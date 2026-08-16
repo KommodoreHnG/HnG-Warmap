@@ -1,37 +1,47 @@
 <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>War Map — Heroes &amp; Generals</title>
 <style>
 :root{
-  --ground:#0e1218; --panel:#161d27; --panel2:#1d2531; --line:#28323f;
-  --text:#dce4ee; --dim:#8493a5; --dim2:#5d6b7c;
-  --accent:#d9a441; --accent-dk:#8a6820;
-  --us:#3fbf5a; --ge:#7f74dd; --su:#e03b32; --none:#6b7684;
-  --r:4px;
+  --ground:#100d0a; --panel:#1c1712; --panel2:#262019; --line:#3a3227;
+  --text:#e9e2d5; --dim:#a2957f; --dim2:#6f6555;
+  --accent:#e2ac48; --accent-dk:#8a6820;
+  --us:#3fbf5a; --ge:#7f74dd; --su:#e03b32; --none:#7a705f;
+  --r:2px;
+  --schrift:"Bahnschrift SemiCondensed","Bahnschrift","Segoe UI Variable Text",
+            "Arial Narrow","Segoe UI",system-ui,sans-serif;
+  --schmal:"Bahnschrift Condensed","Bahnschrift","Arial Narrow","Segoe UI",system-ui,sans-serif;
 }
 :root[data-theme="light"]{
-  --ground:#e7e9ec; --panel:#f4f5f7; --panel2:#eaecef; --line:#c8cdd4;
-  --text:#1a2029; --dim:#5a6675; --dim2:#8792a1;
+  --ground:#ded7c9; --panel:#f0ebe0; --panel2:#e5ded0; --line:#c2b8a4;
+  --text:#221c14; --dim:#5f5647; --dim2:#8a806e;
   --accent:#8a6314; --accent-dk:#d9a441;
-  --us:#1f8c38; --ge:#4a3fae; --su:#b8241c; --none:#7b8593;
+  --us:#1f8c38; --ge:#4a3fae; --su:#b8241c; --none:#7b7565;
 }
+/* One knob for the whole interface. The map canvas is deliberately left out —
+   it scales itself through devicePixelRatio and would only go blurry. */
+#top,#bar,#side,.float,#hits,.dlg,#ghost,#toast{zoom:var(--ui,1)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
-body{background:var(--ground);color:var(--text);
-  font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
-  font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body{background:var(--ground);color:var(--text);font-family:var(--schrift);
+  font-size:13.5px;line-height:1.4;-webkit-font-smoothing:antialiased}
+/* The game titles everything in spaced capitals — so does this. */
+.bar-h,.tile .k,.chip,.sec h3,.dlg-h h2,#brand b,.tw th,.sums span,#legend h4,#depot h4{
+  font-family:var(--schmal);text-transform:uppercase;letter-spacing:.09em}
 button,input,select,textarea{font:inherit;color:inherit}
 .mono{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;font-variant-numeric:tabular-nums}
 
 #app{display:grid;grid-template-rows:auto 1fr;height:100%}
-#top{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--panel);
-  border-bottom:1px solid var(--line);flex-wrap:wrap}
+#top{display:flex;align-items:center;gap:14px;padding:7px 14px;flex-wrap:wrap;
+  background:linear-gradient(180deg,#241d16 0%,#181310 100%);
+  border-bottom:2px solid var(--accent-dk);box-shadow:0 2px 10px rgba(0,0,0,.5)}
 #brand{display:flex;flex-direction:column;gap:1px;min-width:0}
-#brand b{font-size:14px;font-weight:650;letter-spacing:.2px;white-space:nowrap}
+#brand b{font-size:16px;font-weight:600;white-space:nowrap;color:var(--accent)}
 #brand span{font-size:9.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.9px}
 #tally{display:flex;gap:6px}
-.tile{display:flex;flex-direction:column;gap:1px;padding:4px 10px 4px 9px;border-left:3px solid var(--f);
-  background:var(--panel2);border-radius:0 var(--r) var(--r) 0;min-width:76px}
+.tile{display:flex;flex-direction:column;gap:0;padding:3px 11px 3px 9px;border-left:3px solid var(--f);
+  background:rgba(0,0,0,.28);min-width:78px}
 .tile .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.85px;color:var(--dim)}
-.tile .v{font-size:15px;font-weight:600;line-height:1.1;color:var(--f);font-variant-numeric:tabular-nums}
+.tile .v{font-size:17px;font-weight:600;line-height:1.05;color:var(--f);
+  font-variant-numeric:tabular-nums;font-family:var(--schmal)}
 .tile .u{font-size:9.5px;color:var(--dim2);font-variant-numeric:tabular-nums}
 #top-right{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 
@@ -39,7 +49,8 @@ button,input,select,textarea{font:inherit;color:inherit}
   padding:5px 11px;cursor:pointer;transition:background .12s,border-color .12s;white-space:nowrap}
 .btn:hover{border-color:var(--accent-dk)}
 .btn:active{transform:translateY(1px)}
-.btn.primary{background:var(--accent);color:#14100a;border-color:var(--accent);font-weight:600}
+.btn.primary{background:linear-gradient(180deg,#e8b856,#c8912f);color:#1a1204;
+  border-color:#f0c470;font-weight:600;text-shadow:0 1px 0 rgba(255,235,190,.35)}
 .btn.primary:hover{filter:brightness(1.08)}
 .btn.danger{color:var(--su);border-color:var(--su)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
@@ -52,13 +63,14 @@ button,input,select,textarea{font:inherit;color:inherit}
 select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
 #main{display:grid;grid-template-columns:auto 1fr auto;min-height:0}
-#bar{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;
-  gap:3px;padding:9px 7px;width:96px;overflow-y:auto}
+#bar{background:linear-gradient(180deg,#1e1913 0%,#151109 100%);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;gap:2px;padding:8px 6px;width:96px;overflow-y:auto}
 .bar-h{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--dim2);padding:8px 3px 3px}
 .tool{display:flex;flex-direction:column;align-items:center;gap:3px;background:transparent;
   border:1px solid transparent;border-radius:var(--r);padding:7px 3px 6px;cursor:pointer;text-align:center}
 .tool:hover{background:var(--panel2)}
-.tool[aria-pressed="true"]{background:var(--panel2);border-color:var(--accent);color:var(--accent)}
+.tool[aria-pressed="true"]{background:linear-gradient(180deg,#3a2f1c,#2a2114);
+  border-color:var(--accent);color:var(--accent);box-shadow:inset 0 0 12px rgba(226,172,72,.14)}
 .tool svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6;
   stroke-linecap:round;stroke-linejoin:round}
 .tool .lbl{font-size:9.5px;line-height:1.15}
@@ -72,13 +84,13 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 .fac .dot{width:11px;height:11px;border-radius:50%;background:var(--f);flex:0 0 auto}
 .fac .lbl{font-size:10.5px}
 
-#mapwrap{position:relative;min-width:0;background:#080b0f;overflow:hidden}
+#mapwrap{position:relative;min-width:0;background:#0b0805;overflow:hidden}
 #cv{display:block;width:100%;height:100%;cursor:crosshair}
 #cv.grabbing{cursor:grabbing}
 #cv.dropping{cursor:copy}
-.float{position:absolute;background:rgba(14,18,24,.92);border:1px solid var(--line);
-  border-radius:var(--r);backdrop-filter:blur(6px)}
-:root[data-theme="light"] .float{background:rgba(244,245,247,.94)}
+.float{position:absolute;background:rgba(22,18,13,.94);border:1px solid var(--line);
+  border-radius:var(--r);backdrop-filter:blur(6px);box-shadow:0 4px 18px rgba(0,0,0,.5)}
+:root[data-theme="light"] .float{background:rgba(240,235,224,.95)}
 #searchbox{top:10px;left:10px;display:flex;gap:5px;align-items:center;padding:4px 6px}
 #search{background:transparent;border:0;outline:0;width:170px;font-size:12px}
 #search::placeholder{color:var(--dim2)}
@@ -101,7 +113,7 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 #legend svg{width:22px;height:15px;flex:0 0 auto}
 
 /* ---------- depot ---------- */
-#depot{left:10px;bottom:44px;width:262px;max-height:52%;display:none;flex-direction:column;overflow:hidden}
+#depot{left:10px;bottom:44px;width:296px;max-height:64%;display:none;flex-direction:column;overflow:hidden}
 #depot.on{display:flex}
 #depot h4{font-size:9.5px;text-transform:uppercase;letter-spacing:1px;color:var(--dim2);
   padding:8px 10px 6px;display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -112,10 +124,19 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
   user-select:none;touch-action:none}
 .dep:active{cursor:grabbing}
 .dep.leer{opacity:.4;cursor:default;border-left-color:var(--dim2)}
-.dep .n{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dep .n em{display:block;font-style:normal;font-size:9px;color:var(--dim2)}
-.dep .c{font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--accent)}
-.dep .c small{color:var(--dim2);font-weight:400}
+.dep .n{font-size:11px;overflow:hidden;min-width:0}
+.dep .n em{display:block;font-style:normal;font-size:9px;color:var(--dim2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dep .tname{width:100%;background:transparent;border:0;border-bottom:1px dotted transparent;
+  padding:0;outline:0;font-size:11.5px;color:var(--text);font-family:var(--schrift)}
+.dep .tname:hover{border-bottom-color:var(--dim2)}
+.dep .tname:focus{border-bottom-color:var(--accent)}
+.dep .tname::placeholder{color:var(--dim2);font-style:italic}
+.dep .c{font-size:9.5px;font-family:var(--schmal);text-transform:uppercase;letter-spacing:.08em;color:var(--dim2)}
+.dep.raus{border-left-color:var(--accent);background:rgba(226,172,72,.09)}
+.dep .pull{background:transparent;border:0;cursor:pointer;color:var(--dim2);font-size:15px;padding:0 3px}
+.dep .pull:hover{color:var(--su)}
+.wer{font-size:9.5px;color:var(--dim2);margin-top:4px;font-family:var(--schmal);letter-spacing:.04em}
 #depot-foot{padding:6px 8px;border-top:1px solid var(--line);display:flex;gap:5px;align-items:center}
 #depot-foot select{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
   padding:4px 5px;outline:0;font-size:11px;min-width:0}
@@ -126,7 +147,7 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
   box-shadow:0 6px 18px rgba(0,0,0,.5)}
 
 /* ---------- side ---------- */
-#side{width:296px;background:var(--panel);border-left:1px solid var(--line);
+#side{width:304px;background:linear-gradient(180deg,#1e1913,#171208);border-left:1px solid var(--line);
   display:flex;flex-direction:column;overflow-y:auto}
 #side.hidden{display:none}
 .s-head{padding:11px 13px 9px;border-bottom:1px solid var(--line)}
@@ -183,11 +204,13 @@ textarea{background:var(--panel2);border:1px solid var(--line);border-radius:var
 #veil{position:fixed;inset:0;background:rgba(4,7,11,.72);display:none;align-items:center;
   justify-content:center;z-index:50;padding:20px}
 #veil.on{display:flex}
-.dlg{background:var(--panel);border:1px solid var(--line);border-radius:6px;max-width:620px;width:100%;
+.dlg{background:linear-gradient(180deg,#211b14,#181309);border:1px solid var(--accent-dk);
+  border-radius:3px;max-width:620px;width:100%;
   max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .dlg.wide{max-width:860px}
-.dlg-h{padding:14px 16px 10px;border-bottom:1px solid var(--line)}
-.dlg-h h2{font-size:15px;font-weight:600}
+.dlg-h{padding:13px 16px 10px;border-bottom:1px solid var(--accent-dk);
+  background:linear-gradient(180deg,#2a221a,transparent)}
+.dlg-h h2{font-size:16px;font-weight:600;color:var(--accent)}
 .dlg-h p{font-size:12px;color:var(--dim);margin-top:3px}
 .dlg-b{padding:14px 16px;display:flex;flex-direction:column;gap:11px}
 .dlg-f{padding:11px 16px;border-top:1px solid var(--line);display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}
@@ -271,21 +294,24 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="tool" data-t="line" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M3 9h18M6 9v5M11 9v5M16 9v5M21 9v5"/></svg>
         <span class="lbl">Defence</span><span class="kb">5</span></button>
+      <button class="tool" data-t="area" aria-pressed="false">
+        <svg viewBox="0 0 24 24"><path d="M4 14c-1-5 3-9 8-9s9 3 8 8-4 8-9 7-6-3-7-6z"/></svg>
+        <span class="lbl">Area</span><span class="kb">6</span></button>
       <button class="tool" data-t="spot" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M12 3l9 17H3z"/><path d="M12 10v4M12 17.2v.2"/></svg>
-        <span class="lbl">Sighting</span><span class="kb">6</span></button>
+        <span class="lbl">Sighting</span><span class="kb">7</span></button>
       <button class="tool" data-t="battle" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M5 19L19 5M5 5l14 14"/><circle cx="12" cy="12" r="9"/></svg>
-        <span class="lbl">Battle</span><span class="kb">7</span></button>
+        <span class="lbl">Battle</span><span class="kb">8</span></button>
       <button class="tool" data-t="erase" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
-        <span class="lbl">Clear</span><span class="kb">8</span></button>
+        <span class="lbl">Clear</span><span class="kb">9</span></button>
 
       <div class="bar-h">Faction</div>
       <div id="factions"></div>
 
       <div class="bar-h">View</div>
-      <button class="tool row" id="b-depot" aria-pressed="false">
+      <button class="tool row" id="b-depot" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M3 8l9-4 9 4v9l-9 4-9-4z"/><path d="M3 8l9 4 9-4M12 12v9"/></svg>
         <span class="lbl">Depot</span></button>
       <button class="tool row" id="b-key" aria-pressed="false">
@@ -297,6 +323,9 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="tool row" id="b-names" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M4 7V5h16v2M9 19h6M12 5v14"/></svg>
         <span class="lbl">Labels</span></button>
+      <button class="tool row" id="b-ui" title="Interface size — click to step through">
+        <svg viewBox="0 0 24 24"><path d="M4 20V9M4 9l4 11M8 20h-4M14 20V4M14 4l6 16M20 20h-6"/></svg>
+        <span class="lbl" id="ui-lbl">100 %</span></button>
     </nav>
 
     <div id="mapwrap">
@@ -308,7 +337,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       </div>
       <div id="hits"></div>
       <div id="legend" class="float"></div>
-      <div id="depot" class="float">
+      <div id="depot" class="float on">
         <h4><span>Your depot</span><em id="depot-sum"></em></h4>
         <div id="depot-list"></div>
         <div id="depot-foot">
@@ -387,18 +416,25 @@ const isArmor= k => /armor|tank_destroyer/.test(k);
    Timestamped entries so two people's maps can be merged; v===null is a
    tombstone so deletions survive a sync.                                */
 const STORE = "hng-warmap-v3";
-const neu = () => ({me:"", name:"", owner:{}, units:{}, depot:{}, notes:{},
-                    arrows:[], join:{}, fight:{}, star:{}, spot:{}, line:{},
-                    post:{}, meta:{}, gone:{}});
+/* Every kind of timestamped entry. Arrows are a list, everything else a map. */
+const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot","line","post","area"];
+const neu = () => Object.assign({me:"", name:"", arrows:[], gone:{}},
+                                ...BUCKETS.map(b => ({[b]:{}})));
 let S = neu();
 let tool = "inspect", faction = 1, sel = null, arrowFrom = null, lineDraft = null;
-let objOnly = false, showNames = true, showKey = false, showDepot = false;
+let objOnly = false, showNames = true, showKey = false, showDepot = true;
 const jetzt = () => Date.now();
 
 /* How long a sighting counts as fresh. Older ones fade out — on a map that is
    updated by hand, an unmarked stale report is worse than none.            */
 const FRISCH = 6*3600e3, ALT = 24*3600e3;
 const alter = t => jetzt() - (t||0);
+/* Who made an edit. Every entry carries its author's name; fall back to the id. */
+function werWar(e){
+  if (!e) return "?";
+  if (e.by === S.me) return (S.name || "you") + " (you)";
+  return e.n || e.by || "?";
+}
 function alterText(t){
   const m = Math.round(alter(t)/60000);
   if (m < 1) return "just now";
@@ -415,6 +451,7 @@ const starAt    = i => !!(S.star[i] && S.star[i].v);
 const lebt      = (id, e) => e && e.v && !(S.gone[id] && S.gone[id].t >= (e.t||0));
 const liveArrows= () => S.arrows.filter(a => !(S.gone[a.id] && S.gone[a.id].t >= (a.t||0)));
 const liveLines = () => Object.entries(S.line).filter(([id,e]) => lebt(id,e));
+const liveAreas = () => Object.entries(S.area).filter(([id,e]) => lebt(id,e));
 const livePosts = () => Object.entries(S.post).filter(([id,e]) => lebt(id,e))
                         .sort((a,b) => (b[1].t||0) - (a[1].t||0));
 /* Sightings are keyed "<town>:<player>" so several people can report the same town */
@@ -467,20 +504,62 @@ const myUnits = i => (S.units[`${i}:${S.me}`] && S.units[`${i}:${S.me}`].v) || [
 const teamsAt = i => unitsAt(i).reduce((s,g)=>s + g.list.reduce((t,u)=>t+u.s,0), 0);
 const menAt   = i => unitsAt(i).reduce((s,g)=>s + g.list.reduce((t,u)=>t+u.s*atMen(u.k),0), 0);
 
-/* depot: what a player owns; deployed: what is currently on the map */
-const myDepot = () => (S.depot[S.me] && S.depot[S.me].v) || [];
+/* Depot: one entry per assault team, each with its own name — the game names
+   them too ("Bodenmänner-1"), and without names nobody can tell their own
+   three Guards apart. Older depots stored {k,n} counts; those are converted. */
+function myDepot(){
+  const roh = (S.depot[S.me] && S.depot[S.me].v) || [];
+  if (roh.length && roh[0].n !== undefined && roh[0].id === undefined){
+    const raus = [];
+    for (const d of roh)
+      for (let i=0;i<d.n;i++)
+        raus.push({id: `${d.k}-${i}`, k: d.k, name: ""});
+    return raus;
+  }
+  return roh;
+}
+const teamById = id => myDepot().find(d => d.id === id);
+function deployedIds(who){
+  const raus = new Set();
+  for (const [, gruppen] of unitIdx)
+    for (const g of gruppen)
+      if (g.who === who) for (const u of g.list) if (u.id) raus.add(u.id);
+  return raus;
+}
 function deployedBy(who){
   const zaehl = {};
   for (const [, gruppen] of unitIdx)
     for (const g of gruppen)
-      if (g.who === who) for (const u of g.list) zaehl[u.k] = (zaehl[u.k]||0) + u.s;
+      if (g.who === who) for (const u of g.list) zaehl[u.k] = (zaehl[u.k]||0) + (u.s || 1);
   return zaehl;
 }
-function freiImDepot(){
-  const raus = deployedBy(S.me), frei = {};
-  for (const d of myDepot()) frei[d.k] = (d.n||0) - (raus[d.k]||0);
-  return frei;
+const townOfTeam = id => {
+  for (const [town, gruppen] of unitIdx)
+    for (const g of gruppen)
+      if (g.mine) for (const u of g.list) if (u.id === id) return town;
+  return null;
+};
+
+/* ---------------- interface scale ----------------
+   On a 4K panel at 100 % Windows scaling everything is half the size it should
+   be, so start from the window width and let the user override it.       */
+const UI_STUFEN = [1, 1.15, 1.3, 1.5, 1.75, 2];
+function uiVorschlag(){
+  const b = window.innerWidth;
+  return b > 3200 ? 1.75 : b > 2500 ? 1.5 : b > 1900 ? 1.15 : 1;
 }
+let uiScale = parseFloat(localStorage.getItem("hng-warmap-ui") || "0") || uiVorschlag();
+function uiSetzen(v){
+  uiScale = v;
+  document.documentElement.style.setProperty("--ui", v);
+  document.getElementById("ui-lbl").textContent = Math.round(v*100) + " %";
+  localStorage.setItem("hng-warmap-ui", String(v));
+  requestAnimationFrame(resize);
+}
+document.getElementById("b-ui").addEventListener("click", ()=>{
+  const i = UI_STUFEN.findIndex(s => Math.abs(s-uiScale) < .01);
+  uiSetzen(UI_STUFEN[(i+1) % UI_STUFEN.length]);
+});
 
 /* ---------------- canvas ---------------- */
 const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
@@ -541,9 +620,20 @@ function draw(){
     ctx.stroke();
   }
 
+  /* --- free-hand areas: enemy concentrations, zones, anything you circle --- */
+  for (const [id,e] of liveAreas()) drawArea(e.v, e);
+  if (zieh && zieh.art === "area" && zieh.pts.length > 2)
+    drawArea({pts: zieh.pts, f: faction, label: ""}, null, true);
+
   for (const [id,e] of liveLines()) drawLine(e.v);
-  if (lineDraft && lineDraft.pts.length){
-    drawLine({pts: lineDraft.pts, f: lineDraft.f}, lastMouse);
+  if (lineDraft && lineDraft.pts.length) drawLine({pts: lineDraft.pts, f: lineDraft.f}, lastMouse);
+  if (zieh && zieh.art === "line" && zieh.pts.length) drawLine({pts: zieh.pts, f: faction}, lastMouse);
+  if (zieh && zieh.art === "arrow" && lastMouse){
+    const [ax,ay] = toScr(MAP.n[zieh.von][1], MAP.n[zieh.von][2]);
+    ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 2.5*uiScale;
+    ctx.setLineDash([6,5]);
+    ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(lastMouse[0], lastMouse[1]); ctx.stroke();
+    ctx.setLineDash([]);
   }
   for (const a of liveArrows()) drawArrow(a);
   if (arrowFrom !== null && lastMouse){
@@ -554,7 +644,7 @@ function draw(){
   }
 
   /* --- towns as filled discs with the game's pictogram inside --- */
-  const r0 = Math.max(2.6, 3.1*Math.sqrt(z));
+  const r0 = Math.max(2.6, 3.1*Math.sqrt(z)) * uiScale;
   for (let i=0;i<MAP.n.length;i++){
     const n = MAP.n[i], cap = isCap(i), obj = isObj(i);
     if (objOnly && !obj && !S.owner[i] && !unitsAt(i).length) continue;
@@ -585,7 +675,7 @@ function draw(){
     const st = teamsAt(i);
     if (st && z > .8){
       ctx.fillStyle = myUnits(i).length ? "#ffdf9a" : "#e8b04a";
-      ctx.font = `600 ${Math.max(9, 8*Math.sqrt(z))}px ui-monospace,Consolas,monospace`;
+      ctx.font = `600 ${Math.max(9, 8*Math.sqrt(z))*uiScale}px ui-monospace,Consolas,monospace`;
       ctx.textAlign = "center"; ctx.textBaseline = "bottom";
       ctx.strokeStyle = "rgba(5,8,12,.9)"; ctx.lineWidth = 2.5;
       ctx.strokeText(st, x, y-r-2); ctx.fillText(st, x, y-r-2);
@@ -601,7 +691,7 @@ function draw(){
     const a = alter(d.t);
     const frisch = a < FRISCH;
     ctx.globalAlpha = a > ALT ? .42 : (frisch ? 1 : .72);
-    const gr = Math.max(9, 7.5*Math.sqrt(z)), oy = -(isCap(d.town)?r0*1.9:r0*1.35) - gr - 4;
+    const gr = Math.max(9, 7.5*Math.sqrt(z))*uiScale, oy = -(isCap(d.town)?r0*1.9:r0*1.35) - gr - 4;
     const farbe = d.f != null ? col(FACTIONS[d.f]) : "#e8b04a";
     ctx.beginPath();                                   // warning triangle
     ctx.moveTo(x, y+oy-gr); ctx.lineTo(x+gr*.95, y+oy+gr*.72); ctx.lineTo(x-gr*.95, y+oy+gr*.72);
@@ -628,7 +718,7 @@ function draw(){
     if (!n) continue;
     const [x,y] = toScr(n[1], n[2]);
     if (x < -30 || y < -30 || x > WW+30 || y > HH+30) continue;
-    const s = Math.max(7, 5.5*Math.sqrt(z)), ox = (isCap(town)?r0*1.9:r0*1.35) + s + 2;
+    const s = Math.max(7, 5.5*Math.sqrt(z))*uiScale, ox = (isCap(town)?r0*1.9:r0*1.35) + s + 2;
     ctx.fillStyle = prio >= 2 ? "#e03b32" : prio === 1 ? "#d9a441" : "#8493a5";
     ctx.strokeStyle = "rgba(5,8,12,.9)"; ctx.lineWidth = 1.4;
     ctx.beginPath();                                   // speech mark
@@ -649,7 +739,7 @@ function draw(){
       if (objOnly && !obj && !S.owner[i]) continue;
       const [x,y] = toScr(n[1], n[2]);
       if (x < -70 || y < -20 || x > WW+10 || y > HH+20) continue;
-      const gr = cap ? Math.min(15, 9.6*Math.sqrt(z)) : Math.min(13, 8.4*Math.sqrt(z));
+      const gr = (cap ? Math.min(15, 9.6*Math.sqrt(z)) : Math.min(13, 8.4*Math.sqrt(z))) * uiScale;
       ctx.font = `${cap?"600 ":""}${gr}px "Segoe UI",system-ui,sans-serif`;
       ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(5,8,12,.92)";
       ctx.fillStyle = cap ? "#f0c169" : (light() ? "#1a2029" : "#e6ecf4");
@@ -700,6 +790,38 @@ function pictogram(x,y,r,typ,cap,farbe){
   ctx.restore();
 }
 
+/* Free-hand area — circle a region and say what is in it. */
+function drawArea(a, eintrag, entwurf){
+  if (a.pts.length < 3) return;
+  const f = col(FACTIONS[a.f]);
+  const p = a.pts.map(q => toScr(q[0], q[1]));
+  ctx.beginPath();
+  ctx.moveTo(p[0][0], p[0][1]);
+  for (let i=1;i<p.length;i++) ctx.lineTo(p[i][0], p[i][1]);
+  ctx.closePath();
+  ctx.globalAlpha = entwurf ? .18 : .14; ctx.fillStyle = f; ctx.fill();
+  ctx.globalAlpha = entwurf ? .95 : .8;
+  ctx.strokeStyle = f; ctx.lineWidth = 2*uiScale;
+  ctx.setLineDash(entwurf ? [5,4] : [9,5]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+  if (a.label && !entwurf){
+    let cx = 0, cy = 0;
+    for (const q of p){ cx += q[0]; cy += q[1]; }
+    cx /= p.length; cy /= p.length;
+    const gr = Math.min(16, 9*Math.sqrt(view.z))*uiScale;
+    ctx.font = `600 ${gr}px ${SCHMAL}`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const bw = ctx.measureText(a.label).width + 14*uiScale, bh = gr*1.7;
+    ctx.fillStyle = "rgba(14,10,6,.85)"; ctx.fillRect(cx-bw/2, cy-bh/2, bw, bh);
+    ctx.strokeStyle = f; ctx.lineWidth = 1.2; ctx.strokeRect(cx-bw/2, cy-bh/2, bw, bh);
+    ctx.fillStyle = "#f4ead9"; ctx.fillText(a.label, cx, cy);
+    if (eintrag && view.z > 1.6){
+      ctx.font = `${gr*0.72}px ${SCHMAL}`; ctx.fillStyle = "rgba(240,232,216,.6)";
+      ctx.fillText(`${eintrag.n || eintrag.by} · ${alterText(eintrag.t)}`, cx, cy + bh*0.9);
+    }
+  }
+}
+
 /* Defence line: thick line through towns with tick marks on one side,
    the way a held position is drawn on a military map. */
 function drawLine(l, bisMaus){
@@ -707,7 +829,7 @@ function drawLine(l, bisMaus){
   if (bisMaus) pts.push(bisMaus);
   if (pts.length < 2) return;
   const f = col(FACTIONS[l.f]);
-  const br = Math.max(2.6, 3*Math.sqrt(view.z));
+  const br = Math.max(2.6, 3*Math.sqrt(view.z))*uiScale;
   ctx.strokeStyle = f; ctx.lineWidth = br; ctx.lineCap = "round"; ctx.lineJoin = "round";
   ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
   for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
@@ -726,45 +848,76 @@ function drawLine(l, bisMaus){
   }
   if (l.label && view.z > 1.2){
     const [mx,my] = pts[Math.floor(pts.length/2)];
-    ctx.font = `600 ${Math.min(13, 8*Math.sqrt(view.z))}px "Segoe UI",system-ui,sans-serif`;
+    ctx.font = `600 ${Math.min(13, 8*Math.sqrt(view.z))*uiScale}px "Segoe UI",system-ui,sans-serif`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.lineWidth = 3; ctx.strokeStyle = "rgba(5,8,12,.85)";
     ctx.strokeText(l.label, mx, my - 14); ctx.fillStyle = f; ctx.fillText(l.label, mx, my - 14);
   }
 }
 
+/* A movement arrow is one filled body that tapers into a broad head — the
+   shape used on operational maps — not a stroked line with a triangle stuck
+   on the end. It widens with what the clan has committed to it. */
+const SCHMAL = '"Bahnschrift Condensed","Bahnschrift","Arial Narrow","Segoe UI",system-ui,sans-serif';
+function pfeilForm(x1,y1,cx,cy,x2,y2,breite){
+  const B  = t => [ (1-t)*(1-t)*x1 + 2*(1-t)*t*cx + t*t*x2,
+                    (1-t)*(1-t)*y1 + 2*(1-t)*t*cy + t*t*y2 ];
+  const Bs = t => { const dx = 2*(1-t)*(cx-x1) + 2*t*(x2-cx),
+                          dy = 2*(1-t)*(cy-y1) + 2*t*(y2-cy);
+                    const l = Math.hypot(dx,dy)||1; return [dx/l, dy/l]; };
+  const kopf = 0.80, N = 20, links = [], rechts = [];
+  for (let i=0;i<=N;i++){
+    const t = kopf*i/N, [px,py] = B(t), [ux,uy] = Bs(t), w = breite*(1 - 0.28*t);
+    links.push([px - uy*w, py + ux*w]);
+    rechts.push([px + uy*w, py - ux*w]);
+  }
+  const [hx,hy] = B(kopf), [hux,huy] = Bs(kopf), kb = breite*2.5;
+  const p = new Path2D();
+  p.moveTo(links[0][0], links[0][1]);
+  for (const q of links) p.lineTo(q[0], q[1]);
+  p.lineTo(hx - huy*kb, hy + hux*kb);          // linke Schulter
+  p.lineTo(x2, y2);                             // Spitze
+  p.lineTo(hx + huy*kb, hy - hux*kb);          // rechte Schulter
+  for (let i=rechts.length-1;i>=0;i--) p.lineTo(rechts[i][0], rechts[i][1]);
+  p.closePath();
+  return p;
+}
 function drawArrow(a){
   const A = MAP.n[a.from], B = MAP.n[a.to];
   if (!A || !B) return;
-  const [x1,y1] = toScr(A[1],A[2]), [x2,y2] = toScr(B[1],B[2]);
+  let [x1,y1] = toScr(A[1],A[2]);
+  let [x2,y2] = toScr(B[1],B[2]);
   const f = col(FACTIONS[a.f]);
   const dx = x2-x1, dy = y2-y1, len = Math.hypot(dx,dy) || 1;
-  const mx = (x1+x2)/2 - dy/len*len*.13, my = (y1+y2)/2 + dx/len*len*.13;
+  if (len < 8) return;
+  const ux = dx/len, uy = dy/len;
+  const rand = Math.max(4, 3.4*Math.sqrt(view.z))*uiScale;   // nicht im Stadtsymbol ansetzen
+  x1 += ux*rand; y1 += uy*rand; x2 -= ux*rand*1.25; y2 -= uy*rand*1.25;
+  const cx = (x1+x2)/2 - dy/len*len*.16, cy = (y1+y2)/2 + dx/len*len*.16;
+
   const mit = joinOf(a.id), staerke = mit.reduce((s,j)=>s+j.n, 0);
-  const dick = Math.max(2.4, (2.4 + Math.min(staerke,20)*0.55)*Math.sqrt(view.z));
+  const breite = Math.max(2.2, (2.2 + Math.min(staerke,24)*0.42)*Math.sqrt(view.z))*uiScale;
+  const pfad = pfeilForm(x1,y1,cx,cy,x2,y2,breite);
+  a._pfad = pfad;
 
-  ctx.strokeStyle = f; ctx.lineWidth = dick;
-  ctx.globalAlpha = .82; ctx.lineCap = "round";
-  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.quadraticCurveTo(mx,my,x2,y2); ctx.stroke();
-  const tx = x2-mx, ty = y2-my, tl = Math.hypot(tx,ty)||1;
-  const ux = tx/tl, uy = ty/tl, sp = dick*2.3;
-  ctx.fillStyle = f; ctx.beginPath(); ctx.moveTo(x2,y2);
-  ctx.lineTo(x2-ux*sp - uy*sp*.55, y2-uy*sp + ux*sp*.55);
-  ctx.lineTo(x2-ux*sp + uy*sp*.55, y2-uy*sp - ux*sp*.55);
-  ctx.closePath(); ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 1.5;
+  ctx.globalAlpha = .9; ctx.fillStyle = f; ctx.fill(pfad);
+  ctx.restore();
+  ctx.strokeStyle = "rgba(0,0,0,.5)"; ctx.lineWidth = 1.1; ctx.stroke(pfad);
 
-  if (view.z > 1.2 && (staerke || a.label)){
-    const txt = (a.label ? a.label + "  " : "")
-      + (staerke ? `${mit.length}👤 ${staerke}` : "");
-    ctx.font = `600 ${Math.min(13, 8*Math.sqrt(view.z))}px "Segoe UI",system-ui,sans-serif`;
+  if (view.z > 1.1 && (staerke || a.label)){
+    const txt = (a.label ? a.label + "   " : "") + (staerke ? `${mit.length}× ${staerke}` : "");
+    ctx.font = `600 ${Math.min(14, 8.4*Math.sqrt(view.z))*uiScale}px ${SCHMAL}`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    const bw = ctx.measureText(txt).width + 10, bh = Math.min(19, 12*Math.sqrt(view.z));
-    ctx.fillStyle = "rgba(8,11,16,.82)";
+    const bw = ctx.measureText(txt).width + 12*uiScale;
+    const bh = Math.min(20, 13*Math.sqrt(view.z))*uiScale;
+    const mx = (x1+x2)/2*.35 + cx*.65, my = (y1+y2)/2*.35 + cy*.65;
+    ctx.fillStyle = "rgba(14,10,6,.9)";
     ctx.fillRect(mx-bw/2, my-bh/2, bw, bh);
-    ctx.strokeStyle = f; ctx.lineWidth = 1;
+    ctx.strokeStyle = f; ctx.lineWidth = 1.2;
     ctx.strokeRect(mx-bw/2, my-bh/2, bw, bh);
-    ctx.fillStyle = "#f0f4fa"; ctx.fillText(txt, mx, my);
+    ctx.fillStyle = "#f4ead9"; ctx.fillText(txt, mx, my);
   }
 }
 const joinOf = id => Object.keys(S.join)
@@ -782,13 +935,20 @@ function hitTest(sx, sy){
   return best;
 }
 function arrowHit(sx, sy){
-  for (const a of liveArrows()){
-    const A = MAP.n[a.from], B = MAP.n[a.to];
-    if (!A || !B) continue;
-    const [x1,y1] = toScr(A[1],A[2]), [x2,y2] = toScr(B[1],B[2]);
-    const dx = x2-x1, dy = y2-y1, len = Math.hypot(dx,dy)||1;
-    const mx = (x1+x2)/2 - dy/len*len*.13, my = (y1+y2)/2 + dx/len*len*.13;
-    if (Math.hypot(sx-mx, sy-my) < 16) return a;
+  for (const a of liveArrows())
+    if (a._pfad && ctx.isPointInPath(a._pfad, sx*dpr, sy*dpr)) return a;
+  return null;
+}
+function areaHit(sx, sy){
+  const [kx,ky] = toMap(sx,sy);
+  for (const [id,e] of liveAreas()){
+    const p = e.v.pts;
+    let drin = false;
+    for (let i=0,j=p.length-1;i<p.length;j=i++){
+      if ((p[i][1] > ky) !== (p[j][1] > ky) &&
+          kx < (p[j][0]-p[i][0])*(ky-p[i][1])/(p[j][1]-p[i][1]) + p[i][0]) drin = !drin;
+    }
+    if (drin) return {id, e};
   }
   return null;
 }
@@ -832,14 +992,24 @@ function dropEntry(bucket, id){
   if (S[bucket][id]){ S[bucket][id] = {v:null, t:jetzt(), by:S.me}; dirty.add(`${bucket}:${id}`); }
   save();
 }
+function lineSpeichern(pts){
+  const id = Math.random().toString(36).slice(2,10), k = `${id}:${S.me}`;
+  S.line[k] = {v:{pts, f: faction, label: ""}, t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`line:${k}`); save(); draw();
+  toast(`Defence line over ${pts.length} towns — click it to label it`);
+}
+function areaSpeichern(pts){
+  const id = Math.random().toString(36).slice(2,10), k = `${id}:${S.me}`;
+  const rund = pts.map(p => [Math.round(p[0]*10)/10, Math.round(p[1]*10)/10]);
+  S.area[k] = {v:{pts: rund, f: faction, label: ""}, t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`area:${k}`); save(); draw();
+  areaDialog(k, S.area[k], true);
+}
 function lineFertig(){
   if (!lineDraft) return;
-  if (lineDraft.pts.length < 2){ lineDraft = null; draw(); toast("A defence line needs at least two towns"); return; }
-  const id = Math.random().toString(36).slice(2,10), k = `${id}:${S.me}`;
-  S.line[k] = {v:{pts: lineDraft.pts, f: lineDraft.f, label: ""}, t: jetzt(), by: S.me, n: S.name || ""};
-  dirty.add(`line:${k}`);
-  lineDraft = null; save(); draw();
-  toast("Defence line saved — click it with Inspect to label or remove it");
+  if (lineDraft.pts.length >= 2) lineSpeichern(lineDraft.pts);
+  else toast("A defence line needs at least two towns");
+  lineDraft = null; draw();
 }
 function lineHit(sx, sy){
   for (const [id,e] of liveLines()){
@@ -856,30 +1026,51 @@ function lineHit(sx, sy){
 }
 function setMeta(k, v){ stamp("meta", k, v); save(); kopfzeile(); }
 
-/* Deploy from depot: only what is actually free */
-function deployFromDepot(town, k, wieviel){
-  const frei = freiImDepot()[k] || 0;
-  if (frei <= 0){ toast(`No ${atName(k)} left in your depot`); return false; }
-  const n = Math.min(wieviel, frei);
-  const list = myUnits(town).slice();
-  const idx = list.findIndex(u => u.k === k);
-  if (idx >= 0) list[idx] = {...list[idx], s: list[idx].s + n};
-  else list.push({k, s: n});
-  setMyUnits(town, list);
+/* Deploy one named team. It can only be in one place, so it is pulled off
+   wherever it stood before. */
+function deployTeam(town, id){
+  const team = teamById(id);
+  if (!team) return false;
+  const alt = townOfTeam(id);
+  if (alt === town) return false;
+  if (alt !== null) setMyUnits(alt, myUnits(alt).filter(u => u.id !== id));
+  setMyUnits(town, myUnits(town).concat([{id, k: team.k, s: 1}]));
   return true;
 }
+function withdrawTeam(id){
+  const alt = townOfTeam(id);
+  if (alt !== null) setMyUnits(alt, myUnits(alt).filter(u => u.id !== id));
+}
 
-/* ---------------- interaction ---------------- */
+/* ---------------- interaction ----------------
+   Everything that has a from and a to is drawn by dragging: arrows, defence
+   lines and free-hand areas. Only panning shares the same gesture, so a drag
+   that starts on empty ground pans and one that starts on a town draws.   */
 let dragging = false, dragged = false, dragStart = null;
-let carrying = null;                       // {k} while dragging from the depot
+let carrying = null;                       // {k,id} while dragging from the depot
+let zieh = null;                           // {art, von, pts}
 
 cv.addEventListener("mousedown", e => {
   if (carrying) return;
+  const i = hitTest(e.offsetX, e.offsetY);
+  if (tool === "arrow" && i !== null){ zieh = {art:"arrow", von:i}; return; }
+  if (tool === "line"  && i !== null){ zieh = {art:"line", pts:[i]}; return; }
+  if (tool === "area"){ zieh = {art:"area", pts:[toMap(e.offsetX, e.offsetY)]}; return; }
   dragging = true; dragged = false;
   dragStart = {mx:e.offsetX, my:e.offsetY, vx:view.x, vy:view.y};
 });
 cv.addEventListener("mousemove", e => {
   lastMouse = [e.offsetX, e.offsetY];
+  if (zieh){
+    if (zieh.art === "line"){
+      const i = hitTest(e.offsetX, e.offsetY);
+      if (i !== null && zieh.pts[zieh.pts.length-1] !== i && !zieh.pts.includes(i)) zieh.pts.push(i);
+    } else if (zieh.art === "area"){
+      const p = toMap(e.offsetX, e.offsetY), l = zieh.pts[zieh.pts.length-1];
+      if (Math.hypot(p[0]-l[0], p[1]-l[1]) > 3/view.z) zieh.pts.push(p);
+    }
+    draw(); return;
+  }
   if (dragging){
     const dx = e.offsetX-dragStart.mx, dy = e.offsetY-dragStart.my;
     if (Math.abs(dx)+Math.abs(dy) > 3){
@@ -888,7 +1079,27 @@ cv.addEventListener("mousemove", e => {
     }
   } else if (arrowFrom !== null) draw();
 });
-window.addEventListener("mouseup", () => { dragging = false; cv.classList.remove("grabbing"); });
+window.addEventListener("mouseup", e => {
+  dragging = false; cv.classList.remove("grabbing");
+  if (!zieh) return;
+  const r = cv.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  if (zieh.art === "arrow"){
+    const bis = hitTest(x, y);
+    if (bis !== null && bis !== zieh.von){
+      const id = Math.random().toString(36).slice(2,10);
+      S.arrows.push({from:zieh.von, to:bis, f:faction, label:"", t:jetzt(), by:S.me, id});
+      dirty.add(`arrow:${id}`); save();
+      toast(`${MAP.n[zieh.von][0]} → ${MAP.n[bis][0]}`);
+    }
+  } else if (zieh.art === "line"){
+    if (zieh.pts.length >= 2) lineSpeichern(zieh.pts);
+    else toast("Drag across at least two towns");
+  } else if (zieh.art === "area"){
+    if (zieh.pts.length >= 6) areaSpeichern(zieh.pts);
+  }
+  zieh = null; draw(); tally();
+});
 cv.addEventListener("click", e => {
   if (dragged) return;
   if (tool === "inspect"){
@@ -896,6 +1107,8 @@ cv.addEventListener("click", e => {
     if (pfeil){ arrowDialog(pfeil); return; }
     const lin = lineHit(e.offsetX, e.offsetY);
     if (lin){ lineDialog(lin.id, lin.e); return; }
+    const ar = areaHit(e.offsetX, e.offsetY);
+    if (ar){ areaDialog(ar.id, ar.e); return; }
   }
   const i = hitTest(e.offsetX, e.offsetY);
   if (i === null){
@@ -942,8 +1155,8 @@ cv.addEventListener("wheel", e => {
 document.addEventListener("keydown", e => {
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)){ if (e.key === "Escape") e.target.blur(); return; }
   const k = e.key.toLowerCase();
-  const t = {"1":"inspect","2":"owner","3":"unit","4":"arrow","5":"line","6":"spot",
-             "7":"battle","8":"erase"}[e.key];
+  const t = {"1":"inspect","2":"owner","3":"unit","4":"arrow","5":"line","6":"area",
+             "7":"spot","8":"battle","9":"erase"}[e.key];
   if (t){ setTool(t); return; }
   if (k === "b"){ document.getElementById("b-board").click(); return; }
   if (k === "enter" && lineDraft){ lineFertig(); return; }
@@ -990,8 +1203,9 @@ function tips(){
     inspect:"<b>Inspect</b> — click a town, a move arrow or a defence line. Drag to pan, wheel to zoom.",
     owner:  `<b>Control</b> — click sets the town to <b>${p}</b>. Click again to release it.`,
     unit:   `<b>Unit</b> — click a town, then add teams on the right. Or drag them from your depot.`,
-    arrow:  `<b>Move</b> — click origin, then destination. Arrow drawn for <b>${p}</b>.`,
-    line:   `<b>Defence line</b> — click town after town along the line. <kbd>Enter</kbd> or clicking the last one again finishes it. Drawn for <b>${p}</b>.`,
+    arrow:  `<b>Move</b> — <b>drag</b> from the origin town to the target. Drawn for <b>${p}</b>.`,
+    line:   `<b>Defence line</b> — <b>drag across</b> the towns it runs through. Drawn for <b>${p}</b>.`,
+    area:   `<b>Area</b> — <b>draw a shape</b> anywhere on the map, then label it ("many planes"). Coloured for <b>${p}</b>.`,
     spot:   "<b>Sighting</b> — click the town where you saw enemy forces, then record what and how much.",
     battle: "<b>Battle</b> — click marks a town as contested (brass ring). Click again to clear it.",
     erase:  "<b>Clear</b> — removes control, your teams, sightings, marks and your arrows here."
@@ -1033,22 +1247,24 @@ function zoom(f){
 const ghost = document.getElementById("ghost");
 function depotZeichnen(){
   const liste = document.getElementById("depot-list");
-  const frei = freiImDepot(), mein = myDepot();
-  const c = light() ? "#1a2029" : "#dce4ee";
-  const gesamt = mein.reduce((s,d)=>s+d.n,0);
-  const raus = Object.values(deployedBy(S.me)).reduce((s,n)=>s+n,0);
+  const mein = myDepot(), c = light() ? "#1a2029" : "#e9e2d5";
+  const raus = deployedIds(S.me);
   document.getElementById("depot-sum").textContent =
-    gesamt ? `${raus}/${gesamt} deployed` : "";
+    mein.length ? `${raus.size}/${mein.length} deployed` : "";
   liste.innerHTML = mein.length ? mein.map(d => {
-    const f = frei[d.k] || 0;
-    return `<div class="dep${f<=0?" leer":""}" data-k="${d.k}" style="--f:${col(FACTIONS[faction])}"
-              title="${f>0?"Drag onto a town to deploy":"All of these are already on the map"}">
-        <span>${symbolSVG(d.k, f>0?c:"#6b7684", 24, 17)}</span>
-        <span class="n">${esc(atName(d.k))}<em>${(atMen(d.k)*d.n).toLocaleString("en")} men</em></span>
-        <span class="c">${f}<small>/${d.n}</small></span>
+    const town = townOfTeam(d.id);
+    const drin = town !== null;
+    return `<div class="dep${drin?" raus":""}" data-id="${esc(d.id)}" style="--f:${col(FACTIONS[faction])}"
+              title="${drin?"Drag to move it, or click the × to pull it back":"Drag onto a town"}">
+        <span>${symbolSVG(d.k, c, 24, 17)}</span>
+        <span class="n"><input class="tname" data-id="${esc(d.id)}" value="${esc(d.name||"")}"
+            placeholder="${esc(atName(d.k))}" spellcheck="false">
+          <em>${esc(atName(d.k))} · ${atMen(d.k)} men${drin?` · ${esc(MAP.n[town][0])}`:""}</em></span>
+        ${drin ? `<button class="pull" data-pull="${esc(d.id)}" title="Pull back to depot">×</button>`
+               : `<span class="c">free</span>`}
       </div>`;
   }).join("") : `<div class="empty" style="padding:6px 4px">Nothing yet. Add what you own below —
-    it stays across wars, so you only do this once.</div>`;
+    give each team the name it has in the game. This stays across wars.</div>`;
 
   const sel2 = document.getElementById("dep-type");
   if (!sel2.options.length){
@@ -1057,13 +1273,26 @@ function depotZeichnen(){
       + `<optgroup label="Air Force">${MAP.at.filter(a=>a.arm==="air")
         .map(a=>`<option value="${a.k}">${esc(a.name)}</option>`).join("")}</optgroup>`;
   }
-  liste.querySelectorAll(".dep:not(.leer)").forEach(el => {
+  liste.querySelectorAll(".tname").forEach(inp => {
+    inp.addEventListener("pointerdown", ev => ev.stopPropagation());
+    inp.addEventListener("change", ()=>{
+      const list = myDepot().map(d => d.id === inp.dataset.id ? {...d, name: inp.value.trim()} : d);
+      setMyDepot(list); depotZeichnen();
+    });
+  });
+  liste.querySelectorAll("[data-pull]").forEach(b => {
+    b.addEventListener("pointerdown", ev => ev.stopPropagation());
+    b.addEventListener("click", ()=>{ withdrawTeam(b.dataset.pull); depotZeichnen(); side(); draw(); });
+  });
+  liste.querySelectorAll(".dep").forEach(el => {
     el.addEventListener("pointerdown", ev => {
+      if (ev.target.classList.contains("tname") || ev.target.dataset.pull) return;
       ev.preventDefault();
-      carrying = {k: el.dataset.k};
-      ghost.textContent = atName(carrying.k);
-      ghost.style.display = "block";
-      bewegeGhost(ev);
+      const d = teamById(el.dataset.id);
+      if (!d) return;
+      carrying = {id: d.id};
+      ghost.textContent = d.name || atName(d.k);
+      ghost.style.display = "block"; bewegeGhost(ev);
       cv.classList.add("dropping");
       el.setPointerCapture(ev.pointerId);
     });
@@ -1076,9 +1305,10 @@ function depotZeichnen(){
       if (x >= 0 && y >= 0 && x <= r.width && y <= r.height){
         const i = hitTest(x, y);
         if (i !== null){
-          if (deployFromDepot(i, carrying.k, 1)){
+          const d = teamById(carrying.id);
+          if (deployTeam(i, carrying.id)){
             sel = i; side(); draw(); tally();
-            toast(`${atName(carrying.k)} → ${MAP.n[i][0]}`);
+            toast(`${d.name || atName(d.k)} → ${MAP.n[i][0]}`);
           }
         } else toast("Drop it right on a town");
       }
@@ -1094,9 +1324,10 @@ document.getElementById("dep-add").addEventListener("click", ()=>{
   const k = document.getElementById("dep-type").value;
   const n = Math.max(1, Math.min(99, +document.getElementById("dep-n").value || 1));
   const list = myDepot().slice();
-  const i = list.findIndex(d => d.k === k);
-  if (i >= 0) list[i] = {...list[i], n: list[i].n + n}; else list.push({k, n});
+  for (let j=0;j<n;j++)
+    list.push({id: Math.random().toString(36).slice(2,9), k, name: ""});
   setMyDepot(list); depotZeichnen();
+  toast(n === 1 ? "Added — give it its in-game name" : `${n} added — name them in the list`);
 });
 
 /* ---------------- tally ---------------- */
@@ -1134,7 +1365,8 @@ function side(){
   const gruppen = unitsAt(i).slice().sort((a,b)=> (b.mine?1:0)-(a.mine?1:0));
   const nb = MAP.e.filter(([a,b]) => a===i||b===i).map(([a,b]) => a===i?b:a);
   const c = light() ? "#1a2029" : "#dce4ee";
-  const frei = freiImDepot();
+  const belegt = deployedIds(S.me);
+  const freieTeams = myDepot().filter(d => !belegt.has(d.id));
   const spo = spotsAt(i);
 
   el.innerHTML = `
@@ -1148,6 +1380,7 @@ function side(){
         <span class="chip own" style="--f:${col(f)}">${f.name}</span>
         ${fightAt(i) ? `<span class="chip fight">⚔ contested</span>` : ""}
       </div>
+      ${S.owner[i] && S.owner[i].by ? `<div class="wer">control set by ${esc(werWar(S.owner[i]))} · ${alterText(S.owner[i].t)}</div>` : ""}
     </div>
     <div class="sec">
       <h3>Control</h3>
@@ -1192,22 +1425,20 @@ function side(){
           ${g.list.map((u,k)=>`
             <div class="unit" style="--f:${col(FACTIONS[faction])}">
               <span class="sym">${symbolSVG(u.k, c)}</span>
-              <span class="n">${u.s>1?`${u.s}× `:""}${esc(atName(u.k))}
-                <em>${(u.s*atMen(u.k)).toLocaleString("en")} men</em></span>
+              <span class="n">${esc(u.id && g.mine ? (teamById(u.id)?.name || atName(u.k)) : atName(u.k))}
+                <em>${u.s>1?`${u.s}× · `:""}${((u.s||1)*atMen(u.k)).toLocaleString("en")} men</em></span>
               ${g.mine ? `<button class="x" data-rm="${k}" title="Back to depot">×</button>`
                        : `<span class="lock" title="Only its owner can change this">🔒</span>`}
             </div>`).join("")}
         </div>`).join("") : `<span class="empty">Nothing here yet.</span>`}
       <div class="row">
-        <select id="u-type">${MAP.at.map(a=>{
-          const fr = frei[a.k] || 0;
-          return `<option value="${a.k}"${fr<=0?" disabled":""}>${esc(a.name)}${fr>0?` (${fr} free)`:" — none in depot"}</option>`;
-        }).join("")}</select>
-        <input type="number" id="u-str" value="1" min="1" max="99">
-        <button class="btn" id="u-add">+</button>
+        <select id="u-type">${freieTeams.length
+          ? freieTeams.map(d=>`<option value="${esc(d.id)}">${esc(d.name || atName(d.k))} — ${esc(atName(d.k))}</option>`).join("")
+          : `<option disabled>nothing free in your depot</option>`}</select>
+        <button class="btn" id="u-add" ${freieTeams.length?"":"disabled"}>Place</button>
       </div>
-      <div class="hint">Teams come out of <b>your depot</b> — press <kbd>D</kbd> to open it and drag them
-        straight onto the map.</div>
+      <div class="hint">Faster: open the <b>depot</b> (<kbd>D</kbd>) and <b>drag a team straight onto the
+        map</b>. Dragging one that is already placed moves it.</div>
     </div>
     <div class="sec">
       <h3>Note</h3>
@@ -1250,13 +1481,14 @@ function side(){
     setSpot(i, list); side(); draw();
   }));
   el.querySelector("#u-add")?.addEventListener("click", ()=>{
-    const k = el.querySelector("#u-type").value;
-    const s = Math.max(1, Math.min(99, +el.querySelector("#u-str").value || 1));
-    if (deployFromDepot(i, k, s)){ side(); draw(); depotZeichnen(); }
+    if (deployTeam(i, el.querySelector("#u-type").value)){ side(); draw(); depotZeichnen(); }
   });
   el.querySelectorAll("[data-rm]").forEach(b => b.addEventListener("click", ()=>{
     const list = myUnits(i).slice(); list.splice(+b.dataset.rm, 1);
     setMyUnits(i, list); side(); draw(); depotZeichnen();
+  }));
+  el.querySelectorAll("[data-goto]").forEach(b => b.addEventListener("click", ()=>{
+    sel = +b.dataset.goto; flyTo(sel); side(); draw();
   }));
   el.querySelector("#note")?.addEventListener("input", ev=>{
     stamp("notes", i, ev.target.value.trim() || null); save();
@@ -1509,6 +1741,43 @@ async function screenshotLesen(datei){
   });
   shotState = erg;
   document.getElementById("shot-take").disabled = n === 0;
+}
+
+/* ---------------- free-hand area dialog ---------------- */
+function areaDialog(id, e, neuGezogen){
+  const a = e.v, meins = e.by === S.me;
+  openDlg(`
+    <div class="dlg-h"><h2>${neuGezogen ? "What is in there?" : "Marked area"}</h2>
+      <p>${neuGezogen ? "Give it a short label — that is what everyone reads on the map."
+                      : `Drawn by ${esc(e.n || e.by)} · ${alterText(e.t)}`}</p></div>
+    <div class="dlg-b">
+      <div class="row">
+        <input type="text" id="ar-lbl" value="${esc(a.label||"")}" style="flex:1"
+          placeholder="e.g. many planes · armour massing · avoid" ${meins?"":"disabled"}></div>
+      <div class="row" style="flex-wrap:wrap;gap:5px">
+        ${["many planes","armour massing","infantry heavy","AA cover","weak spot","avoid"]
+          .map(v=>`<button class="btn" data-vor="${esc(v)}" style="font-size:11px;padding:3px 8px">${esc(v)}</button>`).join("")}
+      </div>
+      <div class="note">The colour follows the faction selected on the left — pick the enemy
+        before drawing and the area reads as theirs.</div>
+    </div>
+    <div class="dlg-f">
+      ${meins ? `<button class="btn danger" id="ar-del">Delete</button>` : ""}
+      <button class="btn" id="d-close">Close</button>
+      ${meins ? `<button class="btn primary" id="ar-save">Save</button>` : ""}
+    </div>`);
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  document.querySelectorAll("[data-vor]").forEach(b => b.addEventListener("click", ()=>{
+    document.getElementById("ar-lbl").value = b.dataset.vor;
+  }));
+  document.getElementById("ar-save")?.addEventListener("click", ()=>{
+    S.area[id] = {v:{...a, label: document.getElementById("ar-lbl").value.trim()},
+                  t: jetzt(), by: S.me, n: S.name || ""};
+    dirty.add(`area:${id}`); save(); closeDlg(); draw(); toast("Saved");
+  });
+  document.getElementById("ar-del")?.addEventListener("click", ()=>{
+    dropEntry("area", id); closeDlg(); draw(); toast("Area removed");
+  });
 }
 
 /* ---------------- defence line dialog ---------------- */
@@ -1884,10 +2153,11 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   const c = light() ? "#1a2029" : "#dce4ee";
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
-      <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.</p></div>
+      <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
+         <span style="color:var(--dim2)">· build 2026-08-16 15:51</span></p></div>
     <div class="dlg-b">
       <div class="keys">
-        <div><kbd>1</kbd>…<kbd>8</kbd><span>Inspect · Control · Unit · Move · Defence · Sighting · Battle · Clear</span></div>
+        <div><kbd>1</kbd>…<kbd>9</kbd><span>Inspect · Control · Unit · Move · Defence · Area · Sighting · Battle · Clear</span></div>
         <div><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd><span>US · Germany · Soviet Union</span></div>
         <div><kbd>B</kbd><span>Board — written orders and intel</span></div>
         <div><kbd>D</kbd><span>Your depot — drag teams from there onto a town</span></div>
@@ -1901,8 +2171,11 @@ document.getElementById("b-help").addEventListener("click", ()=>{
           the war map (zoomed all the way out) and sets every town's owner at once.</div>
         <div><b>Your depot</b> is what you own. It survives a new war, so you set it up once and afterwards
           only drag teams onto the map.</div>
-        <div><b>Move arrows:</b> draw one with tool 4, then click it with tool 1 to commit your teams.
-          The arrow gets thicker the more the clan puts behind it.</div>
+        <div><b>Almost everything is a drag:</b> move arrows (tool 4) drag from town to town, defence
+          lines (5) drag across the towns, areas (6) are drawn free-hand, and teams are dragged out of
+          the depot onto the map. Click an arrow, line or area with tool 1 to label, join or delete it.</div>
+        <div><b>Every entry carries its author</b> — you can always see who set a town, drew a line or
+          reported a sighting, and only that person can change it.</div>
         <div><b style="color:var(--accent)">Brass ring</b> = fighting right now. <b>White ring</b> = key
           objective. <b>Grey line</b> = front, where two factions meet — that one appears on its own.</div>
         <div><b>Triangles</b> above a town are enemy sightings, in the spotted faction's colour with the
@@ -1975,7 +2248,6 @@ function applyRemote(key, val){
   if (!da || (val.t||0) > (da.t||0)){ S[bucket][id] = val; return true; }
   return false;
 }
-const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot","line","post"];
 async function syncPull(){
   if (!CFG || pulling) return;
   pulling = true;
