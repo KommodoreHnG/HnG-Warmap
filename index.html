@@ -113,8 +113,18 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 #legend svg{width:22px;height:15px;flex:0 0 auto}
 
 /* ---------- depot ---------- */
-#depot{left:10px;bottom:44px;width:296px;max-height:64%;display:none;flex-direction:column;overflow:hidden}
-#depot.on{display:flex}
+#rechts{display:flex;flex-direction:column;width:308px;min-height:0;
+  background:linear-gradient(180deg,#1e1913,#171208);border-left:1px solid var(--line)}
+#rechts.schmal{width:0;overflow:hidden;border-left:0}
+#side{width:100%;border-left:0;flex:0 1 auto;max-height:58%}
+#depot{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;
+  border-top:1px solid var(--accent-dk)}
+#depot.zu{display:none}
+#depot-filter{display:flex;gap:3px;padding:0 8px 6px}
+#depot-filter button{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:2px;
+  padding:3px 2px;font-size:9.5px;cursor:pointer;color:var(--dim);font-family:var(--schmal);
+  text-transform:uppercase;letter-spacing:.06em}
+#depot-filter button[aria-pressed="true"]{background:var(--accent);color:#1a1204;border-color:var(--accent)}
 #depot h4{font-size:9.5px;text-transform:uppercase;letter-spacing:1px;color:var(--dim2);
   padding:8px 10px 6px;display:flex;justify-content:space-between;align-items:center;gap:8px}
 #depot h4 em{font-style:normal;color:var(--dim);text-transform:none;letter-spacing:0;font-size:10px}
@@ -127,6 +137,13 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 .dep .n{font-size:11px;overflow:hidden;min-width:0}
 .dep .n em{display:block;font-style:normal;font-size:9px;color:var(--dim2);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dep .zeile2{display:flex;gap:4px;align-items:baseline}
+.dep .ttag{width:52px;flex:0 0 auto;background:transparent;border:0;border-bottom:1px dotted transparent;
+  padding:0;outline:0;font-size:9.5px;color:var(--accent);font-family:var(--schmal);
+  text-transform:uppercase;letter-spacing:.06em;text-align:right}
+.dep .ttag:hover{border-bottom-color:var(--dim2)}
+.dep .ttag:focus{border-bottom-color:var(--accent)}
+.dep .ttag::placeholder{color:var(--dim2)}
 .dep .tname{width:100%;background:transparent;border:0;border-bottom:1px dotted transparent;
   padding:0;outline:0;font-size:11.5px;color:var(--text);font-family:var(--schrift)}
 .dep .tname:hover{border-bottom-color:var(--dim2)}
@@ -136,6 +153,32 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 .dep.raus{border-left-color:var(--accent);background:rgba(226,172,72,.09)}
 .dep .pull{background:transparent;border:0;cursor:pointer;color:var(--dim2);font-size:15px;padding:0 3px}
 .dep .pull:hover{color:var(--su)}
+.sympick{display:flex;align-items:center;justify-content:space-between;gap:6px;flex:1;min-width:0;
+  background:var(--panel2);border:1px solid var(--line);border-radius:2px;padding:3px 6px;cursor:pointer}
+.sympick:hover{border-color:var(--accent-dk)}
+.sympick .sw-cur{display:flex;align-items:center;gap:6px;min-width:0;font-size:11.5px}
+.sympick .sw-cur span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sympick .sw-pfeil{color:var(--dim2);font-size:10px}
+.sw-liste{position:absolute;z-index:80;background:var(--panel);border:1px solid var(--accent-dk);
+  border-radius:2px;max-height:320px;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.6);
+  padding:3px;zoom:var(--ui,1)}
+.sw-liste .sw-h{font-family:var(--schmal);font-size:9px;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--dim2);padding:5px 6px 2px}
+.sw-liste button{display:flex;align-items:center;gap:7px;width:100%;background:transparent;border:0;
+  padding:3px 6px;cursor:pointer;color:var(--text);font-size:11.5px;text-align:left;border-radius:2px}
+.sw-liste button:hover{background:var(--panel2)}
+.sw-liste button.an{background:rgba(226,172,72,.16);color:var(--accent)}
+.pickgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:5px}
+.pick{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--panel2);
+  border:1px solid var(--line);border-radius:2px;padding:7px 4px;cursor:pointer;color:var(--text)}
+.pick:hover{border-color:var(--accent);background:rgba(226,172,72,.1)}
+.pick span{font-size:10.5px;text-align:center;line-height:1.15}
+.pick em{font-style:normal;font-size:9px;color:var(--dim2)}
+.mini{background:var(--panel2);border:1px solid var(--line);border-radius:2px;padding:1px 3px;
+  font-size:10.5px;outline:0;color:var(--text)}
+.para-row{display:flex;align-items:center;gap:8px}
+.para-lbl{font-size:9.5px;font-family:var(--schmal);text-transform:uppercase;letter-spacing:.09em;
+  color:var(--dim2);width:66px;flex:0 0 auto}
 .wer{font-size:9.5px;color:var(--dim2);margin-top:4px;font-family:var(--schmal);letter-spacing:.04em}
 #depot-foot{padding:6px 8px;border-top:1px solid var(--line);display:flex;gap:5px;align-items:center}
 #depot-foot select{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
@@ -145,6 +188,18 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 #ghost{position:fixed;pointer-events:none;z-index:70;display:none;background:var(--panel);
   border:1px solid var(--accent);border-radius:var(--r);padding:3px 8px;font-size:11px;
   box-shadow:0 6px 18px rgba(0,0,0,.5)}
+#hover{position:fixed;pointer-events:none;z-index:68;display:none;max-width:290px;
+  background:rgba(20,16,11,.96);border:1px solid var(--accent-dk);border-radius:2px;
+  padding:7px 10px;box-shadow:0 8px 24px rgba(0,0,0,.6);zoom:var(--ui,1)}
+#hover .h-name{font-family:var(--schmal);font-size:14px;font-weight:600;color:var(--accent);
+  letter-spacing:.04em}
+#hover .h-sub{font-size:10.5px;color:var(--dim);margin-bottom:3px}
+#hover .h-tags{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0}
+#hover .h-row{font-size:11.5px;margin-top:3px;border-top:1px solid rgba(160,140,110,.16);padding-top:3px}
+#hover .h-row em{font-style:normal;color:var(--dim2);font-size:10px;display:block}
+#hover .h-warn{color:#ffc9a0}
+#hover .h-note{color:var(--dim);font-style:italic}
+#hover .h-hint{font-size:9px;color:var(--dim2);margin-top:5px;text-transform:uppercase;letter-spacing:.1em}
 
 /* ---------- side ---------- */
 #side{width:304px;background:linear-gradient(180deg,#1e1913,#171208);border-left:1px solid var(--line);
@@ -267,6 +322,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
     <div id="tally"></div>
     <div id="top-right">
       <button class="btn" id="b-sync"><span class="dot"></span><span class="txt">Sync off</span></button>
+      <button class="btn" id="b-enemy">Enemy</button>
       <button class="btn" id="b-board">Board</button>
       <button class="btn" id="b-shot">Read screenshot</button>
       <button class="btn" id="b-roster">Roster</button>
@@ -294,18 +350,21 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="tool" data-t="line" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M3 9h18M6 9v5M11 9v5M16 9v5M21 9v5"/></svg>
         <span class="lbl">Defence</span><span class="kb">5</span></button>
+      <button class="tool" data-t="para" aria-pressed="false">
+        <svg viewBox="0 0 24 24"><path d="M4 11a8 8 0 0 1 16 0"/><path d="M4 11l8 6 8-6"/><path d="M12 17v4"/></svg>
+        <span class="lbl">Para</span><span class="kb">6</span></button>
       <button class="tool" data-t="area" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M4 14c-1-5 3-9 8-9s9 3 8 8-4 8-9 7-6-3-7-6z"/></svg>
-        <span class="lbl">Area</span><span class="kb">6</span></button>
+        <span class="lbl">Area</span><span class="kb">7</span></button>
       <button class="tool" data-t="spot" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M12 3l9 17H3z"/><path d="M12 10v4M12 17.2v.2"/></svg>
-        <span class="lbl">Sighting</span><span class="kb">7</span></button>
+        <span class="lbl">Sighting</span><span class="kb">8</span></button>
       <button class="tool" data-t="battle" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M5 19L19 5M5 5l14 14"/><circle cx="12" cy="12" r="9"/></svg>
-        <span class="lbl">Battle</span><span class="kb">8</span></button>
+        <span class="lbl">Battle</span><span class="kb">9</span></button>
       <button class="tool" data-t="erase" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
-        <span class="lbl">Clear</span><span class="kb">9</span></button>
+        <span class="lbl">Clear</span><span class="kb">0</span></button>
 
       <div class="bar-h">Faction</div>
       <div id="factions"></div>
@@ -337,15 +396,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       </div>
       <div id="hits"></div>
       <div id="legend" class="float"></div>
-      <div id="depot" class="float on">
-        <h4><span>Your depot</span><em id="depot-sum"></em></h4>
-        <div id="depot-list"></div>
-        <div id="depot-foot">
-          <select id="dep-type"></select>
-          <input type="number" id="dep-n" value="1" min="1" max="99" title="How many you own">
-          <button class="btn" id="dep-add" title="Add to your depot">+</button>
-        </div>
-      </div>
+
       <div id="zoombox" class="float">
         <button id="z-in" title="Zoom in">+</button>
         <button id="z-out" title="Zoom out">−</button>
@@ -354,12 +405,23 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <div id="tip" class="float"></div>
     </div>
 
-    <aside id="side" class="hidden"></aside>
+    <div id="rechts">
+      <aside id="side" class="hidden"></aside>
+      <section id="depot">
+        <h4><span>Your assault teams</span><em id="depot-sum"></em></h4>
+        <div id="depot-filter"></div>
+        <div id="depot-list"></div>
+        <div id="depot-foot">
+          <button class="btn" id="dep-add" style="flex:1">Add teams …</button>
+        </div>
+      </section>
+    </div>
   </div>
 </div>
 
 <div id="veil"><div class="dlg" id="dlg"></div></div>
 <div id="ghost"></div>
+<div id="hover"></div>
 <div id="toast"></div>
 
 <script>
@@ -417,18 +479,99 @@ const isArmor= k => /armor|tank_destroyer/.test(k);
    tombstone so deletions survive a sync.                                */
 const STORE = "hng-warmap-v3";
 /* Every kind of timestamped entry. Arrows are a list, everything else a map. */
-const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot","line","post","area"];
+const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot",
+                 "line","post","area","para","roster","est","edep"];
 const neu = () => Object.assign({me:"", name:"", arrows:[], gone:{}},
                                 ...BUCKETS.map(b => ({[b]:{}})));
 let S = neu();
 let tool = "inspect", faction = 1, sel = null, arrowFrom = null, lineDraft = null;
-let objOnly = false, showNames = true, showKey = false, showDepot = true;
+let objOnly = false, showNames = true, showKey = false, showDepot = true, paraGeplant = false;
 const jetzt = () => Date.now();
 
 /* How long a sighting counts as fresh. Older ones fade out — on a map that is
    updated by hand, an unmarked stale report is worse than none.            */
 const FRISCH = 6*3600e3, ALT = 24*3600e3;
 const alter = t => jetzt() - (t||0);
+/* ---- enemy register ----------------------------------------------------
+   Player names in this game are full of decoration ("/!(§Peter"). Matching on
+   the stripped-down form means typing "peter" finds him, and two spellings of
+   the same person collapse into one register entry.                        */
+/* Stripped-down form of a name, used for SEARCHING only. "Peter", "/!(§Peter"
+   and "Peter123" are three different people and stay three entries — but
+   typing "peter" has to surface all of them, so the key keeps the stripped
+   form as a prefix and a short hash of the exact name behind it. */
+const namKey = s => String(s).toLowerCase().normalize("NFKD")
+  .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+function namHash(s){
+  let h = 5381;
+  for (let i=0;i<s.length;i++) h = ((h*33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36).slice(0,5);
+}
+const spielerKey = name => `${namKey(name).slice(0,28) || "x"}-${namHash(name)}`;
+function merkeSpieler(name, f, clan){
+  name = String(name).trim();
+  if (name.length < 2) return null;
+  const k = spielerKey(name), alt = S.roster[k], av = alt && alt.v;
+  const neuF = f == null ? (av ? av.f : null) : f;
+  const neuC = clan == null ? (av ? av.clan : "") : String(clan).trim();
+  if (av && av.name === name && av.f === neuF && (av.clan||"") === (neuC||"")) return k;
+  S.roster[k] = {v:{name, f: neuF, clan: neuC}, t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`roster:${k}`); save();
+  return k;
+}
+/* Clans are not a separate table — they are whatever players are tagged with.
+   Grouping them is how you see that a sighting is an organised operation
+   rather than a handful of randoms. */
+function clanListe(){
+  const m = new Map();
+  for (const p of spielerListe()){
+    const c = (p.clan || "").trim();
+    if (!c) continue;
+    const d = m.get(c.toLowerCase()) || {name:c, spieler:[], teams:0, f:new Map()};
+    d.spieler.push(p);
+    d.teams += feindDepot(p.key).length;
+    if (p.f != null) d.f.set(p.f, (d.f.get(p.f)||0) + 1);
+    m.set(c.toLowerCase(), d);
+  }
+  return [...m.values()].sort((a,b)=> b.spieler.length - a.spieler.length);
+}
+const clanVon = name => {
+  const e = S.roster[spielerKey(name)];
+  return e && e.v && e.v.clan ? e.v.clan : "";
+};
+/* Which clans are behind the sightings at a town */
+function clansAt(i){
+  const raus = new Map();
+  for (const g of spotsAt(i))
+    for (const u of g.list){
+      if (!u.owner) continue;
+      const c = clanVon(u.owner);
+      if (c) raus.set(c, (raus.get(c)||0) + u.n);
+    }
+  return [...raus.entries()].map(([name,n])=>({name, n}));
+}
+const spielerListe = () => Object.entries(S.roster)
+  .filter(([,e]) => e && e.v && e.v.name)
+  .map(([k,e]) => ({key:k, name:e.v.name, f:e.v.f, clan:e.v.clan||"", t:e.t, by:e.n || e.by}))
+  .sort((a,b) => a.name.localeCompare(b.name));
+/* Loose search: "peter" finds Peter, Peter123 and the decorated spelling. */
+function spielerSuche(q){
+  const k = namKey(q);
+  if (!k) return spielerListe().slice(0, 12);
+  return spielerListe()
+    .map(p => ({p, roh: namKey(p.name)}))
+    .filter(x => x.roh.includes(k) || k.includes(x.roh))
+    .sort((a,b) => a.roh.indexOf(k) - b.roh.indexOf(k) || a.roh.length - b.roh.length)
+    .slice(0, 12).map(x => x.p);
+}
+/* Enemy depot: what we believe a given enemy player owns. Shared, everyone
+   may add to it — with name and tag so nobody enters the same team twice. */
+const feindDepot = key => (S.edep[key] && S.edep[key].v) || [];
+function setFeindDepot(key, list){
+  S.edep[key] = {v: list.length ? list : null, t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`edep:${key}`); save();
+}
+
 /* Who made an edit. Every entry carries its author's name; fall back to the id. */
 function werWar(e){
   if (!e) return "?";
@@ -628,6 +771,11 @@ function draw(){
   for (const [id,e] of liveLines()) drawLine(e.v);
   if (lineDraft && lineDraft.pts.length) drawLine({pts: lineDraft.pts, f: lineDraft.f}, lastMouse);
   if (zieh && zieh.art === "line" && zieh.pts.length) drawLine({pts: zieh.pts, f: faction}, lastMouse);
+  if (zieh && zieh.art === "para") for (const p of zieh.pts){
+    const [px,py] = toScr(MAP.n[p][1], MAP.n[p][2]);
+    ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 2*uiScale;
+    ctx.beginPath(); ctx.arc(px, py, 12*uiScale, 0, 6.284); ctx.stroke();
+  }
   if (zieh && zieh.art === "arrow" && lastMouse){
     const [ax,ay] = toScr(MAP.n[zieh.von][1], MAP.n[zieh.von][2]);
     ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 2.5*uiScale;
@@ -663,6 +811,21 @@ function draw(){
     if (fightAt(i)){                        // contested: brass ring
       ctx.strokeStyle = "#f0b845"; ctx.lineWidth = Math.max(1.6, 1.8*Math.sqrt(z));
       ctx.beginPath(); ctx.arc(x, y, r+3.4, 0, 6.284); ctx.stroke();
+    }
+    const pb = paraAt(i);
+    if (pb){                                // para-block: parachute glyph beside the disc
+      const g = Math.max(6, 5*Math.sqrt(z))*uiScale, px = x - r - g*0.9, py = y - r*0.2;
+      ctx.globalAlpha = pb.plan ? .62 : 1;
+      ctx.fillStyle = col(FACTIONS[pb.f]);
+      ctx.strokeStyle = "rgba(5,8,12,.9)"; ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.arc(px, py, g, Math.PI, 0); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(px-g*.62, py); ctx.lineTo(px, py+g*.85);
+      ctx.lineTo(px+g*.62, py); ctx.stroke();
+      if (pb.plan){ ctx.setLineDash([2,2]); ctx.beginPath();
+        ctx.arc(px, py+g*.2, g*1.35, 0, 6.284); ctx.stroke(); ctx.setLineDash([]); }
+      ctx.globalAlpha = 1;
     }
     if (starAt(i)){                         // key objective: double white ring
       ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1.2, 1.3*Math.sqrt(z));
@@ -707,6 +870,27 @@ function draw(){
       ctx.beginPath(); ctx.arc(x, y+oy, gr*1.5, 0, 6.284); ctx.stroke();
     }
     ctx.globalAlpha = 1;
+
+    /* A clan tag turns "some enemies" into "an organised operation" — worth
+       its own banner next to the warning. */
+    const cl = clansAt(d.town);
+    if (cl.length && z > 0.9){
+      const txt = cl.map(c=>c.name).join(" / ");
+      const fh = gr*1.15;
+      ctx.font = `600 ${fh*0.86}px ${SCHMAL}`;
+      const bw = ctx.measureText(txt).width + fh*0.9;
+      const bx = x + gr*1.1, by2 = y + oy - fh*0.5;
+      ctx.fillStyle = farbe;
+      ctx.beginPath();
+      ctx.moveTo(bx, by2); ctx.lineTo(bx+bw, by2);
+      ctx.lineTo(bx+bw-fh*0.34, by2+fh*0.5); ctx.lineTo(bx+bw, by2+fh);
+      ctx.lineTo(bx, by2+fh); ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "rgba(5,8,12,.85)"; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = "#14100a"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      ctx.fillText(txt, bx + fh*0.42, by2 + fh*0.54);
+      ctx.textAlign = "center";
+    }
   }
 
   /* --- board notes pinned to a town --- */
@@ -981,6 +1165,34 @@ function setSpot(town, list){
   S.spot[k] = {v: list.length ? list : null, t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`spot:${k}`); save();
 }
+/* Free-form strength notes — "~1000 infantry". A sighting of assault teams is
+   a confirmed count; this is the rough impression, deliberately kept apart. */
+function estAt(i){
+  const raus = [];
+  for (const k of Object.keys(S.est)){
+    const p = k.indexOf(":");
+    if (+k.slice(0,p) !== i) continue;
+    const e = S.est[k];
+    if (e && e.v && e.v.length)
+      for (const x of e.v) raus.push({...x, who:k.slice(p+1), name:e.n||"", t:e.t, mine:k.endsWith(":"+S.me)});
+  }
+  return raus;
+}
+const myEst = i => (S.est[`${i}:${S.me}`] && S.est[`${i}:${S.me}`].v) || [];
+function setEst(town, list){
+  const k = `${town}:${S.me}`;
+  S.est[k] = {v: list.length ? list : null, t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`est:${k}`); save();
+}
+/* Para-blocking: denying an airfield's drop zone. Strategically decisive, so
+   it gets its own mark — either already in place or planned. */
+function setPara(town, f, plan){
+  stamp("para", town, f == null ? null : {f, plan: !!plan}, {n: S.name || ""});
+  save();
+}
+const paraAt = i => (S.para[i] && S.para[i].v) || null;
+const allPara = () => Object.keys(S.para).filter(i => S.para[i] && S.para[i].v)
+  .map(i => ({town:+i, ...S.para[i].v, t:S.para[i].t, by:S.para[i].n || S.para[i].by}));
 function addPost(text, town, prio){
   const id = Math.random().toString(36).slice(2,10);
   const k = `${id}:${S.me}`;
@@ -1055,14 +1267,55 @@ cv.addEventListener("mousedown", e => {
   const i = hitTest(e.offsetX, e.offsetY);
   if (tool === "arrow" && i !== null){ zieh = {art:"arrow", von:i}; return; }
   if (tool === "line"  && i !== null){ zieh = {art:"line", pts:[i]}; return; }
+  if (tool === "para"  && i !== null){ zieh = {art:"para", pts:[i]}; return; }
   if (tool === "area"){ zieh = {art:"area", pts:[toMap(e.offsetX, e.offsetY)]}; return; }
   dragging = true; dragged = false;
   dragStart = {mx:e.offsetX, my:e.offsetY, vx:view.x, vy:view.y};
 });
+/* Hover card — what is at this town without having to click it */
+const hover = document.getElementById("hover");
+let hoverIdx = null, hoverTimer = null;
+function hoverZeigen(i, mx, my){
+  if (i === null){ hover.style.display = "none"; hoverIdx = null; return; }
+  if (i === hoverIdx){ hover.style.left = (mx+16)+"px"; hover.style.top = (my+14)+"px"; return; }
+  hoverIdx = i;
+  const n = MAP.n[i], f = factionOf(i), gr = unitsAt(i), sp = spotsAt(i);
+  const teams = teamsAt(i), sch = estAt(i), pb = S.para[i] && S.para[i].v;
+  hover.innerHTML = `
+    <div class="h-name">${esc(n[0])}</div>
+    <div class="h-sub">${esc(MAP.typen[n[3]])}${isCap(i)?" · capital":""}
+      · <span style="color:${col(f)}">${f.name}</span></div>
+    ${starAt(i)||fightAt(i)||pb ? `<div class="h-tags">
+      ${starAt(i)?'<span class="chip">key</span>':""}
+      ${fightAt(i)?'<span class="chip fight">⚔ contested</span>':""}
+      ${pb?`<span class="chip" style="border-color:var(--accent);color:var(--accent)">para ${pb.plan?"planned":"blocked"}</span>`:""}
+    </div>`:""}
+    ${teams ? `<div class="h-row"><b>${teams}</b> own teams · ${menAt(i).toLocaleString("en")} men
+      <em>${gr.map(g=>esc(g.mine?"you":g.name||g.who)).join(", ")}</em></div>` : ""}
+    ${sp.length ? `<div class="h-row h-warn"><b>${sp.reduce((s,g)=>s+g.list.reduce((t,u)=>t+(u.n||0),0),0)}</b>
+      enemy reported <em>${alterText(Math.max(...sp.map(g=>g.t)))}</em>
+      ${clansAt(i).length ? `<em style="color:var(--accent)">clan: ${clansAt(i).map(c=>esc(c.name)).join(", ")}</em>` : ""}</div>` : ""}
+    ${sch.length ? `<div class="h-row">${sch.map(x=>esc(x.text)).join(" · ")}</div>` : ""}
+    ${noteOf(i) ? `<div class="h-row h-note">${esc(noteOf(i).slice(0,90))}</div>` : ""}
+    <div class="h-hint">click for detail</div>`;
+  hover.style.display = "block";
+  hover.style.left = (mx+16)+"px"; hover.style.top = (my+14)+"px";
+}
+
+cv.addEventListener("mouseleave", ()=>{ hover.style.display = "none"; hoverIdx = null; });
 cv.addEventListener("mousemove", e => {
   lastMouse = [e.offsetX, e.offsetY];
+  if (!dragging && !zieh && !carrying){
+    clearTimeout(hoverTimer);
+    const i = hitTest(e.offsetX, e.offsetY);
+    if (i === null) hoverZeigen(null);
+    else {
+      const r = cv.getBoundingClientRect();
+      hoverTimer = setTimeout(()=>hoverZeigen(i, r.left + e.offsetX, r.top + e.offsetY), i === hoverIdx ? 0 : 90);
+    }
+  } else hoverZeigen(null);
   if (zieh){
-    if (zieh.art === "line"){
+    if (zieh.art === "line" || zieh.art === "para"){
       const i = hitTest(e.offsetX, e.offsetY);
       if (i !== null && zieh.pts[zieh.pts.length-1] !== i && !zieh.pts.includes(i)) zieh.pts.push(i);
     } else if (zieh.art === "area"){
@@ -1092,11 +1345,16 @@ window.addEventListener("mouseup", e => {
       dirty.add(`arrow:${id}`); save();
       toast(`${MAP.n[zieh.von][0]} → ${MAP.n[bis][0]}`);
     }
+  } else if (zieh.art === "para"){
+    for (const p of zieh.pts) setPara(p, faction, paraGeplant);
+    toast(`${zieh.pts.length} town${zieh.pts.length===1?"":"s"} marked para-blocked`);
+    side();
   } else if (zieh.art === "line"){
     if (zieh.pts.length >= 2) lineSpeichern(zieh.pts);
     else toast("Drag across at least two towns");
   } else if (zieh.art === "area"){
     if (zieh.pts.length >= 6) areaSpeichern(zieh.pts);
+    setTool("inspect");          // one report, then back to the normal pointer
   }
   zieh = null; draw(); tally();
 });
@@ -1155,10 +1413,12 @@ cv.addEventListener("wheel", e => {
 document.addEventListener("keydown", e => {
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)){ if (e.key === "Escape") e.target.blur(); return; }
   const k = e.key.toLowerCase();
-  const t = {"1":"inspect","2":"owner","3":"unit","4":"arrow","5":"line","6":"area",
-             "7":"spot","8":"battle","9":"erase"}[e.key];
+  const t = {"1":"inspect","2":"owner","3":"unit","4":"arrow","5":"line","6":"para",
+             "7":"area","8":"spot","9":"battle","0":"erase"}[e.key];
   if (t){ setTool(t); return; }
   if (k === "b"){ document.getElementById("b-board").click(); return; }
+  if (k === "p"){ paraGeplant = !paraGeplant; tips();
+    toast(paraGeplant ? "Para-block: marking as PLANNED" : "Para-block: marking as in place"); return; }
   if (k === "enter" && lineDraft){ lineFertig(); return; }
   if (k === "q"){ setFaction(0); return; }
   if (k === "w"){ setFaction(1); return; }
@@ -1205,6 +1465,7 @@ function tips(){
     unit:   `<b>Unit</b> — click a town, then add teams on the right. Or drag them from your depot.`,
     arrow:  `<b>Move</b> — <b>drag</b> from the origin town to the target. Drawn for <b>${p}</b>.`,
     line:   `<b>Defence line</b> — <b>drag across</b> the towns it runs through. Drawn for <b>${p}</b>.`,
+    para:   `<b>Para-block</b> — <b>drag across</b> the towns that are blocked for <b>${p}</b>. Hold <kbd>P</kbd> while dragging to mark them as only planned.`,
     area:   `<b>Area</b> — <b>draw a shape</b> anywhere on the map, then label it ("many planes"). Coloured for <b>${p}</b>.`,
     spot:   "<b>Sighting</b> — click the town where you saw enemy forces, then record what and how much.",
     battle: "<b>Battle</b> — click marks a town as contested (brass ring). Click again to clear it.",
@@ -1224,8 +1485,9 @@ document.getElementById("b-key").addEventListener("click", function(){
 });
 document.getElementById("b-depot").addEventListener("click", function(){
   showDepot = !showDepot; this.setAttribute("aria-pressed", String(showDepot));
-  document.getElementById("depot").classList.toggle("on", showDepot);
+  document.getElementById("depot").classList.toggle("zu", !showDepot);
   if (showDepot) depotZeichnen();
+  requestAnimationFrame(resize);
 });
 function drawKey(){
   const c = light() ? "#1a2029" : "#dce4ee";
@@ -1245,39 +1507,56 @@ function zoom(f){
 
 /* ---------------- depot panel with drag to map ---------------- */
 const ghost = document.getElementById("ghost");
+const FILTER = [
+  {k:"all",  name:"All",   passt: () => true},
+  {k:"inf",  name:"Inf",   passt: a => a.arm === "army" && /infantry|guard|recon|para|path/.test(a.k)},
+  {k:"tank", name:"Armor", passt: a => isArmor(a.k)},
+  {k:"air",  name:"Air",   passt: a => a.arm === "air"},
+];
+let depotFilter = "all";
 function depotZeichnen(){
   const liste = document.getElementById("depot-list");
-  const mein = myDepot(), c = light() ? "#1a2029" : "#e9e2d5";
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const alle = myDepot();
+  const fl = FILTER.find(x=>x.k===depotFilter) || FILTER[0];
+  const mein = alle.filter(d => AT[d.k] && fl.passt(AT[d.k]));
+  const fb = document.getElementById("depot-filter");
+  fb.innerHTML = FILTER.map(x=>{
+    const anz = alle.filter(d => AT[d.k] && x.passt(AT[d.k])).length;
+    return `<button data-fl="${x.k}" aria-pressed="${x.k===depotFilter}">${x.name}${anz?` ${anz}`:""}</button>`;
+  }).join("");
+  fb.querySelectorAll("[data-fl]").forEach(b => b.addEventListener("click", ()=>{
+    depotFilter = b.dataset.fl; depotZeichnen();
+  }));
   const raus = deployedIds(S.me);
   document.getElementById("depot-sum").textContent =
-    mein.length ? `${raus.size}/${mein.length} deployed` : "";
+    alle.length ? `${raus.size}/${alle.length} deployed` : "";
   liste.innerHTML = mein.length ? mein.map(d => {
     const town = townOfTeam(d.id);
     const drin = town !== null;
     return `<div class="dep${drin?" raus":""}" data-id="${esc(d.id)}" style="--f:${col(FACTIONS[faction])}"
               title="${drin?"Drag to move it, or click the × to pull it back":"Drag onto a town"}">
         <span>${symbolSVG(d.k, c, 24, 17)}</span>
-        <span class="n"><input class="tname" data-id="${esc(d.id)}" value="${esc(d.name||"")}"
-            placeholder="${esc(atName(d.k))}" spellcheck="false">
+        <span class="n">
+          <span class="zeile2"><input class="tname" data-id="${esc(d.id)}" value="${esc(d.name||"")}"
+              placeholder="${esc(atName(d.k))}" spellcheck="false">
+            <input class="ttag" data-id="${esc(d.id)}" value="${esc(d.tag||"")}"
+              placeholder="TAG" spellcheck="false" maxlength="10"></span>
           <em>${esc(atName(d.k))} · ${atMen(d.k)} men${drin?` · ${esc(MAP.n[town][0])}`:""}</em></span>
         ${drin ? `<button class="pull" data-pull="${esc(d.id)}" title="Pull back to depot">×</button>`
                : `<span class="c">free</span>`}
       </div>`;
-  }).join("") : `<div class="empty" style="padding:6px 4px">Nothing yet. Add what you own below —
-    give each team the name it has in the game. This stays across wars.</div>`;
+  }).join("") : `<div class="empty" style="padding:6px 8px">${alle.length ? "Nothing of this type."
+    : "Nothing yet. Add what you own below — give each team the name it has in the game. This stays across wars."}</div>`;
 
-  const sel2 = document.getElementById("dep-type");
-  if (!sel2.options.length){
-    sel2.innerHTML = `<optgroup label="Army">${MAP.at.filter(a=>a.arm==="army")
-        .map(a=>`<option value="${a.k}">${esc(a.name)}</option>`).join("")}</optgroup>`
-      + `<optgroup label="Air Force">${MAP.at.filter(a=>a.arm==="air")
-        .map(a=>`<option value="${a.k}">${esc(a.name)}</option>`).join("")}</optgroup>`;
-  }
-  liste.querySelectorAll(".tname").forEach(inp => {
+
+  liste.querySelectorAll(".tname,.ttag").forEach(inp => {
     inp.addEventListener("pointerdown", ev => ev.stopPropagation());
     inp.addEventListener("change", ()=>{
-      const list = myDepot().map(d => d.id === inp.dataset.id ? {...d, name: inp.value.trim()} : d);
-      setMyDepot(list); depotZeichnen();
+      const feld = inp.classList.contains("ttag") ? "tag" : "name";
+      const wert = feld === "tag" ? inp.value.trim().toUpperCase() : inp.value.trim();
+      setMyDepot(myDepot().map(d => d.id === inp.dataset.id ? {...d, [feld]: wert} : d));
+      depotZeichnen();
     });
   });
   liste.querySelectorAll("[data-pull]").forEach(b => {
@@ -1291,7 +1570,7 @@ function depotZeichnen(){
       const d = teamById(el.dataset.id);
       if (!d) return;
       carrying = {id: d.id};
-      ghost.textContent = d.name || atName(d.k);
+      ghost.textContent = (d.tag ? d.tag + " · " : "") + (d.name || atName(d.k));
       ghost.style.display = "block"; bewegeGhost(ev);
       cv.classList.add("dropping");
       el.setPointerCapture(ev.pointerId);
@@ -1321,13 +1600,26 @@ function bewegeGhost(ev){
   ghost.style.top  = (ev.clientY - 10) + "px";
 }
 document.getElementById("dep-add").addEventListener("click", ()=>{
-  const k = document.getElementById("dep-type").value;
-  const n = Math.max(1, Math.min(99, +document.getElementById("dep-n").value || 1));
-  const list = myDepot().slice();
-  for (let j=0;j<n;j++)
-    list.push({id: Math.random().toString(36).slice(2,9), k, name: ""});
-  setMyDepot(list); depotZeichnen();
-  toast(n === 1 ? "Added — give it its in-game name" : `${n} added — name them in the list`);
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const kachel = a => `<button class="pick" data-k="${a.k}">
+      ${symbolSVG(a.k, c, 34, 24)}<span>${esc(a.name)}</span>
+      <em>${a.crew.reduce((s,x)=>s+x[1],0)} men · ${a.cp} CP</em></button>`;
+  openDlg(`
+    <div class="dlg-h"><h2>Add assault teams</h2>
+      <p>Click a type to add one. Name it afterwards in the list on the right.</p></div>
+    <div class="dlg-b">
+      <h3 style="font-size:9.5px;letter-spacing:.09em;color:var(--dim2)">ARMY</h3>
+      <div class="pickgrid">${MAP.at.filter(a=>a.arm==="army").map(kachel).join("")}</div>
+      <h3 style="font-size:9.5px;letter-spacing:.09em;color:var(--dim2);margin-top:6px">AIR FORCE</h3>
+      <div class="pickgrid">${MAP.at.filter(a=>a.arm==="air").map(kachel).join("")}</div>
+    </div>
+    <div class="dlg-f"><button class="btn primary" id="d-close">Done</button></div>`, true);
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  document.querySelectorAll(".pick").forEach(b => b.addEventListener("click", ()=>{
+    setMyDepot(myDepot().concat([{id: Math.random().toString(36).slice(2,9), k: b.dataset.k, name: ""}]));
+    depotZeichnen();
+    toast(`${atName(b.dataset.k)} added`);
+  }));
 });
 
 /* ---------------- tally ---------------- */
@@ -1359,12 +1651,13 @@ function tally(){
 /* ---------------- side panel ---------------- */
 function side(){
   const el = document.getElementById("side");
-  if (sel === null){ el.classList.add("hidden"); return; }
+  if (sel === null){ el.classList.add("hidden"); requestAnimationFrame(resize); return; }
   el.classList.remove("hidden");
   const i = sel, n = MAP.n[i], f = factionOf(i);
   const gruppen = unitsAt(i).slice().sort((a,b)=> (b.mine?1:0)-(a.mine?1:0));
   const nb = MAP.e.filter(([a,b]) => a===i||b===i).map(([a,b]) => a===i?b:a);
   const c = light() ? "#1a2029" : "#dce4ee";
+  const pb = paraAt(i), sch = estAt(i);
   const belegt = deployedIds(S.me);
   const freieTeams = myDepot().filter(d => !belegt.has(d.id));
   const spo = spotsAt(i);
@@ -1393,6 +1686,16 @@ function side(){
         <span>Fighting here right now</span></label>
       <label class="toggle"><input type="checkbox" id="star-cb" ${starAt(i)?"checked":""}>
         <span>Key objective — highlight for everyone</span></label>
+      <div class="para-row">
+        <span class="para-lbl">Para-block</span>
+        <div class="own4" style="grid-template-columns:repeat(4,1fr);flex:1">
+          ${FACTIONS.map(q=>`<button data-pb="${q.id}" style="--f:${q.color}"
+            aria-pressed="${pb && pb.f===q.id}">${q.tag}</button>`).join("")}
+          <button data-pb="" style="--f:${NEUTRAL.color}" aria-pressed="${!pb}">none</button>
+        </div>
+      </div>
+      ${pb ? `<label class="toggle"><input type="checkbox" id="pb-plan" ${pb.plan?"checked":""}>
+        <span>Only planned, not in place yet</span></label>` : ""}
     </div>
     <div class="sec">
       <h3>Enemy sightings ${spo.length?`<span class="sub">${spo.reduce((s,g)=>s+g.list.reduce((t,u)=>t+u.n,0),0)} reported</span>`:""}</h3>
@@ -1404,17 +1707,36 @@ function side(){
             <div class="unit" style="--f:${col(FACTIONS[u.f!=null?u.f:faction])}">
               <span class="sym">${symbolSVG(u.k, c)}</span>
               <span class="n">${u.n}× ${esc(atName(u.k))}
-                <em>${FACTIONS[u.f!=null?u.f:faction].tag}</em></span>
+                <em>${FACTIONS[u.f!=null?u.f:faction].tag}${u.owner?` · ${esc(u.owner)}`:""}</em></span>
               ${g.mine ? `<button class="x" data-sprm="${k}" title="Remove">×</button>` : `<span class="lock">🔒</span>`}
             </div>`).join("")}
         </div>`).join("") : `<span class="empty">Nothing reported here.</span>`}
       <div class="row">
-        <select id="sp-type">${MAP.at.map(a=>`<option value="${a.k}">${esc(a.name)}</option>`).join("")}</select>
-        <input type="number" id="sp-n" value="1" min="1" max="99" title="How many">
+        <div id="sp-type"></div>
+        <input type="number" id="sp-n" value="1" min="1" max="99" title="How many" style="width:52px">
+      </div>
+      <div class="row">
+        <input type="text" id="sp-own" list="sp-owners" placeholder="whose is it? (optional)" style="flex:1">
+        <datalist id="sp-owners">${spielerListe().map(p=>`<option value="${esc(p.name)}">`).join("")}</datalist>
         <button class="btn" id="sp-add">+</button>
       </div>
       <div class="hint">Reports fade on the map after a few hours and go pale after a day —
         so nobody plans around a stale sighting.</div>
+    </div>
+    <div class="sec">
+      <h3>Rough strength <span class="sub">not confirmed</span></h3>
+      ${sch.length ? sch.map((x,k)=>`
+        <div class="unit" style="--f:var(--dim2)">
+          <span class="sym" style="text-align:center;font-size:15px">≈</span>
+          <span class="n">${esc(x.text)}<em>${esc(x.name||x.who)} · ${alterText(x.t)}</em></span>
+          ${x.mine ? `<button class="x" data-estrm="${myEst(i).indexOf(myEst(i).find(y=>y.text===x.text))}">×</button>` : `<span class="lock">🔒</span>`}
+        </div>`).join("") : `<span class="empty">Nothing noted.</span>`}
+      <div class="row">
+        <input type="text" id="est-txt" placeholder="e.g. ~1000 infantry, lots of AA" style="flex:1">
+        <button class="btn" id="est-add">+</button>
+      </div>
+      <div class="hint">For what you saw but could not count. Assault teams above are
+        <b>confirmed</b>, this is the impression.</div>
     </div>
     <div class="sec">
       <h3>Assault teams ${teamsAt(i)?`<span class="sub">${teamsAt(i)} teams · ${menAt(i).toLocaleString("en")} men</span>`:""}</h3>
@@ -1433,7 +1755,7 @@ function side(){
         </div>`).join("") : `<span class="empty">Nothing here yet.</span>`}
       <div class="row">
         <select id="u-type">${freieTeams.length
-          ? freieTeams.map(d=>`<option value="${esc(d.id)}">${esc(d.name || atName(d.k))} — ${esc(atName(d.k))}</option>`).join("")
+          ? freieTeams.map(d=>`<option value="${esc(d.id)}">${esc(d.tag?d.tag+" · ":"")}${esc(d.name || atName(d.k))} — ${esc(atName(d.k))}</option>`).join("")
           : `<option disabled>nothing free in your depot</option>`}</select>
         <button class="btn" id="u-add" ${freieTeams.length?"":"disabled"}>Place</button>
       </div>
@@ -1463,16 +1785,37 @@ function side(){
   el.querySelector("#star-cb")?.addEventListener("change", ev=>{
     stamp("star", i, ev.target.checked ? 1 : null); save(); side(); draw();
   });
+  el.querySelectorAll("[data-pb]").forEach(b => b.addEventListener("click", ()=>{
+    const v = b.dataset.pb;
+    setPara(i, v === "" ? null : +v, pb ? pb.plan : false);
+    side(); draw(); tally();
+  }));
+  el.querySelector("#pb-plan")?.addEventListener("change", ev=>{
+    if (pb) setPara(i, pb.f, ev.target.checked);
+    side(); draw();
+  });
+  el.querySelector("#est-add")?.addEventListener("click", ()=>{
+    const txt = el.querySelector("#est-txt").value.trim();
+    if (!txt) return;
+    setEst(i, myEst(i).concat([{text: txt}])); side(); draw();
+  });
+  el.querySelectorAll("[data-estrm]").forEach(b => b.addEventListener("click", ()=>{
+    const l = myEst(i).slice(); l.splice(+b.dataset.estrm, 1); setEst(i, l); side(); draw();
+  }));
+  const spHost = el.querySelector("#sp-type");
+  if (spHost) symbolWahl(spHost, MAP.at[0].k);
   el.querySelector("#sp-add")?.addEventListener("click", ()=>{
-    const k = el.querySelector("#sp-type").value;
+    const k = spHost.dataset.k;
     const anz = Math.max(1, Math.min(99, +el.querySelector("#sp-n").value || 1));
+    const owner = el.querySelector("#sp-own").value.trim();
+    if (owner) merkeSpieler(owner, faction);
     const meins = spo.find(g => g.mine);
     const list = meins ? meins.list.slice() : [];
-    const idx = list.findIndex(u => u.k === k && u.f === faction);
+    const idx = list.findIndex(u => u.k === k && u.f === faction && (u.owner||"") === owner);
     if (idx >= 0) list[idx] = {...list[idx], n: list[idx].n + anz};
-    else list.push({k, n:anz, f:faction});
+    else list.push(owner ? {k, n:anz, f:faction, owner} : {k, n:anz, f:faction});
     setSpot(i, list); side(); draw();
-    toast(`Reported: ${anz}× ${atName(k)}`);
+    toast(`Reported: ${anz}× ${atName(k)}${owner?` (${owner})`:""}`);
   });
   el.querySelectorAll("[data-sprm]").forEach(b => b.addEventListener("click", ()=>{
     const meins = spotsAt(i).find(g => g.mine);
@@ -1888,6 +2231,449 @@ document.getElementById("b-board").addEventListener("click", ()=>{
   }));
 });
 
+/* ---------------- symbol picker ----------------
+   A native <select> cannot show graphics, and the tactical sign is exactly
+   what makes a type recognisable. This is a small button-plus-panel that
+   behaves like a select but draws the symbol. */
+let pickerOffen = null;
+function symbolWahl(host, gewaehlt, beiWahl){
+  const c = () => light() ? "#1a2029" : "#e9e2d5";
+  host.className = "sympick";
+  const zeichne = () => {
+    const a = AT[host.dataset.k];
+    host.innerHTML = `<span class="sw-cur">${a ? symbolSVG(a.k, c(), 26, 18) : ""}
+      <span>${a ? esc(a.name) : "choose …"}</span></span><span class="sw-pfeil">▾</span>`;
+  };
+  host.dataset.k = gewaehlt || MAP.at[0].k;
+  zeichne();
+  host.addEventListener("click", ev => {
+    ev.stopPropagation();
+    if (pickerOffen){ pickerOffen.remove(); pickerOffen = null; }
+    const p = document.createElement("div");
+    p.className = "sw-liste";
+    const gruppe = (titel, arr) => `<div class="sw-h">${titel}</div>` + arr.map(a =>
+      `<button data-k="${a.k}"${a.k===host.dataset.k?' class="an"':''}>
+         ${symbolSVG(a.k, c(), 26, 18)}<span>${esc(a.name)}</span></button>`).join("");
+    p.innerHTML = gruppe("Army", MAP.at.filter(a=>a.arm==="army"))
+                + gruppe("Air Force", MAP.at.filter(a=>a.arm==="air"));
+    document.body.appendChild(p);
+    const r = host.getBoundingClientRect();
+    p.style.left = r.left + "px";
+    p.style.top = (r.bottom + 2 + window.scrollY) + "px";
+    p.style.minWidth = r.width + "px";
+    if (r.bottom + p.offsetHeight > window.innerHeight)
+      p.style.top = (r.top - p.offsetHeight - 2) + "px";
+    pickerOffen = p;
+    p.querySelectorAll("[data-k]").forEach(b => b.addEventListener("click", ev2 => {
+      ev2.stopPropagation();
+      host.dataset.k = b.dataset.k; zeichne();
+      p.remove(); pickerOffen = null;
+      beiWahl && beiWahl(b.dataset.k);
+    }));
+  });
+  return host;
+}
+document.addEventListener("click", ()=>{ if (pickerOffen){ pickerOffen.remove(); pickerOffen = null; } });
+
+/* ---------------- enemy register ----------------
+   Who is out there, which faction they are fighting for this war, and what we
+   have seen of them. Names are matched loosely, so "/!(§Peter" and "Peter"
+   are the same person. */
+document.getElementById("b-enemy").addEventListener("click", ()=>{
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const proSpieler = new Map();
+  for (const k of Object.keys(S.spot)){
+    const e = S.spot[k];
+    if (!e || !e.v) continue;
+    const town = +k.slice(0, k.indexOf(":"));
+    for (const u of e.v){
+      if (!u.owner) continue;
+      const key = namKey(u.owner);
+      const d = proSpieler.get(key) || {name:u.owner, f:u.f, teams:0, arten:new Map(), orte:new Set(), t:0};
+      d.teams += u.n; d.orte.add(town); d.t = Math.max(d.t, e.t||0);
+      d.arten.set(u.k, (d.arten.get(u.k)||0) + u.n);
+      if (u.f != null) d.f = u.f;
+      proSpieler.set(key, d);
+    }
+  }
+  for (const p of spielerListe())
+    if (!proSpieler.has(p.key))
+      proSpieler.set(p.key, {name:p.name, f:p.f, teams:0, arten:new Map(), orte:new Set(), t:p.t});
+  const liste = [...proSpieler.entries()].sort((a,b)=> b[1].teams - a[1].teams);
+  const nz = n => n.toLocaleString("en");
+
+  openDlg(`
+    <div class="dlg-h"><h2>Enemy register</h2>
+      <p>${liste.length ? `<b>${liste.length}</b> players on record. A player can switch faction
+         between wars — only what they field for their current one shows on the map.`
+         : "Nothing recorded yet. Add an owner when you report a sighting and they land here."}</p></div>
+    <div class="dlg-b">
+      ${clanListe().length ? `<div class="tw"><table>
+        <thead><tr><th>Clan</th><th>Players</th><th>Known teams</th><th>Mostly</th></tr></thead>
+        <tbody>${clanListe().map(c=>{
+          const top = [...c.f.entries()].sort((a,b)=>b[1]-a[1])[0];
+          return `<tr><td><b style="color:var(--accent)">${esc(c.name)}</b></td>
+            <td>${c.spieler.length}</td><td>${c.teams||"—"}</td>
+            <td style="color:${top?col(FACTIONS[top[0]]):"var(--dim2)"}">${top?FACTIONS[top[0]].name:"—"}</td></tr>`;
+        }).join("")}</tbody></table></div>` : ""}
+      <div class="row">
+        <input type="text" id="en-name" placeholder="add a player by name" style="flex:1">
+        <select id="en-fac" style="width:120px">
+          <option value="">faction?</option>
+          ${FACTIONS.map(f=>`<option value="${f.id}">${f.name}</option>`).join("")}
+        </select>
+        <input type="text" id="en-clan" placeholder="clan" style="width:110px">
+        <button class="btn" id="en-add">Add</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="en-bulk" style="flex:1">Add many at once …</button>
+        <button class="btn" id="en-ocr" style="flex:1">Read a battle screenshot …</button>
+      </div>
+      ${liste.length ? `<div class="tw"><table>
+        <thead><tr><th>Player</th><th>Clan</th><th>Fights for</th><th>Known teams</th><th>Seen</th><th>Towns</th><th>What</th><th>Last</th></tr></thead>
+        <tbody>${liste.map(([key,d])=>`<tr>
+          <td><a href="#" data-öffne="${esc(key)}" style="color:var(--accent)">${esc(d.name)}</a></td>
+          <td><input class="mini" data-clan="${esc(key)}" value="${esc((S.roster[key]&&S.roster[key].v&&S.roster[key].v.clan)||"")}"
+                placeholder="—" style="width:88px"></td>
+          <td><select data-fac="${esc(key)}" class="mini">
+            <option value="">—</option>
+            ${FACTIONS.map(f=>`<option value="${f.id}"${d.f===f.id?" selected":""}>${f.tag}</option>`).join("")}
+          </select></td>
+          <td>${feindDepot(key).length || "—"}</td>
+          <td>${d.teams?nz(d.teams):"—"}</td>
+          <td>${d.orte.size||"—"}</td>
+          <td style="text-align:left">${[...d.arten.entries()].map(([k,v])=>
+              `<span title="${esc(atName(k))}" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px">
+                 ${symbolSVG(k, c, 20, 14)}<small>${v}</small></span>`).join("") || "—"}</td>
+          <td style="color:var(--dim2)">${d.t?alterText(d.t):"—"}</td>
+        </tr>`).join("")}</tbody></table></div>` : ""}
+      <div class="note">Sightings you enter with an owner feed this list automatically. Setting the
+        faction matters: it says which side that player is on <b>this war</b> — only then can their
+        teams show up on the map at all. Click a name to record what they own.</div>
+    </div>
+    <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, true);
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  document.getElementById("en-add").addEventListener("click", ()=>{
+    const nm = document.getElementById("en-name").value.trim();
+    if (!nm){ toast("Type a name first."); return; }
+    const fv = document.getElementById("en-fac").value;
+    merkeSpieler(nm, fv === "" ? null : +fv, document.getElementById("en-clan").value.trim());
+    closeDlg(); toast(`${nm} recorded`);
+  });
+  document.getElementById("en-bulk").addEventListener("click", massenDialog);
+  document.getElementById("en-ocr").addEventListener("click", ocrDialog);
+  document.querySelectorAll("[data-fac]").forEach(s => s.addEventListener("change", ev=>{
+    ev.stopPropagation();
+    const d = proSpieler.get(s.dataset.fac);
+    merkeSpieler(d.name, s.value === "" ? null : +s.value);
+    toast("Faction updated");
+  }));
+  document.querySelectorAll("[data-clan]").forEach(inp => {
+    inp.addEventListener("click", ev => ev.stopPropagation());
+    inp.addEventListener("change", ()=>{
+      const d = proSpieler.get(inp.dataset.clan);
+      merkeSpieler(d.name, null, inp.value.trim());
+      draw(); toast(inp.value.trim() ? `${d.name} → ${inp.value.trim()}` : "Clan cleared");
+    });
+  });
+  document.querySelectorAll("[data-öffne]").forEach(el => el.addEventListener("click", ()=>{
+    feindDialog(el.dataset.öffne, proSpieler.get(el.dataset.öffne).name);
+  }));
+});
+
+/* Bulk entry — after a match you often have a dozen names at once. */
+function massenDialog(){
+  openDlg(`
+    <div class="dlg-h"><h2>Add many players</h2>
+      <p>One per line. A clan tag in brackets or after a slash is picked up automatically —
+         <code>[ROS] Peter</code>, <code>Peter /ROS</code>.</p></div>
+    <div class="dlg-b">
+      <textarea id="bulk-txt" style="min-height:150px"
+        placeholder="[ROS] Peter&#10;Peter123&#10;/!(§Peter"></textarea>
+      <div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Apply to all of them</span>
+        <input type="text" id="bulk-clan" placeholder="clan (optional)" style="width:120px">
+        <select id="bulk-fac" style="width:120px"><option value="">faction?</option>
+          ${FACTIONS.map(f=>`<option value="${f.id}">${f.name}</option>`).join("")}</select>
+      </div>
+    </div>
+    <div class="dlg-f">
+      <button class="btn" id="d-close">Cancel</button>
+      <button class="btn primary" id="bulk-go">Add</button>
+    </div>`);
+  document.getElementById("d-close").addEventListener("click", ()=>{ closeDlg();
+    document.getElementById("b-enemy").click(); });
+  document.getElementById("bulk-go").addEventListener("click", ()=>{
+    const fv = document.getElementById("bulk-fac").value;
+    const cAll = document.getElementById("bulk-clan").value.trim();
+    let n = 0;
+    for (let z of document.getElementById("bulk-txt").value.split(/\r?\n/)){
+      z = z.trim();
+      if (z.length < 2) continue;
+      let clan = cAll, name = z;
+      const m = z.match(/^\[([^\]]{1,12})\]\s*(.+)$/) || z.match(/^(.+?)\s*[\/|]\s*([\w-]{2,12})$/);
+      if (m){
+        if (z.startsWith("[")){ clan = clan || m[1]; name = m[2]; }
+        else { name = m[1]; clan = clan || m[2]; }
+      }
+      if (merkeSpieler(name.trim(), fv === "" ? null : +fv, clan)) n++;
+    }
+    closeDlg(); toast(`${n} player${n===1?"":"s"} recorded`);
+    document.getElementById("b-enemy").click();
+  });
+}
+
+/* ---- reading a battle screenshot -------------------------------------
+   The battle detail screen carries far more than names: the town, both
+   sides' strength and the whole player list. The town is the easy part —
+   we know all 1438 names, so we only have to find the closest one, which
+   survives a lot of OCR noise. */
+function levenshtein(a, b){
+  if (a === b) return 0;
+  if (!a.length || !b.length) return Math.max(a.length, b.length);
+  let prev = Array.from({length: b.length+1}, (_,i)=>i);
+  for (let i=1;i<=a.length;i++){
+    const cur = [i];
+    for (let j=1;j<=b.length;j++)
+      cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1] + (a[i-1]===b[j-1]?0:1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+const STADT_KEYS = MAP.n.map((n,i) => [namKey(n[0]), i]);
+function findeStadt(zeile){
+  const k = namKey(zeile);
+  if (k.length < 4) return null;
+  let best = null;
+  for (const [sk, i] of STADT_KEYS){
+    if (sk === k) return {i, d:0, sicher:true};
+    if (Math.abs(sk.length - k.length) > 4) continue;
+    const d = levenshtein(k, sk);
+    if (!best || d < best.d) best = {i, d, sicher:false};
+  }
+  if (!best) return null;
+  const rel = best.d / Math.max(4, namKey(MAP.n[best.i][0]).length);
+  return rel <= 0.25 ? {...best, sicher: rel <= 0.12} : null;
+}
+/* "1.4k" -> 1400, "230" -> 230 */
+const zahlWert = s => {
+  const m = String(s).replace(/,/g, ".").match(/^(\d+(?:\.\d+)?)\s*([km])?$/i);
+  if (!m) return null;
+  const v = parseFloat(m[1]);
+  return Math.round(m[2] ? v * (m[2].toLowerCase() === "k" ? 1000 : 1e6) : v);
+};
+
+/* Reading names off a screenshot needs a real OCR engine. It is loaded from a
+   CDN on demand — the map works without it, this is the one place that needs
+   the network. Results are always shown for confirmation, never taken as-is:
+   game fonts plus decorated names make mistakes certain. */
+let ocrLaeuft = null;
+function ocrDialog(){
+  openDlg(`
+    <div class="dlg-h"><h2>Read a battle screenshot</h2>
+      <p>The battle detail screen works best: it carries the town, both sides' strength and the
+         full player list. A plain scoreboard works too.</p></div>
+    <div class="dlg-b">
+      <div class="row"><input type="file" id="ocr-file" accept="image/png,image/jpeg" style="flex:1"></div>
+      <div id="ocr-status" style="font-size:12px;color:var(--dim)">Waiting for an image …</div>
+      <div id="ocr-out" style="display:none;flex-direction:column;gap:6px">
+        <div id="ocr-stadt-box"></div>
+        <div style="font-size:11.5px;color:var(--dim);border-top:1px solid var(--line);padding-top:8px">
+          Tick what is a player name, fix typos and clan tags, then add.
+          OCR gets decorated names wrong more often than not.</div>
+        <div id="ocr-list" style="max-height:34vh;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+        <div class="row" style="align-items:center">
+          <input type="text" id="ocr-clan" placeholder="clan for all ticked" style="flex:1">
+          <select id="ocr-fac" style="width:120px"><option value="">faction?</option>
+            ${FACTIONS.map(f=>`<option value="${f.id}">${f.name}</option>`).join("")}</select>
+        </div>
+      </div>
+    </div>
+    <div class="dlg-f">
+      <button class="btn" id="d-close">Cancel</button>
+      <button class="btn primary" id="ocr-go" disabled>Add ticked</button>
+    </div>`, true);
+  document.getElementById("d-close").addEventListener("click", ()=>{ closeDlg();
+    document.getElementById("b-enemy").click(); });
+  document.getElementById("ocr-file").addEventListener("change", ev => {
+    const f = ev.target.files[0]; if (f) ocrLesen(f);
+  });
+  document.getElementById("ocr-go").addEventListener("click", ()=>{
+    const clanAlle = document.getElementById("ocr-clan").value.trim();
+    const fv = document.getElementById("ocr-fac").value;
+    let n = 0;
+    document.querySelectorAll("#ocr-list .zeile").forEach(z => {
+      if (!z.querySelector("input[type=checkbox]").checked) return;
+      const felder = z.querySelectorAll("input[type=text]");
+      const nm = felder[0].value.trim();
+      const clan = (felder[1] && felder[1].value.trim()) || clanAlle;
+      if (merkeSpieler(nm, fv === "" ? null : +fv, clan)) n++;
+    });
+    // Stadt und Staerke uebernehmen
+    let stadtTxt = "";
+    const si = document.getElementById("ocr-stadt");
+    if (si && si.value.trim()){
+      const tr = findeStadt(si.value.trim());
+      const strCb = document.getElementById("ocr-str");
+      if (tr){
+        sel = tr.i;
+        if (strCb && strCb.checked){
+          const st = JSON.parse(document.getElementById("ocr-out").dataset.staerke || "[]");
+          if (st.length){
+            const txt = st.map(v=>"~"+v.toLocaleString("en")).join(" / ") + " men (from battle screen)";
+            setEst(tr.i, myEst(tr.i).concat([{text: txt}]));
+          }
+        }
+        stadtTxt = ` · ${MAP.n[tr.i][0]}`;
+      }
+    }
+    closeDlg();
+    if (sel !== null){ flyTo(sel); side(); draw(); }
+    toast(`${n} name${n===1?"":"s"} recorded${stadtTxt}`);
+  });
+}
+async function ocrLesen(datei){
+  const st = document.getElementById("ocr-status");
+  const setz = s => st.innerHTML = s;
+  if (!window.Tesseract){
+    setz("Loading the text recogniser (about 3 MB, first time only) …");
+    try {
+      await new Promise((ok, err) => {
+        const s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+        s.onload = ok; s.onerror = () => err(new Error("could not be loaded"));
+        document.head.appendChild(s);
+      });
+    } catch(e){
+      setz(`<b>The recogniser could not be loaded.</b> This needs internet access and does not work
+            offline or inside the preview. Use <b>Add many at once</b> and type the names instead.`);
+      return;
+    }
+  }
+  setz("Reading … this takes a few seconds.");
+  let text = "";
+  try {
+    const r = await window.Tesseract.recognize(datei, "eng", {
+      logger: m => { if (m.status === "recognizing text") setz(`Reading … ${Math.round(m.progress*100)} %`); }
+    });
+    text = r.data.text || "";
+  } catch(e){ setz("<b>Reading failed.</b> " + esc(String(e.message||e))); return; }
+
+  // Zeilen zu Kandidaten machen: alles was wie ein Name aussehen koennte
+  const roh = text.split(/\r?\n/).map(z => z.trim())
+    .filter(z => z.length >= 3 && z.length <= 28 && /[A-Za-z]/.test(z));
+  const gesehen = new Set(), kand = [];
+  for (let z of roh){
+    z = z.replace(/\s{2,}.*$/, "").trim();          // Spalten hinter dem Namen abschneiden
+    if (/^[\d\s.,%:/-]+$/.test(z)) continue;         // reine Zahlenzeilen raus
+    const k = namKey(z);
+    if (k.length < 2 || gesehen.has(k)) continue;
+    gesehen.add(k); kand.push(z);
+  }
+  // --- Stadt: gegen alle bekannten Namen abgleichen -------------------
+  let stadt = null;
+  for (const z of roh.slice(0, 12)){
+    const tr = findeStadt(z);
+    if (tr && (!stadt || tr.d < stadt.d)) stadt = tr;
+    if (stadt && stadt.sicher) break;
+  }
+  // --- Truppenstärke: die grossen Zahlen der Uebersicht ---------------
+  const zahlen = [];
+  for (const z of roh){
+    const teile = z.split(/\s+/).map(zahlWert).filter(v => v !== null && v > 0);
+    if (teile.length >= 3) zahlen.push(teile);
+  }
+  const staerke = zahlen.sort((a,b)=> Math.max(...b) - Math.max(...a)).slice(0, 2)
+                        .map(r => Math.max(...r));
+
+  if (!kand.length && !stadt){
+    setz("<b>Nothing recognised.</b> Try a sharper or tighter screenshot."); return;
+  }
+  setz(`${stadt ? `<b>${esc(MAP.n[stadt.i][0])}</b>${stadt.sicher?"":" (unsure)"} · ` : ""}`
+     + `<b>${kand.length}</b> name candidate${kand.length===1?"":"s"}`
+     + `${staerke.length ? ` · strength around ${staerke.map(v=>v.toLocaleString("en")).join(" vs ")}` : ""}`);
+
+  const out = document.getElementById("ocr-out");
+  out.querySelector("#ocr-stadt-box").innerHTML = `
+    <div class="row" style="align-items:center">
+      <span style="font-size:12px;color:var(--dim);width:74px">Town</span>
+      <input type="text" id="ocr-stadt" list="ocr-staedte" style="flex:1"
+        value="${stadt ? esc(MAP.n[stadt.i][0]) : ""}" placeholder="not recognised — type it">
+      <datalist id="ocr-staedte">${MAP.n.map(n=>`<option value="${esc(n[0])}">`).join("")}</datalist>
+    </div>
+    ${staerke.length ? `<label class="toggle" style="margin-top:5px">
+      <input type="checkbox" id="ocr-str" checked>
+      <span>Note strength there: <b>${staerke.map(v=>"~"+v.toLocaleString("en")).join(" / ")}</b> men</span></label>` : ""}`;
+  out.dataset.staerke = JSON.stringify(staerke);
+
+  const liste = document.getElementById("ocr-list");
+  liste.innerHTML = kand.map(z => {
+    // Clan-Tag in eckigen Klammern abtrennen: "[SRB]CrazySerb"
+    const m = z.match(/^\[([^\]]{1,12})\]\s*(.+)$/);
+    const clan = m ? m[1] : "", nm = m ? m[2].trim() : z;
+    const bekannt = spielerListe().find(p => namKey(p.name) === namKey(nm));
+    return `<label class="zeile" style="display:flex;align-items:center;gap:6px">
+      <input type="checkbox" ${bekannt?"":"checked"}>
+      <input type="text" value="${esc(nm)}" style="flex:1;background:var(--panel2);
+        border:1px solid var(--line);border-radius:2px;padding:3px 6px;outline:0;font-size:12px">
+      <input type="text" value="${esc(clan)}" placeholder="clan" style="width:78px;background:var(--panel2);
+        border:1px solid var(--line);border-radius:2px;padding:3px 6px;outline:0;font-size:11px">
+      ${bekannt?`<span style="font-size:10px;color:var(--dim2)">known</span>`:""}
+    </label>`;
+  }).join("");
+  out.style.display = "flex";
+  document.getElementById("ocr-go").disabled = false;
+}
+
+/* What we believe one enemy player owns. Shared, so the whole clan builds it
+   up together; name and tag are there so nobody enters the same team twice. */
+function feindDialog(key, name){
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const liste = feindDepot(key);
+  const eintrag = S.roster[key];
+  const f = eintrag && eintrag.v ? eintrag.v.f : null;
+  openDlg(`
+    <div class="dlg-h"><h2>${esc(name)}</h2>
+      <p>${liste.length ? `<b>${liste.length}</b> assault teams on record` : "Nothing on record yet"}${
+        f != null ? ` · fighting for <b style="color:${col(FACTIONS[f])}">${FACTIONS[f].name}</b>` : ""}</p></div>
+    <div class="dlg-b">
+      ${liste.length ? `<div style="display:flex;flex-direction:column;gap:4px">
+        ${liste.map((d,i)=>`<div class="unit" style="--f:${f!=null?col(FACTIONS[f]):"var(--dim2)"}">
+          <span class="sym">${symbolSVG(d.k, c)}</span>
+          <span class="n">${esc(d.name || atName(d.k))}<em>${esc(d.tag||"")}${d.tag?" · ":""}${esc(atName(d.k))}</em></span>
+          <button class="x" data-frm="${i}" title="Remove">×</button></div>`).join("")}
+      </div>` : ""}
+      <div style="border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:6px">
+        <div class="row"><div id="fd-type" style="flex:1"></div></div>
+        <div class="row">
+          <input type="text" id="fd-name" placeholder="team name as in game" style="flex:1">
+          <input type="text" id="fd-tag" placeholder="TAG" style="width:84px" maxlength="10">
+          <button class="btn primary" id="fd-add">Add</button>
+        </div>
+      </div>
+      <div class="note">Recording an enemy's teams is how you work out what they can field.
+        Because everyone sees the same list, check the tag before adding — that is what keeps
+        duplicates out.</div>
+    </div>
+    <div class="dlg-f"><button class="btn" id="d-close">Back</button></div>`, true);
+  document.getElementById("d-close").addEventListener("click", ()=>{ closeDlg();
+    document.getElementById("b-enemy").click(); });
+  symbolWahl(document.getElementById("fd-type"), MAP.at[0].k);
+  document.getElementById("fd-add").addEventListener("click", ()=>{
+    const k = document.getElementById("fd-type").dataset.k;
+    const nm = document.getElementById("fd-name").value.trim();
+    const tag = document.getElementById("fd-tag").value.trim().toUpperCase();
+    const doppelt = liste.find(d => (tag && d.tag === tag) || (nm && d.name === nm));
+    if (doppelt){ toast(`Already recorded: ${doppelt.name || atName(doppelt.k)}`); return; }
+    setFeindDepot(key, liste.concat([{id: Math.random().toString(36).slice(2,9), k, name:nm, tag}]));
+    feindDialog(key, name); toast("Added");
+  });
+  document.querySelectorAll("[data-frm]").forEach(b => b.addEventListener("click", ()=>{
+    const l = liste.slice(); l.splice(+b.dataset.frm, 1);
+    setFeindDepot(key, l); feindDialog(key, name);
+  }));
+}
+
 /* ---------------- roster ---------------- */
 document.getElementById("b-roster").addEventListener("click", ()=>{
   const c = light() ? "#1a2029" : "#dce4ee";
@@ -2154,10 +2940,11 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-16 15:51</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-16 17:03</span></p></div>
     <div class="dlg-b">
       <div class="keys">
-        <div><kbd>1</kbd>…<kbd>9</kbd><span>Inspect · Control · Unit · Move · Defence · Area · Sighting · Battle · Clear</span></div>
+        <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
+        <div><kbd>P</kbd><span>Para-block: switch between "in place" and "planned"</span></div>
         <div><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd><span>US · Germany · Soviet Union</span></div>
         <div><kbd>B</kbd><span>Board — written orders and intel</span></div>
         <div><kbd>D</kbd><span>Your depot — drag teams from there onto a town</span></div>
@@ -2174,6 +2961,11 @@ document.getElementById("b-help").addEventListener("click", ()=>{
         <div><b>Almost everything is a drag:</b> move arrows (tool 4) drag from town to town, defence
           lines (5) drag across the towns, areas (6) are drawn free-hand, and teams are dragged out of
           the depot onto the map. Click an arrow, line or area with tool 1 to label, join or delete it.</div>
+        <div><b>Para-blocking</b> (tool 6) is dragged across the towns it covers, like a defence line.
+          <kbd>P</kbd> toggles between blocked and merely planned — planned ones are drawn dashed.</div>
+        <div><b>Enemy register</b> keeps one entry per player, and names are matched loosely: typing
+          "peter" finds Peter, Peter123 and the decorated spelling — but they stay separate people.
+          Click a name to record the teams they own, with name and tag so nobody enters one twice.</div>
         <div><b>Every entry carries its author</b> — you can always see who set a town, drew a line or
           reported a sighting, and only that person can change it.</div>
         <div><b style="color:var(--accent)">Brass ring</b> = fighting right now. <b>White ring</b> = key
