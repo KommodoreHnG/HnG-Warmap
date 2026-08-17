@@ -431,6 +431,8 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
     <div id="forces" title="Your clan's forces — number is vehicles where it has them, otherwise men. Small figure = still free. Click for the full depot."></div>
     <div id="top-right">
       <button class="btn" id="b-sync"><span class="dot"></span><span class="txt">Sync off</span></button>
+      <button class="btn" id="b-members" style="display:none"
+        title="Hand out codes and manage who is in this room">Members</button>
       <button class="btn" id="b-intel">Intel</button>
       <button class="btn" id="b-clan">Clan depot</button>
       <button class="btn" id="b-arms">Arsenal</button>
@@ -4423,13 +4425,6 @@ function poolDialog(){
               </label>`).join("")}
           </div>
         </div>`).join("")}
-      <div style="border-top:1px solid var(--line);padding-top:8px">
-        <label style="font-size:11px;color:var(--dim)">Or paste the whole stock column
-          (${resListe().length} numbers, top to bottom)
-          <textarea id="pool-paste" placeholder="35310&#10;4686&#10;957380 …"
-            style="min-height:52px;margin-top:3px"></textarea></label>
-        <button class="btn" id="pool-fill" style="margin-top:5px">Fill the fields from that</button>
-      </div>
       <div class="note">Everyone sees the same reading, and it says who took it and when — a
         four-hour-old pool figure is worth knowing about before planning around it.</div>
     </div>
@@ -4444,16 +4439,6 @@ function poolDialog(){
       x.setAttribute("aria-pressed", String(+x.dataset.pf === gewaehlt)));
   }));
   document.getElementById("d-close").addEventListener("click", () => { closeDlg(); clanDialog("pool"); });
-  document.getElementById("pool-fill").addEventListener("click", () => {
-    const zahlen = (document.getElementById("pool-paste").value.match(/[0-9][0-9.,\s]*/g) || [])
-      .map(s => parseInt(s.replace(/[^0-9]/g, ""), 10)).filter(n => !isNaN(n));
-    const felder = [...document.querySelectorAll("#dlg [data-res]")];
-    if (zahlen.length < felder.length){
-      toast(`Only ${zahlen.length} of ${felder.length} numbers found.`); return;
-    }
-    felder.forEach((f, i) => f.value = zahlen[i]);
-    toast(`${felder.length} figures taken over — check them before saving.`);
-  });
   document.getElementById("pool-save").addEventListener("click", () => {
     const werte = {};
     document.querySelectorAll("#dlg [data-res]").forEach(f => {
@@ -5039,7 +5024,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-17 15:36</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-17 18:35</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
@@ -5135,7 +5120,18 @@ function tabsAktiv(host, start){
   btns.forEach(b => b.addEventListener("click", ()=>waehle(b.dataset.tab)));
   waehle(btns.some(b => b.dataset.tab === start) ? start : btns[0].dataset.tab);
 }
-function closeDlg(){ document.getElementById("veil").classList.remove("on"); shotState = null; }
+function closeDlg(){
+  document.getElementById("veil").classList.remove("on");
+  shotState = null;
+  /* Den Inhalt erst im naechsten Takt raeumen: Code, der direkt nach dem
+     Schliessen noch ein Feld ausliest, soll es finden. Stehenlassen darf man
+     ihn aber nicht - sonst greift ein spaeteres querySelectorAll("#dlg …")
+     auf die Knoepfe des vorigen Fensters. */
+  setTimeout(() => {
+    const v = document.getElementById("veil");
+    if (v && !v.classList.contains("on")) document.getElementById("dlg").innerHTML = "";
+  }, 0);
+}
 document.getElementById("veil").addEventListener("click", e => { if (e.target.id === "veil") closeDlg(); });
 let toastT;
 function toast(t){
@@ -5293,6 +5289,8 @@ async function syncStart(){
     CFG = null; localStorage.removeItem(CFG_KEY); return;
   }
   CFG.room = ich.room; CFG.admin = !!ich.is_admin; CFG.name = ich.name;
+  CFG.player = ich.player;
+  mitgliederKnopf();
   localStorage.setItem(CFG_KEY, JSON.stringify(CFG));
 
   /* Die Kennung bestimmt der Server. Was vorher ohne Anmeldung entstanden
@@ -5343,7 +5341,7 @@ function syncStop(){
   if (syncTimer) clearInterval(syncTimer);
   syncTimer = null; CFG = null;
   localStorage.removeItem(CFG_KEY);
-  syncMark("Sync off", "off");
+  syncMark("Sync off", "off"); mitgliederKnopf();
 }
 function dialogFehler(titel, text){
   openDlg(`<div class="dlg-h"><h2>${esc(titel)}</h2></div>
@@ -5374,11 +5372,13 @@ document.getElementById("b-sync").addEventListener("click", ()=>{
       </div>
     </div>
     <div class="dlg-f">
+      ${CFG && CFG.admin ? `<button class="btn" id="s-members">Members …</button>` : ""}
       ${CFG ? `<button class="btn danger" id="s-off">Disconnect</button>` : ""}
       <button class="btn" id="d-close">Cancel</button>
       <button class="btn primary" id="s-go">Connect</button>
     </div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  document.getElementById("s-members")?.addEventListener("click", ()=>mitgliederDialog());
   document.getElementById("s-off")?.addEventListener("click", ()=>{ syncStop(); closeDlg(); toast("Disconnected"); });
   document.getElementById("s-go").addEventListener("click", ()=>{
     const code = document.getElementById("s-code").value.trim();
@@ -5393,6 +5393,156 @@ document.getElementById("b-sync").addEventListener("click", ()=>{
     closeDlg(); syncStart();
   });
 });
+
+/* ---------------- members: who is allowed in ----------------
+   Codes are handed out from inside the map now, but only by an admin. The
+   check sits in the database function, not in this page — a normal member who
+   calls the same endpoint gets an exception back and nothing else. And the
+   room is never a parameter: it is read from the caller's own row, so an admin
+   can only ever invite into their own clan's room. */
+function mitgliederKnopf(){
+  const b = document.getElementById("b-members");
+  if (b) b.style.display = (CFG && CFG.admin) ? "" : "none";
+}
+/* Ein Aufruf einer Datenbankfunktion. PostgREST verpackt Fehler als JSON mit
+   "message" - das ist die Meldung, die der Verwalter sehen soll. */
+async function rpc(name, args){
+  if (!CFG) throw new Error("Not connected");
+  const r = await fetch(api("rpc/" + name), {
+    method: "POST", headers: heads(), body: JSON.stringify(args || {})
+  });
+  const text = await r.text();
+  if (!r.ok){
+    let m = text;
+    try { m = JSON.parse(text).message || text; } catch(e){}
+    throw new Error(m || `${r.status}`);
+  }
+  return text ? JSON.parse(text) : null;
+}
+const einladungsText = (name, code) =>
+  `${clanName()} — Lagekarte\n`
+  + `${location.origin}${location.pathname}\n\n`
+  + `Dein persoenlicher Code: ${code}\n\n`
+  + `Oben rechts auf "Sync off" klicken, den Code eintragen, Connect.\n`
+  + `Der Code ist nur fuer dich — nicht weitergeben, nicht oeffentlich posten.`;
+
+document.getElementById("b-members").addEventListener("click", ()=>mitgliederDialog());
+async function mitgliederDialog(meldung){
+  if (!CFG || !CFG.admin){ toast("Only an admin can do that."); return; }
+  openDlg(`<div class="dlg-h"><h2>Members</h2><p>Loading …</p></div>
+    <div class="dlg-b"><div class="empty">…</div></div>
+    <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, true);
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  let liste;
+  try { liste = await rpc("warmap_members"); }
+  catch(e){ dialogFehler("Could not load the member list", String(e.message || e)); return; }
+
+  const alter = t => t ? alterText(new Date(t).getTime()) : "never";
+  openDlg(`
+    <div class="dlg-h"><h2>${esc(clanName())} — members</h2>
+      <p><b>${liste.length}</b> in this room. Every person gets their own code; it decides
+        who they are and what counts as theirs.</p></div>
+    <div class="dlg-b">
+      ${meldung || ""}
+      <div style="border:1px solid var(--accent-dk);border-radius:2px;padding:9px 11px;
+        display:flex;flex-direction:column;gap:7px">
+        <h3 style="font-size:9.5px;letter-spacing:.09em;color:var(--dim2);text-transform:uppercase">
+          Invite somebody</h3>
+        <div class="row">
+          <input type="text" id="inv-name" placeholder="their name in the game" style="flex:1"
+            maxlength="40" autocomplete="off">
+          <label class="toggle" style="white-space:nowrap"><input type="checkbox" id="inv-admin">
+            <span>can invite too</span></label>
+          <button class="btn primary" id="inv-go">Create code</button>
+        </div>
+        <div class="hint">Tick the box only for people who should be able to hand out codes
+          themselves. Everyone else can use the map fully — they just cannot let anyone in.</div>
+      </div>
+      <div class="tw"><table>
+        <thead><tr><th>Name</th><th>Code</th><th>Id</th><th>Role</th><th>State</th>
+          <th>Last seen</th><th></th></tr></thead>
+        <tbody>${liste.map(m => {
+          const ich = m.player === (CFG.player || S.me);
+          return `<tr${ich ? ' class="me"' : ""}>
+            <td>${esc(m.name || "—")}${ich ? " <em>you</em>" : ""}</td>
+            <td class="mono" style="text-align:left">
+              ${m.code ? `<span class="kchip" style="cursor:pointer" data-copy="${esc(m.code)}"
+                  title="Click to copy">${esc(m.code.slice(0,6))}…${esc(m.code.slice(-4))}</span>` : "—"}</td>
+            <td class="mono" style="color:var(--dim2)">${esc(m.player)}</td>
+            <td style="text-align:left">${m.is_admin
+              ? `<span style="color:var(--accent)">admin</span>` : "member"}</td>
+            <td style="text-align:left;color:${m.approved ? "var(--us)" : "var(--su)"}">${
+              m.approved ? "active" : "locked"}</td>
+            <td style="color:var(--dim2)">${esc(alter(m.last_seen))}</td>
+            <td style="text-align:right;white-space:nowrap">${ich ? "" : `
+              <button class="btn" data-msg="${esc(m.player)}" style="padding:2px 7px;font-size:10.5px"
+                title="Copy the invite message for this person">Message</button>
+              <button class="btn" data-lock="${esc(m.player)}" data-to="${m.approved ? "0" : "1"}"
+                style="padding:2px 7px;font-size:10.5px">${m.approved ? "Lock" : "Unlock"}</button>
+              <button class="btn" data-adm="${esc(m.player)}" data-to="${m.is_admin ? "0" : "1"}"
+                style="padding:2px 7px;font-size:10.5px">${m.is_admin ? "Demote" : "Promote"}</button>
+              <button class="btn danger" data-del="${esc(m.player)}"
+                style="padding:2px 7px;font-size:10.5px">Remove</button>`}</td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table></div>
+      <div class="note">A code is the key to this room — send it in a direct message, never in a
+        public channel. <b>Lock</b> takes somebody out immediately without deleting anything they
+        wrote; <b>Remove</b> deletes their entry, and the code stops working. Neither touches the
+        map itself. You cannot lock, demote or remove yourself, and the last admin stays admin —
+        otherwise the room would lock everyone out.</div>
+    </div>
+    <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+
+  const kopiere = async (text, was) => {
+    try { await navigator.clipboard.writeText(text); toast(was + " copied"); }
+    catch(e){ toast("Clipboard blocked — select it by hand."); }
+  };
+  document.querySelectorAll("#dlg [data-copy]").forEach(el =>
+    el.addEventListener("click", ()=>kopiere(el.dataset.copy, "Code")));
+  document.querySelectorAll("#dlg [data-msg]").forEach(b => b.addEventListener("click", ()=>{
+    const m = liste.find(x => x.player === b.dataset.msg);
+    if (!m || !m.code) return toast("No code on that row.");
+    kopiere(einladungsText(m.name, m.code), "Invite message");
+  }));
+
+  const handeln = async (fn, gut) => {
+    try { await fn(); mitgliederDialog(`<div class="note" style="color:var(--accent)">${esc(gut)}</div>`); }
+    catch(e){ dialogFehler("That did not work", String(e.message || e)); }
+  };
+  document.getElementById("inv-go").addEventListener("click", async ()=>{
+    const nm = document.getElementById("inv-name").value.trim();
+    if (!nm){ toast("Type a name first."); return; }
+    const adm = document.getElementById("inv-admin").checked;
+    try {
+      const r = await rpc("warmap_invite_me", {player_name: nm, make_admin: adm});
+      const neu = Array.isArray(r) ? r[0] : r;
+      if (!neu || !neu.code) throw new Error("No code came back.");
+      await kopiere(einladungsText(neu.name, neu.code), "Invite message");
+      mitgliederDialog(`<div style="border-left:3px solid var(--accent);background:var(--panel2);
+        border-radius:2px;padding:9px 11px">
+        <div style="font-size:12px;color:var(--dim);margin-bottom:4px">Code for
+          <b style="color:var(--text)">${esc(neu.name)}</b> — already on your clipboard as a
+          ready-made message.</div>
+        <div class="mono" style="font-size:14px;color:var(--accent);word-break:break-all">${esc(neu.code)}</div>
+      </div>`);
+    } catch(e){ dialogFehler("Could not create a code", String(e.message || e)); }
+  });
+  document.querySelectorAll("#dlg [data-lock]").forEach(b => b.addEventListener("click", ()=>
+    handeln(() => rpc("warmap_member_set", {target_player: b.dataset.lock,
+                                            set_approved: b.dataset.to === "1"}),
+            b.dataset.to === "1" ? "Unlocked." : "Locked out.")));
+  document.querySelectorAll("#dlg [data-adm]").forEach(b => b.addEventListener("click", ()=>
+    handeln(() => rpc("warmap_member_set", {target_player: b.dataset.adm,
+                                            set_admin: b.dataset.to === "1"}),
+            b.dataset.to === "1" ? "Now an admin." : "No longer an admin.")));
+  document.querySelectorAll("#dlg [data-del]").forEach(b => b.addEventListener("click", ()=>{
+    const m = liste.find(x => x.player === b.dataset.del);
+    if (!confirm(`Remove ${m ? m.name : "this member"}? Their code stops working at once.`)) return;
+    handeln(() => rpc("warmap_member_drop", {target_player: b.dataset.del}), "Removed.");
+  }));
+}
 
 /* ---------------- start ---------------- */
 (async function(){
@@ -5419,6 +5569,7 @@ document.getElementById("b-sync").addEventListener("click", ()=>{
   uiSetzen(uiScale); textSetzen(textScale);
   rebuildUnits(); kopfzeile(); tally(); tips(); depotZeichnen(); boardZahl();
   kraftLeiste(); resize();
+  mitgliederKnopf();
   if (CFG) syncStart(); else syncMark("Sync off", "off");
 })();
 window.addEventListener("resize", resize);
