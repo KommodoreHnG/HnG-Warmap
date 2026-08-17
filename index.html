@@ -297,6 +297,8 @@ textarea{background:var(--panel2);border:1px solid var(--line);border-radius:var
   max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .dlg.wide{max-width:860px}
 .dlg.xwide{max-width:1120px}
+.dlg.dropbereit{outline:2px dashed var(--accent);outline-offset:-6px}
+.dlg.dropbereit .dlg-b{background:rgba(226,172,72,.06)}
 /* Tabs — the two big windows carry several views each, and a row of tabs
    keeps them apart without hiding anything behind a menu. */
 .tabs{display:flex;gap:3px;padding:0 16px;border-bottom:1px solid var(--accent-dk);
@@ -565,51 +567,105 @@ const isCap  = i => MAP.n[i][4] !== 0;
 const isObj  = i => OBJ_TYPES.has(MAP.n[i][3]) || isCap(i);
 const capHome= i => { const v = MAP.n[i][4]; return v > 0 ? FACTIONS[v-1] : null; };
 
+/* Taktikzeichen der Assault Teams.
+
+   Nachgemessen an den grossen Zeichen aus dem Kaufbildschirm (174 x 112 px
+   Innenraum, hier auf das Raster 100 x 69 umgerechnet - Rahmen 6,
+   Innenzeichnung 4,4). Jede Zahl unten ist abgelesen:
+
+     Stadion        x 15,4..84,4  y 15,4..53,3  -  IMMER gleich gross
+     Gewichtsbalken Mitten 15,25 und 27,8, Breite 6, ueber die volle Hoehe,
+                    und sie liegen UEBER dem Stadion, nicht daneben
+     Jagdpanzer     Dreieck von den unteren Innenecken zur Spitze (50,6),
+                    Spitze massiv ausgefuellt
+     Flugzeugkeule  Tropfen: Spitze in der Mitte (50,34,5), runder Abschluss
+                    aussen mit Radius 15,4 - keine Ellipse, und die Striche
+                    beider Keulen kreuzen sich in der Mitte
+     Pfeil          massiv, Kopf 42,7..57,3 bis y 17, Schaft 6,2 bis y 37,8
+     Schirm         Kuppel x 36..64, Sehne y 36, Last bis (50,56)
+     Fluegel        von den Aussenkanten zur Kuppelschulter geschwungen
+
+   Bausteine: X Infanterie | \ Aufklaerung | Stadion Panzer | Keulen + Pfeil
+   Flugzeug | Raeder motorisiert | Balken Gewicht | Dreieck Jagdpanzer |
+   Schirm mit Fluegeln Luftlande.                                          */
 const SYM = {
-  infantry:"X", guard:"X G", motorized_guard:"X G M", motorized_infantry:"X M",
+  infantry:"X", guard:"G", motorized_guard:"G M", motorized_infantry:"X M",
   mechanized_infantry:"X A", recon:"R", motorized_recon:"R M", mechanized_recon:"R A",
   light_armor:"A", medium_armor:"A w1", heavy_armor:"A w2",
-  medium_tank_destroyer:"A T", heavy_tank_destroyer:"A T w2",
+  medium_tank_destroyer:"A T w1", heavy_tank_destroyer:"A T w2",
   paratroopers:"X P", paratroopers_on_ground:"X P", pathfinders:"R P", pathfinders_on_ground:"R P",
-  fighter_squadron:"F", heavy_fighter_squadron:"F w2", fighter_recon:"F R",
+  fighter_squadron:"F", heavy_fighter_squadron:"F H", fighter_recon:"F R2",
 };
-/* Traced from the in-game Assault Team Progression screens: a heavy frame,
-   the X reaching exactly into the corners, a flat-topped oval for armour,
-   wheels sitting on the bottom edge rather than under it. */
 function symbolSVG(key, farbe, w=26, h=18){
-  const teile = (SYM[key] || "X").split(" "), W=28, H=19, p=[], has = t => teile.includes(t);
-  const S = 2.0;                                    // Rahmenstaerke wie im Spiel
-  const i = S/2;                                    // Innenkante
-  p.push(`<rect x="${i}" y="${i}" width="${W-S}" height="${H-S}" fill="none"
-    stroke="${farbe}" stroke-width="${S}" stroke-linejoin="miter"/>`);
-  const g = [];                                      // Innenzeichnung, duenner
-  if (has("X")) g.push(`<path d="M${S} ${S}L${W-S} ${H-S}M${W-S} ${S}L${S} ${H-S}"/>`);
-  if (has("R")) g.push(`<path d="M${S} ${H-S}L${W-S} ${S}"/>`);
-  if (has("A")) g.push(`<rect x="${W/2-7.6}" y="${H/2-4.3}" width="15.2" height="8.6" rx="4.3"/>`);
-  if (has("T")) g.push(`<path d="M${W/2-6.2} ${H-S-.6}L${W/2} ${S+1.2}L${W/2+6.2} ${H-S-.6}"/>`);
-  if (has("F")) g.push(`<path d="M${W/2} ${S+1}v${H-2*S-2}"/>`
-    + `<ellipse cx="${W/2-5.1}" cy="${H/2}" rx="4.6" ry="3.6"/>`
-    + `<ellipse cx="${W/2+5.1}" cy="${H/2}" rx="4.6" ry="3.6"/>`);
-  if (has("P")) g.push(`<path d="M${W/2-7} ${H/2+1.4}a7 5.6 0 0 1 14 0"/>`);
-  if (g.length) p.push(`<g stroke="${farbe}" stroke-width="1.5" fill="none"
-    stroke-linecap="square">${g.join("")}</g>`);
-  if (has("G")) p.push(`<text x="${W/2}" y="${H/2+4.6}" font-size="13" font-weight="700"
-    fill="${farbe}" text-anchor="middle" stroke="none"
-    font-family="Bahnschrift,Segoe UI,system-ui,sans-serif">G</text>`);
-  if (has("M")){                                     // Raeder auf der Grundlinie
-    const r = 2.4, y = H - S/2;
-    p.push(`<circle cx="${W*0.26}" cy="${y}" r="${r}" fill="${farbe}"/>`
-         + `<circle cx="${W*0.74}" cy="${y}" r="${r}" fill="${farbe}"/>`);
+  const teile = (SYM[key] || "X").split(" "), hat = t => teile.includes(t);
+  const W = 100, H = 69, R = 6, I = 4.4;
+  const L = R, Re = W - R, O = R, U = H - R;
+  const p = [], g = [], voll = [];        // Rahmen, Strich, Flaeche
+
+  p.push(`<rect x="${R/2}" y="${R/2}" width="${W-R}" height="${H-R}" fill="none"
+    stroke="${farbe}" stroke-width="${R}" stroke-linejoin="miter"/>`);
+
+  if (hat("X")) g.push(`<path d="M${L} ${O}L${Re} ${U}M${Re} ${O}L${L} ${U}"/>`);
+  if (hat("R")) g.push(`<path d="M${L} ${U}L${Re} ${O}"/>`);
+  if (hat("G")){                          // Wache: X nur als Eckstumpf
+    const dx = (Re-L)*0.20, dy = (U-O)*0.20;
+    g.push(`<path d="M${L} ${O}l${dx} ${dy}M${Re} ${O}l${-dx} ${dy}`
+         + `M${L} ${U}l${dx} ${-dy}M${Re} ${U}l${-dx} ${-dy}"/>`);
   }
-  const gew = teile.find(t => t[0] === "w");        // Gewichtsbalken links
-  if (gew) for (let k=0;k<+gew[1];k++)
-    p.push(`<path d="M${S+1.8+k*3.2} ${S+1.6}v${H-2*S-3.2}" stroke="${farbe}" stroke-width="1.9"/>`);
+  /* Das Stadion behaelt immer dieselbe Groesse - die Gewichtsbalken werden
+     spaeter darueber gelegt und verdecken sein linkes Ende. */
+  if (hat("A")) g.push(`<rect x="15.4" y="15.4" width="69" height="37.9"
+    rx="18.95" ry="18.95"/>`);
+  if (hat("T")){                          // Jagdpanzer
+    g.push(`<path d="M${L} ${U}L50 ${O}L${Re} ${U}"/>`);
+    voll.push(`<path d="M50 ${O-1}L57.4 19H42.6Z"/>`);   // massive Spitze
+  }
+  if (hat("F")){
+    /* Zwei Tropfen, deren Spitzen sich in der Mitte treffen und deren Striche
+       sich dort kreuzen - deshalb ein geschlossener Pfad je Keule und keine
+       Ellipse. Der runde Abschluss ist ein Kreisbogen um (23,2 | 76,8). */
+    g.push(`<path d="M50 34.5L29.6 21.9A15.4 15.4 0 1 0 29.6 47.1Z"/>`
+         + `<path d="M50 34.5L70.4 21.9A15.4 15.4 0 1 1 70.4 47.1Z"/>`);
+    voll.push(`<path d="M50 ${O-1}L57.3 17H53.1V37.8H46.9V17H42.7Z"/>`);
+    if (hat("H"))                         // schwerer Jaeger: massive Sprossen
+      for (let k = 0; k < 4; k++)
+        voll.push(`<rect x="42" y="${16 + k*3.4}" width="16" height="1.8"/>`);
+    if (hat("R2"))                        // Aufklaerer: Strich quer zum Schaft
+      g.push(`<path d="M36 54L54 38"/>`);
+  }
+  if (hat("P")){
+    /* Fallschirm mit Fluegeln: schmale Kuppel in der Mitte, Sehne, Last als
+       Spitze, dazu die beiden geschwungenen Fluegel bis an die Innenkanten. */
+    g.push(`<path d="M36 36A14 22 0 0 1 64 36"/>`
+         + `<path d="M36 36H64"/>`
+         + `<path d="M40 36L50 56L60 36"/>`
+         + `<path d="M${L} 34Q24 17 36 25"/>`
+         + `<path d="M${Re} 34Q76 17 64 25"/>`);
+  }
+  if (g.length) p.push(`<g stroke="${farbe}" stroke-width="${I}" fill="none"
+    stroke-linecap="butt" stroke-linejoin="miter">${g.join("")}</g>`);
+
+  /* Die Gewichtsbalken zuletzt und ueber allem - so verdecken sie das Stadion
+     wie im Spiel. */
+  const gew = (teile.find(t => t[0] === "w") || "w0")[1] | 0;
+  for (let k = 0; k < gew; k++)
+    p.push(`<path d="M${15.25 + k*12.55} ${O}V${U}" stroke="${farbe}" stroke-width="6"/>`);
+
+  if (voll.length) p.push(`<g fill="${farbe}" stroke="none">${voll.join("")}</g>`);
+  if (hat("G"))
+    p.push(`<text x="48" y="52" font-size="47" font-weight="700" fill="${farbe}"
+      text-anchor="middle" stroke="none"
+      font-family="Georgia,'Times New Roman',serif">G</text>`);
+  if (hat("M"))
+    p.push(`<circle cx="22" cy="56" r="6.5" fill="${farbe}"/>`
+         + `<circle cx="78" cy="56" r="6.5" fill="${farbe}"/>`);
   return `<svg viewBox="0 0 ${W} ${H}" width="${w}" height="${h}" aria-hidden="true"
     shape-rendering="geometricPrecision">${p.join("")}</svg>`;
 }
-/* The three insignia the game itself uses. A clan row reads as a side at a
-   glance instead of by a three-letter tag — star in a ring for the US, the
-   Balkenkreuz for Germany, the plain red star for the Soviet Union. */
+
+/* Die drei Abzeichen, die das Spiel selbst benutzt: Stern im Ring fuer die
+   US, Balkenkreuz fuer Deutschland, der blanke Stern fuer die Sowjetunion.
+   Damit liest sich eine Clanzeile als Seite und nicht nur als Kuerzel. */
 function fraktionSVG(f, gr = 15){
   if (f == null) return "";
   const c = col(FACTIONS[f]);
@@ -2399,9 +2455,8 @@ function sichtDialog(){
       <div class="tw"><table>
         <thead><tr><th>Step</th><th>Types</th><th>Vision (as in game)</th></tr></thead>
         <tbody>${stufen.map(zeile).join("")}</tbody></table></div>
-      <div class="note">The first two match the game's own "Sicht/Vision" figure and should not
-        need touching. <b>Map scale</b> converts that figure into distance on this map — nudge it
-        until a circle covers the same towns as in game.</div>
+      <div class="note">Leave the first two alone; nudge <b>Map scale</b> until a circle covers the same towns
+        as in game.</div>
     </div>
     <div class="dlg-f">
       <button class="btn" id="sc-std">Reset</button>
@@ -2557,7 +2612,7 @@ document.getElementById("dep-add").addEventListener("click", ()=>{
       <em>${atText(a.k)} · ${a.cp} CP</em></button>`;
   openDlg(`
     <div class="dlg-h"><h2>Add assault teams</h2>
-      <p>Click a type to add one. Name it afterwards in the list on the right.</p></div>
+      <p>Name them afterwards in the list on the right.</p></div>
     <div class="dlg-b">
       <h3 style="font-size:9.5px;letter-spacing:.09em;color:var(--dim2)">ARMY</h3>
       <div class="pickgrid">${MAP.at.filter(a=>a.arm==="army").map(kachel).join("")}</div>
@@ -2728,8 +2783,7 @@ function side(){
         <datalist id="sp-owners">${spielerListe().map(p=>`<option value="${esc(p.name)}">`).join("")}</datalist>
         <button class="btn" id="sp-add">+</button>
       </div>
-      <div class="hint">Reports fade on the map after a few hours and go pale after a day —
-        so nobody plans around a stale sighting.</div>
+      
     </div>
     ${(() => {
       const meine = unitsAt(i).flatMap(g=>g.list);
@@ -2765,8 +2819,7 @@ function side(){
         <input type="text" id="est-txt" placeholder="e.g. ~1000 infantry, lots of AA" style="flex:1">
         <button class="btn" id="est-add">+</button>
       </div>
-      <div class="hint">For what you saw but could not count. Assault teams above are
-        <b>confirmed</b>, this is the impression.</div>
+      <div class="hint">For what you saw but could not count.</div>
     </div>
     <div class="sec">
       <h3>Assault teams ${teamsAt(i)?`<span class="sub">${teamsAt(i)} teams · ${menAt(i).toLocaleString("en")} men</span>`:""}</h3>
@@ -2939,6 +2992,119 @@ search.addEventListener("input", ()=>{
 });
 search.addEventListener("blur", ()=>setTimeout(()=>hits.style.display="none", 180));
 
+/* ---------------- where a picture comes from ----------------
+   Drei Wege für dieselbe Sache, weil das Speichern einer Datei der lästigste
+   Teil war: Datei auswählen, mit Strg+V aus der Zwischenablage einfügen, oder
+   das Spielfenster direkt abgreifen.
+
+   Zum Abgreifen: eine Webseite kann von sich aus nicht in ein anderes Programm
+   sehen — das wäre auch nicht in Ordnung. Der Browser hat dafür eine eigene
+   Schnittstelle, bei der DU im Dialog des Browsers auswählst, was er sehen
+   darf. Wir fragen also nach dem Spielfenster, und der Browser fragt dich.
+   Die Freigabe bleibt danach stehen, jedes weitere Bild geht ohne Rückfrage. */
+let bildStrom = null;        // laufende Freigabe
+let bildAbmelden = null;     // räumt die Zuhörer des offenen Fensters weg
+
+const bildAufnahmeMoeglich = () =>
+  !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia && window.isSecureContext);
+
+function bildQuelleHTML(id){
+  return `<div class="row" style="flex-wrap:wrap;align-items:center">
+      <input type="file" id="${id}" accept="image/png,image/jpeg" style="flex:1;min-width:170px">
+      ${bildAufnahmeMoeglich()
+        ? `<button class="btn" data-bild="grab">Capture the game …</button>`
+        : ""}
+    </div>
+    <div class="hint" data-bild="hint">Or press <kbd>Ctrl</kbd>+<kbd>V</kbd> to paste a screenshot
+      straight from the clipboard, or drop an image anywhere in this window.${
+      bildAufnahmeMoeglich()
+        ? ` <b>Capture</b> asks the browser which window it may see — pick the
+            Heroes &amp; Generals window once, then every further shot is one click.`
+        : ` Capturing a window needs the page to run over https; on a local file the
+            browser does not allow it.`}</div>`;
+}
+
+/* Ein Bild aus der laufenden Freigabe. Beim ersten Mal fragt der Browser, was
+   er sehen darf; danach nicht mehr, solange die Freigabe steht. */
+async function bildAufnehmen(){
+  if (!bildAufnahmeMoeglich())
+    throw new Error("This browser cannot capture a window here.");
+  if (!bildStrom || !bildStrom.active){
+    bildStrom = await navigator.mediaDevices.getDisplayMedia({
+      video: {frameRate: 2}, audio: false});
+    const spur = bildStrom.getVideoTracks()[0];
+    if (spur) spur.addEventListener("ended", ()=>{ bildStrom = null; });
+  }
+  const v = document.createElement("video");
+  v.srcObject = bildStrom; v.muted = true; v.playsInline = true;
+  await v.play();
+  /* Das allererste Bild ist oft noch schwarz - auf ein echtes warten. */
+  await new Promise(fertig => {
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(()=>fertig());
+    else setTimeout(fertig, 260);
+  });
+  const c = document.createElement("canvas");
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  if (!c.width || !c.height){ v.pause(); throw new Error("The picture came back empty."); }
+  c.getContext("2d").drawImage(v, 0, 0);
+  v.pause(); v.srcObject = null;
+  const blob = await new Promise(ok => c.toBlob(ok, "image/png"));
+  if (!blob) throw new Error("The picture could not be built.");
+  return new File([blob], "aufnahme.png", {type: "image/png"});
+}
+function bildFreigabeBeenden(){
+  if (bildStrom){ bildStrom.getTracks().forEach(t => t.stop()); bildStrom = null; }
+}
+
+/* Verdrahtet alle drei Wege für ein geöffnetes Fenster. */
+function bildQuelle(id, beiBild){
+  const dlg = document.getElementById("dlg");
+  const nimm = f => { if (f && /^image\//.test(f.type || "")) beiBild(f); };
+
+  document.getElementById(id)?.addEventListener("change", ev => nimm(ev.target.files[0]));
+
+  const einfuegen = ev => {
+    const daten = ev.clipboardData || window.clipboardData;
+    for (const eintrag of (daten && daten.items) || []){
+      if (eintrag.kind === "file" && /^image\//.test(eintrag.type || "")){
+        const f = eintrag.getAsFile();
+        if (f){ ev.preventDefault(); nimm(f); return; }
+      }
+    }
+  };
+  const ueber  = ev => { ev.preventDefault(); dlg.classList.add("dropbereit"); };
+  const weg    = () => dlg.classList.remove("dropbereit");
+  const fallen = ev => {
+    ev.preventDefault(); weg();
+    nimm([...((ev.dataTransfer && ev.dataTransfer.files) || [])]
+         .find(f => /^image\//.test(f.type || "")));
+  };
+  document.addEventListener("paste", einfuegen);
+  dlg.addEventListener("dragover", ueber);
+  dlg.addEventListener("dragleave", weg);
+  dlg.addEventListener("drop", fallen);
+
+  dlg.querySelectorAll('[data-bild="grab"]').forEach(b => b.addEventListener("click", async ()=>{
+    const alt = b.textContent;
+    b.disabled = true; b.textContent = "Grabbing …";
+    try { nimm(await bildAufnehmen()); }
+    catch(e){
+      const m = String(e.message || e);
+      toast(/denied|Permission/i.test(m) ? "Screen sharing was declined." : m);
+    }
+    finally { b.disabled = false; b.textContent = alt; }
+  }));
+
+  bildAbmelden = () => {
+    document.removeEventListener("paste", einfuegen);
+    dlg.removeEventListener("dragover", ueber);
+    dlg.removeEventListener("dragleave", weg);
+    dlg.removeEventListener("drop", fallen);
+    dlg.classList.remove("dropbereit");
+    bildAbmelden = null;
+  };
+}
+
 /* ================= screenshot reader (runs here, in the browser) =========
    Every town's position on the original map is known, so no OCR is needed —
    only the transform between screenshot and map, then a colour probe at each
@@ -3029,7 +3195,7 @@ document.getElementById("b-shot").addEventListener("click", ()=>{
       <p>Open the war map in the game, <b>zoom all the way out</b>, take a screenshot and drop it here.
          Every town's colour is read at once — no typing.</p></div>
     <div class="dlg-b">
-      <div class="row"><input type="file" id="shot-file" accept="image/png,image/jpeg" style="flex:1"></div>
+      ${bildQuelleHTML("shot-file")}
       <div id="shot-status">Waiting for an image …</div>
       <div id="shot-wrap"><canvas id="shot-cv"></canvas></div>
       <div class="note">Rings mark what was recognised. If they sit neatly on the dots, the reading is good.
@@ -3040,10 +3206,7 @@ document.getElementById("b-shot").addEventListener("click", ()=>{
       <button class="btn primary" id="shot-take" disabled>Apply to map</button>
     </div>`, true);
   document.getElementById("d-close").addEventListener("click", closeDlg);
-  document.getElementById("shot-file").addEventListener("change", ev => {
-    const f = ev.target.files[0];
-    if (f) screenshotLesen(f);
-  });
+  bildQuelle("shot-file", screenshotLesen);
   document.getElementById("shot-take").addEventListener("click", ()=>{
     if (!shotState) return;
     const t = jetzt(); let n = 0;
@@ -3199,18 +3362,14 @@ document.getElementById("b-board").addEventListener("click", ()=>{
   const nz = n => n.toLocaleString("en");
   openDlg(`
     <div class="dlg-h"><h2>${esc(clanName())} — board</h2>
-      <p>Written orders, intel and anything the map itself cannot say.</p></div>
+      <p>Written orders and intel.</p></div>
     <div class="dlg-b">
       <div style="display:flex;flex-direction:column;gap:6px">
         <textarea id="p-text" placeholder="e.g. Hold the line north of Prague until 21:00 — armour is on the way from Berlin."
           style="min-height:60px"></textarea>
         <div class="row" style="align-items:center;flex-wrap:wrap">
           <select id="p-prio" style="width:110px">${PRIO.map(p=>`<option value="${p.v}"${p.v===1?" selected":""}>${p.name}</option>`).join("")}</select>
-          <select id="p-town" style="flex:1;min-width:150px">
-            <option value="">— not tied to a town —</option>
-            ${sel !== null ? `<option value="${sel}" selected>${esc(MAP.n[sel][0])}</option>` : ""}
-            ${MAP.n.map((n,i)=> (i===sel||!isObj(i)) ? "" : `<option value="${i}">${esc(n[0])}</option>`).join("")}
-          </select>
+          <div id="p-town" style="flex:1;min-width:150px"></div>
           <button class="btn primary" id="p-add">Post</button>
         </div>
       </div>
@@ -3246,11 +3405,11 @@ document.getElementById("b-board").addEventListener("click", ()=>{
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, true);
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  stadtWahl(document.getElementById("p-town"), sel, "— not tied to a town —");
   document.getElementById("p-add").addEventListener("click", ()=>{
     const t = document.getElementById("p-text").value.trim();
     if (!t){ toast("Write something first."); return; }
-    const stadt = document.getElementById("p-town").value;
-    addPost(t, stadt === "" ? null : +stadt, +document.getElementById("p-prio").value);
+    addPost(t, stadtAus("p-town"), +document.getElementById("p-prio").value);
     closeDlg(); boardZahl(); draw(); toast("Posted");
   });
   document.querySelectorAll("#dlg [data-del]").forEach(a => a.addEventListener("click", ev=>{
@@ -3304,6 +3463,111 @@ function symbolWahl(host, gewaehlt, beiWahl){
   return host;
 }
 document.addEventListener("click", ()=>{ if (pickerOffen){ pickerOffen.remove(); pickerOffen = null; } });
+
+/* ---------------- picking a town ----------------
+   1438 Namen in einer Klappliste sind nicht bedienbar. Also dasselbe Feld wie
+   für Symbole und Ausrüstung: ein Knopf, der eine Liste mit Suchfeld öffnet.
+   Ohne Sucheingabe stehen die kriegswichtigen Orte oben — Fabriken, Flugplätze,
+   Hauptstädte —, denn darum geht es fast immer. */
+function stadtWahl(host, start, leerText, beiWahl){
+  host.className = "sympick";
+  host.dataset.stadt = (start === null || start === undefined) ? "" : String(start);
+  const zeichne = () => {
+    const i = host.dataset.stadt;
+    const n = i === "" ? null : MAP.n[+i];
+    host.innerHTML = `<span class="sw-cur"><span${n ? "" : ' style="color:var(--dim2)"'}>${
+      n ? esc(n[0]) : esc(leerText || "choose a town …")}</span></span>
+      <span class="sw-pfeil">▾</span>`;
+  };
+  zeichne();
+  host.addEventListener("click", ev => {
+    ev.stopPropagation();
+    if (pickerOffen){ pickerOffen.remove(); pickerOffen = null; }
+    const p = document.createElement("div");
+    p.className = "sw-liste";
+    p.style.width = Math.max(250, host.getBoundingClientRect().width) + "px";
+
+    const suche = q => {
+      const roh = q.trim().toLowerCase();
+      if (!roh){
+        const raus = [];
+        for (let i = 0; i < MAP.n.length && raus.length < 60; i++) if (isObj(i)) raus.push(i);
+        return raus;
+      }
+      /* Namensanfang schlägt Treffer in der Mitte — "Ber" soll Berlin zeigen,
+         nicht Bergheim Flugplatz zuerst. */
+      const vorn = [], drin = [];
+      for (let i = 0; i < MAP.n.length; i++){
+        const stelle = MAP.n[i][0].toLowerCase().indexOf(roh);
+        if (stelle === 0) vorn.push(i);
+        else if (stelle > 0) drin.push(i);
+        if (vorn.length >= 60) break;
+      }
+      return vorn.concat(drin).slice(0, 60);
+    };
+
+    const bau = q => {
+      const treffer = suche(q);
+      const zeile = i => {
+        const f = factionOf(i);
+        return `<button data-i="${i}"${String(i) === host.dataset.stadt ? ' class="an"' : ""}>
+          <span style="color:${col(f)};font-size:9px">●</span>
+          <span style="flex:1">${esc(MAP.n[i][0])}</span>
+          <small style="color:var(--dim2)">${esc(MAP.typen[MAP.n[i][3]])}${
+            isCap(i) ? " ★" : ""}</small></button>`;
+      };
+      p.innerHTML = `<div style="padding:4px"><input id="sw-such" placeholder="type a town …"
+          autocomplete="off" spellcheck="false"
+          style="width:100%;background:var(--panel2);border:1px solid var(--line);
+            border-radius:2px;padding:4px 6px;outline:0;font-size:11.5px"></div>`
+        + (leerText ? `<button data-i=""${host.dataset.stadt === "" ? ' class="an"' : ""}>
+            <span style="flex:1;color:var(--dim2)">${esc(leerText)}</span></button>` : "")
+        + (q.trim() ? "" : `<div class="sw-h">Objectives</div>`)
+        + treffer.map(zeile).join("")
+        + (treffer.length ? "" : `<div class="sw-h">nothing found</div>`);
+
+      p.querySelectorAll("[data-i]").forEach(b => b.addEventListener("click", ev2 => {
+        ev2.stopPropagation();
+        host.dataset.stadt = b.dataset.i;
+        zeichne();
+        p.remove(); pickerOffen = null;
+        if (beiWahl) beiWahl(b.dataset.i === "" ? null : +b.dataset.i);
+      }));
+      const such = p.querySelector("#sw-such");
+      such.value = q;
+      such.addEventListener("click", e2 => e2.stopPropagation());
+      such.addEventListener("keydown", e2 => {
+        if (e2.key === "Enter"){
+          e2.preventDefault();
+          const erster = p.querySelector("[data-i]:not([data-i=''])");
+          if (erster) erster.click();
+        }
+      });
+      such.addEventListener("input", () => {
+        const wert = such.value;
+        bau(wert);
+        const neu = p.querySelector("#sw-such");
+        neu.focus(); neu.setSelectionRange(wert.length, wert.length);
+      });
+    };
+    bau("");
+    document.body.appendChild(p);
+    const r = host.getBoundingClientRect();
+    p.style.left = Math.max(6, Math.min(r.left, window.innerWidth - 268)) + "px";
+    p.style.top = (r.bottom + 2) + "px";
+    if (r.bottom + p.offsetHeight > window.innerHeight)
+      p.style.top = Math.max(6, r.top - p.offsetHeight - 2) + "px";
+    pickerOffen = p;
+    p.querySelector("#sw-such").focus();
+  });
+  return host;
+}
+const stadtAus = id => {
+  const el = document.getElementById(id);
+  const v = el && el.dataset ? el.dataset.stadt : "";
+  return v === "" || v === undefined ? null : +v;
+};
+
 
 /* ---------------- intel ----------------
    Everything about the other side in one window: which clans are out there
@@ -3382,10 +3646,9 @@ function intelDialog(tab){
           </tr>`).join("")}</tbody></table></div>`
           : `<div class="empty">No clans yet. Put a tag in a player's <b>clan</b> field on the
              Players tab and they group up here.</div>`}
-        <div class="note">A clan's side is whatever most of its recorded players fight for
-          <b>this war</b> — people do switch between wars, so the badge follows the majority
-          rather than being fixed. “Known teams” is what we have written down that they own,
-          “seen” what has actually been spotted on the map.</div>
+        <div class="note">A clan's side follows the majority of its recorded players this war.
+          “Known teams” is what we have written down; “seen” is what has been spotted
+          on the map.</div>
       </div>
 
       <div class="tabp" data-tab="players">
@@ -3420,9 +3683,7 @@ function intelDialog(tab){
                    ${symbolSVG(k, c, 20, 14)}<small>${v}</small></span>`).join("") || "—"}</td>
             <td style="color:var(--dim2)">${d.t?alterText(d.t):"—"}</td>
           </tr>`).join("")}</tbody></table></div>` : `<div class="empty">Nobody on record yet.</div>`}
-        <div class="note">Sightings you enter with an owner feed this list automatically. Setting the
-          faction matters: it says which side that player is on <b>this war</b>. Click a name to
-          record the teams they own.</div>
+        <div class="note">Click a name to record the teams they own.</div>
       </div>
 
       <div class="tabp" data-tab="spots">
@@ -3519,10 +3780,9 @@ function massenDialog(){
 document.getElementById("dep-shot").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>Read your assault teams</h2>
-      <p>Screenshot the assault team list in the game — the one with names, tags and the strength
-         bars. The type is worked out from the figures, so no symbol reading is involved.</p></div>
+      <p>Take the shot on the war map — the assault team list down the right-hand side.</p></div>
     <div class="dlg-b">
-      <div class="row"><input type="file" id="ds-file" accept="image/png,image/jpeg" style="flex:1"></div>
+      ${bildQuelleHTML("ds-file")}
       <div id="ds-status" style="font-size:12px;color:var(--dim)">Waiting for an image …</div>
       <div id="ds-list" style="display:none;flex-direction:column;gap:4px;max-height:44vh;overflow-y:auto"></div>
     </div>
@@ -3531,9 +3791,7 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
       <button class="btn primary" id="ds-go" disabled>Add ticked</button>
     </div>`, true);
   document.getElementById("d-close").addEventListener("click", closeDlg);
-  document.getElementById("ds-file").addEventListener("change", ev => {
-    const f = ev.target.files[0]; if (f) depotLesen(f);
-  });
+  bildQuelle("ds-file", depotLesen);
   document.getElementById("ds-go").addEventListener("click", ()=>{
     const liste = myDepot().slice();
     let n = 0, gestellt = [];
@@ -3718,7 +3976,7 @@ function ocrDialog(){
       <p>The battle detail screen works best: it carries the town, both sides' strength and the
          full player list. A plain scoreboard works too.</p></div>
     <div class="dlg-b">
-      <div class="row"><input type="file" id="ocr-file" accept="image/png,image/jpeg" style="flex:1"></div>
+      ${bildQuelleHTML("ocr-file")}
       <div id="ocr-status" style="font-size:12px;color:var(--dim)">Waiting for an image …</div>
       <div id="ocr-out" style="display:none;flex-direction:column;gap:6px">
         <div id="ocr-stadt-box"></div>
@@ -3739,9 +3997,7 @@ function ocrDialog(){
     </div>`, true);
   document.getElementById("d-close").addEventListener("click", ()=>{ closeDlg();
     intelDialog("players"); });
-  document.getElementById("ocr-file").addEventListener("change", ev => {
-    const f = ev.target.files[0]; if (f) ocrLesen(f);
-  });
+  bildQuelle("ocr-file", ocrLesen);
   document.getElementById("ocr-go").addEventListener("click", ()=>{
     const clanAlle = document.getElementById("ocr-clan").value.trim();
     const fv = document.getElementById("ocr-fac").value;
@@ -3755,21 +4011,18 @@ function ocrDialog(){
     });
     // Stadt und Staerke uebernehmen
     let stadtTxt = "";
-    const si = document.getElementById("ocr-stadt");
-    if (si && si.value.trim()){
-      const tr = findeStadt(si.value.trim());
+    const ort = stadtAus("ocr-stadt");
+    if (ort !== null && MAP.n[ort]){
+      sel = ort;
       const strCb = document.getElementById("ocr-str");
-      if (tr){
-        sel = tr.i;
-        if (strCb && strCb.checked){
-          const st = JSON.parse(document.getElementById("ocr-out").dataset.staerke || "[]");
-          if (st.length){
-            const txt = st.map(v=>"~"+v.toLocaleString("en")).join(" / ") + " men (from battle screen)";
-            setEst(tr.i, myEst(tr.i).concat([{text: txt}]));
-          }
+      if (strCb && strCb.checked){
+        const st = JSON.parse(document.getElementById("ocr-out").dataset.staerke || "[]");
+        if (st.length){
+          const txt = st.map(v=>"~"+v.toLocaleString("en")).join(" / ") + " men (from battle screen)";
+          setEst(ort, myEst(ort).concat([{text: txt}]));
         }
-        stadtTxt = ` · ${MAP.n[tr.i][0]}`;
       }
+      stadtTxt = ` · ${MAP.n[ort][0]}`;
     }
     closeDlg();
     if (sel !== null){ flyTo(sel); side(); draw(); }
@@ -3841,13 +4094,13 @@ async function ocrLesen(datei){
   out.querySelector("#ocr-stadt-box").innerHTML = `
     <div class="row" style="align-items:center">
       <span style="font-size:12px;color:var(--dim);width:74px">Town</span>
-      <input type="text" id="ocr-stadt" list="ocr-staedte" style="flex:1"
-        value="${stadt ? esc(MAP.n[stadt.i][0]) : ""}" placeholder="not recognised — type it">
-      <datalist id="ocr-staedte">${MAP.n.map(n=>`<option value="${esc(n[0])}">`).join("")}</datalist>
+      <div id="ocr-stadt" style="flex:1"></div>
     </div>
     ${staerke.length ? `<label class="toggle" style="margin-top:5px">
       <input type="checkbox" id="ocr-str" checked>
       <span>Note strength there: <b>${staerke.map(v=>"~"+v.toLocaleString("en")).join(" / ")}</b> men</span></label>` : ""}`;
+  stadtWahl(document.getElementById("ocr-stadt"), stadt ? stadt.i : null,
+            "not recognised — pick it");
   out.dataset.staerke = JSON.stringify(staerke);
 
   const liste = document.getElementById("ocr-list");
@@ -3894,9 +4147,7 @@ function feindDialog(key, name){
           <button class="btn primary" id="fd-add">Add</button>
         </div>
       </div>
-      <div class="note">Recording an enemy's teams is how you work out what they can field.
-        Because everyone sees the same list, check the tag before adding — that is what keeps
-        duplicates out.</div>
+      <div class="note">Everyone sees the same list — check the tag before adding, so a team is not entered twice.</div>
     </div>
     <div class="dlg-f"><button class="btn" id="d-close">Back</button></div>`, true);
   document.getElementById("d-close").addEventListener("click", ()=>{ closeDlg();
@@ -4131,8 +4382,7 @@ function clanDialog(tab){
               <td>${m.size}</td>
               <td>${nz(d.teams*((AT[d.k]&&AT[d.k].wf[0])||0))}</td></tr>`;
           }).join("")}</tbody></table></div>
-        <div class="note">Everything a member has entered in their own depot, deployed or not.
-          Only the owner can change their own teams — the database enforces that, not the page.</div>
+        
         ` : `<div class="note">Open the <b>Depot</b> on the right (key <kbd>D</kbd>) and enter what you
           own, with the names the teams have in the game. It carries over from war to war, so it is a
           one-time job — and from then on this window shows the whole clan.</div>`}
@@ -4162,13 +4412,9 @@ function clanDialog(tab){
                 <td>${zeig(s.delta)}</td><td>${zeig(x.delta)}</td><td>${x.jetzt}</td></tr>`;
             }).join("");
           })()}</tbody></table></div>` : ""}
-        <div class="note">${reihen.length > 1
-          ? `Each band is one branch, stacked to the clan total. The line steps: a team appears on the
-             day it was bought. History is kept inside each player's own depot entry, one snapshot per
-             day it changed, so it travels with the sync and nobody else can rewrite it.`
-          : `Growth is recorded from the moment somebody changes their depot — there is no history in
-             the game files to read back, so the first snapshot is the state as it is now. Come back in
-             a few days and this becomes a curve.`}</div>
+        <div class="note">${reihen.length > 1 ? `A team appears on the line the day it was bought.`
+          : `There is no history in the game files to read back — the first snapshot is the
+             state as it is now. Come back in a few days.`}</div>
       </div>
 
       <div class="tabp" data-tab="who">
@@ -4197,8 +4443,7 @@ function clanDialog(tab){
                    <small style="color:var(--dim2)">${Math.round(100*m[0][1]/ges)} %</small>`
                 : "—"}</td></tr>`;
           }).join("")}</tbody></table></div>
-        <div class="note">Each bar is one unit type split by who owns it — the colour follows the
-          player, so the same person keeps their band everywhere. Hover a band for the exact count.</div>
+        <div class="note">Colour follows the player, the same band everywhere. Hover a band for the exact count.</div>
         ` : `<div class="empty">Nothing owned yet.</div>`}
       </div>
 
@@ -4254,15 +4499,10 @@ function clanDialog(tab){
         </div>
         <div class="row">
           <input type="text" id="rq-txt" placeholder="what do you need?" style="flex:1">
-          <select id="rq-town" style="width:150px">
-            <option value="">anywhere</option>
-            ${sel!==null?`<option value="${sel}" selected>${esc(MAP.n[sel][0])}</option>`:""}
-            ${MAP.n.map((n,i)=> (i===sel||!isObj(i)) ? "" : `<option value="${i}">${esc(n[0])}</option>`).join("")}
-          </select>
+          <div id="rq-town" style="width:170px"></div>
           <button class="btn primary" id="rq-add">Request</button>
         </div>
-        <div class="note">A request lands on the board as urgent, so it is seen whether or not anyone
-          has this window open. Mark it <b>done</b> when it is covered.</div>
+        <div class="note">A request lands on the board as urgent. Mark it <b>done</b> when it is covered.</div>
       </div>
     </div>
     <div class="dlg-f">
@@ -4275,11 +4515,11 @@ function clanDialog(tab){
   document.querySelectorAll("[data-req]").forEach(b => b.addEventListener("click", ()=>{
     document.getElementById("rq-txt").value = b.dataset.req;
   }));
+  if (document.getElementById("rq-town")) stadtWahl(document.getElementById("rq-town"), sel, "anywhere");
   document.getElementById("rq-add")?.addEventListener("click", ()=>{
     const txt = document.getElementById("rq-txt").value.trim();
     if (!txt){ toast("Say what you need first."); return; }
-    const tw = document.getElementById("rq-town").value;
-    addPost("Needs " + txt, tw === "" ? null : +tw, 2, true);
+    addPost("Needs " + txt, stadtAus("rq-town"), 2, true);
     closeDlg(); boardZahl(); draw(); toast("Request posted");
   });
   document.querySelectorAll("#dlg [data-del]").forEach(a => a.addEventListener("click", ev=>{
@@ -4307,10 +4547,7 @@ function poolPanel(){
   const nz = n => n.toLocaleString("en");
   const stand = poolStand();
   if (!stand) return `
-    <div class="note">Open <b>War → the resource button</b> in the game
-      (“Faction resources”) and type the eighteen stock figures in here once.
-      Production and the price of every assault team already come out of the game
-      files — only the stock is live server state.</div>
+    
     <div class="row"><button class="btn primary" id="pool-set">Enter the faction pool …</button></div>`;
 
   const gruppen = ["army", "armor", "air", "other"].filter(g => resListe().some(r => r.grp === g));
@@ -4368,13 +4605,9 @@ function poolPanel(){
         <td data-zeit="${esc(a.k)}">${v.stueck ? "covered" : esc(dauerText(v.wartenS))}</td>
       </tr>`).join("")}</tbody>
     </table></div>
-    <div class="note">“Enough for n in” assumes nobody else spends a thing, so it is the
-      earliest possible moment and not a forecast.
-      The pool belongs to the whole faction — every player spends from it, so
-      these numbers move without anyone in the clan doing anything. “In the pool” is the reading
-      plus what has been delivered since; it drifts upward and never accounts for what others
-      spent, so read it again before a big decision. Prices and production come out of the game
-      files and are exact.</div>`;
+    <div class="note">“Enough for n in” assumes nobody else spends a thing — the earliest possible moment,
+      not a forecast. The pool is the whole faction's and moves without anyone in the clan
+      touching it, so read it again before a big decision.</div>`;
 }
 function poolPanelWiring(){
   document.getElementById("pool-set")?.addEventListener("click", poolDialog);
@@ -4425,8 +4658,7 @@ function poolDialog(){
               </label>`).join("")}
           </div>
         </div>`).join("")}
-      <div class="note">Everyone sees the same reading, and it says who took it and when — a
-        four-hour-old pool figure is worth knowing about before planning around it.</div>
+      
     </div>
     <div class="dlg-f">
       <button class="btn" id="d-close">Cancel</button>
@@ -4621,10 +4853,8 @@ function arsenalDialog(tab){
               p.koennen.get(f.k) || "—"}</td>`).join("")}
           </tr>`).join("")}</tbody>
         </table></div>
-        <div class="note">Every capability is read off the kit, never typed in. Anti-tank means a
-          launcher or an anti-tank rifle — both come out of the game files, the launchers by their
-          ammunition's penetration and the rifles because their round does 150 to 260 where an
-          ordinary rifle does under 110.</div>
+        <div class="note">Capabilities are read off the kit, never typed in — enter what a soldier carries and
+          the labels follow.</div>
         ` : `<div class="${alle.length ? "note" : "empty"}">${alle.length
           ? "Nobody has entered a weapon or a vehicle yet — the capability overview fills up as soon as somebody does."
           : "Nobody has recorded a soldier yet."}</div>`}
@@ -4896,11 +5126,11 @@ document.getElementById("b-share").addEventListener("click", async ()=>{
   const url = location.origin + location.pathname + "#m=" + code;
   openDlg(`
     <div class="dlg-h"><h2>Share this picture</h2>
-      <p>The link carries the whole map. Post it in your clan chat.</p></div>
+      <p>The link carries the whole map.</p></div>
     <div class="dlg-b">
       <div id="linkout">${esc(url)}</div>
       <div style="font-size:11.5px;color:var(--dim)">${url.length} characters${url.length>7500?" — some chats will cut this. Save as a file instead.":""}</div>
-      <div class="note">With live sync switched on you rarely need this — everyone sees changes anyway.</div>
+      
     </div>
     <div class="dlg-f">
       <button class="btn" id="d-file">Save as file</button>
@@ -5024,7 +5254,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-17 18:35</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-17 20:07</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
@@ -5039,15 +5269,12 @@ document.getElementById("b-help").addEventListener("click", ()=>{
         <div><kbd>L</kbd><span>Symbol key</span></div>
         <div><kbd>/</kbd><span>Search</span></div>
       </div>
+      <div class="note" style="border-top:1px solid var(--line);padding-top:11px"><b>Size:</b> the two steppers at the bottom of the left bar — the first scales the whole
+          interface, the second the text on top of that.</div>
       <div class="note" style="border-top:1px solid var(--line);padding-top:11px">
-        <div><b>Size:</b> the two steppers at the bottom of the left bar. The first scales the
-          whole interface, the second the text on top of that — on a 4K panel the bars want to be
-          large and the lists larger still. Both are remembered per browser, and the first one
-          starts from your window width.</div>
-      </div>
-      <div class="note" style="border-top:1px solid var(--line);padding-top:11px">
-        <div><b>Filling the map:</b> <b style="color:var(--accent)">Read screenshot</b> takes a picture of
-          the war map (zoomed all the way out) and sets every town's owner at once.</div>
+        <div><b>Filling the map:</b> <b style="color:var(--accent)">Read screenshot</b> sets every
+          town's owner from one war-map screenshot, zoomed all the way out.</div>
+
         <div><b>Your depot</b> is what you own. It survives a new war, so you set it up once and afterwards
           only drag teams onto the map.</div>
         <div><b>Almost everything is a drag:</b> move arrows (tool 4) drag from town to town, defence
@@ -5102,6 +5329,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
 });
 
 function openDlg(html, breit){
+  if (bildAbmelden) bildAbmelden();     // Zuhoerer des vorigen Fensters
   const d = document.getElementById("dlg");
   d.className = "dlg" + (breit === true ? " wide" : breit ? " " + breit : "");
   d.innerHTML = html;
@@ -5123,6 +5351,7 @@ function tabsAktiv(host, start){
 function closeDlg(){
   document.getElementById("veil").classList.remove("on");
   shotState = null;
+  if (bildAbmelden) bildAbmelden();
   /* Den Inhalt erst im naechsten Takt raeumen: Code, der direkt nach dem
      Schliessen noch ein Feld ausliest, soll es finden. Stehenlassen darf man
      ihn aber nicht - sonst greift ein spaeteres querySelectorAll("#dlg …")
@@ -5365,11 +5594,8 @@ document.getElementById("b-sync").addEventListener("click", ()=>{
       ${hatBuiltin() ? `<div class="note">Server already configured — the code is all you need.</div>`
         : feld("s-url", "Project URL", "https://abcdefgh.supabase.co", c.url)
         + feld("s-key", "Publishable key", "sb_publishable_…", c.key)}
-      <div class="note" style="border-top:1px solid var(--line);padding-top:11px">
-        <div>Your code decides which room you join and which teams are yours.
-          <b>Nobody can change your teams or depot</b> — the database enforces that.</div>
-        <div>Control, battles, notes and arrows are shared: everyone may edit those.</div>
-      </div>
+      <div class="note" style="border-top:1px solid var(--line);padding-top:11px">Your code decides which room you join and which teams are yours. Nobody else can
+          change them.</div>
     </div>
     <div class="dlg-f">
       ${CFG && CFG.admin ? `<button class="btn" id="s-members">Members …</button>` : ""}
@@ -5455,8 +5681,8 @@ async function mitgliederDialog(meldung){
             <span>can invite too</span></label>
           <button class="btn primary" id="inv-go">Create code</button>
         </div>
-        <div class="hint">Tick the box only for people who should be able to hand out codes
-          themselves. Everyone else can use the map fully — they just cannot let anyone in.</div>
+        <div class="hint">Tick this only for people who may hand out codes themselves — everyone else can use
+          the map fully.</div>
       </div>
       <div class="tw"><table>
         <thead><tr><th>Name</th><th>Code</th><th>Id</th><th>Role</th><th>State</th>
@@ -5486,11 +5712,9 @@ async function mitgliederDialog(meldung){
           </tr>`;
         }).join("")}</tbody>
       </table></div>
-      <div class="note">A code is the key to this room — send it in a direct message, never in a
-        public channel. <b>Lock</b> takes somebody out immediately without deleting anything they
-        wrote; <b>Remove</b> deletes their entry, and the code stops working. Neither touches the
-        map itself. You cannot lock, demote or remove yourself, and the last admin stays admin —
-        otherwise the room would lock everyone out.</div>
+      <div class="note">A code is the key to this room — send it in a direct message, never in a public
+        channel. <b>Lock</b> shuts somebody out but keeps what they wrote; <b>Remove</b> deletes
+        their entry and the code stops working. Neither touches the map.</div>
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
   document.getElementById("d-close").addEventListener("click", closeDlg);
