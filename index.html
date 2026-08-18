@@ -4262,6 +4262,39 @@ function feldBild(quelle, x, y, w, h, faktor){
 
 /* Der Hauptweg. Gibt null zurueck, wenn kein Raster zu erkennen ist -
    dann greift der alte Weg ueber den freien Text. */
+/* Wo in einem Kartenausschnitt steht ueberhaupt Schrift? Die Schrift ist
+   hell, der Grund dunkel - also zaehlt man je Bildzeile die hellen Punkte und
+   sucht die zusammenhaengenden Baender. Rechts vom Taktikzeichen sind das
+   genau drei: Name, Kuerzel mit Ort, und die Zahlen. */
+function schriftZeilen(grau, W, x0, y0, y1, schwelle){
+  const oben = Math.max(0, Math.round(y0)), unten = Math.min(y1|0, y1);
+  const zahl = [];
+  let maxN = 0;
+  for (let y = oben; y < unten; y++){
+    let n = 0;
+    for (let x = x0; x < W; x++) if (grau[y*W+x] >= schwelle) n++;
+    zahl.push(n); if (n > maxN) maxN = n;
+  }
+  if (!maxN) return [];
+  const noetig = Math.max(2, maxN * 0.14);
+  const baender = [];
+  let a = -1;
+  for (let i = 0; i < zahl.length; i++){
+    if (zahl[i] >= noetig){ if (a < 0) a = i; }
+    else if (a >= 0){ if (i - a >= 3) baender.push([oben+a, oben+i-1]); a = -1; }
+  }
+  if (a >= 0 && zahl.length - a >= 3) baender.push([oben+a, oben+zahl.length-1]);
+  /* Zeilen, die nur einen Punkt hoch sind, sind Rauschen; und was direkt
+     aneinandergrenzt, gehoert zusammen. */
+  const raus = [];
+  for (const b of baender){
+    const letzt = raus[raus.length-1];
+    if (letzt && b[0] - letzt[1] <= 2) letzt[1] = b[1];
+    else raus.push([b[0], b[1]]);
+  }
+  return raus;
+}
+
 /* Alle Felder untereinander auf ein weisses Blatt. Jede Zeile freistehend,
    mit einem Abstand groesser als die Zeile selbst - dann trennt die Erkennung
    sie sicher und gibt genau eine Textzeile je Feld zurueck. */
@@ -4338,6 +4371,18 @@ async function depotAusRaster(quelle, melde){
   const g = quelle.getContext("2d", {willReadFrequently:true});
   const bd = g.getImageData(0, 0, W, H);
   const m = balkenMaske(bd, W, H);
+  /* Helligkeit je Punkt, einmal fuer den ganzen Ausschnitt - daraus werden
+     gleich die Schriftzeilen gesucht. */
+  const grau = new Uint8ClampedArray(W*H);
+  {
+    const d = bd.data;
+    let summe = 0;
+    for (let i=0, j=0; j<W*H; i+=4, j++){
+      const v = (d[i] + d[i+1] + d[i+2]) / 3;
+      grau[j] = v; summe += v;
+    }
+    var grauSchwelle = Math.min(230, summe/(W*H) + 40);
+  }
   /* Ein echtes Band traegt mindestens einen Balken von brauchbarer Breite.
      Am Rand des Ausschnitts bleiben sonst ein paar Einzelzeilen haengen. */
   let baender = balkenZeilen(m, W, H)
@@ -4386,31 +4431,70 @@ async function depotAusRaster(quelle, melde){
   const felder = [];
   for (const [o, u] of baender){
     const b = (o+u)/2;
-    const spalten = spaltenX;
-    felder.push({
-      balken: b,
-      spalten,
-      name:  [b - P*0.78, b - P*0.52],
-      kuerzel:[b - P*0.52, b - P*0.30],
-      zahlen:[b - P*0.26, b - P*0.04],
-    });
+    felder.push({balken: b, spalten: spaltenX,
+                 name: [b - P*0.78, b - P*0.52],       // vorlaeufig
+                 kuerzel: [b - P*0.52, b - P*0.30],
+                 zahlen: [b - P*0.26, b - P*0.04]});
   }
 
   /* Erst alle Ausschnitte schneiden, dann in drei Durchgaengen lesen. */
   melde(`${felder.length} units found — reading …`);
-  const linksAb = W*0.19;
+  /* Wo faengt der Text an? Links in jeder Karte steht das Taktikzeichen, und
+     das ist ein kraeftig gefaerbter Kasten - dieselbe Maske findet ihn. Ohne
+     Messung ginge es schief: im einen Fenster sitzt er bei 11 % der Breite,
+     im anderen bei 16 %. */
+  let linksAb = W*0.13;
+  {
+    const oben = Math.max(0, Math.round(felder[0].name[0]));
+    const unten = Math.min(H, Math.round(felder[0].kuerzel[1]));
+    const spalte = new Int32Array(W);
+    for (let y = oben; y < unten; y++)
+      for (let x = 0; x < W; x++) if (m[y*W+x]) spalte[x]++;
+    const noetig = Math.max(2, Math.round((unten-oben) * 0.30));
+    let rand = -1;
+    for (let x = 0; x < W*0.35; x++){
+      if (spalte[x] >= noetig) rand = x;
+      else if (rand >= 0 && x - rand > W*0.03) break;
+    }
+    if (rand > 0) linksAb = Math.min(W*0.30, rand + W*0.015);
+  }
+
+  /* Jetzt die drei Schriftzeilen je Karte wirklich suchen, statt sie an
+     festen Anteilen der Kartenhoehe festzumachen. Die unterste ist die
+     Zahlenzeile, darueber Kuerzel und Ort, ganz oben der Name. */
+  for (const f of felder){
+    const zeilen = schriftZeilen(grau, W, Math.round(linksAb),
+                                 f.balken - P*0.94, f.balken - P*0.02, grauSchwelle);
+    if (zeilen.length < 2) continue;
+    const luft = Math.max(2, P*0.03);
+    const zahl = zeilen[zeilen.length-1];
+    const kz   = zeilen[zeilen.length-2];
+    const nam  = zeilen.length >= 3 ? zeilen[zeilen.length-3] : null;
+    f.zahlen = [zahl[0]-luft, zahl[1]+luft];
+    f.kuerzel = [kz[0]-luft, kz[1]+luft];
+    if (nam) f.name = [nam[0]-luft, nam[1]+luft];
+  }
+  /* Ein leeres Feld wird zum weissen Kaestchen statt zu einem Loch. Nur so
+     bleibt die Zeilenzaehlung auf dem Sammelblatt gleich, und ein unlesbarer
+     Name kostet nicht die ganze Karte. */
+  const leerBild = () => {
+    const c = document.createElement("canvas");
+    c.width = 40; c.height = 20;
+    const g2 = c.getContext("2d");
+    g2.fillStyle = "#fff"; g2.fillRect(0, 0, 40, 20);
+    return c;
+  };
   const namBilder = [], kzBilder = [], zBilder = [], zProKarte = [];
   for (const f of felder){
-    namBilder.push(feldBild(quelle, linksAb, f.name[0], W - linksAb, f.name[1]-f.name[0]));
-    kzBilder.push(feldBild(quelle, linksAb, f.kuerzel[0], W - linksAb, f.kuerzel[1]-f.kuerzel[0]));
+    namBilder.push(feldBild(quelle, linksAb, f.name[0], W - linksAb, f.name[1]-f.name[0]) || leerBild());
+    kzBilder.push(feldBild(quelle, linksAb, f.kuerzel[0], W - linksAb, f.kuerzel[1]-f.kuerzel[0]) || leerBild());
     let n = 0;
     for (const [x0, x1] of f.spalten){
       const zb = feldBild(quelle, x0, f.zahlen[0], x1 - x0, f.zahlen[1]-f.zahlen[0]);
-      if (zb){ zBilder.push(zb); n++; }
+      zBilder.push(zb || leerBild()); n++;     // Platzhalter, damit die Lage stimmt
     }
     zProKarte.push(n);
   }
-  if (namBilder.some(x => !x) || kzBilder.some(x => !x)) return null;
 
   let namen = [], kuerzel = [], zahlZeilen = [];
   try {
@@ -4448,8 +4532,9 @@ async function depotAusRaster(quelle, melde){
       if (treffer.length && treffer.length <= 4)
         kand = [...new Set(treffer.flatMap(c => ZUSAMMEN.get(c.s)))];
     }
-    if (!kand.length) continue;
-
+    /* Auch ohne lesbare Besetzung wird die Einheit angeboten: Name, Kuerzel
+       und Ort stehen fest, der Typ ist in einem Klick nachgewaehlt. Nur wenn
+       gar nichts von der Karte lesbar war, wird sie uebergangen. */
     const name = saeubern(namen[k]);
     const kzZeile = saeubern(kuerzel[k]);
     let tag = "", ort = "", stadt = null;
@@ -4464,7 +4549,10 @@ async function depotAusRaster(quelle, melde){
         if (tr){ stadt = tr.i; ort = MAP.n[tr.i][0]; }
       }
     }
-    raus.push({name, tag, ort, stadt, kand, gewaehlt: kand[0]});
+    if (!kand.length && !name && !tag) continue;
+    raus.push({name, tag, ort, stadt,
+               kand: kand.length ? kand : MAP.at.map(a => a.k),
+               gewaehlt: kand.length ? kand[0] : ""});
   }
   return raus.length ? raus : null;
 }
@@ -4483,6 +4571,7 @@ async function depotLesen(datei, box){
   try {
     const farbe = await farbAusschnitt(datei, box);
     beste = await depotAusRaster(farbe, setz);
+    if (!beste) console.warn("Kein Raster erkannt - lese den Ausschnitt als Fliesstext.");
     if (beste) rohBest = beste.map(g =>
       `${g.name} | ${g.tag} ${g.ort} | ${g.kand.join(", ")}`).join("\n");
   } catch(e){ beste = null; }
@@ -6099,7 +6188,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-17 22:44</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-17 22:56</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
