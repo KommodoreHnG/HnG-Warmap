@@ -4016,8 +4016,8 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
       ${bildQuelleHTML("ds-file")}
       <div id="ds-status" style="font-size:12px;color:var(--dim)">Waiting for an image …</div>
       <div id="ds-crop" style="display:none;flex-direction:column;gap:6px">
-        <div class="hint">Optional: drag a box around the list. The reader finds it in the whole
-          picture on its own, so this only helps if a shot has several lists in it.</div>
+        <div class="hint">The box moves itself to the list. Drag your own only if a shot has
+          several lists in it.</div>
         <div style="text-align:center">
           <div id="ds-bild" style="display:inline-block;position:relative;line-height:0;
             border:1px solid var(--line);border-radius:2px;background:#000;
@@ -4044,6 +4044,9 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
     </div>
     <div class="dlg-f">
       <button class="btn" id="d-close">Cancel</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);cursor:pointer">
+        <input type="checkbox" id="ds-stellen"> also put them on the map for the clan
+      </label>
       <button class="btn primary" id="ds-go" disabled>Add ticked</button>
     </div>`, true);
   document.getElementById("d-close").addEventListener("click", closeDlg);
@@ -4083,7 +4086,7 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
   feld.addEventListener("pointerup", loslassen);
   feld.addEventListener("pointercancel", loslassen);
 
-  bildQuelle("ds-file", f => {
+  bildQuelle("ds-file", async f => {
     datei = f;
     document.getElementById("ds-img").src = URL.createObjectURL(f);
     document.getElementById("ds-crop").style.display = "flex";
@@ -4091,8 +4094,34 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
     document.getElementById("ds-roh").style.display  = "none";
     document.getElementById("ds-go").disabled = true;
     box = VORGABE; malen();
-    document.getElementById("ds-status").innerHTML =
-      "Drag a box around the assault team list, then press <b>Read the box</b>.";
+    const st = document.getElementById("ds-status");
+    st.innerHTML = "Looking at the picture …";
+    /* Erst schauen, wo wir sind. Ein ganzes Fenster verraet es an der golden
+       hinterlegten Registerkarte; bei einem blossen Ausschnitt gibt es kein
+       Urteil, und es geht weiter wie bisher. */
+    let voll = null, wo = null;
+    try {
+      voll = await farbAusschnitt(f, null);
+      wo = await ansichtErkennen(voll);
+    } catch(e){ voll = null; }
+    if (wo && wo.wo === "andere"){
+      st.innerHTML = `<b>That is the ${esc(wo.text.slice(0,14).toLowerCase())} screen.</b>
+        Switch the game to <b>War</b> or to <b>Soldiers</b> with a soldier's assault teams
+        open, then take the shot again. You can also read this one anyway —
+        press <b>Whole picture</b>.`;
+      return;
+    }
+    const gefunden = voll ? listenRahmen(voll) : null;
+    if (gefunden){
+      box = gefunden.box; malen();
+      st.innerHTML = `${wo ? `<b>${wo.wo === "krieg" ? "War map" : "Soldiers"}</b> — ` : ""}${
+        gefunden.n} assault team${gefunden.n===1?"":"s"} in view. Reading …`;
+      return depotLesen(datei, box);
+    }
+    st.innerHTML = wo
+      ? `<b>${wo.wo === "krieg" ? "War map" : "Soldiers"}</b>, but no assault team list in the
+         picture. Open the list, then take the shot again — or drag a box around it yourself.`
+      : "Drag a box around the assault team list, or just press <b>Whole picture</b>.";
   });
   document.getElementById("ds-read").addEventListener("click", ()=> depotLesen(datei, box));
   document.getElementById("ds-all").addEventListener("click", ()=>{
@@ -4113,7 +4142,12 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
       n++;
     });
     setMyDepot(liste);
-    for (const [id, tw] of gestellt) deployTeam(tw, id);   // Standort gleich mit uebernehmen
+    /* Der Standort einer Einheit sieht der ganze Clan. Er wird deshalb nur auf
+       ausdruecklichen Wunsch mit uebernommen - das Depot selbst bleibt davon
+       unberuehrt. */
+    const stellen = document.getElementById("ds-stellen");
+    if (!(stellen && stellen.checked)) gestellt = [];
+    for (const [id, tw] of gestellt) deployTeam(tw, id);
     closeDlg(); depotZeichnen(); side(); draw(); tally();
     toast(`${n} team${n===1?"":"s"} added${gestellt.length?`, ${gestellt.length} placed`:""}`);
   });
@@ -4166,9 +4200,18 @@ async function ocrBereit(psm, weiss, melde){
   }
 }
 async function ocrText(quelle, psm, melde, weiss){
+  return (await ocrMitZuv(quelle, psm, melde, weiss)).text;
+}
+/* Wie ocrText, gibt aber auch die Zuversicht zurueck. Damit laesst sich
+   entscheiden, welche von mehreren Aufbereitungen die bessere war, ohne dass
+   man wissen muesste, was dort stehen sollte.
+   Nicht "ocrLesen" nennen - so heisst seit langem der Schlachtbildschirm-Leser
+   weiter unten, und die spaetere Definition gewinnt. */
+async function ocrMitZuv(quelle, psm, melde, weiss){
   await ocrBereit(psm, weiss, melde);
   const r = await ocrWorker.recognize(quelle);
-  return (r && r.data && r.data.text) || "";
+  return {text: (r && r.data && r.data.text) || "",
+          zuv: Math.round((r && r.data && r.data.confidence) || 0)};
 }
 
 /* Ausschnitt herausschneiden, hochskalieren und die Schrift vom Grund trennen.
@@ -5219,7 +5262,7 @@ function zeichenLesen(quelle, x0, y0, breit, hoch){
 }
 
 /* Ein Ausschnitt als eigenes, aufbereitetes Bild - fuer die Einzelzeilen. */
-function feldBild(quelle, x, y, w, h, faktor, beidseitig){
+function feldBild(quelle, x, y, w, h, faktor, beidseitig, dunkelKanal){
   x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y));
   w = Math.min(quelle.width - x, Math.round(w));
   h = Math.min(quelle.height - y, Math.round(h));
@@ -5238,8 +5281,12 @@ function feldBild(quelle, x, y, w, h, faktor, beidseitig){
      ein einzelnes Feld ist klein genug fuer eine globale Spanne. */
   const bd = g.getImageData(0,0,c.width,c.height), d = bd.data;
   const n = c.width*c.height, hist = new Uint32Array(256), grau = new Uint8ClampedArray(n);
+  /* Der hellste Kanal laesst alles Helle hell. Der dunkelste dagegen loescht
+     Buntes: ein gruener Punkt hat wenig Rot und wenig Blau. Weisse Schrift hat
+     in allen Kanaelen viel und ueberlebt beides - deshalb faellt hier die
+     Landkarte hinter dem halbdurchsichtigen Panel weg. */
   for (let i=0, j=0; j<n; i+=4, j++){
-    const v = Math.max(d[i], d[i+1], d[i+2]);
+    const v = dunkelKanal ? Math.min(d[i], d[i+1], d[i+2]) : Math.max(d[i], d[i+1], d[i+2]);
     grau[j] = v; hist[v]++;
   }
   const perz = p => { let s = 0; for (let v=0; v<256; v++){ s += hist[v]; if (s >= n*p) return v; } return 255; };
@@ -5336,27 +5383,38 @@ async function depotAusRaster(quelle, melde){
                            (r.kastenX[1] - r.kastenX[0]) + r.P*0.06, r.P*0.48);
 
     /* 2. Name und Kuerzelzeile. */
-    const nb = feldBild(quelle, r.textX, k.name[0]-2, rNam - r.textX, k.name[1]-k.name[0]+4);
-    let name = "", kzZeile = "";
+    let name = "", kzZeile = "", kzAlle = [];
     try {
-      if (nb) name = saeubern(await ocrText(nb, 7, ()=>{}));
-      /* Die Kuerzelzeile: erst der billige einseitige Weg. Nur wenn der
-         keinen echten Ortsnamen trifft, kommt der teure beidseitige hinterher -
-         der wird im Soldatenfenster gebraucht, wo Kuerzel und Ortsname
-         verschiedenfarbig nebeneinander stehen. Die Stadtliste entscheidet;
-         sie ist eine harte Gegenprobe, kein Schaetzwert. */
+      /* Der Name ueber beide Farbwege - es gewinnt, was die Erkennung selbst
+         hoeher bewertet. Sitzt der erste schon sicher, bleibt es dabei. */
+      let bestZ = -1;
+      for (const dunkel of [false, true]){
+        const nb = feldBild(quelle, r.textX, k.name[0]-2,
+                            rNam - r.textX, k.name[1]-k.name[0]+4, 0, false, dunkel);
+        if (!nb) continue;
+        const a = await ocrMitZuv(nb, 7, ()=>{});
+        const txt = saeubern(a.text);
+        if (txt && a.zuv > bestZ){ bestZ = a.zuv; name = txt; }
+        if (bestZ >= 85) break;
+      }
+      /* Die Kuerzelzeile ueber beide Farbwege und beide Aufbereitungen. Ein
+         getroffener Ortsname schlaegt jede Zuversicht - die Stadtliste ist
+         eine harte Gegenprobe. Sitzt er, wird abgebrochen. */
       let bestP = -1;
       for (const beid of [false, true]){
-        const kb = feldBild(quelle, r.textX, k.kuerzel[0]-2,
-                            rKue - r.textX, k.kuerzel[1]-k.kuerzel[0]+4, 0, beid);
-        if (!kb) continue;
-        const txt = saeubern(await ocrText(kb, 7, ()=>{}));
-        if (!txt) continue;
-        const tr = tagUndOrt(txt, true);
-        const p = (tr && tr.stadt != null ? 100 : 0) + (tr && tr.tag ? tr.tag.length : 0)
-                + txt.length*0.01;
-        if (p > bestP){ bestP = p; kzZeile = txt; }
-        if (bestP >= 100) break;                  // Ortsname sitzt - genug
+        for (const dunkel of [false, true]){
+          const kb = feldBild(quelle, r.textX, k.kuerzel[0]-2,
+                              rKue - r.textX, k.kuerzel[1]-k.kuerzel[0]+4, 0, beid, dunkel);
+          if (!kb) continue;
+          const a = await ocrMitZuv(kb, 7, ()=>{});
+          const txt = saeubern(a.text);
+          if (!txt) continue;
+          kzAlle.push(txt);
+          const tr = tagUndOrt(txt, true);
+          const p = (tr && tr.stadt != null ? 1000 : 0) + a.zuv;
+          if (p > bestP){ bestP = p; kzZeile = txt; }
+        }
+        if (bestP >= 1000) break;
       }
     } catch(e){ return null; }
 
@@ -5389,16 +5447,21 @@ async function depotAusRaster(quelle, melde){
       kand = MAP.at.map(a => a.k);
     }
 
+    /* Der Ort wird gegen alle 1438 Staedte gesucht, und zwar ueber JEDE
+       Lesart der Kuerzelzeile - nicht nur die bestbewertete. Findet keine
+       davon eine Stadt, bleibt das Feld leer: ein falscher Ortsname ist
+       schlechter als keiner. */
     let tag = "", ort = "", stadt = null;
-    const t2 = tagUndOrt(kzZeile, true);
-    if (t2){ tag = t2.tag; ort = t2.ort; stadt = t2.stadt; }
-    else {
-      const w = kzZeile.split(" ").filter(Boolean);
-      if (w.length){
-        tag = /^[A-Za-z0-9][A-Za-z0-9_-]{1,11}$/.test(w[0]) ? w[0].toUpperCase() : "";
-        ort = w.slice(1).join(" ");
-        const tr = ort ? findeStadt(ort) : null;
-        if (tr){ stadt = tr.i; ort = MAP.n[tr.i][0]; }
+    for (const txt of kzAlle){
+      const tr = tagUndOrt(txt, true);
+      if (tr && tr.stadt != null){ tag = tr.tag; ort = tr.ort; stadt = tr.stadt; break; }
+    }
+    if (stadt === null){
+      const t2 = tagUndOrt(kzZeile, true);
+      if (t2) tag = t2.tag;
+      else {
+        const w = kzZeile.split(" ").filter(Boolean);
+        if (w.length && /^[A-Za-z0-9][A-Za-z0-9_-]{1,11}$/.test(w[0])) tag = w[0].toUpperCase();
       }
     }
     if (!name && !tag && !gewaehlt) continue;
@@ -5717,6 +5780,109 @@ function depotAusText(text){
   return raus;
 }
 
+/* ---- Welche Ansicht ist offen? --------------------------------------
+   Die aktive Registerkarte der oberen Leiste ist golden hinterlegt. An einem
+   echten Bildschirmfoto nachgemessen liest sie sich als "KRIEG" mit
+   Zuversicht 92 - ein Wort, kein Rauschen. Gesucht wird deshalb der breite,
+   flache, gut gefuellte Goldkasten im obersten Achtel.
+   Findet sich keiner, ist es kein ganzes Fenster, sondern ein Ausschnitt -
+   dann gibt es kein Urteil, und es wird gelesen wie bisher. */
+const ANSICHT_KRIEG = ["KRIEG", "WAR"];
+const ANSICHT_SOLDAT = ["SOLDATEN", "SOLDIERS", "SOLDATE"];
+async function ansichtErkennen(quelle){
+  const W = quelle.width, H = quelle.height;
+  const hoch = Math.round(H*0.12);
+  if (W < 400 || hoch < 24) return null;
+  const g = quelle.getContext("2d", {willReadFrequently:true});
+  const d = g.getImageData(0, 0, W, hoch).data;
+  const gold = new Uint8Array(W*hoch);
+  for (let i = 0, j = 0; j < W*hoch; i += 4, j++){
+    const R = d[i], G = d[i+1], B = d[i+2];
+    const mx = Math.max(R,G,B), mn = Math.min(R,G,B);
+    if (mx > 110 && R >= G && G >= B && R > B && (mx-mn)/Math.max(mx,1) > 0.30){
+      const gn = (G-B)/Math.max(1, R-B);
+      if (gn > 0.42 && gn < 0.86) gold[j] = 1;
+    }
+  }
+  /* Laeufe verbinden - dieselbe Technik wie bei den Kacheln. */
+  const eltern = [], stueck = [];
+  const finde = a => { while (eltern[a] !== a) a = eltern[a] = eltern[eltern[a]]; return a; };
+  const eine = (a,b) => { a = finde(a); b = finde(b); if (a !== b) eltern[b] = a; };
+  let vorige = [];
+  for (let y = 0; y < hoch; y++){
+    const jetzt = [];
+    let x = 0;
+    while (x < W){
+      if (!gold[y*W+x]){ x++; continue; }
+      const a = x;
+      while (x < W && gold[y*W+x]) x++;
+      const id = stueck.length;
+      eltern.push(id);
+      stueck.push({x0:a, x1:x-1, y0:y, y1:y, n:x-a});
+      jetzt.push({id, a, b:x-1});
+    }
+    for (const j of jetzt) for (const v of vorige) if (j.a <= v.b && v.a <= j.b) eine(v.id, j.id);
+    vorige = jetzt;
+  }
+  const fl = new Map();
+  for (let i = 0; i < stueck.length; i++){
+    const w = finde(i), k = stueck[i], f = fl.get(w);
+    if (!f) fl.set(w, {x0:k.x0, x1:k.x1, y0:k.y0, y1:k.y1, n:k.n});
+    else { f.x0 = Math.min(f.x0,k.x0); f.x1 = Math.max(f.x1,k.x1);
+           f.y0 = Math.min(f.y0,k.y0); f.y1 = Math.max(f.y1,k.y1); f.n += k.n; }
+  }
+  /* Eine Registerkarte ist breit, flach und durchgefaerbt. Das Rangabzeichen
+     und die Mitgliedschaftsleiste fallen damit heraus. */
+  const kand = [...fl.values()].filter(f => {
+    const b = f.x1-f.x0+1, hh = f.y1-f.y0+1;
+    return b > W*0.035 && hh > hoch*0.12 && b/hh > 1.8 && b/hh < 9 && f.n/(b*hh) > 0.55;
+  }).sort((a,b) => (b.x1-b.x0) - (a.x1-a.x0));
+  if (!kand.length) return null;
+  const k = kand[0];
+  /* Knapp am Goldkasten schneiden. Mit Rand kaeme der dunkle Hintergrund
+     ringsum mit hinein, und dann ist nicht mehr klar, was Schrift und was
+     Grund ist - gelesen wurde damit "AALPAAH" statt "KREG". Dass der knappe
+     Schnitt "KREG" liefert, faengt der nachsichtige Vergleich unten ab. */
+  const c = document.createElement("canvas");
+  const ax = k.x0, ay = k.y0;
+  const br = k.x1-k.x0+1, hh = k.y1-k.y0+1;
+  const f = Math.max(1, Math.min(4, 90/hh));
+  c.width = Math.round(br*f); c.height = Math.round(hh*f);
+  const cg = c.getContext("2d");
+  cg.imageSmoothingEnabled = true; cg.imageSmoothingQuality = "high";
+  cg.drawImage(quelle, ax, ay, br, hh, 0, 0, c.width, c.height);
+  let txt = "";
+  try { txt = (await ocrMitZuv(c, 7, ()=>{})).text; } catch(e){ return null; }
+  txt = txt.toUpperCase().replace(/[^A-ZÄÖÜ]/g, "");
+  if (txt.length < 3) return null;
+  /* Nachsichtig vergleichen - dieselbe Toleranz wie beim Abgleich der
+     Ortsnamen. "KREG" trifft damit "KRIEG"; "SHOP" bleibt mit Abstand 4
+     ausserhalb. */
+  const passt = liste => liste.some(s =>
+    txt.includes(s) || s.includes(txt) || levenshtein(txt, s) <= 2);
+  if (passt(ANSICHT_KRIEG))  return {wo:"krieg", text:txt};
+  if (passt(ANSICHT_SOLDAT)) return {wo:"soldaten", text:txt};
+  return {wo:"andere", text:txt};
+}
+
+/* Der Rahmen wird um das gelegt, was der Finder wirklich gefunden hat -
+   nicht auf geratene Bildschirmanteile. */
+function listenRahmen(quelle){
+  let r;
+  try { r = kartenRaster(quelle); } catch(e){ return null; }
+  if (!r || !r.ok || !r.karten.length) return null;
+  const W = quelle.width, H = quelle.height;
+  const oben = Math.min(...r.karten.map(k => k.oben));
+  const unten = Math.max(...r.karten.map(k => k.oben)) + r.P;
+  const links = Math.min(r.panel[0], r.kastenX[0]);
+  const rechts = Math.max(r.panel[1], r.textRechts ? Math.max(...r.textRechts) : r.panel[1]);
+  const luft = 0.12*r.P;
+  const x0 = Math.max(0, links - luft), x1 = Math.min(W, rechts + luft);
+  const y0 = Math.max(0, oben - luft), y1 = Math.min(H, unten + luft);
+  if (x1 - x0 < 20 || y1 - y0 < 20) return null;
+  return {n: r.n, box: {x: x0/W, y: y0/H, w: (x1-x0)/W, h: (y1-y0)/H}};
+}
+
 /* ---- reading a battle screenshot -------------------------------------
    The battle detail screen carries far more than names: the town, both
    sides' strength and the whole player list. The town is the easy part —
@@ -5823,7 +5989,7 @@ function ocrDialog(){
 }
 async function ocrLesen(datei){
   const st = document.getElementById("ocr-status");
-  const setz = s => st.innerHTML = s;
+  const setz = s => { if (st) st.innerHTML = s; };
   /* Hier bleibt das Bild zunaechst unangetastet. Der Schlachtbildschirm ist
      schon hell auf dunkel und gross gesetzt - gemessen liest Tesseract ihn
      roh besser als aufbereitet, weil die Aufbereitung die Kantenglaettung
@@ -7101,7 +7267,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-18 19:49</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-18 20:56</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
