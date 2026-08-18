@@ -2222,6 +2222,33 @@ function setMeta(k, v){ stamp("meta", k, v); save(); kopfzeile(); }
    Sichtungen. Bleiben muss alles, was ueber Kriege hinweg waechst: das Depot
    mit dem Verlauf, das Arsenal, die Spielerliste und das Feinddepot. Es gibt
    in der Anwendung keinen Knopf, der diese vier loescht. */
+/* ---- Startstaedte ----------------------------------------------------
+   Womit eine Seite in den Krieg geht. Die Vorgabe kommt aus den Spieldateien:
+   Feld 5 einer Stadtzeile traegt 1/2/3 fuer US/GE/UdSSR - London City,
+   Copenhagen, Budapest. Mehrere je Seite sind moeglich, deshalb je Fraktion
+   eine Liste. */
+function startVorgabe(){
+  const r = {0:null, 1:null, 2:null};
+  MAP.n.forEach((n,i) => { if (n[4] > 0 && n[4] <= 3) r[n[4]-1] = i; });
+  return r;
+}
+function startStaedte(){
+  const vor = startVorgabe();
+  const e = S.meta.start;
+  if (!e || !e.v) return vor;
+  const r = {0:null, 1:null, 2:null};
+  for (const f of [0,1,2]){
+    /* Die fruehere Fassung speicherte eine Liste je Seite - der erste Eintrag
+       daraus gilt weiter, damit ein gespeicherter Stand nicht leer dasteht. */
+    let w = e.v[f] !== undefined ? e.v[f] : e.v[String(f)];
+    if (Array.isArray(w)) w = w.length ? w[0] : null;
+    w = (w === null || w === undefined) ? null : Number(w);
+    r[f] = (w !== null && MAP.n[w]) ? w : vor[f];
+  }
+  return r;
+}
+const setStartStaedte = o => setMeta("start", o);
+
 const KRIEG_BLEIBT = ["depot", "roster", "edep", "meta"];
 function neuerKrieg(){
   const linien = liveLines().map(([id]) => id);
@@ -2239,8 +2266,19 @@ function neuerKrieg(){
   }
   for (const a of S.arrows) neuester = Math.max(neuester, (a||{}).t || 0);
   setMeta("epoch", Math.min(jetzt(), neuester + 1));
+  /* Die Startstaedte gehoeren von Anfang an ihrer Seite. Sie werden NICHT
+     erst geleert und dann neu gesetzt: beides traegt denselben Zeitstempel,
+     und bei Gleichstand entschiede der Zufall, ob bei den anderen im Clan die
+     Loeschung oder der Besitz ankommt. Also genau ein Eintrag je Stadt. */
+  const startBei = new Map();
+  const stst = startStaedte();
+  for (const f of [0,1,2]) if (stst[f] != null) startBei.set(String(stst[f]), f);
   for (const b of ["owner", "fight", "star", "notes", "para"])
-    for (const id of Object.keys(S[b])) if (S[b][id] && S[b][id].v != null) stamp(b, id, null);
+    for (const id of Object.keys(S[b])){
+      if (b === "owner" && startBei.has(id)) continue;
+      if (S[b][id] && S[b][id].v != null) stamp(b, id, null);
+    }
+  for (const [id, f] of startBei) stamp("owner", id, f);
   /* Fremde Reihen weist der Server ab - das ist gewollt. Ihre Eintraege sind
      ueber den Zeitstempel oben ohnehin schon aus dem Bild. */
   for (const b of ["units", "join", "spot", "est"])
@@ -3921,8 +3959,8 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
       ${bildQuelleHTML("ds-file")}
       <div id="ds-status" style="font-size:12px;color:var(--dim)">Waiting for an image …</div>
       <div id="ds-crop" style="display:none;flex-direction:column;gap:6px">
-        <div class="hint">Drag a box around the list. Everything outside it is thrown away — that is
-          what keeps the town names on the map from ending up in the reading.</div>
+        <div class="hint">Optional: drag a box around the list. The reader finds it in the whole
+          picture on its own, so this only helps if a shot has several lists in it.</div>
         <div style="text-align:center">
           <div id="ds-bild" style="display:inline-block;position:relative;line-height:0;
             border:1px solid var(--line);border-radius:2px;background:#000;
@@ -4037,7 +4075,7 @@ let ocrWorker = null, ocrMelder = ()=>{}, ocrPsm = null;
    umschliesst nicht nur die Liste, sondern auch ein Stueck Karte. Deren gruene
    und rote Stadtkreise sehen fuer die Balkensuche aus wie Balken. Dann ist es
    ehrlicher, den Rahmen zu bemaengeln als etwas zu erfinden. */
-let rasterGrob = false, rasterGrobGrund = "";
+
 
 async function ocrLaden(){
   if (window.Tesseract) return;
@@ -4106,6 +4144,10 @@ async function bildAufbereiten(datei, box){
     const v = Math.max(d[i], d[i+1], d[i+2]);
     grau[j] = v; hist[v]++;
   }
+  /* Der Grund ist die Mehrheit der Flaeche, also der Mittelwert. Ein Vergleich
+     der Randhundertstel taugt hier NICHT: Schrift nimmt weniger als drei
+     Hundertstel des Feldes ein, das 97. Hundertstel liegt also noch im Grund.
+     An beiden vorliegenden Bildern nachgemessen liegt diese Regel richtig. */
   let s = 0, mitte = 128;
   for (let v=0; v<256; v++){ s += hist[v]; if (s >= n*0.5){ mitte = v; break; } }
   const schriftHell = mitte < 128;      // dunkler Grund, helle Schrift
@@ -4268,7 +4310,11 @@ function kartenRaster(quelle){
     SAT[j] = mx - mn;
     /* Der Farbort des Kastengoldes, beidseitig grosszuegig - kein Pixelmass,
        sondern ein Farbfenster, das auch Skalierungsschlieren mitnimmt. */
-    if (mx > 110 && R >= G && G >= B && R > B && (mx-mn)/Math.max(mx,1) > 0.50){
+    /* Saettigung nur 0,30: eine gesperrte Kampfeinheit zeigt eine blasse
+       Kachel - gemessen 0,34, mit der alten Schwelle 0,50 fielen in
+       template.png zwei von fuenf Kacheln aus und der Stapel kam nicht
+       zustande. Der Farbton bleibt eng, das Formsieb raeumt den Rest weg. */
+    if (mx > 110 && R >= G && G >= B && R > B && (mx-mn)/Math.max(mx,1) > 0.30){
       const gn = (G-B)/Math.max(1, R-B);
       if (gn > 0.42 && gn < 0.86) gold[j] = 1;
     }
@@ -4463,46 +4509,32 @@ function kartenRaster(quelle){
   const dop = new Float64Array(Pi*2);
   for (let i = 0; i < Pi*2; i++) dop[i] = gefaltet[i % Pi];
   const st = stufe(dop, w);
-  let phase = 0, tief = Infinity, zweit = Infinity;
-  for (let i = 0; i < Pi; i++) if (st[i+Pi] < tief){ tief = st[i+Pi]; phase = i; }
+  /* Nicht "eindeutig oder gar nicht". Eine Karte hat zwei starke Kanten - die
+     Oberkante und die Mitte zwischen Namens- und Zahlenteil -, und bei kleineren
+     Bildern werden beide aehnlich tief. Also alle ernsthaften Tiefpunkte als
+     Kandidaten nehmen, jeden zu Ende rechnen und den nehmen, der wirklich
+     Karten ergibt: oben hell, unten dunkel. Der Goldanker prueft jeden Zweig. */
+  let tief = Infinity;
+  for (let i = 0; i < Pi; i++) if (st[i+Pi] < tief) tief = st[i+Pi];
+  if (!(tief < 0)) return nein("Kartenphase nicht eindeutig");
+  const roh = [];
   for (let i = 0; i < Pi; i++){
-    const dist = Math.min(Math.abs(i-phase), Pi-Math.abs(i-phase));
-    if (dist > Pi/8 && st[i+Pi] < zweit) zweit = st[i+Pi];
+    const v = st[i+Pi];
+    if (v > 0.40*tief) continue;
+    if (v > st[i-1+Pi] || v > st[i+1+Pi]) continue;   // nur oertliche Tiefpunkte
+    roh.push({i, v});
   }
-  if (!(tief < 0) || !(zweit > 0.5*tief)) return nein("Kartenphase nicht eindeutig");
+  if (!roh.length) return nein("Kartenphase nicht eindeutig");
+  roh.sort((p,q) => p.v - q.v);
+  const phasen = [];                       // dicht Benachbartes ist derselbe
+  for (const k of roh){
+    if (phasen.some(p => Math.min(Math.abs(p-k.i), Pi-Math.abs(p-k.i)) < Pi/8)) continue;
+    phasen.push(k.i);
+    if (phasen.length >= 4) break;
+  }
 
-  /* Kanten aller Karten nachmessen und die Gerade robust ausgleichen. */
   const rmean = fHell;
   const stR = stufe(rmean, w);
-  let e0 = fy0 + phase, Pf = P;
-  for (let runde = 0; runde < 4; runde++){
-    const pkt = [];
-    for (let k = -1; ; k++){
-      const c = e0 + k*Pf;
-      if (c < fy0) continue;
-      if (c > fy1) break;
-      let bi = -1, bv = Infinity;
-      const von = Math.max(0, Math.round(c - fy0 - 0.12*Pf));
-      const bis = Math.min(hoehe-1, Math.round(c - fy0 + 0.12*Pf));
-      for (let i = von; i <= bis; i++) if (stR[i] < bv){ bv = stR[i]; bi = i; }
-      if (bi >= 0) pkt.push({k, y: fy0+bi, s: bv});
-    }
-    if (pkt.length < 2) break;
-    const sm = median(pkt.map(p=>Math.abs(p.s)));
-    const gut = pkt.filter(p => Math.abs(p.s) >= 0.5*sm && Math.abs(p.s) <= 2.0*sm);
-    if (gut.length < 2) break;
-    const stg = [];
-    for (let i = 0; i < gut.length; i++)
-      for (let j = i+1; j < gut.length; j++)
-        if (gut[j].k !== gut[i].k) stg.push((gut[j].y-gut[i].y)/(gut[j].k-gut[i].k));
-    if (!stg.length) break;
-    Pf = median(stg);
-    e0 = median(gut.map(p => p.y - Pf*p.k));
-  }
-  P = Pf;
-  if (Math.abs(P - Panker) > 0.05*Panker) return nein("Anker und Raster uneinig");
-
-  /* ---- Karten zaehlen: hell oben, dunkel unten ------------------------ */
   const mitP = (a,b) => {
     let s = 0, n = 0;
     for (let y = Math.round(a); y <= Math.round(b); y++){
@@ -4511,24 +4543,106 @@ function kartenRaster(quelle){
     }
     return n ? s/n : NaN;
   };
-  const stellen = [];
-  for (let k = -2; k < 200; k++){
-    const kante = e0 + k*P, t = kante - 0.5*P;
-    if (t + P < fy0) continue;
-    if (t > fy1) break;
-    const o = mitP(t+0.04*P, t+0.44*P), u = mitP(t+0.56*P, t+0.92*P);
-    const ganz = t >= fy0 && t + P <= fy1;
-    stellen.push({t, kante, kontrast: (isNaN(o)||isNaN(u)) ? -1 : o-u, ganz});
-  }
-  const kMed = median(stellen.filter(s=>s.ganz && s.kontrast>0).map(s=>s.kontrast));
-  if (!(kMed > 25)) return nein("kein Hell/Dunkel-Wechsel");
-  let bestLauf = [], akt = [];
-  for (const s of stellen){
-    if (s.ganz && s.kontrast >= 0.45*kMed) akt.push(s);
-    else { if (akt.length > bestLauf.length) bestLauf = akt; akt = []; }
-  }
-  if (akt.length > bestLauf.length) bestLauf = akt;
-  if (bestLauf.length < 3) return nein("zu wenige Karten");
+
+  /* Ein Kandidat, ganz durchgerechnet: Kanten nachmessen, Gerade robust
+     ausgleichen, Karten zaehlen. Null, wenn daraus keine Liste wird. */
+  /* Hoechstwert und Mittelwert der Farbzeile - fuer die Balkenzeile. */
+  const maxF = (a,b) => {
+    let m = NaN;
+    for (let y = Math.round(a); y <= Math.round(b); y++){
+      if (y < fy0 || y > fy1) continue;
+      const v = fFarbe[y-fy0];
+      if (isNaN(m) || v > m) m = v;
+    }
+    return m;
+  };
+  const medF = (a,b) => {
+    const w = [];
+    for (let y = Math.round(a); y <= Math.round(b); y++){
+      if (y < fy0 || y > fy1) continue;
+      w.push(fFarbe[y-fy0]);
+    }
+    return w.length ? median(w) : NaN;
+  };
+  /* Die Oberkante der Goldkacheln, robust ueber alle Kacheln gemittelt.
+     Daraus die Kartenoberkante: 0,11 Kartenhoehen darueber (an panel.png und
+     template.png uebereinstimmend nachgemessen, 0,108 und 0,111). */
+  const kachelBasis = median(anker.map(a =>
+    a.y0 - Panker*Math.round((a.y0 - anker[0].y0)/Panker)));
+  const ankerKante = kachelBasis - 0.11*Panker + 0.5*Panker;
+
+  const auswerten = (phase, art) => {
+    let e0, Pf;
+    if (phase === null){ e0 = ankerKante; Pf = Panker; }   // Lage aus den Kacheln
+    else { e0 = fy0 + phase; Pf = P; }
+    for (let runde = 0; phase !== null && runde < 4; runde++){
+      const pkt = [];
+      for (let k = -1; ; k++){
+        const c = e0 + k*Pf;
+        if (c < fy0) continue;
+        if (c > fy1) break;
+        let bi = -1, bv = Infinity;
+        const von = Math.max(0, Math.round(c - fy0 - 0.12*Pf));
+        const bis = Math.min(hoehe-1, Math.round(c - fy0 + 0.12*Pf));
+        for (let i = von; i <= bis; i++) if (stR[i] < bv){ bv = stR[i]; bi = i; }
+        if (bi >= 0) pkt.push({k, y: fy0+bi, s: bv});
+      }
+      if (pkt.length < 2) break;
+      const sm = median(pkt.map(p=>Math.abs(p.s)));
+      const gut = pkt.filter(p => Math.abs(p.s) >= 0.5*sm && Math.abs(p.s) <= 2.0*sm);
+      if (gut.length < 2) break;
+      const stg = [];
+      for (let i = 0; i < gut.length; i++)
+        for (let j = i+1; j < gut.length; j++)
+          if (gut[j].k !== gut[i].k) stg.push((gut[j].y-gut[i].y)/(gut[j].k-gut[i].k));
+      if (!stg.length) break;
+      Pf = median(stg);
+      e0 = median(gut.map(p => p.y - Pf*p.k));
+    }
+    if (Math.abs(Pf - Panker) > 0.05*Panker) return null;
+    const stellen = [];
+    for (let k = -2; k < 200; k++){
+      const kante = e0 + k*Pf, t = kante - 0.5*Pf;
+      if (t + Pf < fy0) continue;
+      if (t > fy1) break;
+      const ganz = t >= fy0 && t + Pf <= fy1;
+      let wert;
+      if (art === "hell"){
+        const o = mitP(t+0.04*Pf, t+0.44*Pf), u = mitP(t+0.56*Pf, t+0.92*Pf);
+        wert = (isNaN(o)||isNaN(u)) ? -1 : o-u;
+      } else {
+        /* Die Balkenzeile: eine schmale, kraeftig gefaerbte Zeile bei gut vier
+           Fuenfteln der Kartenhoehe. In beiden vorliegenden Bildern steht sie
+           an derselben Stelle - bei dunklem wie bei hellem Grund. */
+        const s = maxF(t+0.78*Pf, t+0.90*Pf) - medF(t+0.02*Pf, t+0.70*Pf);
+        wert = isNaN(s) ? -1 : s*100;
+      }
+      stellen.push({t, kante, kontrast: wert, ganz});
+    }
+    const kMed = median(stellen.filter(s=>s.ganz && s.kontrast>0).map(s=>s.kontrast));
+    if (!(kMed > (art === "hell" ? 25 : 12))) return null;
+    let lauf = [], akt = [];
+    for (const s of stellen){
+      if (s.ganz && s.kontrast >= 0.45*kMed) akt.push(s);
+      else { if (akt.length > lauf.length) lauf = akt; akt = []; }
+    }
+    if (akt.length > lauf.length) lauf = akt;
+    if (lauf.length < 3) return null;
+    return {e0, P: Pf, lauf, art, guete: kMed*lauf.length};
+  };
+  /* Zwei Merkmale, weil keines allein beide Bilder traegt: der Hell/Dunkel-
+     Wechsel innerhalb einer Karte (bei dunklem Gelaende hinter dem Panel) und
+     die Balkenzeile (auch bei hellem). Es gewinnt, was im vorliegenden Bild
+     wirklich Karten ergibt. */
+  let gew = null;
+  for (const art of ["hell", "balken"])
+    for (const ph of [null].concat(phasen)){        // null = Lage aus den Kacheln, zuerst
+      const v = auswerten(ph, art);
+      if (v && (!gew || v.guete > gew.guete)) gew = v;
+    }
+  if (!gew) return nein("keine Karten zu erkennen");
+  P = gew.P;
+  const bestLauf = gew.lauf;
 
   /* ---- Musterprofil aus allen unverdeckten Karten --------------------- */
   const hh = 0.49*P;
@@ -4629,7 +4743,11 @@ function kartenRaster(quelle){
     }
     return best || soll;
   };
-  const textB = bandSuche(0.02*P, 0.52*P, v => v < thrInk, 0.25);
+  /* Schrift ist, was vom Grund abweicht - hell auf dunkel im Kriegsfenster,
+     weiss UND schwarz nebeneinander im Soldatenfenster (Kuerzel weiss,
+     Ortsname schwarz). Die Richtung darf also nicht vorgegeben sein. */
+  const abwText = Math.max(30, 0.5*(p90 - p10));
+  const textB = bandSuche(0.02*P, 0.52*P, v => Math.abs(v - hellBg) > abwText, 0.25);
   const zwei = [feinern(sollBand(0.070, 0.235), textB),
                 feinern(sollBand(0.310, 0.441), textB)];
   const zZahl = [feinern(sollBand(0.577, 0.770),
@@ -4726,8 +4844,62 @@ function kartenRaster(quelle){
       gruppen: gruppen.map(([x0,x1], i) => ({x:[x0,x1], belegt: belegt[i]})),
     };
   });
+  /* ---- Wie weit reicht der Text nach rechts? --------------------------
+     Nicht ueber die Panelbreite: liegt gleichmaessiger Grund hinter dem Panel,
+     ist dessen rechte Kante nicht zu messen (template.png ergab 551 statt 830,
+     und der Name wurde zu "AT013 - Kommod"). Die Tinte selbst ist messbar.
+     Rechts vom Namen stehen Sinnbilder - Lupe und Auge im Kriegsfenster, zwei
+     Punkte im Soldatenfenster -, und davor liegt eine Luecke von fast einer
+     ganzen Kartenhoehe (gemessen 0,96). Die groesste Luecke INNERHALB einer
+     Zeile ist die zwischen Kuerzel und Ortsname (gemessen 0,37). Bei einer
+     halben Kartenhoehe ist also Schluss.
+     Der Ortsname ist mal weiss (Kriegsfenster), mal schwarz (Soldatenfenster) -
+     es zaehlt der Abstand zum Zeilengrund, nicht die Richtung. */
+  const textRechts = zwei.map(band => {
+    const von = Math.round(band[0]), bis = Math.round(band[1]);
+    const xEnd = Math.min(W-1, textX + Math.round(3.5*P));
+    if (xEnd <= textX) return pr;
+    const tinte = new Float64Array(xEnd - textX + 1);
+    let nk = 0;
+    for (const s of bestLauf){
+      const werte = [];
+      for (let dy = von; dy <= bis; dy += 2){
+        const y = Math.round(s.t + dy);
+        if (y < fy0 || y > fy1) continue;
+        for (let x = textX; x <= xEnd; x += 3) werte.push(L[y*W+x]);
+      }
+      if (!werte.length) continue;
+      const grund = median(werte);
+      nk++;
+      for (let x = textX; x <= xEnd; x++){
+        let n = 0, ct = 0;
+        for (let dy = von; dy <= bis; dy++){
+          const y = Math.round(s.t + dy);
+          if (y < fy0 || y > fy1) continue;
+          if (Math.abs(L[y*W+x] - grund) > 45) n++;
+          ct++;
+        }
+        if (ct) tinte[x-textX] += n/ct;
+      }
+    }
+    if (!nk) return pr;
+    let letzte = -1, leer = 0;
+    for (let i = 0; i < tinte.length; i++){
+      if (tinte[i]/nk > 0.05){ letzte = i; leer = 0; }
+      else if (letzte >= 0 && ++leer > 0.5*P) break;
+    }
+    if (letzte < 0) return pr;
+    let rechts = Math.min(W-1, textX + letzte + Math.round(0.04*P));
+    /* Die Panelkante begrenzt - aber nur, wenn sie glaubwuerdig ist. Eine
+       Kante, die weniger als zwei Kartenhoehen Text zulaesst, ist keine:
+       rechts der Zahlengruppen ist eine Karte oft leer, und gleichmaessiger
+       Grund zaehlt der Spaltensuche nicht als "gehoert dazu". */
+    if (pr >= textX + 2*P) rechts = Math.min(rechts, pr);
+    return rechts;
+  });
+
   const kastenX = [Math.round(median(bestStapel.map(k=>k.x0))), boxR];
-  return {ok:true, n:karten.length, P, panel:[pl,pr], kastenX, textX, gruppen, karten,
+  return {ok:true, n:karten.length, P, panel:[pl,pr], kastenX, textX, textRechts, gruppen, karten,
           kastenH: Math.round(median(bestStapel.map(k=>k.h)))};
 }
 
@@ -4746,6 +4918,15 @@ function zeichenVorlagen(){
   for (const [k, s] of Object.entries(MAP.sym || {})){
     const v = new Float32Array(s.length);
     for (let i = 0; i < s.length; i++) v[i] = abc.indexOf(s[i]) / 15;
+    /* Mittelwert null, Laenge eins. Dann haengt der Vergleich nicht mehr
+       daran, wie hell oder wie kontrastreich der Kasten gerade ist. */
+    let m = 0;
+    for (let i = 0; i < v.length; i++) m += v[i];
+    m /= v.length;
+    let q = 0;
+    for (let i = 0; i < v.length; i++){ v[i] -= m; q += v[i]*v[i]; }
+    q = Math.sqrt(q) || 1;
+    for (let i = 0; i < v.length; i++) v[i] /= q;
     ZEICHEN.push({k, v});
   }
   return ZEICHEN;
@@ -4767,53 +4948,108 @@ function zeichenLesen(quelle, x0, y0, breit, hoch){
   /* Oberkante des Rahmens: erste Zeile mit viel Dunkel. Von dort die Breite
      der schwarzen Linie, das ist der Rahmen. Unterkante: letzte Zeile, die
      ihn noch weitgehend ausfuellt. */
-  const dunkel = v => v < 100;
-  let ry = -1;
+  /* Die Schwelle kommt aus dem Fenster selbst. Fest ging nicht: bei einer
+     gesperrten Kampfeinheit ist der Rahmen grau (gemessen 122) statt schwarz,
+     und ueber hellem Gelaende ist der Kartengrund mit 96 dunkler als dieser
+     Rahmen. Das Dunkelste im Fenster ist aber immer der Rahmen. */
+  const hgr = new Uint32Array(256);
+  for (let j = 0; j < grau.length; j++) hgr[grau[j]]++;
+  const pgr = q => { let s = 0;
+    for (let v = 0; v < 256; v++){ s += hgr[v]; if (s >= grau.length*q) return v; } return 255; };
+  const gLo = pgr(0.02), gMed = pgr(0.50);
+  const gSchwelle = Math.max(20, Math.min(110, gLo + 0.30*(gMed - gLo)));
+  const dunkel = v => v < gSchwelle;
+  /* Der Rahmen sind zwei schwarze Balken. Das Suchfenster ist etwas hoeher als
+     eine halbe Karte und ragt in die naechste hinein - wer die LETZTE schwarze
+     Zeile nimmt, erwischt dort deren Oberkante und zieht das Zeichen in die
+     Laenge. Bei 1920 und 1600 war genau das der Fall (Verhaeltnis 1,2 statt
+     1,45, Guete 0,50 statt 0,95). Also: erster Balken oben, der naechste
+     darunter, und dann Schluss. */
+  const anteil = new Float32Array(hoch);
   for (let y = 0; y < hoch; y++){
     let n = 0;
     for (let x = 0; x < breit; x++) if (dunkel(grau[y*breit+x])) n++;
-    if (n > breit*0.10){ ry = y; break; }
+    anteil[y] = n/breit;
   }
-  if (ry < 0) return null;
+  const balken = [];
+  for (let y = 0, a = -1; y <= hoch; y++){
+    const voll = y < hoch && anteil[y] >= 0.60;
+    if (voll){ if (a < 0) a = y; }
+    else if (a >= 0){ balken.push([a, y-1]); a = -1; }
+  }
+  if (!balken.length) return null;
+  const ry = balken[0][0];
+  /* Die Seiten aus einer Zeile des oberen Balkens - der ist durchgehend. */
+  const zr = Math.round((balken[0][0] + balken[0][1])/2);
   let rx0 = -1, rx1 = -1;
-  for (let x = 0; x < breit; x++) if (dunkel(grau[ry*breit+x])){ if (rx0 < 0) rx0 = x; rx1 = x; }
+  for (let x = 0; x < breit; x++) if (dunkel(grau[zr*breit+x])){ if (rx0 < 0) rx0 = x; rx1 = x; }
   if (rx0 < 0 || rx1 - rx0 < 10) return null;
-  let ry1 = ry;
-  for (let y = ry; y < hoch; y++){
-    let n = 0;
-    for (let x = rx0; x <= rx1; x++) if (dunkel(grau[y*breit+x])) n++;
-    if (n > (rx1-rx0+1)*0.60) ry1 = y;
+  /* Die Unterkante ueber die Form, nicht ueber "die letzte schwarze Zeile":
+     der Rahmen ist im Spiel immer gleich geformt (48 zu 33, dieselbe Form wie
+     die Vorlagen), also folgt aus der Breite die Hoehe. Gesucht wird der
+     schwarze Balken, der dieser Hoehe am naechsten kommt. So faellt beides
+     weg - die durchgehend schwarze Zeile mitten im Zeichen und die Oberkante
+     der naechsten Karte, die noch ins Suchfenster ragt. */
+  const soll = (rx1-rx0+1) * Hh / B;
+  let ry1 = -1, ab = Infinity;
+  for (const [, b] of balken){
+    const d2 = Math.abs((b - ry + 1) - soll);
+    if (d2 <= 0.20*soll && d2 < ab){ ab = d2; ry1 = b; }
   }
+  if (ry1 < 0) ry1 = Math.min(hoch-1, ry + Math.round(soll) - 1);
   if (ry1 - ry < 8) return null;
-  /* Auf das Vorlagenraster bringen und auf Tinte normieren. */
+  /* Der Rahmen wird nie auf den Punkt genau getroffen, und bei kleinen Bildern
+     kostet schon ein Punkt Versatz die Entscheidung: bei 1920 stand Pathfinders
+     gegen Motorized Recon mit vier Zehntausendsteln. Also den Ausschnitt ein
+     wenig wackeln lassen - nach links/rechts, oben/unten, enger/weiter - und je
+     Typ die beste Lage werten. Verglichen wird normiert, nicht ueber eine
+     Spanne: sonst entscheidet mit, wie stark der Goldrand hereinstrahlt. */
   const c = document.createElement("canvas");
   c.width = B; c.height = Hh;
   const cg = c.getContext("2d", {willReadFrequently:true});
   cg.imageSmoothingEnabled = true; cg.imageSmoothingQuality = "high";
-  cg.drawImage(quelle, x0+rx0, y0+ry, rx1-rx0+1, ry1-ry+1, 0, 0, B, Hh);
-  const kd = cg.getImageData(0, 0, B, Hh).data;
+  const u = Math.max(1, Math.round((rx1-rx0+1)/40));
   const v = new Float32Array(B*Hh);
-  let lo = 255, hi = 0;
-  for (let i = 0, j = 0; j < B*Hh; i += 4, j++){
-    const g2 = (299*kd[i] + 587*kd[i+1] + 114*kd[i+2]) / 1000;
-    v[j] = g2; if (g2 < lo) lo = g2; if (g2 > hi) hi = g2;
+  const punkte = new Map();
+  for (const dx of [-u, 0, u]) for (const dy of [-u, 0, u]) for (const dr of [-u, 0, u]){
+    const ax = x0+rx0+dx-dr, ay = y0+ry+dy-dr;
+    const aw = rx1-rx0+1+2*dr, ah = ry1-ry+1+2*dr;
+    if (aw < 8 || ah < 6) continue;
+    cg.clearRect(0, 0, B, Hh);
+    cg.drawImage(quelle, ax, ay, aw, ah, 0, 0, B, Hh);
+    const kd = cg.getImageData(0, 0, B, Hh).data;
+    let m = 0;
+    for (let i = 0, j = 0; j < v.length; i += 4, j++){
+      const g2 = -(299*kd[i] + 587*kd[i+1] + 114*kd[i+2]) / 1000;   // dunkel = viel
+      v[j] = g2; m += g2;
+    }
+    m /= v.length;
+    let q = 0;
+    for (let j = 0; j < v.length; j++){ v[j] -= m; q += v[j]*v[j]; }
+    q = Math.sqrt(q);
+    if (!(q > 0)) continue;
+    for (let j = 0; j < v.length; j++) v[j] /= q;
+    for (const zg of vorl){
+      let s = 0;
+      for (let j = 0; j < v.length; j++) s += v[j]*zg.v[j];
+      const bis = punkte.get(zg.k);
+      if (bis === undefined || s > bis) punkte.set(zg.k, s);
+    }
   }
-  const sp = (hi - lo) || 1;
-  for (let j = 0; j < v.length; j++) v[j] = 1 - (v[j]-lo)/sp;
   let best = null, zweit = null;
-  for (const m of vorl){
-    let s = 0;
-    for (let j = 0; j < v.length; j++) s += Math.abs(v[j] - m.v[j]);
-    const dst = s / v.length;
-    if (!best || dst < best.d){ zweit = best; best = {k:m.k, d:dst}; }
-    else if (!zweit || dst < zweit.d) zweit = {k:m.k, d:dst};
+  for (const [k, s] of punkte){
+    if (!best || s > best.s){ zweit = best; best = {k, s}; }
+    else if (!zweit || s > zweit.s) zweit = {k, s};
   }
-  return best ? {k: best.k, abstand: best.d, zweiter: zweit && zweit.k,
-                 vorsprung: zweit ? zweit.d - best.d : 1} : null;
+  /* Ein Zeichen, das nirgends richtig passt, ist keines - dann sollen die
+     Zahlen entscheiden statt eines geratenen Typs. */
+  if (!best || best.s < 0.45) return null;
+  return {k: best.k, abstand: 1 - best.s, zweiter: zweit && zweit.k,
+          vorsprung: zweit ? best.s - zweit.s : 1};
 }
 
 /* Ein Ausschnitt als eigenes, aufbereitetes Bild - fuer die Einzelzeilen. */
-function feldBild(quelle, x, y, w, h, faktor){
+function feldBild(quelle, x, y, w, h, faktor, beidseitig){
   x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y));
   w = Math.min(quelle.width - x, Math.round(w));
   h = Math.min(quelle.height - y, Math.round(h));
@@ -4841,14 +5077,35 @@ function feldBild(quelle, x, y, w, h, faktor){
      Sammelblatt wuerde es keine Zeile erzeugen, und die Zuordnung von Zeile zu
      Feld waere dahin. */
   if (perz(.98) - perz(.02) < 22) return null;
-  const mitte = perz(.5), hell = mitte < 128;
-  let lo = hell ? mitte : perz(.03), hi = hell ? perz(.97) : mitte;
-  if (hi - lo < 14){ lo = 0; hi = 255; }
-  const sp = 255/(hi-lo);
-  for (let i=0, j=0; j<n; i+=4, j++){
-    let v = (grau[j]-lo)*sp;
-    v = v < 0 ? 0 : v > 255 ? 255 : v;
-    d[i] = d[i+1] = d[i+2] = hell ? 255-v : v; d[i+3] = 255;
+  /* Beidseitig, nicht auf eine Richtung festgelegt: in der Kuerzelzeile des
+     Soldatenfensters steht das Kuerzel weiss und der Ortsname schwarz auf
+     demselben grauen Grund. Wer sich fuer eine Richtung entscheidet, wirft
+     eines von beiden weg. Es zaehlt der Abstand zum Grund. */
+  const grund = perz(.5);
+  if (!beidseitig){
+    /* Der Regelfall: nur die Mehrheitsrichtung. Beidseitig waere hier teuer -
+       das Panel im Kriegsfenster ist halbdurchsichtig, die Landkarte dahinter
+       weicht ueberall vom Grund ab, und aus dem Feld wird Rauschen, an dem
+       sich die Texterkennung totsucht (gemessen eine Sekunde je Feld statt
+       sechzig Tausendsteln). */
+    const hell = grund < 128;
+    let lo = hell ? grund : perz(.03), hi = hell ? perz(.97) : grund;
+    if (hi - lo < 14){ lo = 0; hi = 255; }
+    const sp = 255/(hi-lo);
+    for (let i=0, j=0; j<n; i+=4, j++){
+      let v = (grau[j]-lo)*sp;
+      v = v < 0 ? 0 : v > 255 ? 255 : v;
+      d[i] = d[i+1] = d[i+2] = hell ? 255-v : v; d[i+3] = 255;
+    }
+  } else {
+    /* Beidseitig: im Soldatenfenster stehen Kuerzel (weiss) und Ortsname
+       (schwarz) in derselben Zeile. */
+    const spanne = Math.max(18, Math.max(perz(.97) - grund, grund - perz(.03)));
+    for (let i=0, j=0; j<n; i+=4, j++){
+      let v = Math.abs(grau[j]-grund)/spanne*255;
+      v = v < 0 ? 0 : v > 255 ? 255 : v;
+      d[i] = d[i+1] = d[i+2] = 255-v; d[i+3] = 255;
+    }
   }
   g.putImageData(bd, 0, 0);
   return c;
@@ -4885,22 +5142,21 @@ function paarAus(t){
    als Gegenprobe - passt die Besetzung nicht zum erkannten Zeichen, wird die
    Zeile zur Pruefung markiert statt stillschweigend geraten. */
 async function depotAusRaster(quelle, melde){
-  rasterGrob = false;
   let r;
   try { r = kartenRaster(quelle); }
   catch(e){ return null; }
-  if (!r || !r.ok){
-    rasterGrob = !!(r && /Panel|schmal|Wiederholung|uneinig|Aufbau/.test(r.grund || ""));
-    rasterGrobGrund = (r && r.grund) || "";
-    return null;
-  }
+  if (!r || !r.ok) return null;
   melde(`${r.n} units found — reading …`);
 
   const raus = [];
   /* Rechts in der Namenszeile sitzen Lupe und Auge. Laesst man das Feld bis
      zum Panelrand laufen, liest die Erkennung NUR diese beiden Sinnbilder und
      der Name faellt ganz weg - gemessen "Q o" statt "Bodenmaenner - 1". */
-  const rechtsBis = r.panel[0] + 0.87*(r.panel[1] - r.panel[0]);
+  /* Je Zeile eigens gemessen - die Namenszeile endet vor den Sinnbildern,
+     die Kuerzelzeile hinter dem Ortsnamen. */
+  const rueck = r.panel[0] + 0.87*(r.panel[1] - r.panel[0]);
+  const rNam = (r.textRechts && r.textRechts[0]) || rueck;
+  const rKue = (r.textRechts && r.textRechts[1]) || rueck;
   for (let i = 0; i < r.karten.length; i++){
     const k = r.karten[i];
     melde(`Reading unit ${i+1} of ${r.karten.length} …`);
@@ -4910,12 +5166,28 @@ async function depotAusRaster(quelle, melde){
                            (r.kastenX[1] - r.kastenX[0]) + r.P*0.06, r.P*0.48);
 
     /* 2. Name und Kuerzelzeile. */
-    const nb = feldBild(quelle, r.textX, k.name[0]-2, rechtsBis - r.textX, k.name[1]-k.name[0]+4);
-    const kb = feldBild(quelle, r.textX, k.kuerzel[0]-2, rechtsBis - r.textX, k.kuerzel[1]-k.kuerzel[0]+4);
+    const nb = feldBild(quelle, r.textX, k.name[0]-2, rNam - r.textX, k.name[1]-k.name[0]+4);
     let name = "", kzZeile = "";
     try {
       if (nb) name = saeubern(await ocrText(nb, 7, ()=>{}));
-      if (kb) kzZeile = saeubern(await ocrText(kb, 7, ()=>{}));
+      /* Die Kuerzelzeile: erst der billige einseitige Weg. Nur wenn der
+         keinen echten Ortsnamen trifft, kommt der teure beidseitige hinterher -
+         der wird im Soldatenfenster gebraucht, wo Kuerzel und Ortsname
+         verschiedenfarbig nebeneinander stehen. Die Stadtliste entscheidet;
+         sie ist eine harte Gegenprobe, kein Schaetzwert. */
+      let bestP = -1;
+      for (const beid of [false, true]){
+        const kb = feldBild(quelle, r.textX, k.kuerzel[0]-2,
+                            rKue - r.textX, k.kuerzel[1]-k.kuerzel[0]+4, 0, beid);
+        if (!kb) continue;
+        const txt = saeubern(await ocrText(kb, 7, ()=>{}));
+        if (!txt) continue;
+        const tr = tagUndOrt(txt, true);
+        const p = (tr && tr.stadt != null ? 100 : 0) + (tr && tr.tag ? tr.tag.length : 0)
+                + txt.length*0.01;
+        if (p > bestP){ bestP = p; kzZeile = txt; }
+        if (bestP >= 100) break;                  // Ortsname sitzt - genug
+      }
     } catch(e){ return null; }
 
     /* 3. Die Zahlen - Staerke und Gegenprobe. */
@@ -4963,7 +5235,7 @@ async function depotAusRaster(quelle, melde){
     raus.push({name, tag, ort, stadt, kand, gewaehlt,
                staerke: gute.map(p => p.join("/")).join("  ")});
   }
-  if (!raus.length){ rasterGrob = true; return null; }
+  if (!raus.length) return null;
   return raus;
 }
 
@@ -4978,15 +5250,15 @@ async function depotLesen(datei, box){
      anderes Fenster, kein Gruen -, wird der ganze Ausschnitt als Fliesstext
      gelesen wie bisher. */
   let beste = null, rohBest = "", bild = null;
-  try {
-    const farbe = await farbAusschnitt(datei, box);
-    beste = await depotAusRaster(farbe, setz);
-  } catch(e){ beste = null; }
-  if (rasterGrob){
-    setz(`<b>The box takes in part of the map.</b> Its green and red town circles look like
-          the strength bars to the reader. Drag the box tightly around the assault team list —
-          the panel on the right, nothing more.`);
-    return;
+  /* Erst mit dem Rahmen, dann ohne ihn. Der Finder kommt mit dem ganzen
+     Bildschirmfoto zurecht, also darf ein Rahmen nie zum Abbruch fuehren -
+     zwischen den Einheiten ist Abstand, enger als "alles" geht gar nicht. */
+  for (const mitRahmen of (box ? [true, false] : [false])){
+    try {
+      const farbe = await farbAusschnitt(datei, mitRahmen ? box : null);
+      beste = await depotAusRaster(farbe, setz);
+    } catch(e){ beste = null; }
+    if (beste && beste.length) break;
   }
   try {
     if (beste) rohBest = beste.map(g =>
@@ -5032,9 +5304,9 @@ function depotAnzeigen(beste, rohBest, bild, setz){
   roh.style.display = "block";
 
   if (!beste.length){
-    setz(`<b>No teams recognised.</b> The strength figures (like “36/36 12/12”) have to be legible —
-          draw the box tightly around the list, and take the screenshot with the game at its own
-          resolution rather than a scaled-down window. Open the line below to see what came through.`);
+    setz(`<b>No teams recognised.</b> Take the shot with the game at its own resolution rather than
+          a scaled-down window, and make sure the assault team list is open. Open the line below to
+          see what came through.`);
     return;
   }
   const c = light() ? "#1a2029" : "#e9e2d5";
@@ -6532,12 +6804,20 @@ document.getElementById("b-load").addEventListener("click", ()=>{
         <div class="note" style="font-size:11px">Which side the clan plays this war. The
           <b>Arsenal</b> then only offers what your people can buy.</div>
       </div>
+      <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:12px;color:var(--dim)">Start town</span>
+        <div id="set-start"></div>
+        <div class="note" style="font-size:11px">The one town each side holds when a war begins —
+          everything else starts uncontrolled. The list offers the thirteen capitals; any other
+          town works too, just type its name.</div>
+      </div>
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;gap:7px;flex-wrap:wrap">
         <button class="btn danger" id="d-newwar">Start a new war</button>
         <span style="flex:1"></span>
         <button class="btn" id="d-wipe" style="font-size:11px">Forget the local copy</button>
       </div>
-      <div class="note"><b>Start a new war</b> clears the war for everyone: control, battles,
+      <div class="note"><b>Start a new war</b> puts the start towns above on the map and clears
+        the rest for everyone: control, battles,
         deployed teams, arrows, defence lines, the board and all sightings. <b>The depot, the
         arsenal, the player list and everything recorded about the enemy stay</b> — nothing in
         here deletes those. <b>Forget the local copy</b> throws away what this browser has stored;
@@ -6557,6 +6837,37 @@ document.getElementById("b-load").addEventListener("click", ()=>{
     return null;
   };
   document.getElementById("d-close").addEventListener("click", closeDlg);
+
+  let startNeu = startStaedte();
+  const startZeichnen = () => {
+    const ziel = document.getElementById("set-start");
+    if (!ziel) return;
+    ziel.innerHTML = FACTIONS.map(q => `
+      <div class="row" style="align-items:center;gap:7px;margin-bottom:6px">
+        <span class="chip" style="border-color:${q.color};color:${q.color};width:46px;
+              text-align:center;flex:none">${q.tag}</span>
+        <input type="text" list="set-caps" data-hin="${q.id}" style="flex:1"
+               value="${startNeu[q.id] != null ? esc(MAP.n[startNeu[q.id]][0]) : ""}"
+               placeholder="none">
+      </div>`).join("")
+      + `<datalist id="set-caps">${MAP.n.map((n,i) =>
+           n[4] !== 0 ? `<option value="${esc(n[0])}">` : "").join("")}</datalist>`;
+    ziel.querySelectorAll("[data-hin]").forEach(inp => inp.addEventListener("change", ()=>{
+      const f = +inp.dataset.hin, txt = inp.value.trim();
+      if (!txt){ startNeu[f] = null; return; }
+      /* Erst genau, dann nachsichtig - so trifft auch eine Eingabe mit
+         Tippfehler die richtige Stadt. */
+      const genau = MAP.n.findIndex(n => n[0].toLowerCase() === txt.toLowerCase());
+      const tr = genau >= 0 ? {i: genau} : findeStadt(txt);
+      if (!tr){ toast("No town of that name"); startZeichnen(); return; }
+      /* Zwei Seiten koennen nicht in derselben Stadt starten. */
+      for (const g of [0,1,2]) if (g !== f && startNeu[g] === tr.i) startNeu[g] = null;
+      startNeu[f] = tr.i;
+      startZeichnen();
+    }));
+  };
+  startZeichnen();
+
   let neueFrak = clanFaktion();
   document.querySelectorAll("#dlg [data-cf]").forEach(b => b.addEventListener("click", ()=>{
     neueFrak = b.dataset.cf === "" ? null : +b.dataset.cf;
@@ -6567,6 +6878,7 @@ document.getElementById("b-load").addEventListener("click", ()=>{
     setMeta("clan", document.getElementById("set-clan").value.trim() || "War Map");
     setMeta("war", document.getElementById("set-war").value.trim());
     setClanFaktion(neueFrak);
+    setStartStaedte(startNeu);
     closeDlg(); toast("Saved");
   });
   document.getElementById("d-merge").addEventListener("click", async ()=>{
@@ -6614,7 +6926,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-18 14:21</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-18 17:09</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
