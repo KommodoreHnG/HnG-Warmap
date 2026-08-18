@@ -4033,6 +4033,11 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
    of them. The engine itself is loaded from a CDN on demand; the map works
    without it, this is the one place that needs the network. */
 let ocrWorker = null, ocrMelder = ()=>{}, ocrPsm = null;
+/* Merker fuer den einen Fall, der sich nicht reparieren laesst: der Rahmen
+   umschliesst nicht nur die Liste, sondern auch ein Stueck Karte. Deren gruene
+   und rote Stadtkreise sehen fuer die Balkensuche aus wie Balken. Dann ist es
+   ehrlicher, den Rahmen zu bemaengeln als etwas zu erfinden. */
+let rasterGrob = false;
 
 async function ocrLaden(){
   if (window.Tesseract) return;
@@ -4346,6 +4351,7 @@ function paarAus(t){
 }
 
 async function depotAusRaster(quelle, melde){
+  rasterGrob = false;
   const W = quelle.width, H = quelle.height;
   const g = quelle.getContext("2d", {willReadFrequently:true});
   const bd = g.getImageData(0, 0, W, H);
@@ -4385,13 +4391,16 @@ async function depotAusRaster(quelle, melde){
     const d = ((o+u)/2 - a) / P;
     return Math.abs(d - Math.round(d)) < 0.25;
   });
+  const alleB = baender;
   let beste = baender;
   for (const a of mitten){
     const t = passtZu(a);
-    if (t.length > beste.length || beste === baender) beste = t;
+    if (t.length > beste.length || beste === alleB) beste = t;
   }
   baender = beste;
   if (baender.length < 2) return null;
+
+  if (baender.length < alleB.length * 0.45){ rasterGrob = true; return null; }
 
   /* Verhaeltnisse innerhalb einer Karte, am Spielfenster abgemessen:
      Zahlen liegen knapp ueber dem Balken, darueber Kuerzel und Ort,
@@ -4459,14 +4468,26 @@ async function depotAusRaster(quelle, melde){
   for (const f of felder){
     const zeilen = schriftZeilen(grau, W, Math.round(linksAb),
                                  f.balken - P*0.94, f.balken - P*0.02, grauSchwelle);
-    if (zeilen.length < 2) continue;
+    if (!zeilen.length) continue;
+    /* Nicht "das unterste Band sind die Zahlen" - je nach Zuschnitt findet die
+       Suche zwei, drei oder vier Baender, und dann rutscht die ganze Karte um
+       eine Zeile. Stattdessen bekommt jede Zeile das Band, das ihrer erwarteten
+       Lage am naechsten liegt: Zahlen 0,14 Kartenhoehen ueber dem Balken,
+       Kuerzel 0,43, Name 0,60 - am Kriegsfenster abgemessen. */
     const luft = Math.max(2, P*0.03);
-    const zahl = zeilen[zeilen.length-1];
-    const kz   = zeilen[zeilen.length-2];
-    const nam  = zeilen.length >= 3 ? zeilen[zeilen.length-3] : null;
-    f.zahlen = [zahl[0]-luft, zahl[1]+luft];
-    f.kuerzel = [kz[0]-luft, kz[1]+luft];
-    if (nam) f.name = [nam[0]-luft, nam[1]+luft];
+    const naechstes = (anteil) => {
+      const soll = f.balken - P*anteil;
+      let b = null, dmin = P*0.16;             // weiter weg zaehlt nicht mehr
+      for (const z of zeilen){
+        const d = Math.abs((z[0]+z[1])/2 - soll);
+        if (d < dmin){ dmin = d; b = z; }
+      }
+      return b ? [b[0]-luft, b[1]+luft] : null;
+    };
+    const zahl = naechstes(0.14), kz = naechstes(0.43), nam = naechstes(0.60);
+    if (zahl) f.zahlen = zahl;
+    if (kz && (!zahl || kz[0] !== zahl[0])) f.kuerzel = kz;
+    if (nam && (!kz || nam[0] !== kz[0])) f.name = nam;
   }
   /* Ein leeres Feld wird zum weissen Kaestchen statt zu einem Loch. Nur so
      bleibt die Zeilenzaehlung auf dem Sammelblatt gleich, und ein unlesbarer
@@ -4561,6 +4582,17 @@ async function depotAusRaster(quelle, melde){
                kand: kand.length ? kand : MAP.at.map(a => a.k),
                gewaehlt: kand.length ? kand[0] : ""});
   }
+  /* Die schaerfste Probe ist der Ort. Eine aufgestellte Einheit zeigt immer
+     eine Stadt, und die 1438 Namen lassen sich nicht zufaellig treffen. Kommt
+     bei vier oder mehr Karten kein einziger Ort heraus, war das kein
+     Kartenraster - dann steckt Karte im Rahmen, und die gruenen und roten
+     Stadtkreise wurden fuer Balken gehalten. */
+  const mitStadt = raus.filter(g => g.stadt !== null).length;
+  const mitTyp = raus.filter(g => g.gewaehlt).length;
+  if (felder.length >= 4 && mitStadt === 0){ rasterGrob = true; return null; }
+  if (raus.length < felder.length * 0.5 || mitTyp < felder.length * 0.4){
+    rasterGrob = true; return null;
+  }
   return raus.length ? raus : null;
 }
 
@@ -4578,7 +4610,14 @@ async function depotLesen(datei, box){
   try {
     const farbe = await farbAusschnitt(datei, box);
     beste = await depotAusRaster(farbe, setz);
-    if (!beste) console.warn("Kein Raster erkannt - lese den Ausschnitt als Fliesstext.");
+  } catch(e){ beste = null; }
+  if (rasterGrob){
+    setz(`<b>The box takes in part of the map.</b> Its green and red town circles look like
+          the strength bars to the reader. Drag the box tightly around the assault team list —
+          the panel on the right, nothing more.`);
+    return;
+  }
+  try {
     if (beste) rohBest = beste.map(g =>
       `${g.name} | ${g.tag} ${g.ort} | ${g.kand.join(", ")}`).join("\n");
   } catch(e){ beste = null; }
@@ -6204,7 +6243,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-18 12:29</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-18 12:44</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
