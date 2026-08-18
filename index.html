@@ -4111,7 +4111,7 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
         press <b>Whole picture</b>.`;
       return;
     }
-    const gefunden = voll ? listenRahmen(voll) : null;
+    const gefunden = voll ? listenRahmen(voll, wo && wo.wo) : null;
     if (gefunden){
       box = gefunden.box; malen();
       st.innerHTML = `${wo ? `<b>${wo.wo === "krieg" ? "War map" : "Soldiers"}</b> — ` : ""}${
@@ -4488,8 +4488,38 @@ function kartenRaster(quelle){
   const kurzWeg = () => {
     /* Nur Kacheln von Kartenform - ohne Wiederholung, die es bestaetigt,
        muss die Form allein tragen. */
-    const passend = kandidaten.filter(k => k.b/k.h >= 1.30 && k.b/k.h <= 2.20);
-    if (!passend.length) return nein("keine Kachel gefunden");
+    /* Rechts neben einer echten Kachel steht der Name der Einheit. Neben
+       einem Reiterknopf - und der Knopf fuer die Kampfeinheiten-Ansicht ist
+       selbst eine Goldkachel in Kartenform - steht nichts. Ohne diese Probe
+       wurde im Soldatenfenster der Knopf gelesen statt der Liste. */
+    const hatText = k => {
+      const Pd = (k.b) / KACHEL_BREIT;
+      const oben = k.y0 - KACHEL_OBEN*Pd;
+      const y0 = Math.round(oben + 0.07*Pd), y1 = Math.round(oben + 0.235*Pd);
+      const x0 = Math.round(k.x1 + 0.05*Pd), x1 = Math.round(k.x1 + 1.20*Pd);
+      if (y1 <= y0 || x1 <= x0 || y0 < 0 || y1 >= H || x0 >= W) return false;
+      const w = [];
+      for (let y = y0; y <= y1; y += 2)
+        for (let x = x0; x <= Math.min(W-1, x1); x += 2) w.push(L[y*W+x]);
+      if (w.length < 20) return false;
+      const grund = median(w);
+      let n = 0;
+      for (const v of w) if (Math.abs(v - grund) > 45) n++;
+      return n/w.length > 0.02;
+    };
+    /* Die belastbarste Probe: steckt ueberhaupt eines der achtzehn
+       Taktikzeichen darin? Ein Stueck Uniform besteht Form, Rand und
+       Textprobe, aber kein Zeichen. Das Fenster ist grosszuegig, damit auch
+       eine Kachel gefunden wird, deren Goldflaeche das Zeichen zerschneidet. */
+    const hatZeichen = k => {
+      const Pd = k.b / KACHEL_BREIT;
+      const z = zeichenLesen(quelle, k.x0 - 0.10*Pd, k.y0 - 0.16*Pd,
+                             k.b + 0.20*Pd, k.h + 0.34*Pd);
+      return !!z && (1 - z.abstand) >= 0.72;
+    };
+    const formOk = kandidaten.filter(k => k.b/k.h >= 1.20 && k.b/k.h <= 2.60);
+    const passend = formOk.filter(k => hatZeichen(k) && hatText(k));
+    if (!passend.length) return nein("keine Kachel mit Taktikzeichen");
     let reihe = [];
     for (const a of passend){
       const mit = passend.filter(b => Math.abs(b.cx-a.cx) < 0.35*a.b
@@ -4677,8 +4707,14 @@ function kartenRaster(quelle){
      Stapel, laege sonst die ganze erste Karte ausserhalb des Messfensters und
      wuerde als angeschnitten verworfen - genau so ging zuletzt die erste
      Einheit verloren. */
-  const fy0 = Math.max(0, Math.round(anker[0].cy - 2.2*Panker));
-  const fy1 = Math.min(H-1, Math.round(anker[anker.length-1].cy + 2.2*Panker));
+  /* Weit ueber die aeusserste Kachel hinaus. Ueber hellem Gelaende sind die
+     Kacheln gesperrter Einheiten so blass, dass die Farbmaske sie nicht
+     sieht - bei krieg_hell.png blieben zwei von sieben uebrig, und mit 2,2
+     Kartenhoehen Rand endete das Fenster mitten in der Liste. Ein weites
+     Fenster kostet nichts: welche Stelle wirklich eine Karte traegt,
+     entscheidet danach der Kontrast bzw. die Balkenzeile. */
+  const fy0 = Math.max(0, Math.round(anker[0].cy - 8*Panker));
+  const fy1 = Math.min(H-1, Math.round(anker[anker.length-1].cy + 8*Panker));
 
   /* ---- Zeilenraster im Fenster --------------------------------------- */
   const hoehe = fy1 - fy0 + 1;
@@ -4834,12 +4870,24 @@ function kartenRaster(quelle){
     }
     const kMed = median(stellen.filter(s=>s.ganz && s.kontrast>0).map(s=>s.kontrast));
     if (!(kMed > (art === "hell" ? 25 : 12))) return null;
-    let lauf = [], akt = [];
-    for (const s of stellen){
-      if (s.ganz && s.kontrast >= 0.45*kMed) akt.push(s);
-      else { if (akt.length > lauf.length) lauf = akt; akt = []; }
+    /* Luecken von bis zu zwei Karten ueberbruecken. Die Liste ist im Spiel
+       zusammenhaengend; eine blasse oder verdeckte Karte zwischen zwei
+       erkannten gehoert dazu. Ohne das schnitt eine einzige gesperrte
+       Einheit die Liste ab - bei hellem Gelaende vier von sieben. */
+    const gut = stellen.map(s => s.ganz && s.kontrast >= 0.45*kMed);
+    let lauf = [], a = -1, b = -1, luecke = 0;
+    for (let i = 0; i < stellen.length; i++){
+      if (gut[i]){
+        if (a < 0) a = i;
+        b = i; luecke = 0;
+      } else if (a >= 0){
+        if (++luecke > 2){
+          if (b - a + 1 > lauf.length) lauf = stellen.slice(a, b+1);
+          a = -1; b = -1; luecke = 0;
+        }
+      }
     }
-    if (akt.length > lauf.length) lauf = akt;
+    if (a >= 0 && b - a + 1 > lauf.length) lauf = stellen.slice(a, b+1);
     if (lauf.length < 3) return null;
     return {e0, P: Pf, lauf, art, guete: kMed*lauf.length};
   };
@@ -5353,6 +5401,37 @@ function paarAus(t){
 }
 
 
+/* ---- Fehlende Kuerzel aus der Reihe ergaenzen ------------------------
+   Kuerzel folgen im Spiel einem Muster: gleicher Stamm, laufende Nummer, und
+   die Nummer entspricht der im Namen. Faellt eines aus, ergibt es sich aus
+   einer Nachbarin - aber nur, wenn das Muster dort auch belegt ist, deren
+   Name und deren Kuerzel also dieselbe Nummer tragen. */
+function kuerzelReihe(liste){
+  const zerlegen = s => {
+    const m = /^(.*?)(\d+)$/.exec(String(s || "").trim());
+    return m && m[1] ? {stamm: m[1], zahl: +m[2], stellen: m[2].length} : null;
+  };
+  const nummer = s => {
+    const m = /(\d+)\s*$/.exec(String(s || "").trim());
+    return m ? +m[1] : null;
+  };
+  for (let i = 0; i < liste.length; i++){
+    if (liste[i].tag) continue;
+    const z = nummer(liste[i].name);
+    if (z === null) continue;
+    for (const j of [i-1, i+1, i-2, i+2]){
+      if (j < 0 || j >= liste.length) continue;
+      const k = zerlegen(liste[j].tag);
+      if (!k || k.zahl === z) continue;
+      if (nummer(liste[j].name) !== k.zahl) continue;   // Muster nicht belegt
+      liste[i].tag = k.stamm + String(z).padStart(k.stellen, "0");
+      liste[i].tagAbgeleitet = true;
+      break;
+    }
+  }
+  return liste;
+}
+
 /* ---- eine Karte auslesen ---------------------------------------------
    Der Typ kommt aus dem Taktikzeichen, nicht aus den Zahlen: 24/24 passt auf
    drei Typen, 16/14 auf zwei. Die Zahlen geben die Truppenstaerke und dienen
@@ -5469,7 +5548,7 @@ async function depotAusRaster(quelle, melde){
                staerke: gute.map(p => p.join("/")).join("  ")});
   }
   if (!raus.length) return null;
-  return raus;
+  return kuerzelReihe(raus);
 }
 
 async function depotLesen(datei, box){
@@ -5571,6 +5650,12 @@ function depotAnzeigen(beste, rohBest, bild, setz){
   }).join("");
   kiste.querySelectorAll(".zeile").forEach((z,i) => {
     z.dataset.stadt = beste[i].stadt === null ? "" : beste[i].stadt;
+    /* Ein hergeleitetes Kuerzel darf nicht aussehen wie ein gelesenes. */
+    if (beste[i].tagAbgeleitet){
+      const tf = z.querySelectorAll("input[type=text]")[1];
+      if (tf){ tf.style.borderStyle = "dashed";
+               tf.title = "derived from the numbering of the unit next to it"; }
+    }
     const sel2 = z.querySelector("select.typ"), sym = z.querySelector("span");
     sel2.addEventListener("change", ()=>{ sym.innerHTML = symbolSVG(sel2.value, c, 26, 18); });
   });
@@ -5865,17 +5950,36 @@ async function ansichtErkennen(quelle){
   return {wo:"andere", text:txt};
 }
 
+/* Wo darf ueberhaupt gesucht werden? Es gibt nur zwei Orte: auf der
+   Kriegskarte ganz rechts, im Soldatenfenster etwa in der Mitte. An den
+   vorliegenden Bildern abgelesen liegt die Liste bei 0,799..0,983 (Krieg)
+   und bei 0,357..0,569 (Soldaten) der Bildbreite; die Grenzen sind
+   grosszuegig darum gelegt. Alles ausserhalb wird gar nicht erst angeschaut -
+   damit fallen Reiterknoepfe und Ordensleisten weg. */
+const SUCHFELD = {krieg: [0.62, 1.00], soldaten: [0.22, 0.74]};
+
 /* Der Rahmen wird um das gelegt, was der Finder wirklich gefunden hat -
    nicht auf geratene Bildschirmanteile. */
-function listenRahmen(quelle){
+function listenRahmen(quelle, wo){
+  const feld = (wo && SUCHFELD[wo]) || [0, 1];
+  const vx = Math.round(feld[0]*quelle.width);
+  const vb = Math.round((feld[1]-feld[0])*quelle.width);
+  let eng = quelle;
+  if (vb > 40 && (vx > 0 || vb < quelle.width)){
+    eng = document.createElement("canvas");
+    eng.width = vb; eng.height = quelle.height;
+    eng.getContext("2d", {willReadFrequently:true})
+       .drawImage(quelle, vx, 0, vb, quelle.height, 0, 0, vb, quelle.height);
+  }
   let r;
-  try { r = kartenRaster(quelle); } catch(e){ return null; }
+  try { r = kartenRaster(eng); } catch(e){ return null; }
   if (!r || !r.ok || !r.karten.length) return null;
   const W = quelle.width, H = quelle.height;
+  const vs = (eng === quelle) ? 0 : vx;
   const oben = Math.min(...r.karten.map(k => k.oben));
   const unten = Math.max(...r.karten.map(k => k.oben)) + r.P;
-  const links = Math.min(r.panel[0], r.kastenX[0]);
-  const rechts = Math.max(r.panel[1], r.textRechts ? Math.max(...r.textRechts) : r.panel[1]);
+  const links = Math.min(r.panel[0], r.kastenX[0]) + vs;
+  const rechts = Math.max(r.panel[1], r.textRechts ? Math.max(...r.textRechts) : r.panel[1]) + vs;
   const luft = 0.12*r.P;
   const x0 = Math.max(0, links - luft), x1 = Math.min(W, rechts + luft);
   const y0 = Math.max(0, oben - luft), y1 = Math.min(H, unten + luft);
@@ -7267,7 +7371,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-18 20:56</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-18 23:14</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
