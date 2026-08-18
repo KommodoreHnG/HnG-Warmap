@@ -2764,6 +2764,30 @@ function bewegeGhost(ev){
   ghost.style.left = (ev.clientX + 12) + "px";
   ghost.style.top  = (ev.clientY - 10) + "px";
 }
+/* ---- Die Benennung des Spiels -----------------------------------------
+   Am Kaufbildschirm abgelesen: Name "AT034 - Kommodore" (hoechstens 20
+   Zeichen), Kurzname "USSR-034". Die Nummer laeuft je Spieler durch. */
+const atNr = n => String(n).padStart(3, "0");
+function naechsteAtNr(liste){
+  let hoch = 0;
+  for (const d of liste){
+    let m = /^AT\s*(\d{1,4})/i.exec(d.name || "");
+    if (m) hoch = Math.max(hoch, +m[1]);
+    m = /(\d{1,4})\s*$/.exec(d.tag || "");
+    if (m) hoch = Math.max(hoch, +m[1]);
+  }
+  return hoch + 1;
+}
+function atSpielName(nr){
+  const wer = (S.name || "").trim();
+  const kopf = "AT" + atNr(nr);
+  return (wer ? `${kopf} - ${wer}` : kopf).slice(0, 20);
+}
+function atSpielTag(nr){
+  const f = clanFaktion();
+  return `${f != null ? FACTIONS[f].tag : "AT"}-${atNr(nr)}`;
+}
+
 document.getElementById("dep-add").addEventListener("click", ()=>{
   const c = light() ? "#1a2029" : "#e9e2d5";
   const kachel = a => `<button class="pick" data-k="${a.k}">
@@ -2771,8 +2795,16 @@ document.getElementById("dep-add").addEventListener("click", ()=>{
       <em>${atText(a.k)} · ${a.cp} CP</em></button>`;
   openDlg(`
     <div class="dlg-h"><h2>Add assault teams</h2>
-      <p>Name them afterwards in the list on the right.</p></div>
+      <p>Pick a type — it goes straight into your depot.</p></div>
     <div class="dlg-b">
+      <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--dim)">How many</span>
+        <input type="number" id="qa-n" value="1" min="1" max="50" style="width:66px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);cursor:pointer">
+          <input type="checkbox" id="qa-name" checked> name them the way the game does
+        </label>
+      </div>
+      <div class="note" id="qa-vor" style="font-size:11px"></div>
       <h3 style="font-size:9.5px;letter-spacing:.09em;color:var(--dim2)">ARMY</h3>
       <div class="pickgrid">${MAP.at.filter(a=>a.arm==="army").map(kachel).join("")}</div>
       <h3 style="font-size:9.5px;letter-spacing:.09em;color:var(--dim2);margin-top:6px">AIR FORCE</h3>
@@ -2780,10 +2812,35 @@ document.getElementById("dep-add").addEventListener("click", ()=>{
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Done</button></div>`, true);
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  const qaN = document.getElementById("qa-n"), qaName = document.getElementById("qa-name");
+  const wieviel = () => Math.max(1, Math.min(50, Math.round(+qaN.value) || 1));
+  const vorschau = () => {
+    const feld = document.getElementById("qa-vor");
+    if (!qaName.checked){
+      feld.innerHTML = `Added without a name — the type stands in for it until you type one.`;
+      return;
+    }
+    const nr = naechsteAtNr(myDepot()), n = wieviel();
+    const bis = nr + n - 1;
+    feld.innerHTML = `Next: <b>${esc(atSpielName(nr))}</b> · <b>${esc(atSpielTag(nr))}</b>${
+      n > 1 ? ` … through <b>${esc(atSpielName(bis))}</b>` : ""}${
+      (S.name||"").trim() ? "" : ` — set your name in the top bar and it goes into the name too.`}`;
+  };
+  qaN.addEventListener("input", vorschau);
+  qaName.addEventListener("change", vorschau);
+  vorschau();
   document.querySelectorAll(".pick").forEach(b => b.addEventListener("click", ()=>{
-    setMyDepot(myDepot().concat([{id: Math.random().toString(36).slice(2,9), k: b.dataset.k, name: ""}]));
+    const n = wieviel(), liste = myDepot().slice();
+    let nr = naechsteAtNr(liste);
+    for (let i = 0; i < n; i++){
+      const e = {id: Math.random().toString(36).slice(2,9), k: b.dataset.k, name: ""};
+      if (qaName.checked){ e.name = atSpielName(nr); e.tag = atSpielTag(nr); nr++; }
+      liste.push(e);
+    }
+    setMyDepot(liste);
     depotZeichnen();
-    toast(`${atName(b.dataset.k)} added`);
+    vorschau();
+    toast(`${n} × ${atName(b.dataset.k)} added`);
   }));
 });
 
@@ -4377,7 +4434,120 @@ function kartenRaster(quelle){
     const b = f.x1-f.x0+1, h = f.y1-f.y0+1;
     return b >= 6 && h >= 6 && b/h >= 0.70 && b/h <= 2.60 && f.n/(b*h) >= 0.45;
   }).map(f => ({...f, cx:(f.x0+f.x1)/2, cy:(f.y0+f.y1)/2, b:f.x1-f.x0+1, h:f.y1-f.y0+1}));
-  if (kandidaten.length < 3) return nein("kein Panel im Bild");
+  /* ---- Kurze Listen: eine oder zwei Kampfeinheiten -------------------
+     Ohne Wiederholung ist die Kartenhoehe nicht zu messen. Sie steckt aber in
+     der Kachel: an beiden vorliegenden Bildern ist die Kachel 0,452 bzw.
+     0,460 Kartenhoehen breit. 98 Punkte durch 0,456 ergeben 215 gegen
+     gemessene 213 und 217 - genau genug, denn die Zeilenlagen sind Anteile
+     der Kartenhoehe und verschieben sich damit um hoechstens zwei Punkte. */
+  const KACHEL_BREIT = 0.456;   // Kachelbreite je Kartenhoehe
+  const KACHEL_OBEN  = 0.11;    // Kachel-Oberkante unter der Kartenoberkante
+  const kurzWeg = () => {
+    /* Nur Kacheln von Kartenform - ohne Wiederholung, die es bestaetigt,
+       muss die Form allein tragen. */
+    const passend = kandidaten.filter(k => k.b/k.h >= 1.30 && k.b/k.h <= 2.20);
+    if (!passend.length) return nein("keine Kachel gefunden");
+    let reihe = [];
+    for (const a of passend){
+      const mit = passend.filter(b => Math.abs(b.cx-a.cx) < 0.35*a.b
+        && Math.abs(b.b/a.b - 1) < 0.25 && Math.abs(b.h/a.h - 1) < 0.25);
+      if (mit.length > reihe.length) reihe = mit;
+    }
+    reihe.sort((a,b) => a.cy - b.cy);
+    const kb = median(reihe.map(k => k.b));
+    let P = kb / KACHEL_BREIT;
+    if (reihe.length >= 2){
+      /* Stehen zwei Kacheln da, ist ihr Abstand das bessere Mass - sofern er
+         zu einem ganzzahligen Vielfachen der geschaetzten Hoehe passt. */
+      const d = (reihe[reihe.length-1].cy - reihe[0].cy) / (reihe.length-1);
+      const k = Math.max(1, Math.round(d/P));
+      if (Math.abs(d/k - P) < 0.15*P) P = d/k;
+    }
+    if (!(P >= 16)) return nein("Kachel zu klein");
+    const x0 = Math.round(median(reihe.map(k => k.x0)));
+    const x1 = Math.round(median(reihe.map(k => k.x1)));
+    const textX = Math.min(W-2, Math.round(x1 + 0.09*P));
+
+    /* Zeilenlagen und Zahlengruppen als Anteile - dieselben Werte, die der
+       Regelweg als Ausgangspunkt nimmt. Die Gruppen sitzen gemessen bei
+       -0,035 / +0,789 / +1,613 Kartenhoehen neben der Kachel, gut 0,78 breit. */
+    const zwei  = [[0.070*P, 0.235*P], [0.310*P, 0.441*P]];
+    const zZahl = [0.577*P, 0.770*P];
+    const gruppen = [-0.035, 0.789, 1.613].map(a =>
+      [Math.max(0, Math.round(x0 + a*P)), Math.min(W-1, Math.round(x0 + (a+0.78)*P))])
+      .filter(g => g[1] > g[0] + 8 && g[0] < W-1);
+
+    /* Grundhelligkeit der Karte, um zu entscheiden, ob eine Zahlengruppe
+       ueberhaupt beschriftet ist. */
+    const werte = [];
+    for (const k of reihe)
+      for (let y = Math.round(k.y0 - KACHEL_OBEN*P + 0.05*P); y < Math.round(k.y0 + 0.85*P); y += 3)
+        for (let x = textX; x < Math.min(W, textX + Math.round(2*P)); x += 3)
+          if (y >= 0 && y < H) werte.push(L[y*W+x]);
+    const grund = werte.length ? median(werte) : 128;
+
+    const karten = reihe.map(k => {
+      const oben = k.y0 - KACHEL_OBEN*P;
+      const belegt = gruppen.map(([a,b]) => {
+        let n = 0, ct = 0;
+        for (let dy = Math.round(zZahl[0]); dy <= Math.round(zZahl[1]); dy++){
+          const y = Math.round(oben + dy);
+          if (y < 0 || y >= H) continue;
+          for (let x = a; x <= b; x++){ if (Math.abs(L[y*W+x] - grund) > 45) n++; ct++; }
+        }
+        return ct ? n/ct > 0.02 : false;
+      });
+      return {
+        oben, unten: oben + P,
+        name:    [oben + zwei[0][0], oben + zwei[0][1]],
+        kuerzel: [oben + zwei[1][0], oben + zwei[1][1]],
+        zahlen:  [oben + zZahl[0],   oben + zZahl[1]],
+        gruppen: gruppen.map(([a,b], i) => ({x:[a,b], belegt: belegt[i]})),
+      };
+    });
+
+    /* Textbreite wie im Regelweg ueber die Tinte messen. */
+    const textRechts = zwei.map(band => {
+      const von = Math.round(band[0]), bis = Math.round(band[1]);
+      const xEnd = Math.min(W-1, textX + Math.round(3.5*P));
+      if (xEnd <= textX) return W-1;
+      const tinte = new Float64Array(xEnd - textX + 1);
+      let nk = 0;
+      for (const k of karten){
+        const w2 = [];
+        for (let dy = von; dy <= bis; dy += 2){
+          const y = Math.round(k.oben + dy);
+          if (y < 0 || y >= H) continue;
+          for (let x = textX; x <= xEnd; x += 3) w2.push(L[y*W+x]);
+        }
+        if (!w2.length) continue;
+        const g2 = median(w2);
+        nk++;
+        for (let x = textX; x <= xEnd; x++){
+          let n = 0, ct = 0;
+          for (let dy = von; dy <= bis; dy++){
+            const y = Math.round(k.oben + dy);
+            if (y < 0 || y >= H) continue;
+            if (Math.abs(L[y*W+x] - g2) > 45) n++;
+            ct++;
+          }
+          if (ct) tinte[x-textX] += n/ct;
+        }
+      }
+      if (!nk) return W-1;
+      let letzte = -1, leer = 0;
+      for (let i = 0; i < tinte.length; i++){
+        if (tinte[i]/nk > 0.05){ letzte = i; leer = 0; }
+        else if (letzte >= 0 && ++leer > 0.5*P) break;
+      }
+      return letzte < 0 ? W-1 : Math.min(W-1, textX + letzte + Math.round(0.04*P));
+    });
+
+    return {ok:true, n:karten.length, P, panel:[x0, Math.max(...textRechts)],
+            kastenX:[x0, x1], textX, textRechts, gruppen, karten, kurz:true,
+            kastenH: Math.round(median(reihe.map(k => k.h)))};
+  };
+  if (kandidaten.length < 3) return kurzWeg();
 
   /* ---- Der Stapel: gleich grosse Kaesten uebereinander in festem Takt */
   let bestStapel = [], bestP = 0;
@@ -4406,13 +4576,13 @@ function kartenRaster(quelle){
       }
     }
   }
-  if (bestStapel.length < 3) return nein("kein Kastenstapel");
+  if (bestStapel.length < 3) return kurzWeg();
   bestStapel.sort((a,b)=>a.cy-b.cy);
   const hMed = median(bestStapel.map(k=>k.h));
   const voll = bestStapel.filter(k => Math.abs(k.h/hMed - 1) < 0.15);
   const anker = voll.length >= 2 ? voll : bestStapel;
   const Panker = (anker[anker.length-1].cy - anker[0].cy) / (anker.length-1);
-  if (!(Panker >= 8)) return nein("Kartenabstand unplausibel");
+  if (!(Panker >= 8)) return kurzWeg();
 
   /* ---- Panelspalten: was sich mit der Periode wiederholt -------------- */
   const P0 = Math.round(Panker);
@@ -4455,7 +4625,7 @@ function kartenRaster(quelle){
       else if (++luecke > 0.25*P0) break;
     } }
   const PB = pr - pl + 1;
-  if (PB < 1.6*P0) return nein("Panel zu schmal");
+  if (PB < 1.6*P0) return kurzWeg();
 
   /* ---- Messfenster ---------------------------------------------------- */
   const fx0 = Math.max(0, Math.round(pl - 0.03*PB));
@@ -4490,11 +4660,11 @@ function kartenRaster(quelle){
   }
   const lo = Math.max(4, Math.round(0.80*Panker)), hi = Math.round(1.25*Panker);
   const schaetzer = [fHell, fFarbe, fKante].map(p => bestesLag(p, lo, hi)).filter(Boolean);
-  if (!schaetzer.length || schaetzer.every(s => s.r < 0.25)) return nein("keine Wiederholung");
+  if (!schaetzer.length || schaetzer.every(s => s.r < 0.25)) return kurzWeg();
   const med = median(schaetzer.map(s=>s.lag));
   const nah = schaetzer.map(s=>s.lag).filter(l => Math.abs(l-med) <= 0.04*med);
   let P = nah.length ? nah.reduce((a,b)=>a+b,0)/nah.length : med;
-  if (Math.abs(P - Panker) > 0.05*Panker) return nein("Anker und Raster uneinig");
+  if (Math.abs(P - Panker) > 0.05*Panker) return kurzWeg();
 
   /* Phase aus der Hell/Dunkel-Kante - dem schaerfsten Merkmal im Bild. */
   const Pi = Math.round(P);
@@ -4516,7 +4686,7 @@ function kartenRaster(quelle){
      Karten ergibt: oben hell, unten dunkel. Der Goldanker prueft jeden Zweig. */
   let tief = Infinity;
   for (let i = 0; i < Pi; i++) if (st[i+Pi] < tief) tief = st[i+Pi];
-  if (!(tief < 0)) return nein("Kartenphase nicht eindeutig");
+  if (!(tief < 0)) return kurzWeg();
   const roh = [];
   for (let i = 0; i < Pi; i++){
     const v = st[i+Pi];
@@ -4524,7 +4694,7 @@ function kartenRaster(quelle){
     if (v > st[i-1+Pi] || v > st[i+1+Pi]) continue;   // nur oertliche Tiefpunkte
     roh.push({i, v});
   }
-  if (!roh.length) return nein("Kartenphase nicht eindeutig");
+  if (!roh.length) return kurzWeg();
   roh.sort((p,q) => p.v - q.v);
   const phasen = [];                       // dicht Benachbartes ist derselbe
   for (const k of roh){
@@ -4640,7 +4810,7 @@ function kartenRaster(quelle){
       const v = auswerten(ph, art);
       if (v && (!gew || v.guete > gew.guete)) gew = v;
     }
-  if (!gew) return nein("keine Karten zu erkennen");
+  if (!gew) return kurzWeg();
   P = gew.P;
   const bestLauf = gew.lauf;
 
@@ -4820,7 +4990,7 @@ function kartenRaster(quelle){
       gruppen.push([Math.max(fx0, Math.round(x - 0.012*gb)),
                     Math.min(fx1, Math.round(x + gb*0.98))]);
   }
-  if (!gruppen.length) return nein("Aufbau: keine Zahlengruppen");
+  if (!gruppen.length) return kurzWeg();
 
   /* ---- Ergebnis -------------------------------------------------------- */
   const karten = bestLauf.map(s => {
@@ -5498,7 +5668,12 @@ function tagUndOrt(zeile, sicher){
 }
 function depotAusText(text){
   const zeilen = String(text).split(/\r?\n/).map(z => z.trim()).filter(z => z.length > 1);
-  const zahlZeile = zeilen.map(z => typAusZahlen(zahlenAus(z)));
+  /* Eine echte Kampfeinheit zeigt mindestens zwei vollstaendige Zahlenpaare -
+     Moral und Mannschaft, meist noch Fahrzeuge. Ohne diese Huerde entstanden
+     aus dem Rauschen eines ganzen Bildschirms Zeilen wie "Cr ABA AR ARL",
+     angeboten mit Haekchen und einen Klick vom Clandepot entfernt. */
+  const zahlen = zeilen.map(z => zahlenAus(z));
+  const zahlZeile = zeilen.map((z,i) => zahlen[i].length >= 4 ? typAusZahlen(zahlen[i]) : []);
   const raus = [];
   for (let i=0; i<zeilen.length; i++){
     const kand = zahlZeile[i];
@@ -6926,7 +7101,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-18 17:09</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-18 19:49</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
