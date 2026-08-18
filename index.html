@@ -3150,10 +3150,26 @@ async function bildAufnehmen(){
   if (!bildAufnahmeMoeglich())
     throw new Error("This browser cannot capture a window here.");
   if (!bildStrom || !bildStrom.active){
+    /* Ein Fenster kann die Seite nicht selbst waehlen - das laesst kein
+       Browser zu, sonst koennte jede Seite ungefragt mitlesen. Was geht: die
+       Auswahl gleich auf der Fensterliste oeffnen statt bei den Bildschirmen,
+       den eigenen Tab ausblenden und das Umschalten erlauben. Danach bleibt
+       die Freigabe stehen, und jedes weitere Bild ist ein Klick. */
     bildStrom = await navigator.mediaDevices.getDisplayMedia({
-      video: {frameRate: 2}, audio: false});
+      video: {frameRate: 2, displaySurface: "window"},
+      audio: false, selfBrowserSurface: "exclude",
+      surfaceSwitching: "include", systemAudio: "exclude"});
     const spur = bildStrom.getVideoTracks()[0];
     if (spur) spur.addEventListener("ended", ()=>{ bildStrom = null; });
+    /* Welches Fenster geteilt wurde, erfaehrt die Seite nicht - das waere die
+       Luecke, die die ganze Regel verhindern soll. Ob ueberhaupt ein Fenster
+       oder ein ganzer Bildschirm geteilt wird, steht aber im Datenstrom, und
+       ein ganzer Bildschirm liest sich deutlich schlechter. */
+    try {
+      const art = spur && spur.getSettings && spur.getSettings().displaySurface;
+      if (art && art !== "window")
+        toast("A whole screen is being shared — picking just the game window reads better.");
+    } catch(e){}
   }
   const v = document.createElement("video");
   v.srcObject = bildStrom; v.muted = true; v.playsInline = true;
@@ -4270,9 +4286,18 @@ function schriftZeilen(grau, W, x0, y0, y1, schwelle){
   const oben = Math.max(0, Math.round(y0)), unten = Math.min(y1|0, y1);
   const zahl = [];
   let maxN = 0;
+  /* Nicht die Helligkeit zaehlen, sondern die Kanten. Im Kriegsfenster ist die
+     obere Kartenhaelfte hell mit dunkler Schrift und die untere dunkel mit
+     heller - wer helle Punkte zaehlt, haelt den ganzen hellen Block fuer eine
+     einzige Zeile. Ein Buchstabe erzeugt dagegen immer viele Wechsel neben-
+     einanderliegender Punkte, ein leerer Grund keinen einzigen. */
   for (let y = oben; y < unten; y++){
     let n = 0;
-    for (let x = x0; x < W; x++) if (grau[y*W+x] >= schwelle) n++;
+    const z = y*W;
+    for (let x = x0; x < W-2; x++){
+      const d = grau[z+x] - grau[z+x+2];
+      if (d > 26 || d < -26) n++;
+    }
     zahl.push(n); if (n > maxN) maxN = n;
   }
   if (!maxN) return [];
@@ -4292,52 +4317,6 @@ function schriftZeilen(grau, W, x0, y0, y1, schwelle){
     if (letzt && b[0] - letzt[1] <= 2) letzt[1] = b[1];
     else raus.push([b[0], b[1]]);
   }
-  return raus;
-}
-
-/* Alle Felder untereinander auf ein weisses Blatt. Jede Zeile freistehend,
-   mit einem Abstand groesser als die Zeile selbst - dann trennt die Erkennung
-   sie sicher und gibt genau eine Textzeile je Feld zurueck. */
-const MONT_ZH = 74, MONT_R = 30;      // Zeilenhoehe und Rand auf dem Sammelblatt
-function montage(bilder){
-  const ZH = MONT_ZH, R = MONT_R;
-  let breit = 0;
-  const teile = bilder.map(b => {
-    const f = ZH / b.height;
-    const w = Math.round(b.width * f);
-    breit = Math.max(breit, Math.min(1400, w));
-    return {b, w};
-  });
-  const c = document.createElement("canvas");
-  c.width = breit + 2*R;
-  c.height = bilder.length * (ZH + R) + R;
-  const g = c.getContext("2d");
-  g.fillStyle = "#ffffff"; g.fillRect(0, 0, c.width, c.height);
-  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
-  teile.forEach((t, i) => {
-    const w = Math.min(t.w, breit);
-    const qw = Math.round(t.b.width * (w / t.w));
-    g.drawImage(t.b, 0, 0, qw, t.b.height, R, R + i*(ZH+R), w, ZH);
-  });
-  return c;
-}
-/* Das Sammelblatt in einem Zug lesen und jede erkannte Zeile ueber ihre Lage
-   dem Feld zuordnen, aus dem sie stammt. Gibt ein Feld nichts her, bleibt an
-   seiner Stelle eine leere Zeichenkette - der Rest verschiebt sich nicht. */
-async function ocrMontage(bilder, psm, weiss, melde){
-  if (!bilder.length) return [];
-  await ocrBereit(psm, weiss, melde);
-  const r = await ocrWorker.recognize(montage(bilder), {}, {blocks: true, text: true});
-  const raus = new Array(bilder.length).fill("");
-  const teiler = MONT_ZH + MONT_R, erste = MONT_R + MONT_ZH/2;
-  for (const b of ((r.data && r.data.blocks) || []))
-    for (const p of (b.paragraphs || []))
-      for (const l of (p.lines || [])){
-        if (!l.bbox) continue;
-        const i = Math.round(((l.bbox.y0 + l.bbox.y1)/2 - erste) / teiler);
-        if (i >= 0 && i < raus.length)
-          raus[i] = (raus[i] + " " + String(l.text || "").trim()).trim();
-      }
   return raus;
 }
 
@@ -4425,16 +4404,31 @@ async function depotAusRaster(quelle, melde){
     const sp = balkenSpalten(m, W, b);
     if (sp.length > muster.length) muster = sp;
   }
-  const spaltenX = muster.map((s, i) =>
-    [Math.max(0, s[0] - W*0.01), i+1 < muster.length ? muster[i+1][0] : W]);
+  /* Alle Gruppen gleich breit, naemlich so breit wie ihr Abstand. Die letzte
+     bis zum Rand laufen zu lassen zog den runden Knopf am Zeilenende mit
+     herein. */
+  const startX = muster.map(s => s[0]);
+  let spBreite = W;
+  if (startX.length > 1){
+    const dd = [];
+    for (let i = 1; i < startX.length; i++) dd.push(startX[i] - startX[i-1]);
+    dd.sort((a,b) => a-b);
+    spBreite = dd[Math.floor(dd.length/2)];
+  }
+  const spaltenX = startX.map(x =>
+    [Math.max(0, x - W*0.012), Math.min(W, x + spBreite)]);
 
   const felder = [];
   for (const [o, u] of baender){
     const b = (o+u)/2;
     felder.push({balken: b, spalten: spaltenX,
-                 name: [b - P*0.78, b - P*0.52],       // vorlaeufig
-                 kuerzel: [b - P*0.52, b - P*0.30],
-                 zahlen: [b - P*0.26, b - P*0.04]});
+                 // Am echten Kriegsfenster abgemessen: Zahlen liegen 0,14
+                 // Kartenhoehen ueber dem Balken, Kuerzel und Ort 0,43, der
+                 // Name 0,60. Gilt nur, wenn die Zeilensuche unten nichts
+                 // findet - sonst wird gemessen.
+                 name: [b - P*0.72, b - P*0.48],
+                 kuerzel: [b - P*0.52, b - P*0.33],
+                 zahlen: [b - P*0.25, b - P*0.05]});
   }
 
   /* Erst alle Ausschnitte schneiden, dann in drei Durchgaengen lesen. */
@@ -4486,8 +4480,11 @@ async function depotAusRaster(quelle, melde){
   };
   const namBilder = [], kzBilder = [], zBilder = [], zProKarte = [];
   for (const f of felder){
-    namBilder.push(feldBild(quelle, linksAb, f.name[0], W - linksAb, f.name[1]-f.name[0]) || leerBild());
-    kzBilder.push(feldBild(quelle, linksAb, f.kuerzel[0], W - linksAb, f.kuerzel[1]-f.kuerzel[0]) || leerBild());
+    /* Rechts sitzen Lupe und Auge. Die sind keine Schrift und wuerden als
+       Zeichensalat hinter dem Ortsnamen landen - also vorher abschneiden. */
+    const rechtsBis = W*0.87 - linksAb;
+    namBilder.push(feldBild(quelle, linksAb, f.name[0], rechtsBis, f.name[1]-f.name[0]) || leerBild());
+    kzBilder.push(feldBild(quelle, linksAb, f.kuerzel[0], rechtsBis, f.kuerzel[1]-f.kuerzel[0]) || leerBild());
     let n = 0;
     for (const [x0, x1] of f.spalten){
       const zb = feldBild(quelle, x0, f.zahlen[0], x1 - x0, f.zahlen[1]-f.zahlen[0]);
@@ -4499,11 +4496,21 @@ async function depotAusRaster(quelle, melde){
   let namen = [], kuerzel = [], zahlZeilen = [];
   try {
     melde(`${felder.length} units found — reading the names …`);
-    namen = await ocrMontage(namBilder, 6, "", ()=>{});
+    /* Jedes Feld einzeln. Der Umweg ueber ein Sammelblatt war schneller
+       gedacht, kostet aber die Zuordnung: die Erkennung zieht dort Zeilen
+       zusammen oder laesst die oberste aus, und dann steht der Name der
+       einen Einheit bei der anderen. Gemessen kostet ein Feld rund 30 ms -
+       einzeln gelesen ist es schnell genug und kann nicht verrutschen. */
+    for (const b of namBilder) namen.push(b ? await ocrText(b, 7, ()=>{}) : "");
     melde(`${felder.length} units found — reading tags and towns …`);
-    kuerzel = await ocrMontage(kzBilder, 6, "", ()=>{});
+    for (const b of kzBilder) kuerzel.push(b ? await ocrText(b, 7, ()=>{}) : "");
+    /* Die Zahlen NICHT ueber das Sammelblatt: gemessen kostet ein einzelnes
+       Zahlenfeld 26 ms, und einzeln gelesen kann keine Zeile in der falschen
+       Zeile landen. Bei den Namen lohnt das Blatt, weil die Felder breit sind. */
     melde(`${felder.length} units found — reading the strengths …`);
-    zahlZeilen = await ocrMontage(zBilder, 6, ZIFFERN, ()=>{});
+    zahlZeilen = [];
+    for (const b of zBilder)
+      zahlZeilen.push(b ? await ocrText(b, 7, ()=>{}, ZIFFERN) : "");
   } catch(e){ return null; }
 
   const raus = [];
@@ -4770,7 +4777,16 @@ function saeubern(s){
    Vergleich ueber die Editierdistanz uebersteht einiges an Rauschen. Ein
    einzelnes Wort wird nur dann als Ort genommen, wenn es genau passt - sonst
    verschwaende ein Team ohne Standort seinen Namen an eine Stadt. */
+/* Eine Einheit, die nirgends steht, zeigt statt des Ortes "Nicht stationiert"
+   bzw. "Not deployed". Ohne diese Sperre sucht die Stadtsuche sich daraus die
+   naechstbeste Stadt zusammen. */
+const NICHT_STATIONIERT = /nicht\s*stat|not\s*deploy|no[nt]\s*station/i;
 function tagUndOrt(zeile, sicher){
+  if (NICHT_STATIONIERT.test(String(zeile))){
+    const w0 = saeubern(zeile).split(" ").filter(Boolean);
+    const t0 = w0.length && /^[A-Z0-9][A-Z0-9_-]{1,11}$/.test(w0[0]) ? w0[0] : "";
+    return t0 ? {tag: t0, stadt: null, ort: ""} : null;
+  }
   const w = saeubern(zeile).split(" ").filter(Boolean);
   if (!w.length) return null;
   let best = null;
@@ -6188,7 +6204,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-17 22:56</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-18 12:29</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
