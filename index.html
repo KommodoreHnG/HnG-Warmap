@@ -443,7 +443,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
         title="Hand out codes and manage who is in this room">Members</button>
       <button class="btn" id="b-intel">Intel</button>
       <button class="btn" id="b-battle">Battle</button>
-      <button class="btn" id="b-clan">Clan depot</button>
+      <button class="btn" id="b-clan">Clan</button>
       <button class="btn" id="b-arms">Arsenal</button>
       <button class="btn" id="b-board">Board</button>
       <button class="btn" id="b-shot">Read screenshot</button>
@@ -970,6 +970,12 @@ function rangText(r){
    muesste - und keinen Zustand "keine Seite", denn eine Kampfeinheit ohne
    Seite gibt es im Spiel nicht. */
 const KLAN_VORGABE = 2;                    // UdSSR
+/* Welches Depot man gerade ANSIEHT. Null heisst: das der Kriegsseite. Ein
+   Blickwechsel ist reine Ansichtssache und aendert nichts fuer den Clan -
+   sonst muesste man die Seite aller umstellen, nur um nachzusehen, was im
+   deutschen Depot liegt. */
+let depotBlick = null;
+const aktiveSeite = () => depotBlick !== null ? depotBlick : clanFaktion();
 const clanFaktion = () => {
   const v = S.meta.clanf && S.meta.clanf.v;
   return (v === 0 || v === 1 || v === 2) ? v : KLAN_VORGABE;
@@ -1301,6 +1307,21 @@ const allSpots = () => {
   return [...m.values()].sort((a,b)=> b.t - a.t);
 };
 const clanName  = () => (S.meta.clan && S.meta.clan.v) || "War Map";
+/* Was zentral gilt. Eine Zeile fuer alle, mit Verfasser und Zeitpunkt -
+   sonst weiss niemand, ob der Befehl von gestern noch steht. */
+const clanBefehl = () => {
+  const e = S.meta.befehl;
+  return (e && e.v) ? {text: String(e.v), von: e.n || e.by || "", t: e.t || 0} : null;
+};
+function setClanBefehl(txt){
+  /* Mit Verfassernamen - sonst steht beim Befehl die interne Kennung, und
+     niemand weiss, von wem er stammt. */
+  stamp("meta", "befehl", String(txt || "").trim() || null, {n: S.name || ""});
+  save(); kopfzeile();
+}
+/* Wer die Karte allein benutzt, darf alles - sonst koennte niemand anfangen.
+   Mit Anschluss entscheidet der Zugangscode. */
+const istLeiter = () => !CFG || !!CFG.admin;
 const warName   = () => (S.meta.war && S.meta.war.v) || "";
 
 let unitIdx = new Map(), depotIdx = new Map();
@@ -1321,7 +1342,7 @@ function rebuildUnits(){
     /* Nur das Depot der eingestellten Seite - wer eine andere spielt, hat
        hier nichts zu suchen. */
     if (e && Array.isArray(e.v))
-      depotIdx.set(who, {name: e.n || who, list: aufSeite(depotListe(e.v), clanFaktion()),
+      depotIdx.set(who, {name: e.n || who, list: aufSeite(depotListe(e.v), aktiveSeite()),
                          h: verlaufVon(who), t: e.t,
                          arms: soldatenListe(e.arms)});
   }
@@ -1404,7 +1425,7 @@ function namenUmziehen(){
 }
 
 function myDepot(){
-  return aufSeite(myDepotAlle(), clanFaktion());
+  return aufSeite(myDepotAlle(), aktiveSeite());
 }
 const teamById = id => myDepot().find(d => d.id === id);
 
@@ -1464,7 +1485,7 @@ function verlaufKuerzen(h){
 function verlaufVon(who){
   const e = S.depot[who];
   if (!e || !Array.isArray(e.v)) return [];
-  const f = clanFaktion();
+  const f = aktiveSeite();
   if (e.hf && Array.isArray(e.hf[f]) && e.hf[f].length) return e.hf[f];
   const liste = aufSeite(depotListe(e.v), f);
   /* Ein Verlauf ohne Seitenangabe gehoert zum Altbestand, also nur dann, wenn
@@ -2252,7 +2273,7 @@ function depotSchreiben(felder){
   const liste = felder.list !== undefined ? felder.list
                                           : (Array.isArray(alt.v) ? alt.v : []);
   const arms  = soldatenListe(felder.arms !== undefined ? felder.arms : alt.arms);
-  const f = clanFaktion();
+  const f = aktiveSeite();
   const hf = Object.assign({}, alt.hf);
   hf[f] = verlaufFort(alt, aufSeite(depotListe(liste), f), f);
   /* Namen heraustrennen - geteilt wird nur, WAS jemand hat. */
@@ -2264,7 +2285,7 @@ function depotSchreiben(felder){
 /* Beim Schreiben bleiben die anderen beiden Depots unangetastet, und was neu
    dazukommt, bekommt die eingestellte Seite eingetragen. */
 function setMyDepot(list){
-  const f = clanFaktion();
+  const f = aktiveSeite();
   const fremd = myDepotAlle().filter(d => { const s = seiteVon(d); return s !== null && s !== f; });
   const eigen = (list || []).map(d => seiteVon(d) === null ? {...d, f} : d);
   depotSchreiben({list: fremd.concat(eigen)});
@@ -2984,7 +3005,10 @@ document.getElementById("dep-add").addEventListener("click", ()=>{
 /* ---------------- tally ---------------- */
 function kopfzeile(){
   document.getElementById("clan-name").textContent = clanName();
-  document.getElementById("war-label").textContent = warName() || "Heroes & Generals";
+  const f = clanFaktion();
+  document.getElementById("war-label").innerHTML =
+    `${esc(warName() || "Heroes & Generals")} · <b style="color:${col(FACTIONS[f])}"
+      >${FACTIONS[f].tag}</b>`;
 }
 /* What the whole clan owns, deployed or not — grouped the way the game
    groups it, so the strip reads like the force overview in-game. */
@@ -7325,13 +7349,14 @@ function clanDialog(tab){
   };
 
   openDlg(`
-    <div class="dlg-h"><h2>${esc(clanName())} — depot</h2>
-      <p>${teams ? `<b>${nz(teams)}</b> assault teams across ${leute.length}
+    <div class="dlg-h"><h2>${esc(clanName())}</h2>
+      <p>${teams ? `<b>${nz(teams)}</b> assault team${teams===1?"":"s"} across ${leute.length}
          player${leute.length===1?"":"s"} · <b>${nz(men)}</b> men · <b>${nz(veh)}</b> vehicles and planes ·
          <b>${drin}</b> committed, <b>${teams-drin}</b> free.`
          : "Nobody has set up a depot yet."}</p></div>
     <div class="tabs">
-      <button data-tab="over"   aria-pressed="true">Overview</button>
+      <button data-tab="clan"   aria-pressed="true">Clan</button>
+      <button data-tab="over"   aria-pressed="false">Depot</button>
       <button data-tab="growth" aria-pressed="false">Growth</button>
       <button data-tab="who"    aria-pressed="false">Who has what</button>
       <button data-tab="deploy" aria-pressed="false">In the field</button>
@@ -7340,7 +7365,65 @@ function clanDialog(tab){
     </div>
     <div class="dlg-b">
 
-      <div class="tabp on" data-tab="over">
+      <div class="tabp on" data-tab="clan">
+        ${(()=>{
+          const leiter = istLeiter(), bf = clanBefehl(), st = startStaedte();
+          const wf = clanFaktion();
+          return `
+          <div class="row" style="align-items:center;gap:8px">
+            <span style="font-size:12px;color:var(--dim);width:86px">Clan name</span>
+            <input type="text" id="cl-name" value="${esc(clanName())}" style="flex:1"
+              ${leiter?"":"disabled"} dir="auto" spellcheck="false">
+          </div>
+          <div class="row" style="align-items:center;gap:8px">
+            <span style="font-size:12px;color:var(--dim);width:86px">This war</span>
+            <div class="own4" style="flex:1">
+              ${FACTIONS.map(q=>`<button data-clf="${q.id}" style="--f:${q.color}"
+                aria-pressed="${wf===q.id}" ${leiter?"":"disabled"}>${q.tag}</button>`).join("")}
+            </div>
+            <span style="font-size:11px;color:var(--dim2)">starts at
+              <b>${st[wf]!=null?esc(MAP.n[st[wf]][0]):"—"}</b></span>
+          </div>
+          <div class="row" style="align-items:center;gap:8px">
+            <span style="font-size:12px;color:var(--dim);width:86px">War</span>
+            <input type="text" id="cl-war" value="${esc(warName())}" style="flex:1"
+              placeholder="e.g. 1940 The Start_113" ${leiter?"":"disabled"}>
+            <button class="btn primary" id="cl-save" ${leiter?"":"disabled"}>Save</button>
+          </div>
+          <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:9px">
+            <div style="font-size:12px;color:var(--dim);margin-bottom:5px">Standing orders</div>
+            ${bf ? `<div style="border-left:3px solid var(--accent);padding:6px 10px;
+                background:var(--panel2);border-radius:var(--r);white-space:pre-wrap;
+                font-size:13px" dir="auto">${esc(bf.text)}</div>
+              <div style="font-size:10px;color:var(--dim2);margin-top:3px">${esc(bf.von)} ·
+                ${alterText(bf.t)}</div>`
+              : `<div style="font-size:11px;color:var(--dim2)">Nothing set.</div>`}
+            ${leiter ? `<textarea id="cl-befehl" placeholder="What holds for everyone this war"
+                style="min-height:60px;margin-top:7px" dir="auto">${esc(bf?bf.text:"")}</textarea>
+              <div class="row"><button class="btn" id="cl-bf-save">Set orders</button>
+                <button class="btn" id="cl-bf-clear" style="font-size:11px">Clear</button></div>`
+              : `<div class="note" style="font-size:11px">Only the clan leader writes these.</div>`}
+          </div>
+          <div class="note">The side set here decides everything: which depot is shown, what the
+            <b>Arsenal</b> offers, and under which side new assault teams are created. Nobody has to
+            keep a personal setting in sync.${leiter?"":" You are not the leader, so this is read-only."}</div>`;
+        })()}
+      </div>
+
+      <div class="tabp" data-tab="over">
+        ${(()=>{
+          const wf = clanFaktion(), bl = aktiveSeite();
+          return `<div class="row" style="align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-size:12px;color:var(--dim);width:86px">Looking at</span>
+            <div class="own4" style="flex:1">
+              ${FACTIONS.map(q=>`<button data-blick="${q.id}" style="--f:${q.color}"
+                aria-pressed="${bl===q.id}">${q.tag}</button>`).join("")}
+            </div>
+            ${bl !== wf ? `<span style="font-size:11px;color:var(--accent)">not the side you
+              fight this war — viewing only</span>`
+              : `<span style="font-size:11px;color:var(--dim2)">the side you fight this war</span>`}
+          </div>`;
+        })()}
         ${teams ? `
         <div class="sums">
           <div><span>Teams owned</span><b>${nz(teams)}</b></div>
@@ -7492,6 +7575,37 @@ function clanDialog(tab){
   tabsAktiv(document.getElementById("dlg"), tab);
   poolPanelWiring();
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  /* Clan-Reiter: Name, Seite, Krieg, Befehle. */
+  document.getElementById("cl-save")?.addEventListener("click", ()=>{
+    setMeta("clan", document.getElementById("cl-name").value.trim() || "War Map");
+    setMeta("war", document.getElementById("cl-war").value.trim());
+    kopfzeile(); clanDialog("clan"); toast("Saved");
+  });
+  document.querySelectorAll("#dlg [data-clf]").forEach(b => b.addEventListener("click", ()=>{
+    const f = +b.dataset.clf;
+    if (f === clanFaktion()) return;
+    if (!confirm(`Fight this war as ${FACTIONS[f].name}?
+
+The depot of that side becomes the `
+               + `active one. Nothing is lost - the other two stay where they are.`)) return;
+    setClanFaktion(f); depotBlick = null;
+    rebuildUnits(); kopfzeile(); side(); draw(); tally(); depotZeichnen(); kraftLeiste();
+    clanDialog("clan"); toast(`Now fighting as ${FACTIONS[f].tag}`);
+  }));
+  document.getElementById("cl-bf-save")?.addEventListener("click", ()=>{
+    setClanBefehl(document.getElementById("cl-befehl").value);
+    clanDialog("clan"); toast("Orders set");
+  });
+  document.getElementById("cl-bf-clear")?.addEventListener("click", ()=>{
+    setClanBefehl(""); clanDialog("clan");
+  });
+  /* Blick aufs Depot einer anderen Seite - reine Ansichtssache. */
+  document.querySelectorAll("#dlg [data-blick]").forEach(b => b.addEventListener("click", ()=>{
+    const f = +b.dataset.blick;
+    depotBlick = (f === clanFaktion()) ? null : f;
+    rebuildUnits(); depotZeichnen(); kraftLeiste(); side();
+    clanDialog("over");
+  }));
   document.querySelectorAll("[data-req]").forEach(b => b.addEventListener("click", ()=>{
     document.getElementById("rq-txt").value = b.dataset.req;
   }));
@@ -8338,7 +8452,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-19 12:29</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-19 13:56</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
