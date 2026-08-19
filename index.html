@@ -368,6 +368,38 @@ body.txt-modus{cursor:text}
 .zr-schalt input{accent-color:var(--accent);flex:0 0 auto}
 #zahnrad .note{font-size:10px;color:var(--dim2);line-height:1.4;margin-top:5px}
 #zahnrad .btn{width:100%;margin-top:6px;justify-content:center;text-align:center}
+/* Rechts steht nur noch, was es gibt - eine Zeile je Punkt. */
+#zahnrad .zr-menu{display:flex;flex-direction:column;gap:1px;margin:7px 0 2px}
+#zahnrad .zr-menu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  background:transparent;border:1px solid transparent;border-radius:2px;color:var(--text);
+  padding:7px 9px;cursor:pointer;font-size:12.5px}
+#zahnrad .zr-menu button:hover{background:var(--panel2);border-color:var(--line)}
+#zahnrad .zr-menu button[aria-pressed="true"]{background:rgba(226,172,72,.15);
+  border-color:var(--accent-dk);color:var(--accent)}
+#zahnrad .zr-menu .pf{margin-left:auto;color:var(--dim2);font-size:14px;line-height:1}
+/* Das Unterfenster liegt in der Mitte des FREIEN Feldes, nicht des Schirms.
+   Der Rahmen laesst Klicks durch, damit die Karte bedienbar bleibt - man
+   dreht an einem Regler und sieht dabei zu. */
+#zwrap{position:fixed;top:0;bottom:0;left:0;right:292px;z-index:74;display:none;
+  align-items:center;justify-content:center;padding:20px;pointer-events:none}
+#zwrap.an{display:flex}
+#zw{pointer-events:auto;width:100%;max-width:520px;max-height:86vh;overflow-y:auto;
+  background:linear-gradient(180deg,#211b14,#181309);border:1px solid var(--accent-dk);
+  border-radius:3px;box-shadow:0 20px 60px rgba(0,0,0,.6);
+  zoom:calc(var(--ui,1) * var(--f-dlg,1))}
+.zw-kopf{display:flex;align-items:center;gap:8px;padding:9px 13px;
+  border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:2}
+.zw-kopf b{flex:1;font-family:var(--schmal);text-transform:uppercase;letter-spacing:.1em;
+  font-size:12px;color:var(--accent)}
+.zw-kopf button{background:transparent;border:0;color:var(--dim2);cursor:pointer;font-size:17px;
+  line-height:1;padding:0 3px}
+.zw-kopf button:hover{color:var(--accent)}
+.zw-leib{padding:11px 13px 14px}
+.zw-leib .btn{width:100%;margin-top:8px;justify-content:center;text-align:center}
+.zw-leib .note{font-size:10.5px;color:var(--dim2);line-height:1.45;margin-top:6px}
+.zw-h{font-family:var(--schmal);font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--dim2);margin:11px 0 4px;border-top:1px solid var(--line);padding-top:7px}
+.zw-leib .zr-z .n{width:96px}
 /* Der Streifen im Bearbeitungsmodus bleibt selbst unantastbar - sonst kaeme
    man aus dem Modus nicht mehr heraus, weil auch "Done" umbenannt wuerde. */
 #txt-bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:82;
@@ -381,6 +413,19 @@ body.txt-modus{cursor:text}
   box-shadow:0 8px 26px rgba(0,0,0,.6);font-size:11.5px;zoom:var(--ui,1)}
 #meld-bar.an{display:flex}
 body.meld-modus{cursor:help}
+/* Laeuft die Wache, steht das sichtbar da. Etwas, das im Hintergrund den
+   Bildschirm mitliest, gehoert nicht versteckt. */
+#wache{bottom:10px;left:128px;z-index:12;display:none;align-items:center;gap:10px;
+  border-color:var(--accent);padding:6px 10px;max-width:380px}
+#wache.an{display:flex}
+#wache .pkt{width:9px;height:9px;border-radius:50%;background:var(--su);flex:0 0 auto;
+  animation:wapuls 1.6s ease-in-out infinite}
+@keyframes wapuls{0%,100%{opacity:1}50%{opacity:.25}}
+#wache .txt{display:flex;flex-direction:column;gap:1px;min-width:0}
+#wache .txt b{font-size:11.5px;font-family:var(--schmal);text-transform:uppercase;
+  letter-spacing:.08em;color:var(--accent)}
+#wache .txt em{font-style:normal;font-size:10.5px;color:var(--dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #tor{position:fixed;inset:0;background:var(--bg,#0c0f14);display:none;align-items:center;
   justify-content:center;z-index:200;padding:24px}
 #tor .tor-box{width:100%;max-width:380px;display:flex;flex-direction:column;gap:9px;
@@ -636,6 +681,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
         <button id="z-fit" title="Fit whole map" style="width:auto;padding:0 7px;font-size:10px">Fit</button>
       </div>
       <div id="tip" class="float"></div>
+      <div id="wache" class="float" data-fest></div>
     </div>
 
     <div id="rechts">
@@ -656,6 +702,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 <div id="veil"><div class="dlg" id="dlg"></div></div>
 <div id="tor"></div>
 <div id="zahnrad"></div>
+<div id="zwrap"><div id="zw"></div></div>
 <div id="txt-bar" data-fest><span>Editing labels — click any wording to change it.</span>
   <button class="btn primary" id="txt-fertig">Done</button></div>
 <div id="meld-bar" data-fest><span>Point at whatever is wrong — click it and say what you mean.</span>
@@ -4089,6 +4136,31 @@ document.getElementById("b-shot").addEventListener("click", ()=>{
       <div id="shot-wrap"><canvas id="shot-cv"></canvas></div>
       <div class="note">Rings mark what was recognised. If they sit neatly on the dots, the reading is good.
         Towns outside the screenshot keep whatever they had.</div>
+
+      <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:11px">
+        <div class="zw-h" style="border:0;padding:0;margin:0 0 5px">Or let it watch</div>
+        <div style="font-size:12.5px;line-height:1.5">Put the war map on a screen at the zoom you
+          like, then let this read it every so often. It is the same reading as above — you just
+          do not have to sit next to it.</div>
+        <div class="row" style="align-items:center;margin-top:8px">
+          <span style="font-size:12px;color:var(--dim);flex:1">Look every</span>
+          <select id="wa-sek" style="width:120px">
+            <option value="30">30 seconds</option>
+            <option value="60" selected>minute</option>
+            <option value="120">2 minutes</option>
+            <option value="300">5 minutes</option>
+          </select>
+          <button class="btn primary" id="wa-go">${"Pick a window …"}</button>
+        </div>
+        <div class="note">Your browser asks which window it may see and shows for the whole time
+          that it is being shared — that cannot be hidden, and it should not be. Nothing is
+          recorded and nothing leaves this computer except the town colours, exactly as if you had
+          pressed <b>Apply to map</b> yourself.<br><br>
+          The game has to run <b>borderless or windowed</b>; in exclusive fullscreen the browser
+          only gets a black picture. If something else is on that window when it looks, the reading
+          simply fails and <b>nothing is written</b> — a gap costs nothing, a wrongly repainted map
+          costs the evening.</div>
+      </div>
     </div>
     <div class="dlg-f">
       <button class="btn" id="d-close">Cancel</button>
@@ -4096,6 +4168,18 @@ document.getElementById("b-shot").addEventListener("click", ()=>{
     </div>`, true);
   document.getElementById("d-close").addEventListener("click", closeDlg);
   bildQuelle("shot-file", screenshotLesen);
+  {
+    const knopf = document.getElementById("wa-go");
+    const setzKnopf = () => knopf.textContent = wacheLaeuft() ? "Stop watching" : "Pick a window …";
+    setzKnopf();
+    knopf.addEventListener("click", async ()=>{
+      if (wacheLaeuft()){ wacheStop(false); setzKnopf(); return; }
+      knopf.disabled = true;
+      const ok = await wacheStart(+document.getElementById("wa-sek").value || 60);
+      knopf.disabled = false; setzKnopf();
+      if (ok) closeDlg();
+    });
+  }
   document.getElementById("shot-take").addEventListener("click", ()=>{
     if (!shotState) return;
     const t = jetzt(); let n = 0;
@@ -4107,6 +4191,54 @@ document.getElementById("b-shot").addEventListener("click", ()=>{
   });
 });
 
+/* Der Erkennungskern, losgeloest von der Anzeige: nimmt alles, was sich
+   zeichnen laesst - eine Datei, ein Bild, ein laufendes Video -, und gibt
+   zurueck, was daraus zu lesen war. Frueher steckte das mitten im Fenster
+   und liess sich nur benutzen, wenn auch jemand zusah.
+
+   Die Lage wird bei JEDEM Durchgang neu gesucht, obwohl sich die aus dem
+   letzten wiederverwenden liesse. Der Suchlauf kostet gemessen rund eine
+   Zehntelsekunde - geschenkt. Eine alte Lage weiterzubenutzen waere schnell
+   und genau dann falsch, wenn jemand die Karte verschoben hat: dann liest
+   sie flott die falschen Staedte. */
+function kartenAusBild(quelle, melde){
+  const bw = quelle.videoWidth || quelle.naturalWidth || quelle.width;
+  const bh = quelle.videoHeight || quelle.naturalHeight || quelle.height;
+  if (!bw || !bh) return {fehler: "no picture yet"};
+  const MAXB = 1600;
+  const sk = Math.min(1, MAXB/bw);
+  const W = Math.round(bw*sk), H = Math.round(bh*sk);
+  const tmp = document.createElement("canvas");
+  tmp.width = W; tmp.height = H;
+  const tc = tmp.getContext("2d", {willReadFrequently:true});
+  tc.drawImage(quelle, 0, 0, W, H);
+  const mk = maskeBauen(tc.getImageData(0, 0, W, H));
+  if (mk.n < 400) return {fehler: `only ${mk.n} coloured pixels — is that the war map?`, W, H, tmp};
+  const punkte = MAP.n.map(n => [n[1] + (MAP.x0||0), n[2] + (MAP.y0||0)]);
+  const tr = findeTransform(mk, punkte, melde || (()=>{}));
+  if (!tr) return {fehler: "no match — try the map zoomed further out", W, H, tmp, punkte};
+  return {erg: farbenLesen(mk, punkte, tr), tr, punkte, W, H, tmp};
+}
+
+/* Uebernehmen heisst: nur schreiben, was sich wirklich geaendert hat. Alle
+   1438 Staedte im Minutentakt durch die Leitung zu schicken, waere die
+   sicherste Art, den Abgleich lahmzulegen. */
+function besitzUebernehmen(besitz){
+  const t = jetzt(); let n = 0;
+  for (const [idx, f] of Object.entries(besitz)){
+    if ((S.owner[idx] && S.owner[idx].v) === f) continue;
+    S.owner[idx] = {v:f, t, by:S.me}; dirty.add(`owner:${idx}`); n++;
+  }
+  if (n){ save(); tally(); draw(); side(); }
+  return n;
+}
+function besitzWaeren(besitz){
+  let n = 0;
+  for (const [idx, f] of Object.entries(besitz))
+    if ((S.owner[idx] && S.owner[idx].v) !== f) n++;
+  return n;
+}
+
 async function screenshotLesen(datei){
   const st = document.getElementById("shot-status");
   const setz = t => st.innerHTML = t;
@@ -4116,39 +4248,20 @@ async function screenshotLesen(datei){
     im.onload = () => ok(im); im.onerror = err;
     im.src = URL.createObjectURL(datei);
   });
-  // auf handliche Groesse bringen, das reicht fuer die Punkterkennung voellig
-  const MAXB = 1600;
-  const sk = Math.min(1, MAXB/bild.width);
-  const W = Math.round(bild.width*sk), H = Math.round(bild.height*sk);
-  const tmp = document.createElement("canvas");
-  tmp.width = W; tmp.height = H;
-  const tc = tmp.getContext("2d", {willReadFrequently:true});
-  tc.drawImage(bild, 0, 0, W, H);
-  URL.revokeObjectURL(bild.src);
-
   setz(`Image ${bild.width}×${bild.height}. Looking for coloured dots …`);
   await new Promise(r => setTimeout(r, 20));
-  const mk = maskeBauen(tc.getImageData(0, 0, W, H));
-  if (mk.n < 400){
-    setz(`<b>Only ${mk.n} coloured pixels found.</b> Is this really the war map?`);
-    return;
-  }
-  const punkte = MAP.n.map(n => [n[1] + (MAP.x0||0), n[2] + (MAP.y0||0)]);
-  setz(`${mk.n.toLocaleString("en")} coloured pixels. Matching against ${punkte.length} known towns …`);
-  await new Promise(r => setTimeout(r, 20));
-
   const t0 = performance.now();
-  const tr = findeTransform(mk, punkte, p => {
-    setz(`Matching … ${Math.round(p*100)} %`);
-  });
-  if (!tr){ setz("<b>No match found.</b> Try a shot with the map zoomed further out."); return; }
-  const erg = farbenLesen(mk, punkte, tr);
+  const res = kartenAusBild(bild, p => setz(`Matching … ${Math.round(p*100)} %`));
+  URL.revokeObjectURL(bild.src);
+  if (res.fehler){ setz(`<b>${esc(res.fehler)}</b>`); return; }
+  const {erg, tr, punkte, W, H, tmp} = res;
   const n = Object.keys(erg.besitz).length;
   const ms = Math.round(performance.now()-t0);
 
   setz(`<b>${n} of ${punkte.length} towns read</b> (${Math.round(100*n/punkte.length)} %) in ${ms} ms —
      US ${erg.zaehl[0]}, GE ${erg.zaehl[1]}, USSR ${erg.zaehl[2]}.
-     ${erg.aussen} outside the shot, ${erg.unklar} unclear.`);
+     ${erg.aussen} outside the shot, ${erg.unklar} unclear.
+     <b>${besitzWaeren(erg.besitz)}</b> towns would change.`);
 
   // Kontrollbild
   const scv = document.getElementById("shot-cv");
@@ -4167,6 +4280,105 @@ async function screenshotLesen(datei){
   shotState = erg;
   document.getElementById("shot-take").disabled = n === 0;
 }
+
+/* ---- Die Wache -------------------------------------------------------
+   Ein zweiter Spieler, der die Karte abfaehrt, waere ein Bot - der faellt
+   aus. Das hier ist etwas anderes: der eigene Bildschirm, die eigene
+   Sitzung, und der Browser fragt vorher, welches Fenster er sehen darf.
+   Nichts laeuft im Spiel, nichts liest fremden Speicher, nichts gibt sich
+   als Spieler aus. Es ist genau das, was man sonst von Hand macht -
+   Screenshot, einlesen, uebernehmen -, nur ohne danebenzusitzen.
+
+   Die Bremse ist Absicht: springt ein Durchgang um mehr als WACHE_BREMSE
+   Staedte, wird NICHTS geschrieben und nachgefragt. Eine verpasste Minute
+   kostet nichts, eine falsch uebermalte Karte kostet den Abend. */
+const WACHE_BREMSE = 150;
+let wache = null;
+function wacheLaeuft(){ return !!wache; }
+async function wacheStart(sek){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
+    toast("This browser cannot share a window."); return false;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({video: {frameRate: 1}, audio: false});
+  } catch(e){ toast("Nothing picked — nothing is being watched."); return false; }
+  const video = document.createElement("video");
+  video.srcObject = stream; video.muted = true; video.playsInline = true;
+  try { await video.play(); } catch(e){}
+  wache = {stream, video, sek, laeufe:0, gelesen:0, gesamt:0, letzte:0, zuletzt:0,
+           meldung:"", wartet:null};
+  stream.getVideoTracks()[0].addEventListener("ended", ()=>wacheStop(true));
+  wacheAnzeigen();
+  setTimeout(wacheTick, 900);                 // dem Bild einen Moment geben
+  wache.uhr = setInterval(wacheTick, Math.max(10, sek)*1000);
+  return true;
+}
+function wacheStop(vonAussen){
+  if (!wache) return;
+  clearInterval(wache.uhr);
+  try { wache.stream.getTracks().forEach(x => x.stop()); } catch(e){}
+  try { wache.video.srcObject = null; } catch(e){}
+  wache = null;
+  wacheAnzeigen();
+  toast(vonAussen ? "Sharing ended — the war map is no longer being watched"
+                  : "Stopped watching the war map");
+}
+function wacheTick(){
+  if (!wache) return;
+  const res = kartenAusBild(wache.video, null);
+  wache.laeufe++;
+  if (res.fehler){ wache.meldung = res.fehler; wacheAnzeigen(); return; }
+  const anz = Object.keys(res.erg.besitz).length;
+  /* Wie viele Staedte zu sehen sind, haengt am Zoom - eine feste Untergrenze
+     waere Willkuer. Dass die Lage ueberhaupt gefunden wurde, ist die
+     eigentliche Pruefung; hier faengt nur der offensichtliche Unfall ab. */
+  if (anz < 40){
+    wache.meldung = `only ${anz} towns readable just now`;
+    wacheAnzeigen(); return;
+  }
+  wache.gelesen = anz; wache.meldung = "";
+  const waeren = besitzWaeren(res.erg.besitz);
+  /* Beim ersten Durchgang ist ein grosser Sprung normal - da wird der
+     Ausgangsstand gesetzt. Danach nicht mehr. */
+  if (waeren > WACHE_BREMSE && wache.laeufe > 1){
+    wache.wartet = res.erg.besitz;
+    wache.meldung = `${waeren} towns would change at once — held back`;
+    wacheAnzeigen(); return;
+  }
+  wache.wartet = null;
+  wache.letzte = besitzUebernehmen(res.erg.besitz);
+  wache.gesamt += wache.letzte;
+  wache.zuletzt = jetzt();
+  wacheAnzeigen();
+}
+function wacheAnzeigen(){
+  const el = document.getElementById("wache");
+  if (!el) return;
+  if (!wache){ el.classList.remove("an"); el.innerHTML = ""; return; }
+  el.classList.add("an");
+  el.innerHTML = `
+    <span class="pkt"></span>
+    <span class="txt">
+      <b>Watching the war map</b>
+      <em>${wache.meldung
+        ? esc(wache.meldung)
+        : `${wache.gelesen} towns read${wache.zuletzt
+            ? ` · ${wache.gesamt} changed so far · last ${alterText(wache.zuletzt)}`
+            : ""}`}</em>
+    </span>
+    ${wache.wartet ? `<button class="btn" id="wa-doch" style="font-size:10.5px">Apply anyway</button>` : ""}
+    <button class="btn" id="wa-stop" style="font-size:10.5px">Stop</button>`;
+  el.querySelector("#wa-stop").addEventListener("click", ()=>wacheStop(false));
+  el.querySelector("#wa-doch")?.addEventListener("click", ()=>{
+    if (!wache || !wache.wartet) return;
+    wache.letzte = besitzUebernehmen(wache.wartet);
+    wache.gesamt += wache.letzte; wache.zuletzt = jetzt();
+    wache.wartet = null; wache.meldung = "";
+    wacheAnzeigen();
+  });
+}
+
 
 /* ---------------- free-hand area dialog ---------------- */
 function areaDialog(id, e, neuGezogen){
@@ -7588,150 +7800,223 @@ function abmelden(){
   location.reload();
 }
 
-/* ---- Das Fenster ---- */
-function zahnradZu(){ document.getElementById("zahnrad").classList.remove("an"); }
+/* ---- Das Fenster ----
+   Rechts steht nur noch, was es gibt. Was man anklickt, oeffnet sich in der
+   Mitte des freien Feldes; das Menue bleibt daneben stehen, damit man von
+   einem Punkt zum naechsten kommt, ohne jedes Mal zurueck ans Zahnrad zu
+   muessen. Das Unterfenster sperrt die Karte nicht - man dreht an einem
+   Regler und sieht dabei zu. */
+const ZR_SEITEN = [
+  {k:"layout",  n:"Layout",  d:"Columns, and the order of the buttons"},
+  {k:"groesse", n:"Size",    d:"Everything, text, map labels — and per section"},
+  {k:"konto",   n:"Account", d:"Staying signed in, logging out"},
+];
+let zwOffen = null;
+
+function zahnradZu(){
+  document.getElementById("zahnrad").classList.remove("an");
+  zwZu();
+}
 function zahnradAuf(){
   const el = document.getElementById("zahnrad");
   if (el.classList.contains("an")){ zahnradZu(); return; }
   zahnradZeichnen(); el.classList.add("an");
 }
+function zwZu(){
+  zwOffen = null;
+  document.getElementById("zwrap").classList.remove("an");
+  document.querySelectorAll("#zahnrad [data-zw]").forEach(b =>
+    b.setAttribute("aria-pressed", "false"));
+}
+function zwZeigen(k){
+  if (zwOffen === k){ zwZu(); return; }
+  zwOffen = k;
+  const wrap = document.getElementById("zwrap"), fenster = document.getElementById("zw");
+  /* Genau neben dem Menue zentrieren, nicht im Bildschirm - sonst laege das
+     Fenster unter dem Streifen, der ja offen bleiben soll. Die Breite des
+     Streifens haengt an der Oberflaechengroesse, also wird sie gemessen. */
+  const breit = document.getElementById("zahnrad").getBoundingClientRect().width;
+  wrap.style.right = Math.round(breit) + "px";
+  const seite = ZR_SEITEN.find(s => s.k === k) || {n: k};
+  fenster.innerHTML = `
+    <div class="zw-kopf"><b>${esc(seite.n)}</b>
+      <button id="zw-zu" title="Close">&times;</button></div>
+    <div class="zw-leib">${zwInhalt(k)}</div>`;
+  wrap.classList.add("an");
+  document.querySelectorAll("#zahnrad [data-zw]").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.zw === k)));
+  document.getElementById("zw-zu").addEventListener("click", zwZu);
+  zwVerdrahten(k);
+}
+
 function zrRegler(name, wert, min, max, ruf){
   return `<div class="zr-z"><span class="n">${esc(name)}</span>
     <input type="range" min="${min}" max="${max}" step="5" value="${Math.round(wert*100)}"
       data-ruf="${ruf}"><span class="w">${Math.round(wert*100)} %</span></div>`;
 }
-function zahnradZeichnen(){
-  const el = document.getElementById("zahnrad");
-  const ordListe = (k) => {
-    const g = ORD_GRUPPEN[k];
-    const da = g.wahl();
-    const wunsch = (LAY.ord && LAY.ord[k]) || da.map(g.id);
-    const sortiert = wunsch.filter(id => da.some(e => g.id(e) === id))
-                           .concat(da.map(g.id).filter(id => !wunsch.includes(id)));
-    return sortiert.map((id, i) => {
-      const e = da.find(x => g.id(x) === id);
-      return `<div class="zr-ord">
-        <span class="n">${esc(e ? g.name(e) : id)}</span>
-        <button data-mv="${k}" data-id="${esc(id)}" data-d="-1"
-          ${i === 0 ? "disabled" : ""} title="Move up">&#9650;</button>
-        <button data-mv="${k}" data-id="${esc(id)}" data-d="1"
-          ${i === sortiert.length-1 ? "disabled" : ""} title="Move down">&#9660;</button>
-      </div>`;
-    }).join("");
-  };
-  const angemeldet = !!(CFG && CFG.code);
-  el.innerHTML = `
-    <div class="zr-kopf"><b>Settings</b>
-      <button id="zr-zu" title="Close">&times;</button></div>
-    <div class="note">Everything here is yours alone — it stays in this browser and
-      nobody else sees it.</div>
+function zrOrdListe(k){
+  const g = ORD_GRUPPEN[k];
+  const da = g.wahl();
+  const wunsch = (LAY.ord && LAY.ord[k]) || da.map(g.id);
+  const sortiert = wunsch.filter(id => da.some(e => g.id(e) === id))
+                         .concat(da.map(g.id).filter(id => !wunsch.includes(id)));
+  return sortiert.map((id, i) => {
+    const e = da.find(x => g.id(x) === id);
+    return `<div class="zr-ord">
+      <span class="n">${esc(e ? g.name(e) : id)}</span>
+      <button data-mv="${k}" data-id="${esc(id)}" data-d="-1"
+        ${i === 0 ? "disabled" : ""} title="Move up">&#9650;</button>
+      <button data-mv="${k}" data-id="${esc(id)}" data-d="1"
+        ${i === sortiert.length-1 ? "disabled" : ""} title="Move down">&#9660;</button>
+    </div>`;
+  }).join("");
+}
 
-    <h3>Layout</h3>
+function zwInhalt(k){
+  if (k === "layout") return `
     <label class="zr-schalt"><input type="checkbox" id="zr-zwei" ${LAY.zwei ? "checked" : ""}>
       Tool bar in two columns</label>
-    <div class="note" style="margin-bottom:7px">Order of the buttons — top of the list is
-      first in the bar.</div>
-    <div style="font-size:9.5px;color:var(--dim2);letter-spacing:.09em;text-transform:uppercase;
-      font-family:var(--schmal);margin:6px 0 3px">${esc(ORD_GRUPPEN.tool.titel)}</div>
-    ${ordListe("tool")}
-    <div style="font-size:9.5px;color:var(--dim2);letter-spacing:.09em;text-transform:uppercase;
-      font-family:var(--schmal);margin:8px 0 3px">${esc(ORD_GRUPPEN.top.titel)}</div>
-    ${ordListe("top")}
-    <button class="btn" id="zr-ord-weg">Back to the original order</button>
+    <div class="note">Order of the buttons — top of the list is first in the bar. The keyboard
+      shortcuts stay with their tool wherever you put it.</div>
+    <div class="zw-h">${esc(ORD_GRUPPEN.tool.titel)}</div>
+    ${zrOrdListe("tool")}
+    <div class="zw-h">${esc(ORD_GRUPPEN.top.titel)}</div>
+    ${zrOrdListe("top")}
+    <button class="btn" id="zr-ord-weg">Back to the original order</button>`;
 
-    <h3>Size</h3>
+  if (k === "groesse") return `
     ${zrRegler("Everything", uiScale, 70, 260, "ui")}
     ${zrRegler("Text", textScale, 70, 220, "text")}
     ${zrRegler("Map labels", ortScale, 50, 220, "ort")}
-    <div class="note" style="margin:7px 0 2px">On top of that, per section:</div>
+    <div class="zw-h">On top of that, per section</div>
     ${ABSCHNITTE.map(a => zrRegler(a.n, layGr(a.k), 60, 200, "gr:" + a.k)).join("")}
-    <button class="btn" id="zr-gr-weg">Back to the original sizes</button>
+    <div class="note">Drag one and watch the map behind — this window does not block it.</div>
+    <button class="btn" id="zr-gr-weg">Back to the original sizes</button>`;
 
-    <h3>Account</h3>
-    ${angemeldet ? `
+  if (k === "konto"){
+    const angemeldet = !!(CFG && CFG.code);
+    if (!angemeldet) return `<div class="note" style="margin-top:0">Not signed in — this map is
+      running on its own on this computer.</div>`;
+    return `
       <div class="note" style="margin-top:0">Signed in as
-        <b style="color:var(--text)">${esc((CFG && CFG.name) || "you")}</b>.</div>
+        <b style="color:var(--text)">${esc(CFG.name || "you")}</b>${
+        rangNamen(S.me).length ? ` · ${esc(rangNamen(S.me).join(" · "))}` : ""}.</div>
       <label class="zr-schalt"><input type="checkbox" id="zr-auto" ${CFG.auto ? "checked" : ""}>
         Stay signed in on this computer</label>
-      <div class="note" style="margin-top:0">With this on, your code lies unlocked in this
-        browser and anyone who sits down here is in. Convenient on your own machine,
-        a bad idea on a shared one.</div>
-      <button class="btn" id="zr-aus">Log out</button>`
-    : `<div class="note" style="margin-top:0">Not signed in.</div>`}
+      <div class="note" style="margin-top:0">With this on, your code lies unlocked in this browser
+        and anyone who sits down here is in. Convenient on your own machine, a bad idea on a
+        shared one. It is also what lets the notebook open without typing your password.</div>
+      <button class="btn" id="zr-aus">Log out</button>
+      <div class="note">Logging out throws nothing away: the locked code stays, and next time your
+        password is enough.</div>`;
+  }
+  return "";
+}
 
-    <h3>Something wrong?</h3>
-    <div class="note" style="margin-top:0">Anything broken, in the way or missing — say so here.
-      It lands on the admin's list with your name and where you saw it, so nothing has to go
-      through Discord and get lost there.</div>
-    <button class="btn" id="zr-meld">Report or suggest …</button>
-    <button class="btn" id="zr-zeig">Report by pointing at it</button>
-
-    ${istAdmin() ? `
-      <h3>Admin</h3>
-      <div class="note" style="margin-top:0">Renaming a label changes it for everyone on this
-        map — a shared wording is worth more than mine.</div>
-      <button class="btn" id="zr-txt">Edit labels …</button>
-      <button class="btn" id="zr-todo">Open points${
-        (()=>{ const n = meldungen().filter(([,e])=>!e.v.st).length; return n ? ` · ${n}` : ""; })()
-      } …</button>` : ""}`;
-
-  el.querySelector("#zr-zu").addEventListener("click", zahnradZu);
-  el.querySelector("#zr-zwei").addEventListener("change", ev => {
+function zwVerdrahten(k){
+  const el = document.getElementById("zw");
+  el.querySelector("#zr-zwei")?.addEventListener("change", ev => {
     LAY.zwei = ev.target.checked; laySpeichern(); spaltenAnwenden();
   });
   el.querySelectorAll("[data-mv]").forEach(b => b.addEventListener("click", ()=>{
-    const k = b.dataset.mv, g = ORD_GRUPPEN[k];
+    const g = ORD_GRUPPEN[b.dataset.mv];
     LAY.ord ||= {};
     const da = g.wahl().map(g.id);
-    const alt = LAY.ord[k] || da;
+    const alt = LAY.ord[b.dataset.mv] || da;
     const liste = alt.filter(id => da.includes(id))
                      .concat(da.filter(id => !alt.includes(id)));
     const i = liste.indexOf(b.dataset.id), j = i + Number(b.dataset.d);
     if (i < 0 || j < 0 || j >= liste.length) return;
     [liste[i], liste[j]] = [liste[j], liste[i]];
-    LAY.ord[k] = liste; laySpeichern(); ordnungAnwenden(); zahnradZeichnen();
+    LAY.ord[b.dataset.mv] = liste; laySpeichern(); ordnungAnwenden(); zwZeigenNeu(k);
   }));
-  el.querySelector("#zr-ord-weg").addEventListener("click", ()=>{
-    delete LAY.ord; laySpeichern(); ordnungAnwenden(); zahnradZeichnen();
+  el.querySelector("#zr-ord-weg")?.addEventListener("click", ()=>{
+    delete LAY.ord; laySpeichern(); ordnungAnwenden(); zwZeigenNeu(k);
   });
   el.querySelectorAll("input[data-ruf]").forEach(r => r.addEventListener("input", ()=>{
     const v = Number(r.value) / 100;
     r.parentElement.querySelector(".w").textContent = r.value + " %";
     const ruf = r.dataset.ruf;
-    if (ruf === "ui") uiSetzen(v);
+    if (ruf === "ui"){ uiSetzen(v); zwNachziehen(); }
     else if (ruf === "text") textSetzen(v);
     else if (ruf === "ort") ortSetzen(v);
     else if (ruf.startsWith("gr:")){
-      LAY.gr ||= {}; LAY.gr[ruf.slice(3)] = v; laySpeichern(); groessenAnwenden();
+      LAY.gr ||= {}; LAY.gr[ruf.slice(3)] = v; laySpeichern(); groessenAnwenden(); zwNachziehen();
     }
   }));
-  el.querySelector("#zr-gr-weg").addEventListener("click", ()=>{
+  el.querySelector("#zr-gr-weg")?.addEventListener("click", ()=>{
     delete LAY.gr; laySpeichern();
     uiSetzen(uiVorschlag()); textSetzen(1); ortSetzen(1);
-    groessenAnwenden(); zahnradZeichnen();
+    groessenAnwenden(); zwZeigenNeu(k); zwNachziehen();
   });
   el.querySelector("#zr-auto")?.addEventListener("change", ev => autoSetzen(ev.target.checked));
   el.querySelector("#zr-aus")?.addEventListener("click", abmelden);
+}
+/* Neu zeichnen, ohne das Fenster zuzuklappen. */
+function zwZeigenNeu(k){ zwOffen = null; zwZeigen(k); }
+/* Wird die Oberflaeche groesser, wird auch der Streifen breiter - das Fenster
+   muss mitwandern, sonst schiebt es sich darunter. */
+function zwNachziehen(){
+  if (!zwOffen) return;
+  /* Nicht ueber requestAnimationFrame: in einem Hintergrund-Tab laeuft das
+     nicht, und dann steht das Fenster nach dem Zurueckkommen falsch. */
+  setTimeout(()=>{
+    if (!zwOffen) return;
+    const breit = document.getElementById("zahnrad").getBoundingClientRect().width;
+    document.getElementById("zwrap").style.right = Math.round(breit) + "px";
+  }, 16);
+}
+
+function zahnradZeichnen(){
+  const el = document.getElementById("zahnrad");
+  const offen = meldungen().filter(([,e]) => !e.v.st).length;
+  el.innerHTML = `
+    <div class="zr-kopf"><b>Settings</b>
+      <button id="zr-zu" title="Close">&times;</button></div>
+    <div class="note">Everything under the first three is yours alone — it stays in this browser
+      and nobody else sees it.</div>
+
+    <div class="zr-menu">
+      ${ZR_SEITEN.map(s => `<button data-zw="${s.k}" aria-pressed="false" title="${esc(s.d)}">
+        <span>${esc(s.n)}</span><span class="pf">&rsaquo;</span></button>`).join("")}
+    </div>
+
+    <h3>Something wrong?</h3>
+    <div class="note" style="margin-top:0">Broken, in the way or missing — say so here. It lands on
+      the admin's list with your name and where you saw it, so nothing has to go through Discord
+      and get lost there.</div>
+    <button class="btn" id="zr-meld">Report or suggest …</button>
+    <button class="btn" id="zr-zeig">Report by pointing at it</button>
+
+    ${istAdmin() ? `
+      <h3>Admin</h3>
+      <div class="note" style="margin-top:0">Renaming a label changes it for everyone on this map —
+        a shared wording is worth more than mine.</div>
+      <button class="btn" id="zr-txt">Edit labels …</button>
+      <button class="btn" id="zr-todo">Open points${offen ? ` · ${offen}` : ""} …</button>` : ""}`;
+
+  el.querySelector("#zr-zu").addEventListener("click", zahnradZu);
+  el.querySelectorAll("[data-zw]").forEach(b =>
+    b.addEventListener("click", ()=>zwZeigen(b.dataset.zw)));
+  el.querySelector("#zr-meld").addEventListener("click", ()=>meldeFenster(""));
+  el.querySelector("#zr-zeig").addEventListener("click", ()=>meldeModusSetzen(true));
   el.querySelector("#zr-txt")?.addEventListener("click", ()=>textModusSetzen(true));
-  el.querySelector("#zr-meld")?.addEventListener("click", ()=>{ zahnradZu(); meldeFenster(""); });
-  el.querySelector("#zr-zeig")?.addEventListener("click", ()=>meldeModusSetzen(true));
-  el.querySelector("#zr-todo")?.addEventListener("click", ()=>{ zahnradZu(); todoFenster(); });
+  el.querySelector("#zr-todo")?.addEventListener("click", todoFenster);
 }
 document.getElementById("b-gear").addEventListener("click", ev => {
   ev.stopPropagation(); zahnradAuf();
 });
 document.getElementById("txt-fertig").addEventListener("click", ()=>textModusSetzen(false));
-/* Ein Klick daneben schliesst. */
-document.addEventListener("click", ev => {
-  const el = document.getElementById("zahnrad");
-  if (!el.classList.contains("an")) return;
-  if (el.contains(ev.target) || ev.target.closest("#b-gear")) return;
-  zahnradZu();
-});
+/* Kein Schliessen durch einen Klick daneben: wer zwischen Karte und
+   Einstellung hin und her arbeitet, will das Menue stehen lassen. Zu geht es
+   ueber das Zahnrad oder das Kreuz. */
 document.addEventListener("keydown", ev => {
-  if (ev.key === "Escape" && document.getElementById("zahnrad").classList.contains("an"))
-    zahnradZu();
+  if (ev.key !== "Escape") return;
+  if (zwOffen){ zwZu(); return; }
+  if (document.getElementById("zahnrad").classList.contains("an")) zahnradZu();
 });
+window.addEventListener("resize", zwNachziehen);
+
 
 /* ---- Passwort ---------------------------------------------------------
    Der Einmalcode ist die Zutrittskarte: einmal eingeloest, danach liegt er
@@ -10212,7 +10497,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-19 17:26</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-19 17:50</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
