@@ -149,10 +149,21 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 #zoombox button:hover{background:var(--panel2)}
 #tip{bottom:10px;right:10px;padding:5px 9px;font-size:10.5px;color:var(--dim);max-width:340px}
 #tip b{color:var(--text);font-weight:600}
-#legend{top:10px;right:10px;padding:8px 10px;font-size:10.5px;color:var(--dim);display:none;max-width:196px}
+/* Achtzehn Zeilen statt zehn: der Kasten bekommt eine Obergrenze und darf
+   notfalls scrollen. Gemessen wird am Kartenfeld, nicht am Fenster - die
+   Kopfzeile waechst ja mit. Und geteilt durch --ui, weil der Kasten selbst
+   noch gezoomt wird: sonst waere die Grenze bei 150 Prozent anderthalbmal
+   so hoch wie gemeint. */
+#legend{top:10px;right:10px;padding:8px 10px;font-size:10.5px;color:var(--dim);display:none;
+  max-width:214px;max-height:calc((100% - 20px) / var(--ui, 1));overflow-y:auto}
 #legend.on{display:block}
 #legend h4{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--dim2);margin-bottom:5px}
+#legend h5{font-family:var(--schmal);font-size:8.5px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--accent-dk);font-weight:600;margin:7px 0 1px;
+  border-top:1px solid rgba(160,140,110,.16);padding-top:5px}
+#legend h5:first-of-type{margin-top:1px;border-top:0;padding-top:0}
 #legend div{display:flex;align-items:center;gap:7px;padding:1.5px 0}
+#legend div span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #legend svg{width:22px;height:15px;flex:0 0 auto}
 
 /* ---------- depot ---------- */
@@ -2931,12 +2942,25 @@ document.getElementById("b-key").addEventListener("click", function(){
   if (showKey) drawKey();
 });
 document.getElementById("b-depot").addEventListener("click", () => depotAuf(!showDepot));
+/* Alle achtzehn, nicht die ersten zehn. Wer die Zeichenerklaerung aufmacht,
+   will nicht fuer den Rest ins Hilfefenster wechseln - und ausgerechnet die
+   Panzerjaeger und die Flieger, die vorher fehlten, sind die, die man selten
+   sieht und deshalb am ehesten nachschlaegt. Nach Zweigen geordnet, weil
+   achtzehn Zeichen am Stueck niemand liest. */
+const KEY_ZWEIGE = [["infantry","Infantry"], ["recon","Recon"], ["armor","Armor"],
+                    ["airborne","Airborne"], ["airforce","Air force"]];
 function drawKey(){
   const c = light() ? "#1a2029" : "#dce4ee";
-  document.getElementById("legend").innerHTML = `<h4>Assault teams</h4>` +
-    MAP.at.filter(a=>a.arm==="army").slice(0,10).map(a =>
-      `<div>${symbolSVG(a.k, c)}<span>${esc(a.name)}</span></div>`).join("") +
-    `<div style="margin-top:5px;color:var(--dim2);font-size:9.5px">Full list in Help</div>`;
+  const zeile = a => `<div>${symbolSVG(a.k, c)}<span>${esc(a.name)}</span></div>`;
+  const bekannt = new Set(KEY_ZWEIGE.map(z => z[0]));
+  const teile = KEY_ZWEIGE.map(([z, titel]) => {
+    const liste = MAP.at.filter(a => a.branch === z);
+    return liste.length ? `<h5>${esc(titel)}</h5>` + liste.map(zeile).join("") : "";
+  });
+  /* Ein Zweig, den ich hier nicht kenne, faellt nicht unter den Tisch. */
+  const rest = MAP.at.filter(a => !bekannt.has(a.branch));
+  if (rest.length) teile.push(`<h5>Other</h5>` + rest.map(zeile).join(""));
+  document.getElementById("legend").innerHTML = `<h4>Assault teams</h4>` + teile.join("");
 }
 document.getElementById("z-in").addEventListener("click", ()=>zoom(1.35));
 document.getElementById("z-out").addEventListener("click", ()=>zoom(1/1.35));
@@ -7220,9 +7244,9 @@ function zahnradZeichnen(){
     : `<div class="note" style="margin-top:0">Not signed in.</div>`}
 
     ${istLeiter() ? `
-      <h3>Clan leader</h3>
-      <div class="note" style="margin-top:0">Renaming a label changes it for everyone in the
-        clan — a shared wording is worth more than mine.</div>
+      <h3>Admin</h3>
+      <div class="note" style="margin-top:0">Renaming a label changes it for everyone on this
+        map — a shared wording is worth more than mine.</div>
       <button class="btn" id="zr-txt">Edit labels …</button>` : ""}`;
 
   el.querySelector("#zr-zu").addEventListener("click", zahnradZu);
@@ -7338,8 +7362,8 @@ function torZeigen(meldung){
       <input type="password" id="tor-code" placeholder="your code" autocomplete="off"
         spellcheck="false">
       <button class="btn primary" id="tor-go">Enter</button>
-      <p class="tor-klein">No code? Ask the clan leader. Lost it? Same — a new one takes
-        him ten seconds, and the old one stops working.</p>
+      <p class="tor-klein">No code? Ask for one on Discord. Same if you lost it: you get a
+        new one, and the old one stops working.</p>
     </div>`;
   el.style.display = "flex";
   const feld = document.getElementById("tor-code");
@@ -7361,7 +7385,7 @@ function torZeigen(meldung){
       passwortAnlegen(ich);
     } catch(e){
       CFG = null;
-      torZeigen("That code was not accepted. Ask the clan leader for a new one.");
+      torZeigen("That code was not accepted. Ask for a new one on Discord.");
     }
   };
   document.getElementById("tor-go").addEventListener("click", los);
@@ -7391,9 +7415,9 @@ function passwortAnlegen(ich, meldung){
         computer</label>
       <button class="btn primary" id="pw-go">Set it</button>
       <p class="tor-klein">It never leaves this computer. Your code is locked away with it, so
-        whoever gets hold of this browser finds nothing usable. Nobody can look the password up,
-        the clan leader included — <b>and so nobody can reset it.</b> If you forget it, write to him
-        on Discord: he hands you a new code and you set a new password. Nothing of yours is lost.</p>
+        whoever gets hold of this browser finds nothing usable. Nobody can look the password up —
+        <b>and so nobody can reset it.</b> If you forget it, ask on Discord for a new code and set
+        a new password with it. Nothing of yours is lost.</p>
     </div>`;
   const los = async () => {
     const a = document.getElementById("pw-1").value;
@@ -7430,10 +7454,10 @@ function passwortAbfragen(meldung){
       <p class="tor-text">Your password.</p>
       <input type="password" id="pw-1" placeholder="password" autocomplete="current-password">
       <button class="btn primary" id="pw-go">Enter</button>
-      <p class="tor-klein">Forgotten it? Nobody can look it up or reset it — <b>write to the clan
-        leader on Discord</b>. That message is our second factor: he knows who you are, and hands you
-        a new code by direct message. With it you set a new password, and everything you own stays
-        yours.</p>
+      <p class="tor-klein">Forgotten it? Nobody can look it up or reset it — <b>ask on Discord
+        for a new code</b>. That message is our second factor: there you are a known face, and the
+        code comes back as a direct message. With it you set a new password, and everything you own
+        stays yours.</p>
       <button class="btn" id="pw-neu" style="font-size:11px;margin-top:6px">I have a new code</button>
     </div>`;
   const los = async () => {
@@ -9233,7 +9257,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-19 16:17</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-19 16:35</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
@@ -9488,9 +9512,9 @@ async function syncStart(){
     syncMark("Rejected", "err");
     CFG = null; localStorage.removeItem(CFG_KEY);
     /* Zurueck ans Tor - ohne gueltigen Code hat hier niemand etwas zu sehen. */
-    if (hatBuiltin()){ torZeigen("That code was not accepted. Ask the clan leader."); return; }
+    if (hatBuiltin()){ torZeigen("That code was not accepted. Ask on Discord for a new one."); return; }
     dialogFehler("That code was not accepted",
-      "Either it is mistyped or it has not been approved. Ask whoever runs the map.");
+      "Either it is mistyped or it has not been approved. Ask on Discord.");
     return;
   }
   CFG.room = ich.room; CFG.admin = !!ich.is_admin; CFG.name = ich.name;
