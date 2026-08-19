@@ -4150,6 +4150,23 @@ function maskeBauen(imgd){
   }
   return {m, W, H, n};
 }
+/* ACHTUNG, hier steckt eine Grenze, die man kennen muss.
+
+   Der Startmassstab wird aus der Streuung ALLER 1438 Staedte geschaetzt.
+   Zeigt das Bild nur einen Ausschnitt, liegt der wahre Massstab ausserhalb
+   des abgesuchten Bereichs - die Suche findet dann nicht die richtige Lage,
+   sondern die am wenigsten falsche, und meldet mit voller Ueberzeugung
+   Staedte, die gar nicht im Bild sind. Deshalb schreibt die Wache nur bei
+   Weitaufnahmen; siehe die Schwelle in wacheTick.
+
+   Ein Versuch, die Lage aus dem vorigen Bild als Startpunkt mitzugeben
+   ("einmal weit raus einrasten, dann reinfahren"), ist gescheitert: die
+   Bewertung bevorzugt systematisch KLEINE Massstaebe, weil dort alle Punkte
+   in einem dichten Fleck zusammenfallen und fast jeder trifft. Mit Hinweis
+   lief sie zuverlaessig in den kleinsten Massstab des Suchbereichs, egal wo
+   die Wahrheit lag. Das laesst sich nur beheben, indem die Bewertung auf die
+   Zahl der Punkte normiert wird, die ueberhaupt im Bild liegen - und das ist
+   ein Eingriff, der eigene Messungen braucht, keine Feineinstellung. */
 function findeTransform(mk, punkte, melde){
   const {m, W, H} = mk;
   const dichte = mk.n / (W*H);
@@ -4530,6 +4547,328 @@ const SWEEP_STUFEN = [
 ];
 const sweepStufe = t => t ? SWEEP_STUFEN.find(s => jetzt()-t < s.bis) : null;
 
+/* ---- Kampfeinheiten von der Karte lesen ------------------------------
+   Bei genug Zoom zeigt die Karte, wer wo steht. Eine einzelne Einheit traegt
+   ihr Typensymbol - exakt bestimmbar, die achtzehn Vorlagen liegen schon im
+   Bau. Mehrere werden zu einem Stapel mit roemischer Ziffer, und die ist eine
+   Groessenklasse, kein Zaehlwert. Kein IV: die NATO-Groessensymbolik kennt
+   keines, deshalb springt es von III direkt auf X.
+
+   Gemessen an den Bildschirmfotos: 29 von 36 Stapeln richtig gelesen. Die
+   uebrigen melden sich als "weiss nicht" statt etwas zu behaupten - bei
+   Aufklaerung ist eine Luecke billiger als eine Falschmeldung. */
+const AT_ZIFF_B = 28, AT_ZIFF_H = 18;
+const AT_ZIFFERN = {
+  "II":  "///////xewUAAAAAAAAAAAAAAAAAAABp3///////////8XsFAAAAAAAAAAAAAAAAAAAAad////////////F7BQAAAAAAAAAAAAAAAAAAAGnf///////////xewUAAAAAAAAAAAAAAAAAAABp3///////////8XsFAAAAAAAAAAAAAAAAAAAAad////////////F7BQAAAAAAAAAAAAAAAAAAAGnf///////////xewUAAAAAAAAAAAAAAAAAAABp3///////////8XsFAAAAAAAAAAAAAAAAAAAAad////////////F7BQAAAAAAAAAAAAAAAAAAAGnf///////////xewUAAAAAAAAAAAAAAAAAAABp3///////////8XsFAAAAAAAAAAAAAAAAAAAAad////////////F7BQAAAAAAAAAAAAAAAAAAAGnf///////////xewUAAAAAAAAAAAAAAAAAAABp3///////////8XsFAAAAAAAAAAAAAAAAAAAAad////////////F7BQAAAAAAAAAAAAAAAAAAAGnf////////++rQagQAAAAAAAAAAAAAAAAAAABp3////+ru+N9pAAAAAAAAAAAAAAAAAAAAAAAAad////8AMqjfaQAAAAAAAAAAAAAAAAAAAAAAAGnf////",
+  "III": "ANZEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAETWAOr871gAAAAAAAAAAACB6poAAAAAAAAAAFjv/Or///9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////////YAAAAAAAAAAAAI3/qAAAAAAAAAAAYP///////2AAAAAAAAAAAACN/6gAAAAAAAAAAGD///////9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////////YAAAAAAAAAAAAI3/qAAAAAAAAAAAYP///////2AAAAAAAAAAAACN/6gAAAAAAAAAAGD///////9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////////YAAAAAAAAAAAAI3/qAAAAAAAAAAAYP///////2AAAAAAAAAAAACN/6gAAAAAAAAAAGD///////9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////////YAAAAAAAAAAAAI3/qAAAAAAAAAAAYP///////2AAAAAAAAAAAACN/6gAAAAAAAAAAGD///////9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////////YAAAAAAAAAAAAI3/qAAAAAAAAAAAYP///////2AAAAAAAAAAAACN/6gAAAAAAAAAAGD///////9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////",
+  "X":   "///////////EciAAAAAAAAAgcsT/////////////////////xHIgAAAAAAAAIHLE//////////////////////fr4LFqIwAAACByxP////OsZiMjMjJwsvT////////15dXNzc3U5PT////xn00AAAAAEyg8c7Du////////////////7rBzPCgTAAAAAAAAAESW6P///////////////+iWRAAAAAAAAAAAAABEluj////////////////olkQAAAAAAAAAAAAARJbo////////////////6JZEAAAAAAAAAAAAACBHbpjD7v///////+7DmG5HIAAAAAAAAAAAAAAAAAA7jd/////////fjTsAAAAAAAAAAAAAAAAAHD9hjb3s////////7L2NYT8cAAAAAAAAAAAAAESW6P///////////////+iWRAAAAAAAAAAAAABEluj////////////////olkQAAAAAAAAAAAAARJbo////////////////6JZEAAAAAAAAAA8fL2iq7P///////////////+yqaC8fDwAAIyNmrPP////////47eHc3Nzg6/f////xn00AAP//////////+vPsvHEmAAAAIHLE////8Z9NAAD//////////8RyIAAAAAAAACByxP////GfTQAA",
+  "XX":  "///NIAAAAABE8f+yBQBX////8UQAAAAAIM3/////++zq6urq7/7/sgUAV/////7vigAAACDN//8jlf///////////7IFAAwovf///5YAAGLg+JUjAIT///////////+yBQAABbL////rzc3k//+EAACE//////////+ILQEAAAEtiP//////////hAAAhP//////////YAAAAAAAAGD////////pcSgAADB86//////UZSMAAAAAAAAjZdT/////3zIAAAAAMt//////uw4AAAAAAAAAAA67/////98yAAAAADLf/////7sOAAAAAAAAAAAOu////8NpGAAAAAAy3////7hjBwAAAAAAAAAADrv///+NAAAAAAAAMt////+oTgYAAAAAAAAAAA67////vV0VAAAAADLf/////7sOAAAAAAAAAAAOu//////fMgAAAChx6f/////QWB0AAAAAAAAADrv/////6XEoAACE//////////9gAAAAAAAAGErM////////hAAAhP//////////fyMBAAABI3///////////4QAAIT///////////+yBQAABbL////w3Nzr//+EAACE///z6ur2///yowUAAAWy////lgAAaez7hAAAhP//cgAAlv//YAAAAAAFsv///5YAAAAgzYQA",
+};
+/* Was eine Ziffer ueber die Anzahl sagt. Ausgemessen, nicht abgeleitet. */
+const AT_ANZAHL = {"II":[2,2], "III":[3,5], "X":[6,10], "XX":[11,0]};
+const AT_ANZ_WORT = a => a[1] ? (a[0]===a[1] ? String(a[0]) : `${a[0]}–${a[1]}`)
+                              : `over ${a[0]-1}`;
+/* Fuellfarben der Karten: fremd beige, eigen orange. Beide sind auf dem
+   Gelaende praktisch einzigartig - das macht sie zum besten Anker. */
+const AT_FUELL_FREMD = [218,213,197], AT_FUELL_EIGEN = [248,177,51];
+const atNah = (r,g,b,s,t) => Math.abs(r-s[0])<t && Math.abs(g-s[1])<t && Math.abs(b-s[2])<t;
+
+let AT_ZIFF_V = null;
+function atZiffernVorlagen(){
+  if (AT_ZIFF_V) return AT_ZIFF_V;
+  AT_ZIFF_V = [];
+  for (const [name, b64] of Object.entries(AT_ZIFFERN)){
+    const roh = unb(b64);
+    const v = new Float32Array(roh.length);
+    let m = 0;
+    for (let i = 0; i < roh.length; i++){ v[i] = roh[i]/255; m += v[i]; }
+    m /= v.length;
+    let q = 0;
+    for (let i = 0; i < v.length; i++){ v[i] -= m; q += v[i]*v[i]; }
+    q = Math.sqrt(q) || 1;
+    for (let i = 0; i < v.length; i++) v[i] /= q;
+    AT_ZIFF_V.push({name, v});
+  }
+  return AT_ZIFF_V;
+}
+/* Ein Ausschnitt auf Normmass, mittelwertfrei und auf Laenge eins - dann
+   haengt der Vergleich nicht daran, wie hell das Bild gerade ist. */
+function atNormieren(werte, br, ho, zielB, zielH){
+  const v = new Float32Array(zielB*zielH);
+  for (let y = 0; y < zielH; y++)
+    for (let x = 0; x < zielB; x++){
+      const sx = Math.min(br-1, Math.floor(x*br/zielB));
+      const sy = Math.min(ho-1, Math.floor(y*ho/zielH));
+      v[y*zielB + x] = werte[sy*br + sx];
+    }
+  let m = 0;
+  for (let i = 0; i < v.length; i++) m += v[i];
+  m /= v.length;
+  let q = 0;
+  for (let i = 0; i < v.length; i++){ v[i] -= m; q += v[i]*v[i]; }
+  q = Math.sqrt(q) || 1;
+  for (let i = 0; i < v.length; i++) v[i] /= q;
+  return v;
+}
+
+/* Zusammenhaengende Flaechen einer Maske. Auf dem verkleinerten Bild sind es
+   wenige hundert Pixel je Karte - das laeuft in Millisekunden. */
+function atFlaechen(maske, W, H, mind){
+  const gesehen = new Uint8Array(W*H), aus = [];
+  const stapel = new Int32Array(W*H);
+  for (let p = 0; p < W*H; p++){
+    if (!maske[p] || gesehen[p]) continue;
+    let n = 0, oben = 0;
+    stapel[oben++] = p; gesehen[p] = 1;
+    let x0 = W, x1 = 0, y0 = H, y1 = 0;
+    while (oben){
+      const q = stapel[--oben], qx = q % W, qy = (q / W) | 0;
+      n++;
+      if (qx < x0) x0 = qx; if (qx > x1) x1 = qx;
+      if (qy < y0) y0 = qy; if (qy > y1) y1 = qy;
+      if (qx > 0   && maske[q-1] && !gesehen[q-1]){ gesehen[q-1]=1; stapel[oben++]=q-1; }
+      if (qx < W-1 && maske[q+1] && !gesehen[q+1]){ gesehen[q+1]=1; stapel[oben++]=q+1; }
+      if (qy > 0   && maske[q-W] && !gesehen[q-W]){ gesehen[q-W]=1; stapel[oben++]=q-W; }
+      if (qy < H-1 && maske[q+W] && !gesehen[q+W]){ gesehen[q+W]=1; stapel[oben++]=q+W; }
+    }
+    if (n >= mind) aus.push({x0, y0, w: x1-x0+1, h: y1-y0+1, n});
+  }
+  return aus;
+}
+
+/* Die Fraktion steckt im Rand der Karte - bei eigenen Einheiten in der
+   Fuellung selbst, die ist durchgefaerbt statt beige. */
+function atSeite(g, x0, y0, w, h, eigen){
+  if (eigen) return clanFaktion();
+  const d = g.getImageData(Math.max(0,x0-3), Math.max(0,y0-3), w+6, 6).data;
+  let sr=0, sg=0, sb=0, n=0;
+  for (let i = 0; i < d.length; i += 4){
+    const r=d[i], gg=d[i+1], b=d[i+2];
+    if (Math.max(r,gg,b) - Math.min(r,gg,b) < 50) continue;
+    sr+=r; sg+=gg; sb+=b; n++;
+  }
+  if (n < 8) return null;
+  const r=sr/n, gg=sg/n, b=sb/n;
+  if (gg > r+40 && gg > b+40) return 0;            // gruen  = US
+  if (b  > r+40 && b  > gg+40) return 1;           // violett = GE
+  if (r  > gg+60 && r > b+60)  return 2;           // rot     = UdSSR
+  return null;
+}
+
+/* Der schwarze Balken ueber der Karte. Dazwischen liegt der farbige
+   Kartenrand - daran muss man erst vorbei, sonst bricht die Suche sofort ab.
+   Das hat mich drei Anlaeufe gekostet, bis ich die Zeilen ausgedruckt habe. */
+function atBalken(grau, W, H, x0, y0, w, hoehe){
+  const dunkelAnteil = y => {
+    let n = 0;
+    for (let x = x0; x < x0+w; x++) if (grau[y*W + x] < 55) n++;
+    return n / w;
+  };
+  let y = y0-1, sprung = 0;
+  while (y >= 0 && sprung < 8 && dunkelAnteil(y) < 0.35){ y--; sprung++; }
+  if (y < 0 || sprung >= 8) return null;
+  const unten = y;
+  let hoch = 0;
+  while (y >= 0 && hoch < hoehe*1.3 && dunkelAnteil(y) >= 0.35){ y--; hoch++; }
+  if (hoch < 9) return null;
+  return {y0: y+1, y1: unten};
+}
+function atZiffer(hell, W, x0, w, by0, by1){
+  let zx0=W, zx1=0, zy0=by1, zy1=by0;
+  for (let y = by0; y <= by1; y++)
+    for (let x = x0; x < x0+w; x++)
+      if (hell[y*W + x]){
+        if (x<zx0) zx0=x; if (x>zx1) zx1=x;
+        if (y<zy0) zy0=y; if (y>zy1) zy1=y;
+      }
+  if (zx1 <= zx0 || zy1-zy0 < 4) return null;
+  const bw = zx1-zx0+1, bh = zy1-zy0+1;
+  const feld = new Float32Array(bw*bh);
+  for (let y = 0; y < bh; y++)
+    for (let x = 0; x < bw; x++)
+      feld[y*bw + x] = hell[(zy0+y)*W + (zx0+x)] ? 1 : 0;
+  const v = atNormieren(feld, bw, bh, AT_ZIFF_B, AT_ZIFF_H);
+  let best = null, bv = -9;
+  for (const t of atZiffernVorlagen()){
+    let s = 0;
+    for (let i = 0; i < v.length; i++) s += v[i]*t.v[i];
+    if (s > bv){ bv = s; best = t.name; }
+  }
+  return bv >= 0.55 ? {ziffer: best, guete: bv} : null;
+}
+
+/* Der Hauptdurchgang. quelle: das Vollbild. klein: das verkleinerte Bild aus
+   der Karteneinpassung. tr: die Lage darin. */
+function atVonKarte(quelle, klein, tr){
+  if (!tr || !klein) return [];
+  const bw = quelle.videoWidth || quelle.naturalWidth || quelle.width;
+  const kg = klein.getContext("2d", {willReadFrequently:true});
+  const KW = klein.width, KH = klein.height;
+  const kd = kg.getImageData(0, 0, KW, KH).data;
+  const faktor = bw / KW;
+  /* Suchen auf dem kleinen Bild: dort sind die Karten noch gut zwanzig Pixel
+     breit, und die Flaechensuche kostet nichts. */
+  /* Nur im Kartenfeld suchen. Die Leiste mit den eigenen Kampfeinheiten am
+     rechten Rand ist genau dieselbe Farbe wie ein eigener Stapel - ohne
+     Begrenzung findet er dort ein Dutzend Marker, die keine sind. Oben die
+     Kopfzeile, unten die Statusleiste. */
+  const fx1 = Math.round(KW*0.69), fy0 = Math.round(KH*0.07), fy1 = Math.round(KH*0.88);
+  const maske = new Uint8Array(KW*KH);
+  for (let y = fy0; y < fy1; y++)
+    for (let x = 0; x < fx1; x++){
+      const p = y*KW + x, i = p*4;
+      const r = kd[i], g = kd[i+1], b = kd[i+2];
+      if (atNah(r,g,b,AT_FUELL_FREMD,20) || atNah(r,g,b,AT_FUELL_EIGEN,30)) maske[p] = 1;
+    }
+  const kandidaten = atFlaechen(maske, KW, KH, 40).filter(k =>
+    k.w > 8 && k.w < 60 && k.h > 5 && k.h < 42 && k.w/k.h > 0.9 && k.w/k.h < 2.8);
+  if (!kandidaten.length) return [];
+
+  const marker = [];
+  for (const k of kandidaten){
+    /* Am Original nachsehen - dort ist die Ziffer vierzehn Pixel hoch statt
+       sechs. Nur der Ausschnitt, nicht das ganze Bild. */
+    const nx = Math.round(k.x0*faktor), ny = Math.round(k.y0*faktor);
+    const nw = Math.round(k.w*faktor),  nh = Math.round(k.h*faktor);
+    const rand = Math.round(nh*1.6) + 12;
+    const ax = Math.max(0, nx-6), ay = Math.max(0, ny-rand);
+    const aw = Math.min(bw-ax, nw+12), ah = (ny+nh+4) - ay;
+    if (aw < 10 || ah < 14) continue;
+    const c = atVonKarte.cv || (atVonKarte.cv = document.createElement("canvas"));
+    c.width = aw; c.height = ah;
+    const g = c.getContext("2d", {willReadFrequently:true});
+    g.drawImage(quelle, ax, ay, aw, ah, 0, 0, aw, ah);
+    const d = g.getImageData(0, 0, aw, ah).data;
+    const grau = new Uint8Array(aw*ah), hell = new Uint8Array(aw*ah);
+    for (let p = 0, i = 0; p < aw*ah; p++, i += 4){
+      grau[p] = (299*d[i] + 587*d[i+1] + 114*d[i+2]) / 1000;
+      hell[p] = (d[i] > 140 && d[i+1] > 140 && d[i+2] > 140) ? 1 : 0;
+    }
+    const kx = nx-ax, ky = ny-ay;
+    const eigen = atNah(d[((ky+((nh/2)|0))*aw + kx + ((nw/2)|0))*4],
+                        d[((ky+((nh/2)|0))*aw + kx + ((nw/2)|0))*4+1],
+                        d[((ky+((nh/2)|0))*aw + kx + ((nw/2)|0))*4+2], AT_FUELL_EIGEN, 40);
+    const seite = atSeite(g, kx, ky, nw, nh, eigen);
+    /* Wo steht das auf der Karte? Ueber die Lage aus der Einpassung. */
+    const [mx, my] = ausBild(k.x0 + k.w/2, k.y0 + k.h, tr);   // Fusspunkt
+    const ort = ortBei(mx, my);
+    const bal = atBalken(grau, aw, ah, kx, ky, nw, nh);
+    if (!bal){ marker.push({ort, seite, eigen, art:"einzeln"}); continue; }
+    const z = atZiffer(hell, aw, kx, nw, bal.y0, bal.y1);
+    marker.push({ort, seite, eigen, art:"stapel",
+                 ziffer: z ? z.ziffer : null, guete: z ? z.guete : 0});
+  }
+  return marker;
+}
+
+/* Was gelesen wurde, geht in die Toepfe, die es schon gibt: eine einzelne
+   Einheit ist eine Sichtung, ein Stapel eine Staerkeschaetzung. Eigene
+   Einheiten werden uebergangen - wo die stehen, wissen wir ohnehin. */
+function atEintragen(marker){
+  let sicht = 0, schaetz = 0;
+  const proOrt = new Map();
+  for (const m of marker){
+    if (m.eigen || m.seite === null || m.ort < 0) continue;
+    if (m.art === "stapel" && !m.ziffer) continue;
+    const l = proOrt.get(m.ort) || [];
+    l.push(m); proOrt.set(m.ort, l);
+  }
+  for (const [ort, liste] of proOrt){
+    const texte = [];
+    for (const m of liste){
+      if (m.art === "stapel"){
+        const a = AT_ANZAHL[m.ziffer];
+        texte.push(`${FACTIONS[m.seite].tag} ${AT_ANZ_WORT(a)} assault teams`);
+        schaetz++;
+      } else {
+        texte.push(`${FACTIONS[m.seite].tag} 1 assault team`);
+        sicht++;
+      }
+    }
+    if (!texte.length) continue;
+    /* Zu den eigenen Schaetzungen dazu, ohne fremde anzufassen. */
+    const alt = myEst(ort).filter(e => !/assault teams?$/.test(e.text || ""));
+    setEst(ort, alt.concat(texte.map(t => ({text: t}))));
+  }
+  return {sicht, schaetz, orte: proOrt.size};
+}
+
+/* ---- Die Zoomstufe aus dem Spiel ------------------------------------
+   Der Zoomregler des Spiels ist ein schwarzer Balken mit weissem Griff, der
+   ihn in zwei Stuecke teilt. Eine Bildzeile mit zwei langen sehr dunklen
+   Laeufen und einer schmalen Luecke dazwischen gibt es sonst nirgends - das
+   macht ihn ohne Vorlage findbar.
+
+   Warum nicht einfach den Massstab aus der Einpassung nehmen: die braucht
+   die halbe Karte, um zu greifen, und kostet eine Zehntelsekunde. Der Regler
+   steht immer da, auch ganz nah herangefahren, und kostet wenige
+   Millisekunden. Fuer eine Anzeige, die mitlaufen soll waehrend man faehrt,
+   ist das der Unterschied zwischen brauchbar und unbrauchbar. */
+const ZOOM_MINDLAUF = 0.09;      // Anteil der Suchfeldbreite je Balkenstueck
+function zoomLesen(quelle){
+  const bw = quelle.videoWidth || quelle.naturalWidth || quelle.width;
+  const bh = quelle.videoHeight || quelle.naturalHeight || quelle.height;
+  if (!bw || !bh) return null;
+  /* Nur die obere linke Ecke: dort sitzt der Regler, und ein kleineres
+     Suchfeld ist nicht nur schneller, sondern faengt auch weniger
+     Verwechslungen ein. */
+  const W = 480, H = Math.max(40, Math.round(480 * (bh/bw) * 0.62));
+  const c = zoomLesen.cv || (zoomLesen.cv = document.createElement("canvas"));
+  c.width = W; c.height = H;
+  const g = c.getContext("2d", {willReadFrequently:true});
+  g.drawImage(quelle, 0, 0, Math.round(bw*0.34), Math.round(bh*0.30), 0, 0, W, H);
+  const d = g.getImageData(0, 0, W, H).data;
+  const mind = Math.round(W * ZOOM_MINDLAUF);
+
+  let best = null;
+  for (let y = 0; y < H; y++){
+    const laeufe = [];
+    let lauf = 0, start = 0, dunkelGes = 0;
+    for (let x = 0; x <= W; x++){
+      const p = (y*W + x) * 4;
+      const dunkel = x < W && d[p] < 48 && d[p+1] < 48 && d[p+2] < 48;
+      if (dunkel){ if (!lauf) start = x; lauf++; }
+      else {
+        if (lauf >= mind){ laeufe.push([start, x-1]); dunkelGes += lauf; }
+        lauf = 0;
+      }
+    }
+    /* Genau zwei Stuecke: links und rechts vom Griff. Ein Balken ohne Griff
+       (ganz aussen) gibt eines - dann steht der Zoom am Anschlag. */
+    if (!laeufe.length || laeufe.length > 3) continue;
+    if (!best || dunkelGes > best.dunkelGes) best = {y, laeufe, dunkelGes};
+  }
+  if (!best) return null;
+  const x0 = best.laeufe[0][0], x1 = best.laeufe[best.laeufe.length-1][1];
+  const laenge = x1 - x0;
+  if (laenge < W*0.35) return null;
+
+  /* Zwei Wege zum selben Wert: die Luecke im Balken, und der weisse Griff
+     darin. Stimmen sie nicht ueberein, war es nicht der Regler. */
+  let ausLuecke = null;
+  if (best.laeufe.length >= 2)
+    ausLuecke = ((best.laeufe[0][1] + best.laeufe[1][0]) / 2 - x0) / laenge;
+  let ausGriff = null, hoechste = 0;
+  {
+    const y0 = Math.max(0, best.y-16), y1 = Math.min(H-1, best.y+16);
+    for (let x = x0; x <= x1; x++){
+      let n = 0;
+      for (let y = y0; y <= y1; y++){
+        const p = (y*W + x)*4;
+        if (d[p] > 195 && d[p+1] > 195 && d[p+2] > 195) n++;
+      }
+      if (n > hoechste){ hoechste = n; ausGriff = (x - x0) / laenge; }
+    }
+    if (hoechste < 6) ausGriff = null;
+  }
+  if (ausLuecke !== null && ausGriff !== null && Math.abs(ausLuecke - ausGriff) > 0.09)
+    return null;                                   // die beiden sind sich nicht einig
+  const wert = ausLuecke !== null && ausGriff !== null ? (ausLuecke + ausGriff)/2
+             : (ausLuecke !== null ? ausLuecke : ausGriff);
+  if (wert === null) return null;
+  return {zoom: Math.max(0, Math.min(1, wert)), zeile: best.y, laenge};
+}
+
 /* ---- Der Radarraum ---------------------------------------------------
    Die Kurbel fuehrt die Antenne ueber das eigene Suchraster und sagt, wohin
    man im Spiel fahren soll. Sie bewegt nichts im Spiel - das ist der ganze
@@ -4564,19 +4903,101 @@ const rdWorte = () => RD_WORTE[clanFaktion()] || RD_WORTE[0];
 const rdS = s => clanFaktion() === 2
   ? String(s).replace(/R/g, "Я").replace(/N/g, "И") : String(s);
 
-let radarOffen = false, radarZeiger = 0, radarWinkel = 0, radarBild = null;
-let radarZielOrt = null, radarZielSektor = null;
-/* Ein einzelner Ort als Anhaltspunkt, nicht der ganze Sektor: "fahr nach
-   Szeged" ist eine Anweisung, "fahr nach G5" ist eine Rechenaufgabe. Er
-   bleibt stehen, bis der Sektor voll ist. */
-function zielOrtSichern(){
-  const z = radarZiel();
-  if (radarZielSektor === z.k && radarZielOrt !== null) return;
-  radarZielSektor = z.k;
-  radarZielOrt = z.orte.length ? z.orte[Math.floor(Math.random()*z.orte.length)] : null;
-}
+let radarOffen = false, radarWinkel = 0, radarBild = null;
 let radarTon = true, radarKurbelWeg = 0, radarKlang = null, radarBlitz = 0;
+/* Die Kurbel wiegt Tempo gegen Flaeche ab - eng scannt schnell und wenig,
+   weit langsam und viel. Das ist die Abwaegung, die es wirklich zu treffen
+   gibt; die Position sagt das Geraet ohnehin an. */
+let radarBeam = 0.5;
+let radarZiel = null, radarScan = 0, radarSignal = 0;
+/* Einheitenortung: kostet Naehe und Tempo, dafuer sieht man, wer wo steht.
+   Die Kosten sind nicht erfunden - die roemische Ziffer ist vierzehn Pixel
+   hoch, aus der Vogelperspektive ist sie schlicht weg, und der zusaetzliche
+   Durchgang kostet gemessen achtzig Millisekunden. */
+let radarAT = false, radarATzahl = 0, radarATorte = 0;
+try { radarAT = localStorage.getItem("hng-warmap-radarat") === "1"; } catch(e){}
 
+/* Wie nah man heran muss, als sichtbare Kartenbreite. Eng heisst nah. */
+const beamSpanne = () => { const n = sektoren(); return (1.7 + 1.1*radarBeam)*(n.x1-n.x0); };
+/* Wie schnell der Scan laeuft, in Anteil je Sekunde. */
+const beamTempo  = () => 0.16 - 0.115*radarBeam;
+/* Wieviele Sektoren ein fertiger Scan gutschreibt. */
+const beamFlaeche= () => 1 + Math.round(3*radarBeam);
+const beamWort   = () => radarBeam < 0.25 ? "tight · fast · little ground"
+                       : radarBeam < 0.55 ? "narrow"
+                       : radarBeam < 0.8  ? "wide" : "widest · slow · much ground";
+
+/* ---- Der Regler im Spiel eicht sich selbst ----
+   Er gibt einen Wert zwischen null und eins, dessen Bedeutung ich nicht
+   kenne - nicht einmal, ob gross nah oder weit heisst. Bei jeder
+   vollstaendigen Lesung faellt aber ein Paar an: Reglerwert und tatsaechlich
+   sichtbare Kartenbreite. Aus zweien davon laesst sich rechnen statt raten. */
+const EICH_STORE = "hng-warmap-zoomeich";
+let zoomEich = [];
+try { zoomEich = JSON.parse(localStorage.getItem(EICH_STORE) || "[]") || []; } catch(e){}
+function eichPunkt(regler, spanne){
+  if (regler === null || !spanne) return;
+  /* Nur wirklich verschiedene Stellungen merken - zwanzig Punkte aus
+     derselben Zoomstufe helfen niemandem. */
+  if (zoomEich.some(p => Math.abs(p.r - regler) < 0.06)) return;
+  zoomEich.push({r: regler, s: spanne});
+  zoomEich.sort((a,b)=>a.r-b.r);
+  if (zoomEich.length > 8) zoomEich.splice(4, 1);
+  try { localStorage.setItem(EICH_STORE, JSON.stringify(zoomEich)); } catch(e){}
+}
+/* Aus einer Reglerstellung die zu erwartende Kartenbreite - linear zwischen
+   den beiden naechstgelegenen Eichpunkten. Ohne genug Eichung: nichts, und
+   dann zaehlt allein die gemessene Spanne aus der Einpassung. */
+function spanneAusRegler(regler){
+  if (regler === null || zoomEich.length < 2) return null;
+  let a = zoomEich[0], b = zoomEich[zoomEich.length-1];
+  for (let i = 0; i < zoomEich.length-1; i++)
+    if (regler >= zoomEich[i].r && regler <= zoomEich[i+1].r){ a = zoomEich[i]; b = zoomEich[i+1]; }
+  if (Math.abs(b.r - a.r) < 1e-6) return a.s;
+  const f = (regler - a.r) / (b.r - a.r);
+  return a.s + f*(b.s - a.s);
+}
+/* Welche Reglerstellung zur geforderten Spanne gehoert - fuer die Ansage
+   "weiter heran" oder "weiter heraus". */
+function reglerFuerSpanne(spanne){
+  if (zoomEich.length < 2) return null;
+  const erste = zoomEich[0], letzte = zoomEich[zoomEich.length-1];
+  const rein = letzte.s < erste.s;               // gross = nah?
+  let a = erste, b = letzte;
+  for (let i = 0; i < zoomEich.length-1; i++){
+    const lo = Math.min(zoomEich[i].s, zoomEich[i+1].s), hi = Math.max(zoomEich[i].s, zoomEich[i+1].s);
+    if (spanne >= lo && spanne <= hi){ a = zoomEich[i]; b = zoomEich[i+1]; }
+  }
+  if (Math.abs(b.s - a.s) < 1e-6) return a.r;
+  return Math.max(0, Math.min(1, a.r + (spanne - a.s)/(b.s - a.s)*(b.r - a.r)));
+}
+
+/* ---- Wohin als naechstes ----
+   Zufaellig, aber nicht gleichverteilt: was am laengsten niemand gesehen hat,
+   wird am haeufigsten gezogen. Reine Zufallswahl schickte einen genauso oft
+   in einen Sektor, den der Nachbar vor fuenf Minuten abgefahren hat. */
+function zielZiehen(){
+  const netz = sektoren(), st = sweepStand(), nun = jetzt();
+  const wahl = [];
+  let summe = 0;
+  for (const s of netz.folge){
+    const f = netz.felder[s], stand = st[f.k];
+    const alter = stand ? (nun - stand.t) : 30*24*3600e3;
+    const gewicht = Math.max(0.02, Math.min(1, alter / (12*3600e3)));
+    summe += gewicht; wahl.push({s, gewicht, summe});
+  }
+  let w = Math.random()*summe, treffer = wahl[wahl.length-1];
+  for (const k of wahl) if (w <= k.summe){ treffer = k; break; }
+  const f = netz.felder[treffer.s];
+  radarZiel = f.orte.length ? f.orte[Math.floor(Math.random()*f.orte.length)] : null;
+  radarScan = 0; radarSignal = 0;
+  return radarZiel;
+}
+const zielSektor = () => radarZiel === null ? null
+  : sektoren().felder[sektoren().vonOrt[radarZiel]];
+
+/* Ein Ping, wenn ein Scan durch ist - und ein trockenes Rasten beim Kurbeln.
+   Beides aus dem Rechner erzeugt, damit keine Klangdatei mitreisen muss. */
 function radarPing(hoch){
   if (!radarTon) return;
   try {
@@ -4593,7 +5014,6 @@ function radarPing(hoch){
   } catch(e){}
   radarBlitz = jetzt();
 }
-/* Ein Rasten beim Kurbeln - kurz und trocken, kein Ton zum Zuhoeren. */
 function radarKlack(){
   if (!radarTon) return;
   try {
@@ -4608,41 +5028,35 @@ function radarKlack(){
   } catch(e){}
 }
 
-/* Welcher Sektor gerade aufgeschaltet ist. Der Zeiger laeuft ueber die
-   Reihenfolge des Suchrasters, nicht ueber die Sektornummern - so wandert er
-   ohne Spruenge. */
-const radarZiel = () => {
-  const netz = sektoren();
-  return netz.felder[netz.folge[((radarZeiger % netz.folge.length) + netz.folge.length)
-                                % netz.folge.length]];
-};
+/* Pfeiltasten und Mausrad verstellen dieselbe Abwaegung wie die Kurbel. */
 function radarDrehen(schritte){
   if (!schritte) return;
-  radarZeiger += schritte;
-  radarKlack();
-  radarPult(); radarZeichnen();
+  radarBeam = Math.max(0, Math.min(1, radarBeam + schritte/12));
+  radarKurbelWeg += schritte*Math.PI/6;
+  radarKlack(); radarPult(); radarZeichnen();
 }
-/* Nach einem Treffer weiter zum naechsten, den lange niemand gesehen hat -
-   das ist es, was ein Suchlauf tut. Sind alle frisch, bleibt er stehen. */
-function radarWeiterZumAeltesten(){
-  const netz = sektoren(), st = sweepStand();
-  let besterZeiger = null, aeltest = Infinity;
-  for (let i = 1; i <= netz.folge.length; i++){
-    const f = netz.felder[netz.folge[(radarZeiger + i) % netz.folge.length]];
-    const zeit = (st[f.k] && st[f.k].t) || 0;
-    if (zeit < aeltest){ aeltest = zeit; besterZeiger = radarZeiger + i; }
-  }
-  if (besterZeiger !== null && aeltest < jetzt() - 15*60e3) radarZeiger = besterZeiger;
+/* Nur die Zahlen nachziehen, ohne das Pult neu zu bauen - sonst risse es
+   einem beim Kurbeln den Griff unter der Hand weg. */
+function radarWerte(){
+  const el = document.getElementById("rd-pult");
+  if (!el) return;
+  const s = el.querySelector("[data-beam]");
+  if (s) s.textContent = beamWort();
 }
 
-function radarAuf(){
+async function radarAuf(){
   if (radarOffen) return;
   sektoren();
   radarOffen = true;
   document.getElementById("radar").classList.add("an");
-  /* Beim Aufmachen dorthin schauen, wo es am noetigsten ist. */
-  radarZeiger = 0; radarWeiterZumAeltesten();
+  if (radarZiel === null) zielZiehen();
   radarPult(); radarSchleife();
+  /* Wer den Radarraum aufmacht, will messen - also gleich nach dem Fenster
+     fragen, statt ihn erst einen Knopf suchen zu lassen. */
+  if (!wacheLaeuft()){
+    await wacheStart(2);
+    radarPult();
+  }
 }
 function radarZu(){
   if (!radarOffen) return;
@@ -4662,31 +5076,29 @@ function radarPult(){
   const el = document.getElementById("rd-pult");
   if (!el || !radarOffen) return;
   const W = rdWorte(), netz = sektoren(), st = sweepStand();
-  zielOrtSichern();
-  const ziel = radarZiel(), zielStand = st[ziel.k];
   const laeuft = wacheLaeuft();
   const frisch = netz.folge.filter(s => {
     const z = st[netz.felder[s].k];
     return z && jetzt() - z.t < 2*3600e3;
   }).length;
   const proz = Math.round(100*frisch/netz.folge.length);
-  const topf = laeuft ? wache.proSektor.get(ziel.k) : null;
-  const fort = Math.round(100 * (topf ? sektorVoll(ziel.k, topf) : 0));
-  const grenze = spanneMax();
-  const zo = radarZielOrt !== null ? MAP.n[radarZielOrt] : null;
+  const zo = radarZiel !== null ? MAP.n[radarZiel] : null;
+  const sig = Math.round(radarSignal*100), scan = Math.round(radarScan*100);
 
-  /* Wo steht die Karte gerade - in Ortsnamen, nicht in Zahlen. */
-  let lage = "";
-  if (laeuft && wache.peil){
-    const p = wache.peil, hier = MAP.n[ortBei(p.x, p.y)];
-    if (p.spanne > grenze)
-      lage = `<b style="color:#e8a34a">Too far out.</b> Zoom in until you see about
-              ${esc(SPANNE_WORT[wacheStufe])}.`;
-    else if (zo && Math.abs(zo[1]-p.x) < p.spanne*0.42 && Math.abs(zo[2]-p.y) < p.spanne*0.42)
-      lage = `<b style="color:#8fe6a2">On target.</b> Centred near ${esc(hier[0])}.`;
-    else if (zo)
-      lage = `Centred near ${esc(hier[0])} — ${esc(ziel.name)} lies to the
-              <b>${esc(HIMMEL(zo[1]-p.x, zo[2]-p.y))}</b>.`;
+  /* Eine Zeile, die sagt was zu tun ist - nicht drei, die den Zustand
+     beschreiben. */
+  let sagen = "";
+  if (!laeuft) sagen = `Switch the set on and pick the game window.`;
+  else if (!wache.peil) sagen = esc(wache.meldung || "Looking for the war map …");
+  else if (zo){
+    const p = wache.peil, soll = beamSpanne();
+    const d = Math.hypot(zo[1]-p.x, zo[2]-p.y);
+    const hier = MAP.n[ortBei(p.x, p.y)];
+    if (d > p.spanne*0.32)
+      sagen = `Move ${esc(HIMMEL(zo[1]-p.x, zo[2]-p.y))} — you are over ${esc(hier[0])}.`;
+    else if (p.spanne > soll*1.25) sagen = `Almost. <b>Zoom in.</b>`;
+    else if (p.spanne < soll*0.8)  sagen = `Almost. <b>Zoom out.</b>`;
+    else sagen = `<b style="color:#8fe6a2">Locked on. Hold it.</b>`;
   }
 
   el.innerHTML = `
@@ -4695,23 +5107,23 @@ function radarPult(){
 
     <div class="rd-ziel">
       <div class="rd-lbl" style="text-align:left;margin-bottom:3px">${esc(rdS(W.ziel))}</div>
-      <div class="s">${esc(ziel.k)}</div>
-      <div class="o">${esc(ziel.name || "—")}${zo && zo[0] !== ziel.name
-        ? ` · make for <b style="color:#f0c169">${esc(zo[0])}</b>` : ""}</div>
-      <div class="rd-bar"><i style="width:${fort}%"></i></div>
-      <div class="h">${zielStand ? `Last seen ${esc(alterText(zielStand.t))}.`
-                                 : `<b style="color:#e8a34a">Never looked at.</b>`}
-        ${lage ? `<br>${lage}` : ""}</div>
+      <div class="s">${esc(zo ? zo[0] : "—")}</div>
+      <div class="o">${zielSektor() ? esc(zielSektor().k) : ""}</div>
+      <div class="h">${sagen}</div>
+      ${laeuft && wache.meldung && wache.peil
+        ? `<div class="h" style="color:#e8a34a;margin-top:4px">${esc(wache.meldung)}</div>` : ""}
+    </div>
+
+    <div class="rd-anz">
+      <div class="z"><span>SIGNAL</span><b>${sig} %</b></div>
+      <div class="rd-bar"><i style="width:${sig}%;${sig>=55?"":"opacity:.45"}"></i></div>
+      <div class="z" style="margin-top:6px"><span>SCAN</span><b>${scan} %</b></div>
+      <div class="rd-bar"><i style="width:${scan}%;background:linear-gradient(90deg,#2c6b3a,#8fe6a2)"></i></div>
     </div>
 
     <div class="rd-teil">
-      <svg class="rd-kurbel" id="rd-kurbel" viewBox="0 0 120 120" width="112" height="112"></svg>
-      <div class="rd-lbl">${esc(rdS(W.suche))}</div>
-    </div>
-
-    <div class="rd-teil">
-      <svg class="rd-dial" id="rd-dial" viewBox="0 0 120 90" width="112" height="84"></svg>
-      <div class="rd-lbl">${esc(rdS(W.freq))}<em>show at most ${esc(SPANNE_WORT[wacheStufe])}</em></div>
+      <svg class="rd-kurbel" id="rd-kurbel" viewBox="0 0 120 120" width="106" height="106"></svg>
+      <div class="rd-lbl">${esc(rdS(W.suche))}<em data-beam>${esc(beamWort())}</em></div>
     </div>
 
     <button class="rd-schalter ${laeuft?"an":""}" id="rd-kraft">
@@ -4721,26 +5133,30 @@ function radarPult(){
       <div class="z"><span>${esc(rdS(W.abdeckung))}</span><b>${proz} %</b></div>
       <div class="z"><span>${esc(rdS(W.sektoren))}</span><b>${frisch} / ${netz.folge.length}</b></div>
       <div class="z"><span>${esc(rdS(W.sicht))}</span><b>${laeuft ? (wache.gelesen||0) : "—"}</b></div>
-      ${laeuft && wache.zaehl ? `<div class="z" style="border-top:1px solid #1d2a1d;margin-top:3px;
-        padding-top:3px"><span>US · GE · SU</span><b>${wache.zaehl.join(" · ")}</b></div>` : ""}
+      ${laeuft && wache.zaehl ? `<div class="z"><span>US · GE · SU</span>
+        <b>${wache.zaehl.join(" · ")}</b></div>` : ""}
+      ${laeuft && wache.zoom !== null ? `<div class="z"><span>GAME ZOOM</span>
+        <b>${Math.round(wache.zoom*100)} %</b></div>` : ""}
+
     </div>
 
-    ${wache && wache.wartet ? `<button class="rd-schalter an" id="rd-doch"
+    ${laeuft && wache.wartet ? `<button class="rd-schalter an" id="rd-doch"
       style="border-color:#c8453a;color:#ff9a90">HELD BACK · APPLY ANYWAY</button>` : ""}
     ${besitzRueck ? `<button class="rd-schalter" id="rd-zurueck"
       style="font-size:10.5px;padding:6px 0">UNDO LAST READING</button>` : ""}
+    <button class="rd-schalter" id="rd-neu" style="font-size:10.5px;padding:6px 0">SKIP THIS ONE</button>
     <button class="rd-schalter ${radarTon?"an":""}" id="rd-ton"
       style="font-size:10.5px;padding:6px 0">${esc(rdS(W.ton))}</button>
 
-    <div class="rd-fuss">The crank moves this set's antenna. Nothing in the game is touched —
+    <div class="rd-fuss">The crank trades speed against ground. Nothing in the game is touched —
       you drive, it reads.</div>`;
 
-  kurbelZeichnen(); dialZeichnen();
+  kurbelZeichnen();
   el.querySelector("#rd-kraft").addEventListener("click", async ()=>{
     if (wacheLaeuft()){ wacheStop(false); radarPult(); return; }
-    await wacheStart(wacheSek());
-    radarPult();
+    await wacheStart(2); radarPult();
   });
+  el.querySelector("#rd-neu").addEventListener("click", ()=>{ zielZiehen(); radarPult(); radarZeichnen(); });
   el.querySelector("#rd-doch")?.addEventListener("click", ()=>{
     if (!wache || !wache.wartet) return;
     wache.letzte = besitzUebernehmen(wache.wartet);
@@ -4755,10 +5171,46 @@ function radarPult(){
     if (radarTon) radarKlack();
     radarPult();
   });
-  kurbelGriff(); dialGriff();
+  kurbelGriff();
 }
 
-/* ---- Kurbel und Drehschalter ---- */
+/* Ziehen dreht die Kurbel; eine ganze Umdrehung geht von eng nach weit. */
+function kurbelGriff(){
+  const s = document.getElementById("rd-kurbel");
+  if (!s) return;
+  let letzter = null, sammel = 0;
+  const winkel = ev => {
+    const r = s.getBoundingClientRect();
+    return Math.atan2(ev.clientY - (r.top + r.height/2), ev.clientX - (r.left + r.width/2));
+  };
+  s.addEventListener("pointerdown", ev => {
+    s.setPointerCapture(ev.pointerId); letzter = winkel(ev); ev.preventDefault();
+  });
+  s.addEventListener("pointermove", ev => {
+    if (letzter === null) return;
+    const w = winkel(ev);
+    let d = w - letzter;
+    while (d > Math.PI) d -= 2*Math.PI;
+    while (d < -Math.PI) d += 2*Math.PI;
+    letzter = w; radarKurbelWeg += d; sammel += d;
+    const vorher = radarBeam;
+    radarBeam = Math.max(0, Math.min(1, radarBeam + d/(2*Math.PI)));
+    const raster = Math.PI/6;
+    while (Math.abs(sammel) >= raster){ sammel -= Math.sign(sammel)*raster; radarKlack(); }
+    if (radarBeam !== vorher) radarWerte();
+    kurbelZeichnen(); radarZeichnen();
+  });
+  const los = () => { if (letzter !== null){ letzter = null; sammel = 0; radarPult(); } };
+  s.addEventListener("pointerup", los);
+  s.addEventListener("pointercancel", los);
+  s.addEventListener("wheel", ev => {
+    ev.preventDefault();
+    radarKurbelWeg += Math.sign(ev.deltaY)*Math.PI/6;
+    radarBeam = Math.max(0, Math.min(1, radarBeam + Math.sign(ev.deltaY)/12));
+    radarKlack(); kurbelZeichnen(); radarWerte(); radarZeichnen();
+  }, {passive:false});
+}
+
 function kurbelZeichnen(){
   const s = document.getElementById("rd-kurbel");
   if (!s) return;
@@ -4779,102 +5231,6 @@ function kurbelZeichnen(){
     <circle cx="${hx}" cy="${hy}" r="3" fill="#7d6535"/>
     <circle cx="60" cy="60" r="11" fill="#2f2c24" stroke="#4d4a3d" stroke-width="2"/>`;
 }
-function dialZeichnen(){
-  const s = document.getElementById("rd-dial");
-  if (!s) return;
-  const i = WACHE_STUFEN.indexOf(wacheSek());
-  const a = -Math.PI*0.86 + (Math.PI*0.72) * (i < 0 ? 1 : i) / (WACHE_STUFEN.length-1);
-  s.innerHTML = `
-    <path d="M8 78 A 52 52 0 0 1 112 78" fill="none" stroke="#2a2822" stroke-width="10"/>
-    ${WACHE_STUFEN.map((v,k)=>{
-      const b = -Math.PI*0.86 + (Math.PI*0.72)*k/(WACHE_STUFEN.length-1);
-      const x1 = 60+Math.cos(b)*44, y1 = 78+Math.sin(b)*44;
-      const x2 = 60+Math.cos(b)*54, y2 = 78+Math.sin(b)*54;
-      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
-        stroke="${k===i?"#f0c169":"#5e594c"}" stroke-width="${k===i?3:1.6}"/>
-        <text x="${60+Math.cos(b)*63}" y="${78+Math.sin(b)*63+3}" text-anchor="middle"
-          font-size="9" fill="${k===i?"#f0c169":"#6b6455"}"
-          font-family="ui-monospace,Consolas,monospace">${v<60?v+"s":(v/60)+"m"}</text>`;
-    }).join("")}
-    <line x1="60" y1="78" x2="${60+Math.cos(a)*38}" y2="${78+Math.sin(a)*38}"
-      stroke="#f0c169" stroke-width="3" stroke-linecap="round"/>
-    <circle cx="60" cy="78" r="9" fill="#2f2c24" stroke="#4d4a3d" stroke-width="2"/>`;
-}
-/* Ziehen dreht - und alle dreissig Grad rastet ein Schritt ein. */
-function kurbelGriff(){
-  const s = document.getElementById("rd-kurbel");
-  if (!s) return;
-  let letzter = null, sammel = 0;
-  const winkel = ev => {
-    const r = s.getBoundingClientRect();
-    return Math.atan2(ev.clientY - (r.top + r.height/2), ev.clientX - (r.left + r.width/2));
-  };
-  s.addEventListener("pointerdown", ev => {
-    s.setPointerCapture(ev.pointerId); letzter = winkel(ev); ev.preventDefault();
-  });
-  s.addEventListener("pointermove", ev => {
-    if (letzter === null) return;
-    const w = winkel(ev);
-    let d = w - letzter;
-    while (d > Math.PI) d -= 2*Math.PI;
-    while (d < -Math.PI) d += 2*Math.PI;
-    letzter = w; radarKurbelWeg += d; sammel += d;
-    const raster = Math.PI/6;                       // 30 Grad je Schritt
-    while (Math.abs(sammel) >= raster){
-      const v = Math.sign(sammel);
-      sammel -= v*raster;
-      radarZeiger += v; radarKlack();
-    }
-    kurbelZeichnen(); radarZielAnzeige(); radarZeichnen();
-  });
-  const los = ev => { if (letzter !== null){ letzter = null; sammel = 0; radarPult(); } };
-  s.addEventListener("pointerup", los);
-  s.addEventListener("pointercancel", los);
-  s.addEventListener("wheel", ev => {
-    ev.preventDefault();
-    radarKurbelWeg += Math.sign(ev.deltaY)*Math.PI/6;
-    radarDrehen(Math.sign(ev.deltaY));
-  }, {passive:false});
-}
-const WACHE_STUFEN = [30, 60, 120, 300];
-let wacheStufe = 1;
-const wacheSek = () => WACHE_STUFEN[wacheStufe];
-function dialGriff(){
-  const s = document.getElementById("rd-dial");
-  if (!s) return;
-  const setz = i => {
-    const neu = Math.max(0, Math.min(WACHE_STUFEN.length-1, i));
-    if (neu === wacheStufe) return;
-    wacheStufe = neu; radarKlack();
-    if (wacheLaeuft()){ wache.sek = wacheSek(); wache.proSektor.clear(); }
-    radarPult();
-  };
-  s.addEventListener("wheel", ev => {
-    ev.preventDefault(); setz(wacheStufe + Math.sign(ev.deltaY));
-  }, {passive:false});
-  s.addEventListener("pointerdown", ev => {
-    const r = s.getBoundingClientRect();
-    const x = (ev.clientX - r.left)/r.width;
-    setz(Math.round(x*(WACHE_STUFEN.length-1)));
-  });
-}
-/* Waehrend gekurbelt wird nur Kennung und Ort nachziehen. Das ganze Pult neu
-   zu bauen risse einem den Zeiger unter der Hand weg. */
-function radarZielAnzeige(){
-  const el = document.querySelector("#rd-pult .rd-ziel");
-  if (!el) return;
-  zielOrtSichern();
-  const ziel = radarZiel(), st = sweepStand()[ziel.k];
-  const zo = radarZielOrt !== null ? MAP.n[radarZielOrt] : null;
-  el.querySelector(".s").textContent = ziel.k;
-  el.querySelector(".o").innerHTML = esc(ziel.name || "—")
-    + (zo && zo[0] !== ziel.name ? ` · make for <b style="color:#f0c169">${esc(zo[0])}</b>` : "");
-  el.querySelector(".rd-bar i").style.width = "0%";
-  el.querySelector(".h").innerHTML = st
-    ? `Last seen ${esc(alterText(st.t))}.`
-    : `<b style="color:#e8a34a">Never looked at.</b>`;
-}
-
 /* ---- Der Schirm ---- */
 function radarZeichnen(){
   if (!radarOffen) return;
@@ -4974,28 +5330,36 @@ function radarZeichnen(){
   }
   g.globalAlpha = 1;
 
-  /* Der aufgeschaltete Sektor - Klammern, kein Kasten: man soll hindurchsehen. */
-  const ziel = radarZiel();
-  const [zx0,zy0] = P(ziel.x0, ziel.y0), [zx1,zy1] = P(ziel.x1, ziel.y1);
-  const blitz = jetzt() - radarBlitz < 700;
-  g.strokeStyle = blitz ? "#8fe6a2" : "#f0c169";
-  g.lineWidth = 2;
-  const e = Math.min(22, (zx1-zx0)/3);
-  for (const [ex,ey,dx,dy] of [[zx0,zy0,1,1],[zx1,zy0,-1,1],[zx0,zy1,1,-1],[zx1,zy1,-1,-1]]){
-    g.beginPath();
-    g.moveTo(ex, ey+dy*e); g.lineTo(ex, ey); g.lineTo(ex+dx*e, ey);
-    g.stroke();
-  }
-  g.fillStyle = blitz ? "#8fe6a2" : "#f0c169";
-  g.font = `600 13px ${SCHMAL}`;
-  g.textBaseline = "bottom";
-  /* Am rechten Rand nach innen ausrichten, sonst laeuft der Name aus dem
-     Bild - und ausgerechnet der sagt, wohin man fahren soll. */
-  const beschr = `${ziel.k} · ${ziel.name || ""}`;
-  if (zx0 + g.measureText(beschr).width > W - 12){
-    g.textAlign = "right"; g.fillText(beschr, zx1, zy0-5);
-  } else {
-    g.textAlign = "left"; g.fillText(beschr, zx0, zy0-5);
+  /* Der Zielort blinkt - das ist die ganze Ansage. Wer hinsieht, weiss
+     wohin; einen Namen braucht es dafuer nicht einmal. */
+  if (radarZiel !== null && MAP.n[radarZiel]){
+    const zn = MAP.n[radarZiel], [zx,zy] = P(zn[1], zn[2]);
+    const takt = (Date.now() % 1200) / 1200;
+    const puls = 0.5 + 0.5*Math.sin(takt*6.283);
+    const fest = radarSignal >= 0.55;
+    const farbe = fest ? "#8fe6a2" : "#f0c169";
+    g.save();
+    g.strokeStyle = farbe; g.fillStyle = farbe;
+    /* Ein auslaufender Ring wie ein Echo. */
+    g.globalAlpha = 0.55*(1-takt);
+    g.lineWidth = 2;
+    g.beginPath(); g.arc(zx, zy, 8 + takt*34, 0, 6.284); g.stroke();
+    g.globalAlpha = 0.35 + 0.5*puls;
+    g.shadowColor = farbe; g.shadowBlur = 14;
+    g.beginPath(); g.arc(zx, zy, 5.5, 0, 6.284); g.fill();
+    g.shadowBlur = 0; g.globalAlpha = 1;
+    /* Fadenkreuz, damit man ihn auch im Gewimmel findet. */
+    g.lineWidth = 1.2; g.globalAlpha = 0.7;
+    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      g.beginPath();
+      g.moveTo(zx+dx*13, zy+dy*13); g.lineTo(zx+dx*24, zy+dy*24); g.stroke();
+    }
+    g.restore();
+    g.fillStyle = farbe;
+    g.font = `600 13px ${SCHMAL}`;
+    g.textBaseline = "bottom";
+    g.textAlign = zx > W-160 ? "right" : "left";
+    g.fillText(zn[0], zx + (zx > W-160 ? -16 : 16), zy - 12);
   }
 
   /* Der Suchstrahl. Laeuft die Anlage, dreht er zuegig; steht sie, schleicht
@@ -5050,35 +5414,20 @@ try { radarTon = localStorage.getItem("hng-warmap-radarton") !== "0"; } catch(e)
    Staedte, wird NICHTS geschrieben und nachgefragt. Eine verpasste Minute
    kostet nichts, eine falsch uebermalte Karte kostet den Abend. */
 const WACHE_BREMSE = 150;
-/* Wieviel Karte ein Blick zeigen darf, je Takt - als Vielfaches der
-   Kartenbreite, nicht als feste Zahl. Absolute Werte waeren geraten: an
-   einem echten Bild der ganzen Karte kam eine Spanne von rund 2,0
-   Kartenbreiten heraus, weil das Spiel Leisten um die Karte herum zeigt und
-   sie nur die halbe Bildbreite einnimmt. Wer das nicht misst, setzt eine
-   Grenze, die entweder immer oder nie faellt.
-
-   Wer alle dreissig Sekunden nachsehen laesst, muss nah heran und erwischt
-   je Blick wenig; wer fuenf Minuten waehlt, darf alles zeigen. Sonst waere
-   der schnellste Takt einfach der beste und das Geraet nur eine Frage der
-   Geduld. */
-const SPANNE_TEILE = [0.5, 0.85, 1.3, 2.6];
-/* Beschrieben wird die Breite, nicht die Flaeche - "die halbe Karte" heisst
-   hier: von links nach rechts die Haelfte. Die gemessene Spanne enthaelt die
-   Leisten des Spiels rings um die Karte, deshalb ist die weiteste Stufe mehr
-   als eine Kartenbreite. */
-const SPANNE_WORT  = ["half the map across", "most of the map across",
-                      "the whole map", "the whole map with room to spare"];
-const spanneMax = () => { const n = sektoren(); return SPANNE_TEILE[wacheStufe]*(n.x1-n.x0); };
 let wache = null;
 /* Was die Einpassung ueber die Lage der Karte im Spiel verraet: Massstab und
    Bildmitte. Beides faellt beim Rechnen ohnehin an - es muss keine Anzeige
    im Spiel gelesen werden, und angefasst wird dort erst recht nichts. */
+/* Die Einpassung rechnet mit den Punkten SAMT Bildversatz (MAP.x0/y0) - die
+   Staedte in MAP.n stehen aber ohne. Wer das vergisst, bekommt Ortsnamen aus
+   einer Gegend zweihundert Einheiten weiter westlich, und alles sieht
+   plausibel aus. Genau das ist mir passiert. */
+const ausBild = (px, py, tr) => [ (px - tr.ox)/tr.s - (MAP.x0||0),
+                                  (py - tr.oy)/tr.s - (MAP.y0||0) ];
 function peilung(res){
   if (!res || !res.tr || !res.W) return null;
-  const s = res.tr.s;
-  return {spanne: res.W / s,                        // sichtbare Kartenbreite
-          x: (res.W/2 - res.tr.ox) / s,
-          y: (res.H/2 - res.tr.oy) / s};
+  const [x, y] = ausBild(res.W/2, res.H/2, res.tr);
+  return {spanne: res.W / res.tr.s, x, y};
 }
 /* Der naechstgelegene Ort zur Bildmitte - so sagt das Geraet in Ortsnamen,
    wo man gerade steht, statt in Zahlen. */
@@ -5137,27 +5486,66 @@ function wacheStop(vonAussen){
 }
 function wacheTick(){
   if (!wache) return;
-  wache.dran = jetzt();
+  const nun = jetzt();
+  const verstrichen = Math.min(8, (nun - (wache.dran || nun)) / 1000);
+  wache.dran = nun;
+
+  /* Erst der Zoomregler des Spiels: zwei Millisekunden, und er steht auch
+     dann noch da, wenn man so nah heran ist, dass die Karteneinpassung
+     nichts mehr findet. */
+  const zl = zoomLesen(wache.video);
+  wache.zoom = zl ? zl.zoom : null;
+
   const res = kartenAusBild(wache.video, null);
   wache.laeufe++;
-  if (res.fehler){ wache.meldung = res.fehler; wacheAnzeigen(); return; }
+  if (res.fehler){ wache.meldung = res.fehler; radarSignal = 0; wacheAnzeigen(); return; }
   const anz = Object.keys(res.erg.besitz).length;
-  /* Wie viele Staedte zu sehen sind, haengt am Zoom - eine feste Untergrenze
-     waere Willkuer. Dass die Lage ueberhaupt gefunden wurde, ist die
-     eigentliche Pruefung; hier faengt nur der offensichtliche Unfall ab. */
   if (anz < 40){
     wache.meldung = `only ${anz} towns readable just now`;
-    wacheAnzeigen(); return;
+    radarSignal = 0; wacheAnzeigen(); return;
+  }
+  wache.peil = peilung(res);
+  /* Die Einpassung taugt NUR fuer Weitaufnahmen, und das ist keine
+     Einstellungssache: den Startmassstab schaetzt sie aus der Streuung aller
+     1438 Staedte. Zeigt das Bild nur dreissig davon, liegt der wahre
+     Massstab ausserhalb des abgesuchten Bereichs - dann findet sie nicht die
+     richtige Lage, sondern die am wenigsten falsche, und meldet dafuer
+     zweihundert Staedte, die gar nicht im Bild sind.
+
+     Gemessen: eine echte Weitaufnahme kommt auf rund zwei Kartenbreiten
+     Spanne, die vier hineingezoomten Bilder auf 1,1 bis 1,6 - und alle vier
+     waren falsch eingepasst. Deshalb die Schwelle bei 1,7. */
+  const kartenBreite = sektoren().x1 - sektoren().x0;
+  if (wache.peil && wache.peil.spanne < kartenBreite*1.7){
+    wache.meldung = "too close for a reliable fix — zoom out until the whole map shows";
+    radarSignal = 0; wacheAnzeigen(); if (radarOffen) radarPult(); return;
   }
   wache.gelesen = anz; wache.meldung = "";
   wache.zaehl = res.erg.zaehl.slice();
-  wache.peil = peilung(res);
+  /* Reglerstellung und tatsaechlich sichtbare Breite gehoeren zusammen -
+     daraus eicht sich die Zoomvorgabe von selbst. */
+  if (wache.peil) eichPunkt(wache.zoom, wache.peil.spanne);
+
+  /* ---- Signalstaerke: Lage und Zoom gegen den Sollwert ---- */
+  radarSignal = 0;
+  if (wache.peil && radarZiel !== null){
+    const zo = MAP.n[radarZiel], p = wache.peil, soll = beamSpanne();
+    /* Zoom: je weiter man von der geforderten Breite weg ist, desto
+       schwaecher. Ein Faktor zwei daneben heisst kein Signal. */
+    const v = p.spanne / soll;
+    const zoomGut = Math.max(0, 1 - Math.abs(Math.log(v)) / Math.log(2.1));
+    /* Lage: der Zielort muss nah an der Bildmitte stehen. */
+    const d = Math.hypot(zo[1]-p.x, zo[2]-p.y);
+    const lageGut = Math.max(0, 1 - d / (p.spanne*0.32));
+    radarSignal = zoomGut * lageGut;
+  }
+  /* Aufgeschaltet: der Scan laeuft, sonst faellt er langsam zurueck - wer
+     abdreht, faengt nicht bei null an, verliert aber. */
+  if (radarSignal >= 0.55) radarScan = Math.min(1, radarScan + beamTempo()*verstrichen*radarSignal);
+  else radarScan = Math.max(0, radarScan - 0.02*verstrichen);
+
+  /* ---- Besitz uebernehmen, mit denselben Bremsen wie immer ---- */
   const waeren = besitzWaeren(res.erg.besitz);
-  /* Frueher war der erste Durchgang von der Bremse ausgenommen - "der setzt
-     ja den Ausgangsstand". Genau so sind 230 Staedte auf einmal in die Karte
-     gewandert, ohne dass jemand hingesehen hatte. Der Gedanke war falsch:
-     beim ersten Durchgang weiss man am wenigsten, ob das Geraet richtig
-     steht. Jetzt wird jede grosse Aenderung vorgelegt. */
   const zweifel = lesungFragwuerdig(res.erg);
   if (zweifel || waeren > WACHE_BREMSE){
     wache.wartet = res.erg.besitz;
@@ -5165,32 +5553,33 @@ function wacheTick(){
     wacheAnzeigen(); return;
   }
   wache.wartet = null;
-  /* Erst zaehlen, wenn es auch uebernommen wurde. Ein Bild, das die Bremse
-     zurueckgehalten hat, war kein Blick auf die Karte - es als Abdeckung zu
-     zaehlen hiesse, sich reicher zu rechnen als man ist. */
   for (const idx of Object.keys(res.erg.besitz)) wache.gesehen.add(+idx);
-  /* Zu weit weg heisst: der Besitz wird uebernommen, aber es zaehlt nicht
-     als abgesuchter Sektor. Sonst waere der kurze Takt aus der Vogelschau
-     die beste aller Einstellungen. */
-  const grenze = spanneMax();
-  const zuWeit = wache.peil && wache.peil.spanne > grenze;
-  wache.zuWeit = !!zuWeit;
-  const frisch = zuWeit ? [] : sektorenSammeln(res.erg.besitz, wache.proSektor);
-  wache.sektoren = frisch;
-  if (sweepMerken(frisch)){
-    /* War der aufgeschaltete Sektor dabei, ist die Aufgabe erledigt - dann
-       rueckt der Suchlauf von selbst zum naechsten, den lange niemand
-       gesehen hat. Genau das tut ein Suchlauf. */
-    const getroffen = radarOffen && frisch.includes(radarZiel().k);
-    radarPing(getroffen);
-    if (getroffen){ radarWeiterZumAeltesten(); radarZielSektor = null; }
-    if (radarOffen) radarPult();
-  }
-  radarZeichnen();
   wache.letzte = besitzUebernehmen(res.erg.besitz);
   wache.gesamt += wache.letzte;
-  wache.zuletzt = jetzt();
+  wache.zuletzt = nun;
+
+  /* ---- Ist der Scan voll, wird gutgeschrieben ---- */
+  if (radarScan >= 1){
+    const zs = zielSektor();
+    const netz = sektoren();
+    /* Wieviel Umland dazugehoert, sagt die Kurbel: eng gescannt nur der
+       Sektor selbst, weit gescannt auch die Nachbarn. */
+    const wieviele = beamFlaeche(), nah = [];
+    if (zs){
+      for (const s of netz.folge){
+        const f = netz.felder[s];
+        nah.push({k: f.k, d: Math.hypot(f.c-zs.c, f.r-zs.r)});
+      }
+      nah.sort((a,b)=>a.d-b.d);
+    }
+    const gut = nah.slice(0, wieviele).map(x=>x.k);
+    if (sweepMerken(gut)) radarPing(true);
+    wache.sektoren = gut;
+    radarScan = 0;
+    zielZiehen();
+  }
   wacheAnzeigen();
+  if (radarOffen) radarPult();
 }
 function wacheAnzeigen(){
   radarZeichnen();
@@ -11371,7 +11760,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-19 20:09</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-19 23:02</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
