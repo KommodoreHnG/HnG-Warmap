@@ -23,7 +23,11 @@
    will, bekommt beides.
    Wichtig: #rechts, nicht #side - die Depotliste haengt in der Spalte, nicht
    im Stadtfenster, und blieb sonst klein, egal was eingestellt war. */
-#top,#bar,#rechts,.float,#hits,.dlg,#ghost,#toast{zoom:var(--ui,1)}
+#top{zoom:calc(var(--ui,1) * var(--f-top,1))}
+#bar{zoom:calc(var(--ui,1) * var(--f-bar,1))}
+#rechts{zoom:calc(var(--ui,1) * var(--f-rechts,1))}
+.dlg{zoom:calc(var(--ui,1) * var(--f-dlg,1))}
+.float,#hits,#ghost,#toast{zoom:var(--ui,1)}
 #depot h4,#depot-filter,#depot-list,#depot-foot,#side,.dlg-h,.dlg-b,#hover,#tip{
   zoom:var(--ui-text,1)}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -109,6 +113,12 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 .tool .kb{font-size:8.5px;color:var(--dim2);font-family:ui-monospace,Consolas,monospace}
 .tool.row{flex-direction:row;gap:6px;justify-content:flex-start;padding-left:7px}
 .tool.row svg{width:15px;height:15px}
+/* Zweispaltig: auf einem breiten Schirm ist die Leiste sonst eine lange
+   Kolonne, bei der man bis zum letzten Werkzeug scrollen muss. */
+#bar.zwei{display:grid;grid-template-columns:1fr 1fr;width:180px;align-content:start}
+#bar.zwei .bar-h,#bar.zwei #factions{grid-column:1/-1}
+#bar.zwei .tool.row{flex-direction:column;gap:3px;padding:7px 3px 6px;justify-content:center}
+#bar.zwei .tool.row svg{width:19px;height:19px}
 .fac{display:flex;align-items:center;gap:7px;padding:5px 7px;cursor:pointer;background:transparent;
   border:1px solid transparent;border-radius:var(--r);width:100%}
 .fac:hover{background:var(--panel2)}
@@ -295,6 +305,75 @@ textarea{background:var(--panel2);border:1px solid var(--line);border-radius:var
 .toggle input{width:15px;height:15px;accent-color:var(--accent)}
 
 /* ---------- dialogs ---------- */
+/* Das Tor liegt ueber allem und ist undurchsichtig - ohne Code soll die Karte
+   nicht einmal durchschimmern. */
+/* Im Bearbeitungsmodus zeigt sich, was sich aendern laesst. */
+body.txt-modus #bar .tool,body.txt-modus .dlg h2,body.txt-modus .dlg h3,
+body.txt-modus .bar-h,body.txt-modus .btn,body.txt-modus th,body.txt-modus .note,
+body.txt-modus .hint,body.txt-modus label{outline:1px dashed var(--accent-dk);
+  outline-offset:2px;cursor:text}
+body.txt-modus{cursor:text}
+/* ---------- Zahnrad ----------
+   Wie im Spiel oben rechts in der Ecke: alles, was nur das eigene Aussehen
+   betrifft, an einer Stelle statt verstreut zwischen den Werkzeugen. */
+#b-gear{padding:4px 7px;line-height:1}
+#b-gear svg{width:15px;height:15px;display:block;stroke:currentColor;fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+#zahnrad{position:fixed;top:0;right:0;z-index:76;width:292px;max-height:100vh;overflow-y:auto;
+  background:var(--panel);border-left:1px solid var(--accent-dk);
+  border-bottom:1px solid var(--accent-dk);box-shadow:-8px 8px 26px rgba(0,0,0,.55);
+  padding:10px 12px 16px;display:none;zoom:var(--ui,1)}
+#zahnrad.an{display:block}
+#zahnrad h3{font-family:var(--schmal);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;
+  color:var(--dim2);margin:13px 0 5px;border-bottom:1px solid var(--line);padding-bottom:3px}
+.zr-kopf{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.zr-kopf b{font-family:var(--schmal);text-transform:uppercase;letter-spacing:.1em;font-size:11.5px;
+  color:var(--accent);flex:1}
+.zr-kopf button{background:transparent;border:0;color:var(--dim2);cursor:pointer;font-size:15px;
+  line-height:1;padding:0 3px}
+.zr-kopf button:hover{color:var(--accent)}
+.zr-z{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:11.5px}
+.zr-z .n{width:88px;flex:0 0 auto;color:var(--dim)}
+.zr-z .w{width:42px;text-align:right;color:var(--dim2);font-variant-numeric:tabular-nums;
+  font-family:ui-monospace,Consolas,monospace;font-size:10.5px}
+.zr-z input[type=range]{flex:1;accent-color:var(--accent);min-width:0;height:14px}
+.zr-ord{display:flex;align-items:center;gap:4px;padding:3px 5px;border:1px solid var(--line);
+  border-radius:2px;margin-bottom:2px;background:var(--panel2);font-size:11px}
+.zr-ord .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zr-ord button{background:transparent;border:1px solid var(--line);border-radius:2px;
+  color:var(--dim);cursor:pointer;width:20px;height:18px;line-height:1;font-size:9px;flex:0 0 auto}
+.zr-ord button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.zr-ord button:disabled{opacity:.22;cursor:default}
+.zr-schalt{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:11.5px;cursor:pointer}
+.zr-schalt input{accent-color:var(--accent);flex:0 0 auto}
+#zahnrad .note{font-size:10px;color:var(--dim2);line-height:1.4;margin-top:5px}
+#zahnrad .btn{width:100%;margin-top:6px;justify-content:center;text-align:center}
+/* Der Streifen im Bearbeitungsmodus bleibt selbst unantastbar - sonst kaeme
+   man aus dem Modus nicht mehr heraus, weil auch "Done" umbenannt wuerde. */
+#txt-bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:82;
+  display:none;align-items:center;gap:11px;background:var(--panel);
+  border:1px solid var(--accent);border-radius:var(--r);padding:7px 11px;
+  box-shadow:0 8px 26px rgba(0,0,0,.6);font-size:11.5px;zoom:var(--ui,1)}
+#txt-bar.an{display:flex}
+#tor{position:fixed;inset:0;background:var(--bg,#0c0f14);display:none;align-items:center;
+  justify-content:center;z-index:200;padding:24px}
+#tor .tor-box{width:100%;max-width:380px;display:flex;flex-direction:column;gap:9px;
+  text-align:center}
+#tor .tor-marke{font-size:26px;letter-spacing:.16em;color:var(--accent);font-weight:700}
+#tor .tor-sub{font-size:10px;letter-spacing:.22em;color:var(--dim2);text-transform:uppercase;
+  margin-top:-6px}
+#tor .tor-text{font-size:12.5px;color:var(--dim);line-height:1.6;margin:12px 0 2px}
+#tor .tor-klein{font-size:11px;color:var(--dim2);line-height:1.55;margin-top:4px}
+#tor .tor-schalt{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--dim);
+  margin:2px 0 2px;cursor:pointer}
+#tor .tor-schalt input{accent-color:var(--accent)}
+#tor .tor-fehler{font-size:12px;color:#e03b32;border:1px solid #e03b32;border-radius:var(--r);
+  padding:6px 9px;margin-top:8px}
+#tor input{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
+  padding:9px 11px;color:var(--text);outline:0;font-size:14px;text-align:center;
+  letter-spacing:.08em}
+#tor input:focus{border-color:var(--accent)}
+#tor .btn{padding:9px 0;font-size:13px}
 #veil{position:fixed;inset:0;background:rgba(4,7,11,.72);display:none;align-items:center;
   justify-content:center;z-index:50;padding:20px}
 #veil.on{display:flex}
@@ -444,75 +523,74 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-intel">Intel</button>
       <button class="btn" id="b-battle">Battle</button>
       <button class="btn" id="b-clan">Clan</button>
+      <button class="btn" id="b-faction">Faction</button>
       <button class="btn" id="b-arms">Arsenal</button>
       <button class="btn" id="b-board">Board</button>
       <button class="btn" id="b-shot">Read screenshot</button>
       <button class="btn" id="b-help">Help</button>
       <button class="btn" id="b-load">Load / Merge</button>
       <button class="btn primary" id="b-share">Share</button>
+      <button class="btn" id="b-gear" title="Settings — layout, sizes, your account">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/>
+          <path d="M12 2.6l1.5 2.5 2.9-.5.6 2.9 2.6 1.4-1.3 2.6 1.3 2.6-2.6 1.4-.6 2.9-2.9-.5L12 21.4l-1.5-2.5-2.9.5-.6-2.9L4.4 15l1.3-2.6L4.4 9.8 7 8.4l.6-2.9 2.9.5z"/></svg>
+      </button>
     </div>
   </header>
 
   <div id="main">
     <nav id="bar" aria-label="Tools">
-      <div class="bar-h">Tool</div>
+      <div class="bar-h" data-txt="bar.tool">Tool</div>
       <button class="tool" data-t="inspect" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M6 3.6v13.1l3.3-3.2 2.1 4.7 2.3-1-2.1-4.6h4.5z"/></svg>
-        <span class="lbl">Inspect</span><span class="kb">1</span></button>
+        <span class="lbl" data-txt="tool.inspect">Inspect</span><span class="kb">1</span></button>
       <button class="tool" data-t="owner" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M6 20.5V3.5"/><path d="M6 4.5h11.6l-3.5 3.6 3.5 3.6H6z"/></svg>
-        <span class="lbl">Control</span><span class="kb">2</span></button>
+        <span class="lbl" data-txt="tool.owner">Control</span><span class="kb">2</span></button>
       <button class="tool" data-t="unit" aria-pressed="false">
         <svg viewBox="0 0 24 24"><rect x="3.5" y="6.2" width="17" height="11.6"/><path d="M3.5 6.2l17 11.6M20.5 6.2L3.5 17.8"/></svg>
-        <span class="lbl">Unit</span><span class="kb">3</span></button>
+        <span class="lbl" data-txt="tool.unit">Unit</span><span class="kb">3</span></button>
       <button class="tool" data-t="arrow" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M3.7 18.8C7.2 9.3 14 5.6 20.2 5.3"/><path d="M16.5 3.9l3.9 1.4-2.5 3.2"/></svg>
-        <span class="lbl">Move</span><span class="kb">4</span></button>
+        <span class="lbl" data-txt="tool.arrow">Move</span><span class="kb">4</span></button>
       <button class="tool" data-t="line" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M3.5 9.2h17"/><path d="M6.4 9.2v6.4M10.6 9.2v6.4M14.8 9.2v6.4M19 9.2v6.4"/></svg>
-        <span class="lbl">Defence</span><span class="kb">5</span></button>
+        <span class="lbl" data-txt="tool.line">Defence</span><span class="kb">5</span></button>
       <button class="tool" data-t="para" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M4.5 11.6a7.5 7.5 0 0 1 15 0"/><path d="M4.5 11.6h15"/><path d="M7.4 11.6L12 18.6l4.6-7"/></svg>
-        <span class="lbl">Para</span><span class="kb">6</span></button>
+        <span class="lbl" data-txt="tool.para">Para</span><span class="kb">6</span></button>
       <button class="tool" data-t="area" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M4 11.2L7.6 4.6l7.5-.6 5.2 4.4-1.9 7.2-6.5 4-6.3-2.7z"/></svg>
-        <span class="lbl">Area</span><span class="kb">7</span></button>
+        <span class="lbl" data-txt="tool.area">Area</span><span class="kb">7</span></button>
       <button class="tool" data-t="spot" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M12 4L20.6 19.6H3.4z"/><path d="M12 10.2v3.9M12 16.9v.1"/></svg>
-        <span class="lbl">Sighting</span><span class="kb">8</span></button>
+        <span class="lbl" data-txt="tool.spot">Sighting</span><span class="kb">8</span></button>
       <button class="tool" data-t="battle" aria-pressed="false">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M7.7 7.7l8.6 8.6M16.3 7.7l-8.6 8.6"/></svg>
-        <span class="lbl">Battle</span><span class="kb">9</span></button>
+        <span class="lbl" data-txt="tool.battle">Battle</span><span class="kb">9</span></button>
       <button class="tool" data-t="erase" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M3.8 7.1h16.4"/><path d="M9.4 7.1V4.4h5.2v2.7"/><path d="M6.4 7.1l.9 12.5h9.4l.9-12.5"/><path d="M10.2 10.4v6.1M13.8 10.4v6.1"/></svg>
-        <span class="lbl">Clear</span><span class="kb">0</span></button>
+        <span class="lbl" data-txt="tool.erase">Clear</span><span class="kb">0</span></button>
 
-      <div class="bar-h">Faction</div>
+      <div class="bar-h" data-txt="bar.faction">Faction</div>
       <div id="factions"></div>
 
-      <div class="bar-h">View</div>
+      <div class="bar-h" data-txt="bar.view">View</div>
       <button class="tool row" id="b-depot" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M3.6 7.6L12 3.5l8.4 4.1v8.8L12 20.5l-8.4-4.1z"/><path d="M3.6 7.6L12 11.7l8.4-4.1M12 11.7v8.8"/></svg>
-        <span class="lbl">Depot</span></button>
+        <span class="lbl" data-txt="view.depot">Depot</span></button>
       <button class="tool row" id="b-key" aria-pressed="false">
         <svg viewBox="0 0 24 24"><rect x="3.5" y="5.2" width="6.4" height="4.4"/><path d="M12.4 7.4h8.1"/><rect x="3.5" y="14.4" width="6.4" height="4.4"/><path d="M12.4 16.6h8.1"/></svg>
-        <span class="lbl">Key</span></button>
+        <span class="lbl" data-txt="view.key">Key</span></button>
       <button class="tool row" id="b-obj" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M12 3.8l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 10.1l6-.8z"/></svg>
-        <span class="lbl">Objectives</span></button>
+        <span class="lbl" data-txt="view.obj">Objectives</span></button>
       <button class="tool row" id="b-radius" aria-pressed="true"
         title="Vision and strike radius — right-click to set the vision scale">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6" stroke-dasharray="2.7 2.7"/><circle cx="12" cy="12" r="2.9" fill="currentColor" stroke="none"/></svg>
-        <span class="lbl">Radius</span></button>
+        <span class="lbl" data-txt="view.radius">Radius</span></button>
       <button class="tool row" id="b-names" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M4.4 7.6V5.2h15.2v2.4"/><path d="M12 5.2v13.6"/><path d="M8.9 18.8h6.2"/></svg>
-        <span class="lbl">Labels</span></button>
-      <button class="tool row" id="b-ui" title="Interface size — click to step through">
-        <svg viewBox="0 0 24 24"><path d="M3.6 9.8V3.6h6.2M20.4 14.2v6.2h-6.2"/><path d="M3.6 3.6l6 6M20.4 20.4l-6-6"/></svg>
-        <span class="lbl" id="ui-lbl">100 %</span></button>
-      <button class="tool row" id="b-text" title="Text size — on top of the interface size">
-        <svg viewBox="0 0 24 24"><path d="M3.4 16.4l3.1-7.8 3.1 7.8M4.5 13.6h4"/><path d="M12.6 19.4l4.4-12.8 4.4 12.8M14.3 14.9h6.2"/></svg>
-        <span class="lbl" id="text-lbl">100 %</span></button>
+        <span class="lbl" data-txt="view.names">Labels</span></button>
     </nav>
 
     <div id="mapwrap">
@@ -549,6 +627,10 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 </div>
 
 <div id="veil"><div class="dlg" id="dlg"></div></div>
+<div id="tor"></div>
+<div id="zahnrad"></div>
+<div id="txt-bar" data-fest><span>Editing labels — click any wording to change it.</span>
+  <button class="btn primary" id="txt-fertig">Done</button></div>
 <div id="ghost"></div>
 <div id="hover"></div>
 <div id="toast"></div>
@@ -1348,6 +1430,15 @@ function rebuildUnits(){
   }
 }
 const unitsAt = i => unitIdx.get(i) || [];
+/* Der Name einer eingesetzten Einheit steht im Depot ihres Besitzers - die
+   Einheit selbst traegt nur Kennung, Gattung und Anzahl. Auch bei Kameraden
+   nachschlagen: man will sehen, WELCHE Einheit in der Naehe steht. */
+function teamNameVon(who, id){
+  if (!id) return "";
+  const d = depotIdx.get(who);
+  const e = d && d.list.find(x => x.id === id);
+  return (e && e.name) || "";
+}
 const myUnits = i => (S.units[`${i}:${S.me}`] && S.units[`${i}:${S.me}`].v) || [];
 const teamsAt = i => unitsAt(i).reduce((s,g)=>s + g.list.reduce((t,u)=>t+u.s,0), 0);
 const menAt   = i => unitsAt(i).reduce((s,g)=>s + g.list.reduce((t,u)=>t+u.s*atMen(u.k),0), 0);
@@ -1400,27 +1491,24 @@ function namenAn(d){
   if (n.tag)  raus.tag  = n.tag;
   return raus;
 }
-/* Name und Kuerzel heraustrennen: hierher merken, aus der geteilten Zeile
-   entfernen. */
-function namenTrennen(liste){
-  return (liste || []).map(d => {
-    const name = (d.name || "").trim(), tag = (d.tag || "").trim();
-    if (name || tag) eigenNamen[d.id] = {name, tag};
-    else delete eigenNamen[d.id];
-    const raus = {...d};
-    delete raus.name; delete raus.tag;
-    return raus;
-  });
-}
-/* Einmaliger Umzug: was noch Namen in der geteilten Zeile stehen hat, kommt
-   hierher. Laeuft still, sobald die Karte geoeffnet wird. */
+/* Einmaliger Umzug zurueck: was nur hier lag, kommt in die geteilte Zeile.
+   Niemand soll etwas neu eintippen muessen. */
 function namenUmziehen(){
   const e = S.depot[S.me];
   if (!e || !Array.isArray(e.v)) return;
-  if (!e.v.some(d => d && (d.name || d.tag))) return;
-  const ohne = namenTrennen(depotListe(e.v));
-  namenSichern();
-  S.depot[S.me] = {...e, v: ohne, t: jetzt()};
+  if (!Object.keys(eigenNamen).length) return;
+  const liste = depotListe(e.v);
+  let geaendert = false;
+  const mit = liste.map(d => {
+    const n = eigenNamen[d.id];
+    if (!n || (d.name && d.tag)) return d;
+    const raus = {...d};
+    if (n.name && !raus.name){ raus.name = n.name; geaendert = true; }
+    if (n.tag && !raus.tag){ raus.tag = n.tag; geaendert = true; }
+    return raus;
+  });
+  if (!geaendert) return;
+  S.depot[S.me] = {...e, v: mit, t: jetzt()};
   dirty.add(`depot:${S.me}`); save();
 }
 
@@ -1527,14 +1615,9 @@ let uiScale = parseFloat(localStorage.getItem("hng-warmap-ui") || "0") || uiVors
 function uiSetzen(v){
   uiScale = v;
   document.documentElement.style.setProperty("--ui", v);
-  document.getElementById("ui-lbl").textContent = Math.round(v*100) + " %";
   localStorage.setItem("hng-warmap-ui", String(v));
   requestAnimationFrame(resize);
 }
-document.getElementById("b-ui").addEventListener("click", ()=>{
-  const i = UI_STUFEN.findIndex(s => Math.abs(s-uiScale) < .01);
-  uiSetzen(UI_STUFEN[(i+1) % UI_STUFEN.length]);
-});
 /* Schriftgroesse getrennt regelbar: auf einem 4K-Schirm will man die Leisten
    gross, die Depotliste aber oft noch groesser. Legt sich auf den ersten
    Regler drauf. */
@@ -1543,14 +1626,18 @@ let textScale = parseFloat(localStorage.getItem("hng-warmap-text") || "0") || 1;
 function textSetzen(v){
   textScale = v;
   document.documentElement.style.setProperty("--ui-text", v);
-  document.getElementById("text-lbl").textContent = Math.round(v*100) + " %";
   localStorage.setItem("hng-warmap-text", String(v));
   requestAnimationFrame(resize);
 }
-document.getElementById("b-text").addEventListener("click", ()=>{
-  const i = TEXT_STUFEN.findIndex(s => Math.abs(s-textScale) < .01);
-  textSetzen(TEXT_STUFEN[(i+1) % TEXT_STUFEN.length]);
-});
+/* Die Ortsnamen auf der Karte haben ihren eigenen Regler. Sie liegen nicht in
+   einer Leiste, sondern zwischen den Marken - wer die Karte voll findet, will
+   sie kleiner, ohne dass die Depotliste mitschrumpft. */
+let ortScale = parseFloat(localStorage.getItem("hng-warmap-orte") || "0") || 1;
+function ortSetzen(v){
+  ortScale = v;
+  localStorage.setItem("hng-warmap-orte", String(v));
+  draw();
+}
 
 /* ---------------- canvas ---------------- */
 const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
@@ -1693,20 +1780,36 @@ function draw(){
 
   /* --- towns as filled discs with the game's pictogram inside --- */
   const r0 = Math.max(2.6, 3.1*Math.sqrt(z)) * uiScale;
+  /* Zwei Durchgaenge, Hauptstaedte zuletzt. Sonst legt sich jede Stadt mit
+     hoeherer Nummer ueber den Stern - und ausgerechnet die Hauptstadt ist
+     die, die man im Gewimmel wiederfinden will. */
+  for (const zuletzt of [false, true])
   for (let i=0;i<MAP.n.length;i++){
     const n = MAP.n[i], cap = isCap(i), obj = isObj(i);
+    if (cap !== zuletzt) continue;
     if (objOnly && !obj && !S.owner[i] && !unitsAt(i).length) continue;
     const [x,y] = toScr(n[1], n[2]);
     if (x < -30 || y < -30 || x > WW+30 || y > HH+30) continue;
     const f = col(factionOf(i));
     const r = cap ? r0*1.9 : (obj ? r0*1.35 : r0);
 
-    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.284);
-    ctx.fillStyle = f; ctx.fill();
-    ctx.lineWidth = Math.max(.8, .9*Math.sqrt(z));
-    ctx.strokeStyle = light() ? "rgba(255,255,255,.9)" : "rgba(5,8,12,.95)";
-    ctx.stroke();
-    if (r > 5) pictogram(x, y, r, n[3], cap, light() ? "#ffffff" : "rgba(6,10,14,.88)");
+    /* Eine Hauptstadt ist ein Stern, keine dickere Scheibe. Aus der Ferne war
+       sie sonst von jeder anderen Stadt nicht zu unterscheiden - und genau aus
+       der Ferne will man wissen, wo die Hauptstadt liegt. */
+    if (cap){
+      sternPfad(x, y, r*1.5);
+      ctx.fillStyle = f; ctx.fill();
+      ctx.lineWidth = Math.max(1, 1.15*Math.sqrt(z));
+      ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(5,8,12,.95)";
+      ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 6.284);
+      ctx.fillStyle = f; ctx.fill();
+      ctx.lineWidth = Math.max(.8, .9*Math.sqrt(z));
+      ctx.strokeStyle = light() ? "rgba(255,255,255,.9)" : "rgba(5,8,12,.95)";
+      ctx.stroke();
+      if (r > 5) pictogram(x, y, r, n[3], light() ? "#ffffff" : "rgba(6,10,14,.88)");
+    }
 
     if (fightAt(i)){                        // contested: brass ring
       ctx.strokeStyle = "#f0b845"; ctx.lineWidth = Math.max(1.6, 1.8*Math.sqrt(z));
@@ -1824,37 +1927,50 @@ function draw(){
 
   if (showNames){
     ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.lineWidth = 3;
+    for (const zuletzt of [false, true])
     for (let i=0;i<MAP.n.length;i++){
       const n = MAP.n[i], cap = isCap(i), obj = isObj(i);
+      if (cap !== zuletzt) continue;         // Hauptstadtnamen obenauf
       const min = cap ? 0 : (obj ? 1.7 : 3.4);
       if (z < min && i !== sel) continue;
       if (objOnly && !obj && !S.owner[i]) continue;
       const [x,y] = toScr(n[1], n[2]);
       if (x < -70 || y < -20 || x > WW+10 || y > HH+20) continue;
-      const gr = (cap ? Math.min(15, 9.6*Math.sqrt(z)) : Math.min(13, 8.4*Math.sqrt(z))) * uiScale;
+      /* Beim Rauszoomen zurueckhaltender. Vorher stand jeder Name auch aus der
+         Ferne in fast voller Groesse da und hat die Karte zugekleistert; jetzt
+         waechst er erst mit der Naehe und bleibt draussen blass. */
+      const nah = Math.min(1, Math.max(0, (z - min) / 2.5));
+      const gr = (cap ? 4.8 + Math.min(10.2, 6.4*Math.sqrt(z)) * nah
+                      : 4.2 + Math.min(8.8, 5.6*Math.sqrt(z)) * nah) * uiScale * ortScale;
       ctx.font = `${cap?"600 ":""}${gr}px "Segoe UI",system-ui,sans-serif`;
+      ctx.globalAlpha = i === sel ? 1 : (cap ? 0.72 + 0.28*nah : 0.5 + 0.5*nah);
       ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(5,8,12,.92)";
       ctx.fillStyle = cap ? "#f0c169" : (light() ? "#1a2029" : "#e6ecf4");
-      const dx = (cap ? r0*1.9 : (obj ? r0*1.35 : r0)) + 5;
+      const dx = (cap ? r0*2.9 : (obj ? r0*1.35 : r0)) + 5;
       ctx.strokeText(n[0], x+dx, y); ctx.fillText(n[0], x+dx, y);
+      ctx.globalAlpha = 1;
     }
   }
 }
 
+/* Fuenfzackiger Stern, Spitze nach oben. */
+function sternPfad(x, y, aussen){
+  const innen = aussen*0.42;
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++){
+    const w = -Math.PI/2 + k*Math.PI/5, rr = (k % 2) ? innen : aussen;
+    const px = x + Math.cos(w)*rr, py = y + Math.sin(w)*rr;
+    k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+  }
+  ctx.closePath();
+}
+
 /* Pictogram inside the disc: town, factory, airfield — like the game's map */
-function pictogram(x,y,r,typ,cap,farbe){
+function pictogram(x,y,r,typ,farbe){
   const s = r*0.62;
   ctx.save(); ctx.translate(x,y); ctx.strokeStyle = farbe; ctx.fillStyle = farbe;
   ctx.lineWidth = Math.max(.9, r*0.17); ctx.lineJoin = "round";
-  if (cap){                                    // star
-    ctx.beginPath();
-    for (let k=0;k<10;k++){
-      const rr = k%2 ? s*0.45 : s, w = -Math.PI/2 + k*Math.PI/5;
-      const px = Math.cos(w)*rr, py = Math.sin(w)*rr;
-      k ? ctx.lineTo(px,py) : ctx.moveTo(px,py);
-    }
-    ctx.closePath(); ctx.fill();
-  } else if (typ === 2){                       // factory: roof teeth + chimney
+  if (typ === 2){                              // factory: roof teeth + chimney
     ctx.beginPath();
     ctx.moveTo(-s, s*.7); ctx.lineTo(-s, -s*.1); ctx.lineTo(-s*.2, s*.35);
     ctx.lineTo(-s*.2, -s*.1); ctx.lineTo(s*.6, s*.35); ctx.lineTo(s*.6, s*.7);
@@ -2276,16 +2392,23 @@ function depotSchreiben(felder){
   const f = aktiveSeite();
   const hf = Object.assign({}, alt.hf);
   hf[f] = verlaufFort(alt, aufSeite(depotListe(liste), f), f);
-  /* Namen heraustrennen - geteilt wird nur, WAS jemand hat. */
-  const ohneNamen = namenTrennen(depotListe(liste));
-  namenSichern();
-  S.depot[S.me] = {v: ohneNamen, t: jetzt(), by: S.me, n: S.name || "", hf, arms};
+  /* Name und Kuerzel gehen mit: auf der Karte soll man sehen, WELCHE Einheit
+     des Clans in der Naehe steht, und im Clan, wer was mitbringt. */
+  S.depot[S.me] = {v: depotListe(liste), t: jetzt(), by: S.me, n: S.name || "", hf, arms};
   dirty.add(`depot:${S.me}`); rebuildUnits(); save(); kraftLeiste();
 }
 /* Beim Schreiben bleiben die anderen beiden Depots unangetastet, und was neu
    dazukommt, bekommt die eingestellte Seite eingetragen. */
 function setMyDepot(list){
   const f = aktiveSeite();
+  /* Eine Kampfeinheit gehoert zu der Seite, bei der sie gekauft wurde. Wer im
+     Depot einer anderen als der Kriegsseite etwas anlegt, wird einmal
+     gefragt - ein Versehen dort waere spaeter kaum zu finden. */
+  if (f !== clanFaktion() && (list||[]).length > aufSeite(myDepotAlle(), f).length){
+    if (!confirm(`You are looking at the ${FACTIONS[f].name} depot, but the clan fights this war `
+               + `as ${FACTIONS[clanFaktion()].name}.\n\nAdd to the ${FACTIONS[f].tag} depot anyway?`))
+      return;
+  }
   const fremd = myDepotAlle().filter(d => { const s = seiteVon(d); return s !== null && s !== f; });
   const eigen = (list || []).map(d => seiteVon(d) === null ? {...d, f} : d);
   depotSchreiben({list: fremd.concat(eigen)});
@@ -2848,12 +2971,21 @@ function depotZeichnen(){
     depotFilter = b.dataset.fl; depotZeichnen();
   }));
   const raus = deployedIds(S.me);
-  document.getElementById("depot-sum").textContent =
-    alle.length ? `${raus.size}/${alle.length} deployed` : "";
+  {
+    /* Welches der drei Depots hier steht, muss dranstehen - erst recht, wenn
+       es nicht das der Kriegsseite ist. */
+    const bl = aktiveSeite(), wf = clanFaktion();
+    const kopf = document.getElementById("depot-sum");
+    kopf.innerHTML = `<span style="color:${col(FACTIONS[bl])}">${FACTIONS[bl].tag}</span>${
+      bl !== wf ? ` <span style="color:var(--accent)">· viewing only</span>` : ""}${
+      alle.length ? ` · ${raus.size}/${alle.length} deployed` : ""}`;
+  }
   liste.innerHTML = mein.length ? mein.map(d => {
     const town = townOfTeam(d.id);
     const drin = town !== null;
-    return `<div class="dep${drin?" raus":""}" data-id="${esc(d.id)}" style="--f:${col(FACTIONS[faction])}"
+    /* Nach der Seite des DEPOTS faerben, nicht nach der links gewaehlten -
+       sonst scheinen die eigenen Truppen die Seite zu wechseln. */
+    return `<div class="dep${drin?" raus":""}" data-id="${esc(d.id)}" style="--f:${col(FACTIONS[aktiveSeite()])}"
               title="${drin?"Drag to move it, or click the × to pull it back":"Drag onto a town"}">
         <span>${symbolSVG(d.k, c, 24, 17)}</span>
         <span class="n">
@@ -2890,7 +3022,7 @@ function depotZeichnen(){
       if (!d) return;
       carrying = {id: d.id};
       /* Mit Taktikzeichen - beim Ziehen soll man sehen, WAS man traegt. */
-      ghost.innerHTML = symbolSVG(d.k, col(FACTIONS[faction]), 26, 18)
+      ghost.innerHTML = symbolSVG(d.k, col(FACTIONS[aktiveSeite()]), 26, 18)
         + `<span>${esc((d.tag ? d.tag + " · " : "") + (d.name || atName(d.k)))}</span>`;
       ghost.classList.add("an"); bewegeGhost(ev);
       cv.classList.add("dropping");
@@ -3204,9 +3336,9 @@ function side(){
           <div class="grp-h">${g.mine ? "Your teams" : esc(g.name || "Another player")}
             <span>${g.list.reduce((s,u)=>s+u.s,0)} · ${g.list.reduce((s,u)=>s+u.s*atMen(u.k),0).toLocaleString("en")} men</span></div>
           ${g.list.map((u,k)=>`
-            <div class="unit" style="--f:${col(FACTIONS[faction])}">
+            <div class="unit" style="--f:${col(FACTIONS[aktiveSeite()])}">
               <span class="sym">${symbolSVG(u.k, c)}</span>
-              <span class="n">${esc(u.id && g.mine ? (teamById(u.id)?.name || atName(u.k)) : atName(u.k))}
+              <span class="n" dir="auto">${esc(teamNameVon(g.who, u.id) || atName(u.k))}
                 <em>${u.s>1?`${u.s}× · `:""}${atText(u.k)}${atRadius(u.k)?` · strike ${atRadius(u.k)}`:""}${atVision(u.k)?` · vision ${atVision(u.k)}`:""}</em></span>
               ${g.mine ? `<button class="x" data-rm="${k}" title="Back to depot">×</button>`
                        : `<span class="lock" title="Only its owner can change this">🔒</span>`}
@@ -3967,7 +4099,11 @@ const stadtAus = id => {
    for this war, and the sightings that feed both. Names are matched loosely,
    so "/!(§Peter" and "Peter" find each other without being merged. */
 document.getElementById("b-intel").addEventListener("click", ()=>intelDialog());
-function intelDialog(tab){
+document.getElementById("b-faction").addEventListener("click", ()=>intelDialog("players", clanFaktion()));
+/* seite === undefined: alle. Eine Zahl: nur diese Fraktion - damit wird aus
+   demselben Fenster die Uebersicht ueber die eigene Seite. */
+function intelDialog(tab, seite){
+  const nurSeite = (seite === 0 || seite === 1 || seite === 2) ? seite : null;
   const c = light() ? "#1a2029" : "#e9e2d5";
   const proSpieler = new Map();
   for (const k of Object.keys(S.spot)){
@@ -3987,7 +4123,9 @@ function intelDialog(tab){
   for (const p of spielerListe())
     if (!proSpieler.has(p.key))
       proSpieler.set(p.key, {name:p.name, f:p.f, teams:0, arten:new Map(), orte:new Set(), t:p.t});
-  const liste = [...proSpieler.entries()].sort((a,b)=> b[1].teams - a[1].teams);
+  const liste = [...proSpieler.entries()]
+    .filter(([,d]) => nurSeite === null || d.f === nurSeite)
+    .sort((a,b)=> b[1].teams - a[1].teams);
   const nz = n => n.toLocaleString("en");
   const sicht = allSpots();
 
@@ -4005,10 +4143,12 @@ function intelDialog(tab){
       if (s){ gesehen += s.teams; t = Math.max(t, s.t || 0); }
     }
     return {...cl, top: top ? top[0] : null, kompo, t, gesehen};
-  }).sort((a,b)=> b.spieler.length - a.spieler.length || b.teams - a.teams);
+  }).filter(cl => nurSeite === null || cl.top === nurSeite)
+    .sort((a,b)=> b.spieler.length - a.spieler.length || b.teams - a.teams);
 
   openDlg(`
-    <div class="dlg-h"><h2>Intel</h2>
+    <div class="dlg-h"><h2>${nurSeite === null ? "Intel"
+        : `${esc(FACTIONS[nurSeite].name)} — our side`}</h2>
       <p>${liste.length ? `<b>${clans.length}</b> clan${clans.length===1?"":"s"} and
          <b>${liste.length}</b> player${liste.length===1?"":"s"} on record ·
          <b>${sicht.length}</b> town${sicht.length===1?"":"s"} with sightings.`
@@ -4068,7 +4208,8 @@ function intelDialog(tab){
         ${liste.length ? `<div class="tw"><table>
           <thead><tr><th>Player</th><th>Clan</th><th>Fights for</th><th>Hours</th><th>Known teams</th><th>Seen</th><th>Towns</th><th>What</th><th>Last</th></tr></thead>
           <tbody>${liste.map(([key,d])=>`<tr>
-            <td><a href="#" data-oeffne="${esc(key)}" style="color:var(--accent)">${esc(d.name)}</a></td>
+            <td><a href="#" data-oeffne="${esc(key)}" style="color:var(--accent)">${esc(d.name)}</a>${
+              uebergelaufen(key) ? ` <em style="color:var(--accent);font-size:10px">ours</em>` : ""}</td>
             <td><input class="mini" data-clan="${esc(key)}" value="${esc((S.roster[key]&&S.roster[key].v&&S.roster[key].v.clan)||"")}"
                   placeholder="—" style="width:88px"></td>
             <td><select data-fac="${esc(key)}" class="mini">
@@ -4095,6 +4236,7 @@ function intelDialog(tab){
         ${(()=>{
           const zeilen = [];
           for (const [key, d] of proSpieler){
+            if (uebergelaufen(key)) continue;     // spielt jetzt mit uns
             const dep = feindDepot(key);
             const echt = atEcht(dep).length, offen = atOffen(dep).length;
             const mind = atMindestens(dep);
@@ -4223,6 +4365,7 @@ function intelDialog(tab){
     merkeSpieler(d.name, s.value === "" ? null : +s.value);
     draw(); toast("Faction updated");
   }));
+  const neuAuf = reiter => intelDialog(reiter, nurSeite === null ? undefined : nurSeite);
   document.querySelectorAll("[data-tz]").forEach(sel => sel.addEventListener("change", ()=>{
     setSpielerZeit(sel.dataset.tz, sel.value === "" ? null : +sel.value);
     toast("Noted");
@@ -4234,7 +4377,7 @@ function intelDialog(tab){
       if (!(n >= 0)){ toast("How many?"); return; }
       aktMelden(+document.getElementById("ak-f").value,
                 document.getElementById("ak-clan").value, n);
-      intelDialog("when"); toast("Recorded");
+      neuAuf("when"); toast("Recorded");
     });
     const eb = document.getElementById("er-add");
     if (eb) eb.addEventListener("click", ()=>{
@@ -4242,10 +4385,10 @@ function intelDialog(tab){
       const x = document.getElementById("er-t").value.trim();
       if (!d || !x){ toast("Date and what happened, please."); return; }
       setEreignisse(ereignisse().concat([{d, t:x}]));
-      intelDialog("when");
+      neuAuf("when");
     });
     document.querySelectorAll("[data-erm]").forEach(b => b.addEventListener("click", ()=>{
-      const l = ereignisse(); l.splice(+b.dataset.erm, 1); setEreignisse(l); intelDialog("when");
+      const l = ereignisse(); l.splice(+b.dataset.erm, 1); setEreignisse(l); neuAuf("when");
     }));
   }
   document.querySelectorAll("[data-clanfac]").forEach(sel => {
@@ -4256,9 +4399,9 @@ function intelDialog(tab){
       const mit = spielerListe().filter(p => (p.clan||"").trim().toLowerCase() === name.trim().toLowerCase());
       if (!mit.length) return;
       if (!confirm(`Move all ${mit.length} recorded member${mit.length===1?"":"s"} of `
-                 + `${name} to ${FACTIONS[f].name}?`)){ intelDialog("clans"); return; }
+                 + `${name} to ${FACTIONS[f].name}?`)){ neuAuf("clans"); return; }
       for (const p of mit) merkeSpieler(p.name, f, p.clan);
-      intelDialog("clans");
+      neuAuf("clans");
       toast(`${name}: ${mit.length} moved to ${FACTIONS[f].tag}`);
     });
   });
@@ -4300,7 +4443,7 @@ function massenDialog(){
       <button class="btn primary" id="bulk-go">Add</button>
     </div>`);
   document.getElementById("d-close").addEventListener("click", ()=>{ closeDlg();
-    intelDialog("players"); });
+    neuAuf("players"); });
   document.getElementById("bulk-go").addEventListener("click", ()=>{
     const fv = document.getElementById("bulk-fac").value;
     const cAll = document.getElementById("bulk-clan").value.trim();
@@ -4313,7 +4456,7 @@ function massenDialog(){
       if (merkeSpieler(z, fv === "" ? undefined : +fv, cAll || tagAus(z))) n++;
     }
     closeDlg(); toast(`${n} player${n===1?"":"s"} recorded`);
-    intelDialog("players");
+    neuAuf("players");
   });
 }
 
@@ -6513,7 +6656,7 @@ function ocrDialog(){
       <button class="btn primary" id="ocr-go" disabled>Add ticked</button>
     </div>`, true);
   document.getElementById("d-close").addEventListener("click", ()=>{ closeDlg();
-    intelDialog("players"); });
+    neuAuf("players"); });
   bildQuelle("ocr-file", ocrLesen);
   document.getElementById("ocr-go").addEventListener("click", ()=>{
     const clanAlle = document.getElementById("ocr-clan").value.trim();
@@ -6750,6 +6893,640 @@ function zeichenAus(eingabe){
   return s;
 }
 
+/* ---- Eigene Beschriftungen -------------------------------------------
+   Die Worte in diesem Werkzeug sind meine Wahl, nicht die des Clans. Wer sie
+   anders nennen will, aendert sie hier statt im Quelltext; die Aenderung liegt
+   in meta und gilt fuer alle.
+
+   Der Schluessel ist der urspruengliche Text selbst - wie bei Uebersetzungen.
+   So braucht keine Stelle im Aufbau eine Kennung, und es wirkt auch in
+   Fenstern, die bei jedem Oeffnen neu entstehen.
+
+   Der Vorbehalt dazu: derselbe Text an zwei Stellen wird an beiden geaendert.
+   "Battle" als Werkzeug und "Battle" als Ortstyp sind fuer dieses Verfahren
+   dasselbe Wort. */
+const eigeneTexte = () => (S.meta.texte && S.meta.texte.v) || {};
+function setTxtVon(k, wert){
+  const alt = Object.assign({}, eigeneTexte());
+  if (wert === null || !String(wert).trim() || String(wert).trim() === k) delete alt[k];
+  else alt[k] = String(wert).trim();
+  setMeta("texte", Object.keys(alt).length ? alt : null);
+  texteRueck = null;
+}
+/* Rueckweg: vom geaenderten Text auf den urspruenglichen. Wird gebraucht, um
+   eine schon geaenderte Beschriftung erneut anzufassen. */
+let texteRueck = null;
+function texteRueckweg(){
+  if (texteRueck) return texteRueck;
+  texteRueck = new Map();
+  for (const [k, v] of Object.entries(eigeneTexte())) texteRueck.set(v, k);
+  return texteRueck;
+}
+/* Wo nicht angefasst wird. Spieldaten stehen unter [data-spiel] - Ortsnamen,
+   Waffen, Kampfeinheiten kommen aus dem Spiel und gehoeren uns nicht. */
+const TXT_TABU = new Set(["SCRIPT","STYLE","SVG","CANVAS","INPUT","TEXTAREA","OPTION","SELECT"]);
+function txtTabu(el){
+  for (let e = el; e; e = e.parentElement){
+    if (TXT_TABU.has(e.tagName)) return true;
+    if (e.dataset && e.dataset.spiel !== undefined) return true;
+    if (e.dataset && e.dataset.fest !== undefined) return true;   // z.B. der "Done"-Streifen
+  }
+  return false;
+}
+/* Nur Text, der bei jedem Aufruf gleich aussieht. Zahlen darin heissen: er
+   entsteht aus Daten, und ein Schluessel darauf traefe nie zweimal. */
+/* Was aus den Spieldateien kommt, gehoert uns nicht: Ortsnamen, Gattungen,
+   Waffen, Fahrzeuge, Aufwertungen. Sie alle im Aufbau zu markieren waeren
+   hunderte Stellen - also einmal eine Liste daraus bauen und dagegen pruefen. */
+let spielWorte = null;
+function spielWortliste(){
+  if (spielWorte) return spielWorte;
+  spielWorte = new Set();
+  const dazu = s => { if (s) spielWorte.add(String(s).trim()); };
+  for (const n of (MAP.n || [])) dazu(n[0]);
+  for (const x of (MAP.at || [])) dazu(x.name);
+  for (const x of (MAP.arms || [])) dazu(x.name);
+  for (const x of (MAP.veh || [])) dazu(x.name);
+  for (const x of (MAP.upg || [])) dazu(x.name);
+  for (const x of (MAP.cls || [])) dazu(x.name);
+  for (const s of (MAP.typen || [])) dazu(s);
+  return spielWorte;
+}
+const txtTauglich = s => {
+  const w = s.trim();
+  if (w.length < 2 || w.length > 400) return false;
+  if (!/[A-Za-z\u00c0-\u024f]/.test(w)) return false;
+  if (/\d/.test(w)) return false;              // entsteht aus Zahlen
+  if (spielWortliste().has(w)) return false;   // gehoert dem Spiel
+  return true;
+};
+let txtAmWerk = false;
+function texteAnwenden(wurzel){
+  const karte = eigeneTexte();
+  if (!Object.keys(karte).length) return;
+  txtAmWerk = true;
+  try {
+    const lauf = document.createTreeWalker(wurzel || document.body, NodeFilter.SHOW_TEXT);
+    const treffer = [];
+    for (let n = lauf.nextNode(); n; n = lauf.nextNode()){
+      const w = n.nodeValue.trim();
+      if (!w || !karte[w]) continue;
+      if (txtTabu(n.parentElement)) continue;
+      treffer.push(n);
+    }
+    for (const n of treffer)
+      n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), karte[n.nodeValue.trim()]);
+  } finally { txtAmWerk = false; }
+}
+/* Was neu im Dokument erscheint, wird sofort umgeschrieben. Ohne diesen
+   Beobachter muesste jede der rund fuenfzig Fensterfunktionen daran denken. */
+function texteBeobachten(){
+  const b = new MutationObserver(muts => {
+    if (txtAmWerk) return;
+    for (const m of muts)
+      for (const n of m.addedNodes)
+        if (n.nodeType === 1) texteAnwenden(n);
+        else if (n.nodeType === 3 && n.parentElement) texteAnwenden(n.parentElement);
+  });
+  b.observe(document.body, {childList:true, subtree:true});
+}
+
+let textModus = false;
+function textModusSetzen(an){
+  textModus = !!an;
+  document.body.classList.toggle("txt-modus", textModus);
+  document.getElementById("txt-bar").classList.toggle("an", textModus);
+  /* Das Zahnrad muss zu: sonst wuerde jeder Klick darin als Umbenennen
+     abgefangen und man kaeme aus dem Modus nicht mehr heraus. */
+  if (textModus) zahnradZu();
+}
+/* Im Bearbeitungsmodus faengt der Klick ab, was er sonst ausgeloest haette. */
+function textKlick(ev){
+  if (!textModus) return;
+  const el = ev.target;
+  if (!el || txtTabu(el)) return;
+  /* Den kleinsten Textknoten unter dem Zeiger nehmen, nicht den ganzen Kasten. */
+  let wort = "";
+  for (const n of (el.childNodes || [])){
+    if (n.nodeType === 3 && n.nodeValue.trim()){ wort = n.nodeValue.trim(); break; }
+  }
+  if (!wort && el.textContent) wort = el.textContent.trim();
+  if (!txtTauglich(wort)) return;
+  ev.preventDefault(); ev.stopPropagation();
+  const rueck = texteRueckweg();
+  textFenster(rueck.get(wort) || wort);
+}
+function textFenster(vorgabe){
+  const jetzt = eigeneTexte()[vorgabe] || vorgabe;
+  const mehrfach = (()=>{
+    let n = 0;
+    const lauf = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let x = lauf.nextNode(); x; x = lauf.nextNode())
+      if (x.nodeValue.trim() === jetzt && !txtTabu(x.parentElement)) n++;
+    return n;
+  })();
+  openDlg(`
+    <div class="dlg-h"><h2>Rename</h2>
+      <p>Everyone in the clan sees your wording.</p></div>
+    <div class="dlg-b">
+      <textarea id="tx-wert" style="min-height:52px" dir="auto" spellcheck="false"
+        >${esc(jetzt)}</textarea>
+      <div class="note">Originally <b>${esc(vorgabe)}</b>.${
+        mehrfach > 1 ? ` This wording appears <b>${mehrfach} times</b> right now — renaming it
+          changes all of them.` : ""}</div>
+    </div>
+    <div class="dlg-f">
+      <button class="btn" id="tx-weg">Back to the original</button>
+      <span style="flex:1"></span>
+      <button class="btn" id="tx-ab">Cancel</button>
+      <button class="btn primary" id="tx-ok">Save</button>
+    </div>`);
+  const feld = document.getElementById("tx-wert");
+  const fertig = wert => {
+    setTxtVon(vorgabe, wert);
+    closeDlg();
+    /* Der Aufbau steht schon geaendert im Dokument - einmal von vorn. */
+    location.reload();
+  };
+  document.getElementById("tx-ok").addEventListener("click", ()=>fertig(feld.value));
+  document.getElementById("tx-ab").addEventListener("click", closeDlg);
+  document.getElementById("tx-weg").addEventListener("click", ()=>fertig(null));
+  feld.addEventListener("keydown", ev => {
+    if (ev.key === "Enter" && !ev.shiftKey){ ev.preventDefault(); fertig(feld.value); }
+    if (ev.key === "Escape") closeDlg();
+  });
+  setTimeout(()=>{ feld.focus(); feld.select(); }, 60);
+}
+
+/* ---- Zahnrad ---------------------------------------------------------
+   Zwei Ebenen, und die Grenze laeuft dort, wo die Wirkung aufhoert:
+
+   Verwalter - die Beschriftungen. Die sieht der ganze Clan, also ist es keine
+   Geschmacksfrage, sondern eine gemeinsame Sprache.
+   Nutzer    - Reihenfolge, Spaltenzahl, Groessen. Das sieht nur, wer davor
+   sitzt. Es liegt deshalb im Browser und nicht in meta - genau wie hell und
+   dunkel, das steht auch nicht im Clanvertrag. */
+const LAY_KEY = "hng-warmap-layout";
+let LAY = {};
+try { LAY = JSON.parse(localStorage.getItem(LAY_KEY) || "{}") || {}; } catch(e){ LAY = {}; }
+function laySpeichern(){ try { localStorage.setItem(LAY_KEY, JSON.stringify(LAY)); } catch(e){} }
+
+/* Jeder Abschnitt hat seinen eigenen Faktor. Auf einem grossen Schirm will
+   man die Kopfzeile oft klein und die Depotliste gross - ein einziger Regler
+   fuer alles bekommt das nie beides hin. */
+const ABSCHNITTE = [
+  {k:"top",    v:"--f-top",    n:"Top bar"},
+  {k:"bar",    v:"--f-bar",    n:"Tool bar"},
+  {k:"rechts", v:"--f-rechts", n:"Right column"},
+  {k:"dlg",    v:"--f-dlg",    n:"Windows"},
+];
+const layGr = k => (LAY.gr && LAY.gr[k]) || 1;
+function groessenAnwenden(){
+  for (const a of ABSCHNITTE)
+    document.documentElement.style.setProperty(a.v, String(layGr(a.k)));
+}
+
+/* Die Reihenfolge wird ueber die CSS-Eigenschaft order gesetzt, nicht durch
+   Umhaengen im Aufbau - so bleiben alle Verdrahtungen, die sich beim Start
+   ein Element gemerkt haben, gueltig. */
+const ORD_GRUPPEN = {
+  tool: {titel: "Tool buttons",
+         wahl: () => Array.from(document.querySelectorAll("#bar .tool[data-t]")),
+         id:   el => el.dataset.t,
+         name: el => (el.querySelector(".lbl") || el).textContent.trim()},
+  top:  {titel: "Top bar buttons",
+         wahl: () => Array.from(document.querySelectorAll("#top-right .btn"))
+                          .filter(b => b.id !== "b-gear"),
+         id:   el => el.id,
+         name: el => (el.querySelector(".txt") || el).textContent.trim()},
+};
+function ordnungAnwenden(){
+  for (const [k, g] of Object.entries(ORD_GRUPPEN)){
+    const wunsch = (LAY.ord && LAY.ord[k]) || null;
+    for (const el of g.wahl()){
+      if (!wunsch){ el.style.order = ""; continue; }
+      const i = wunsch.indexOf(g.id(el));
+      el.style.order = String(i < 0 ? 900 : i + 1);   // Unbekanntes ans Ende
+    }
+  }
+  const gear = document.getElementById("b-gear");
+  if (gear) gear.style.order = "999";                 // bleibt die Ecke
+}
+function spaltenAnwenden(){
+  document.getElementById("bar").classList.toggle("zwei", !!LAY.zwei);
+  requestAnimationFrame(resize);
+}
+function layAnwenden(){ groessenAnwenden(); ordnungAnwenden(); spaltenAnwenden(); }
+
+/* ---- Konto ----
+   Angemeldet bleiben heisst: der Code liegt offen in diesem Browser. Das ist
+   bequem und schwaecher, und beides steht so im Fenster - wer es einschaltet,
+   soll wissen, was er tut. */
+function cfgSpeichern(){
+  if (!CFG){ localStorage.removeItem(CFG_KEY); return; }
+  const {code, ...ohne} = CFG;
+  localStorage.setItem(CFG_KEY, JSON.stringify((CFG.schloss && !CFG.auto) ? ohne : CFG));
+}
+function autoSetzen(an){
+  if (!CFG) return;
+  CFG.auto = !!an;
+  cfgSpeichern();
+  toast(an ? "This browser will let you straight in from now on"
+           : "Your password will be asked for again next time");
+}
+/* Abmelden wirft nichts weg: der verschlossene Code bleibt liegen, nur der
+   offene verschwindet. Beim naechsten Mal reicht das Passwort. */
+function abmelden(){
+  if (!CFG) return;
+  if (!CFG.schloss){
+    if (!confirm("There is no password on this browser yet, so logging out means "
+               + "you will need your code again. Continue?")) return;
+    CFG = null; localStorage.removeItem(CFG_KEY); location.reload(); return;
+  }
+  CFG.auto = false; CFG.code = null;
+  cfgSpeichern();
+  location.reload();
+}
+
+/* ---- Das Fenster ---- */
+function zahnradZu(){ document.getElementById("zahnrad").classList.remove("an"); }
+function zahnradAuf(){
+  const el = document.getElementById("zahnrad");
+  if (el.classList.contains("an")){ zahnradZu(); return; }
+  zahnradZeichnen(); el.classList.add("an");
+}
+function zrRegler(name, wert, min, max, ruf){
+  return `<div class="zr-z"><span class="n">${esc(name)}</span>
+    <input type="range" min="${min}" max="${max}" step="5" value="${Math.round(wert*100)}"
+      data-ruf="${ruf}"><span class="w">${Math.round(wert*100)} %</span></div>`;
+}
+function zahnradZeichnen(){
+  const el = document.getElementById("zahnrad");
+  const ordListe = (k) => {
+    const g = ORD_GRUPPEN[k];
+    const da = g.wahl();
+    const wunsch = (LAY.ord && LAY.ord[k]) || da.map(g.id);
+    const sortiert = wunsch.filter(id => da.some(e => g.id(e) === id))
+                           .concat(da.map(g.id).filter(id => !wunsch.includes(id)));
+    return sortiert.map((id, i) => {
+      const e = da.find(x => g.id(x) === id);
+      return `<div class="zr-ord">
+        <span class="n">${esc(e ? g.name(e) : id)}</span>
+        <button data-mv="${k}" data-id="${esc(id)}" data-d="-1"
+          ${i === 0 ? "disabled" : ""} title="Move up">&#9650;</button>
+        <button data-mv="${k}" data-id="${esc(id)}" data-d="1"
+          ${i === sortiert.length-1 ? "disabled" : ""} title="Move down">&#9660;</button>
+      </div>`;
+    }).join("");
+  };
+  const angemeldet = !!(CFG && CFG.code);
+  el.innerHTML = `
+    <div class="zr-kopf"><b>Settings</b>
+      <button id="zr-zu" title="Close">&times;</button></div>
+    <div class="note">Everything here is yours alone — it stays in this browser and
+      nobody else sees it.</div>
+
+    <h3>Layout</h3>
+    <label class="zr-schalt"><input type="checkbox" id="zr-zwei" ${LAY.zwei ? "checked" : ""}>
+      Tool bar in two columns</label>
+    <div class="note" style="margin-bottom:7px">Order of the buttons — top of the list is
+      first in the bar.</div>
+    <div style="font-size:9.5px;color:var(--dim2);letter-spacing:.09em;text-transform:uppercase;
+      font-family:var(--schmal);margin:6px 0 3px">${esc(ORD_GRUPPEN.tool.titel)}</div>
+    ${ordListe("tool")}
+    <div style="font-size:9.5px;color:var(--dim2);letter-spacing:.09em;text-transform:uppercase;
+      font-family:var(--schmal);margin:8px 0 3px">${esc(ORD_GRUPPEN.top.titel)}</div>
+    ${ordListe("top")}
+    <button class="btn" id="zr-ord-weg">Back to the original order</button>
+
+    <h3>Size</h3>
+    ${zrRegler("Everything", uiScale, 70, 260, "ui")}
+    ${zrRegler("Text", textScale, 70, 220, "text")}
+    ${zrRegler("Map labels", ortScale, 50, 220, "ort")}
+    <div class="note" style="margin:7px 0 2px">On top of that, per section:</div>
+    ${ABSCHNITTE.map(a => zrRegler(a.n, layGr(a.k), 60, 200, "gr:" + a.k)).join("")}
+    <button class="btn" id="zr-gr-weg">Back to the original sizes</button>
+
+    <h3>Account</h3>
+    ${angemeldet ? `
+      <div class="note" style="margin-top:0">Signed in as
+        <b style="color:var(--text)">${esc((CFG && CFG.name) || "you")}</b>.</div>
+      <label class="zr-schalt"><input type="checkbox" id="zr-auto" ${CFG.auto ? "checked" : ""}>
+        Stay signed in on this computer</label>
+      <div class="note" style="margin-top:0">With this on, your code lies unlocked in this
+        browser and anyone who sits down here is in. Convenient on your own machine,
+        a bad idea on a shared one.</div>
+      <button class="btn" id="zr-aus">Log out</button>`
+    : `<div class="note" style="margin-top:0">Not signed in.</div>`}
+
+    ${istLeiter() ? `
+      <h3>Clan leader</h3>
+      <div class="note" style="margin-top:0">Renaming a label changes it for everyone in the
+        clan — a shared wording is worth more than mine.</div>
+      <button class="btn" id="zr-txt">Edit labels …</button>` : ""}`;
+
+  el.querySelector("#zr-zu").addEventListener("click", zahnradZu);
+  el.querySelector("#zr-zwei").addEventListener("change", ev => {
+    LAY.zwei = ev.target.checked; laySpeichern(); spaltenAnwenden();
+  });
+  el.querySelectorAll("[data-mv]").forEach(b => b.addEventListener("click", ()=>{
+    const k = b.dataset.mv, g = ORD_GRUPPEN[k];
+    LAY.ord ||= {};
+    const da = g.wahl().map(g.id);
+    const alt = LAY.ord[k] || da;
+    const liste = alt.filter(id => da.includes(id))
+                     .concat(da.filter(id => !alt.includes(id)));
+    const i = liste.indexOf(b.dataset.id), j = i + Number(b.dataset.d);
+    if (i < 0 || j < 0 || j >= liste.length) return;
+    [liste[i], liste[j]] = [liste[j], liste[i]];
+    LAY.ord[k] = liste; laySpeichern(); ordnungAnwenden(); zahnradZeichnen();
+  }));
+  el.querySelector("#zr-ord-weg").addEventListener("click", ()=>{
+    delete LAY.ord; laySpeichern(); ordnungAnwenden(); zahnradZeichnen();
+  });
+  el.querySelectorAll("input[data-ruf]").forEach(r => r.addEventListener("input", ()=>{
+    const v = Number(r.value) / 100;
+    r.parentElement.querySelector(".w").textContent = r.value + " %";
+    const ruf = r.dataset.ruf;
+    if (ruf === "ui") uiSetzen(v);
+    else if (ruf === "text") textSetzen(v);
+    else if (ruf === "ort") ortSetzen(v);
+    else if (ruf.startsWith("gr:")){
+      LAY.gr ||= {}; LAY.gr[ruf.slice(3)] = v; laySpeichern(); groessenAnwenden();
+    }
+  }));
+  el.querySelector("#zr-gr-weg").addEventListener("click", ()=>{
+    delete LAY.gr; laySpeichern();
+    uiSetzen(uiVorschlag()); textSetzen(1); ortSetzen(1);
+    groessenAnwenden(); zahnradZeichnen();
+  });
+  el.querySelector("#zr-auto")?.addEventListener("change", ev => autoSetzen(ev.target.checked));
+  el.querySelector("#zr-aus")?.addEventListener("click", abmelden);
+  el.querySelector("#zr-txt")?.addEventListener("click", ()=>textModusSetzen(true));
+}
+document.getElementById("b-gear").addEventListener("click", ev => {
+  ev.stopPropagation(); zahnradAuf();
+});
+document.getElementById("txt-fertig").addEventListener("click", ()=>textModusSetzen(false));
+/* Ein Klick daneben schliesst. */
+document.addEventListener("click", ev => {
+  const el = document.getElementById("zahnrad");
+  if (!el.classList.contains("an")) return;
+  if (el.contains(ev.target) || ev.target.closest("#b-gear")) return;
+  zahnradZu();
+});
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape" && document.getElementById("zahnrad").classList.contains("an"))
+    zahnradZu();
+});
+
+/* ---- Passwort ---------------------------------------------------------
+   Der Einmalcode ist die Zutrittskarte: einmal eingeloest, danach liegt er
+   verschluesselt in diesem Browser, und das eigene Passwort schliesst ihn
+   auf. Weder das Passwort noch der offene Code verlassen dieses Geraet, und
+   der Server weiss von alldem nichts - es braucht keine Zeile SQL dafuer.
+   310.000 Runden: was der Browser gerade noch in einem Wimpernschlag schafft
+   und ein Angreifer millionenfach nicht. */
+/* Aus dem Passwort einen Schluessel, mit dem der Code ver- und entsperrt
+   wird. Das Salz liegt beim verschlossenen Code - es muss nicht geheim sein,
+   nur je Geraet verschieden. */
+async function pwSchluessel(passwort, salz){
+  const enc = new TextEncoder();
+  const k = await crypto.subtle.importKey("raw", enc.encode(passwort), "PBKDF2",
+                                          false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    {name:"PBKDF2", salt: salz, iterations: 310000, hash:"SHA-256"},
+    k, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
+}
+const b64 = a => btoa(String.fromCharCode(...new Uint8Array(a)));
+const unb = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+/* Den Code einschliessen. Was danach im Browser liegt, ist ohne das Passwort
+   nichts wert. */
+async function codeSperren(code, passwort){
+  const salz = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const s = await pwSchluessel(passwort, salz);
+  const ct = await crypto.subtle.encrypt({name:"AES-GCM", iv}, s,
+                                         new TextEncoder().encode(code));
+  return {s: b64(salz), iv: b64(iv), ct: b64(ct)};
+}
+/* Aufschliessen. Stimmt das Passwort nicht, schlaegt schon die Pruefsumme des
+   Verfahrens fehl - es gibt kein Halb-Richtig. */
+async function codeOeffnen(schloss, passwort){
+  const s = await pwSchluessel(passwort, unb(schloss.s));
+  const klar = await crypto.subtle.decrypt({name:"AES-GCM", iv: unb(schloss.iv)}, s,
+                                           unb(schloss.ct));
+  return new TextDecoder().decode(klar);
+}
+
+/* ---- Das Tor ---------------------------------------------------------
+   Ist die Karte fuer einen Raum gebaut, kommt ohne gueltigen Code niemand
+   hinein - auch nicht zum Zuschauen. Vorher lag der ganze Aufbau offen, wer
+   den Verweis hatte, sah alles ausser den Daten.
+   Eine Karte ohne eingebauten Raum (fuer sich allein gebaut) laesst weiter
+   jeden herein; dort gibt es nichts zu schuetzen. */
+function torZeigen(meldung){
+  const el = document.getElementById("tor");
+  if (!el) return;
+  el.innerHTML = `
+    <div class="tor-box">
+      <div class="tor-marke">WAR MAP</div>
+      <div class="tor-sub">Heroes &amp; Generals</div>
+      ${meldung ? `<div class="tor-fehler">${esc(meldung)}</div>` : ""}
+      <p class="tor-text">This map is for one clan. You need your personal code —
+        the one you were sent. It is yours alone; do not pass it on.</p>
+      <input type="password" id="tor-code" placeholder="your code" autocomplete="off"
+        spellcheck="false">
+      <button class="btn primary" id="tor-go">Enter</button>
+      <p class="tor-klein">No code? Ask the clan leader. Lost it? Same — a new one takes
+        him ten seconds, and the old one stops working.</p>
+    </div>`;
+  el.style.display = "flex";
+  const feld = document.getElementById("tor-code");
+  const los = async () => {
+    const code = feld.value.trim();
+    if (code.length < 6){ torZeigen("That code looks too short."); return; }
+    CFG = {url: BUILTIN.url, key: BUILTIN.key, code};
+    lastSeen = "1970-01-01T00:00:00Z";
+    document.getElementById("tor-go").disabled = true;
+    document.getElementById("tor-go").textContent = "Checking …";
+    try {
+      const r = await fetch(api("rpc/warmap_whoami"),
+                           {method:"POST", headers: heads(), body:"{}"});
+      if (!r.ok) throw new Error("rejected");
+      const ich = (await r.json())[0];
+      if (!ich || !ich.player) throw new Error("rejected");
+      /* Code angenommen. Jetzt einmal ein Passwort vergeben, das ihn in
+         diesem Browser verschliesst. */
+      passwortAnlegen(ich);
+    } catch(e){
+      CFG = null;
+      torZeigen("That code was not accepted. Ask the clan leader for a new one.");
+    }
+  };
+  document.getElementById("tor-go").addEventListener("click", los);
+  feld.addEventListener("keydown", ev => { if (ev.key === "Enter") los(); });
+  setTimeout(()=>{ if (document.body.contains(feld)) feld.focus(); }, 60);
+}
+function torFertig(){
+  /* Gespeichert wird der verschlossene Code - offen nur, wenn ausdruecklich
+     "angemeldet bleiben" gewaehlt wurde. */
+  cfgSpeichern();
+  torZu(); syncStart();
+  if (!beigetreten()) setTimeout(beitrittDialog, 500);
+}
+/* Nach dem Einloesen des Codes: eigenes Passwort vergeben. */
+function passwortAnlegen(ich, meldung){
+  const el = document.getElementById("tor");
+  el.innerHTML = `
+    <div class="tor-box">
+      <div class="tor-marke">WAR MAP</div>
+      <div class="tor-sub">${esc(ich.name || "welcome")}</div>
+      ${meldung ? `<div class="tor-fehler">${esc(meldung)}</div>` : ""}
+      <p class="tor-text">Your code got you in — it has done its job. Pick a password now;
+        from here on that is all you need on this computer.</p>
+      <input type="password" id="pw-1" placeholder="your password" autocomplete="new-password">
+      <input type="password" id="pw-2" placeholder="again" autocomplete="new-password">
+      <label class="tor-schalt"><input type="checkbox" id="pw-auto"> Stay signed in on this
+        computer</label>
+      <button class="btn primary" id="pw-go">Set it</button>
+      <p class="tor-klein">It never leaves this computer. Your code is locked away with it, so
+        whoever gets hold of this browser finds nothing usable. Nobody can look the password up,
+        the clan leader included — <b>and so nobody can reset it.</b> If you forget it, write to him
+        on Discord: he hands you a new code and you set a new password. Nothing of yours is lost.</p>
+    </div>`;
+  const los = async () => {
+    const a = document.getElementById("pw-1").value;
+    const b = document.getElementById("pw-2").value;
+    if (a.length < 8){ passwortAnlegen(ich, "At least eight characters, please."); return; }
+    if (a !== b){ passwortAnlegen(ich, "The two do not match."); return; }
+    const knopf = document.getElementById("pw-go");
+    knopf.disabled = true; knopf.textContent = "Working …";
+    try {
+      CFG.schloss = await codeSperren(CFG.code, a);
+      /* Wer das ankreuzt, laesst den Code offen in diesem Browser liegen -
+         bequem auf dem eigenen Rechner, unklug auf einem geteilten. Aendern
+         laesst es sich jederzeit im Zahnrad. */
+      CFG.auto = !!document.getElementById("pw-auto").checked;
+      torFertig();
+    } catch(e){
+      passwortAnlegen(ich, "That did not work. Try again.");
+    }
+  };
+  document.getElementById("pw-go").addEventListener("click", los);
+  document.getElementById("pw-2").addEventListener("keydown", ev => {
+    if (ev.key === "Enter") los(); });
+  setTimeout(()=>document.getElementById("pw-1")?.focus(), 60);
+}
+/* Spaeteres Anmelden: Passwort abfragen und den Code damit aufschliessen. */
+function passwortAbfragen(meldung){
+  const el = document.getElementById("tor");
+  el.style.display = "flex";
+  el.innerHTML = `
+    <div class="tor-box">
+      <div class="tor-marke">WAR MAP</div>
+      <div class="tor-sub">${esc((CFG && CFG.name) || "")}</div>
+      ${meldung ? `<div class="tor-fehler">${esc(meldung)}</div>` : ""}
+      <p class="tor-text">Your password.</p>
+      <input type="password" id="pw-1" placeholder="password" autocomplete="current-password">
+      <button class="btn primary" id="pw-go">Enter</button>
+      <p class="tor-klein">Forgotten it? Nobody can look it up or reset it — <b>write to the clan
+        leader on Discord</b>. That message is our second factor: he knows who you are, and hands you
+        a new code by direct message. With it you set a new password, and everything you own stays
+        yours.</p>
+      <button class="btn" id="pw-neu" style="font-size:11px;margin-top:6px">I have a new code</button>
+    </div>`;
+  const los = async () => {
+    const a = document.getElementById("pw-1").value;
+    if (!a){ return; }
+    const knopf = document.getElementById("pw-go");
+    knopf.disabled = true; knopf.textContent = "Checking …";
+    try {
+      CFG.code = await codeOeffnen(CFG.schloss, a);
+      torZu(); syncStart();
+      if (!beigetreten()) setTimeout(beitrittDialog, 500);
+    } catch(e){
+      CFG.code = null;
+      passwortAbfragen("That password does not match.");
+    }
+  };
+  document.getElementById("pw-go").addEventListener("click", los);
+  document.getElementById("pw-1").addEventListener("keydown", ev => {
+    if (ev.key === "Enter") los(); });
+  document.getElementById("pw-neu")?.addEventListener("click", ()=>{
+    if (!confirm("Start over with a new code? What is stored here is thrown away — "
+               + "everything on the server comes back.")) return;
+    CFG = null; localStorage.removeItem(CFG_KEY); torZeigen();
+  });
+  setTimeout(()=>document.getElementById("pw-1")?.focus(), 60);
+}
+
+function torZu(){
+  const el = document.getElementById("tor");
+  if (el){ el.style.display = "none"; el.innerHTML = ""; }
+}
+/* Muss jemand durchs Tor? Nur wenn die Karte fuer einen Raum gebaut ist und
+   noch kein Code hinterlegt wurde. */
+/* Drei Zustaende: gar nichts hinterlegt (Code noetig), ein verschlossener
+   Code (Passwort noetig), oder alles offen (durch). */
+const torNoetig = () => hatBuiltin() && (!CFG || !CFG.code);
+
+/* ---- Beitritt --------------------------------------------------------
+   Einmal je Browser: Name, Seite, und die Bitte, die Inhalte fuer sich zu
+   behalten. Danach nie wieder - wer die Karte taeglich benutzt, will nicht
+   taeglich bestaetigen. */
+const BEITRITT_STORE = "hng-warmap-beigetreten";
+function beigetreten(){ try { return !!localStorage.getItem(BEITRITT_STORE); } catch(e){ return true; } }
+function beitrittDialog(){
+  const f = clanFaktion();
+  openDlg(`
+    <div class="dlg-h"><h2>${esc(clanName())}</h2>
+      <p>Two things before you start.</p></div>
+    <div class="dlg-b">
+      <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;color:var(--dim);width:96px">Your name</span>
+        <input type="text" id="bt-name" value="${esc(S.name||"")}" style="flex:1"
+          placeholder="the name you play under" dir="auto" spellcheck="false">
+      </div>
+      <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;color:var(--dim);width:96px">Joining as</span>
+        <div class="own4" style="flex:1">
+          ${FACTIONS.map(q=>`<button data-bt="${q.id}" style="--f:${q.color}"
+            aria-pressed="${f===q.id}">${q.tag}</button>`).join("")}
+        </div>
+      </div>
+      <div class="note" style="font-size:11px">This picks which of your three depots you see.
+        It follows the clan by default — change it only if you fight somewhere else this war.</div>
+      <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:10px">
+        <div style="border-left:3px solid var(--accent);padding:8px 12px;background:var(--panel2);
+             border-radius:var(--r);font-size:13px;line-height:1.55">
+          What is in here stays in here. No screenshots, no pasting into other clans' chats, no
+          passing it on to the other side.<br><br>
+          <span style="color:var(--dim)">Please play fair — the USSR has it hard enough as it is.
+          Sharing this gets you removed, but honestly, we would rather just trust you.</span>
+        </div>
+      </div>
+    </div>
+    <div class="dlg-f">
+      <button class="btn primary" id="bt-ok" style="width:100%">Agreed — let me in</button>
+    </div>`);
+  let seite = f;
+  document.querySelectorAll("#dlg [data-bt]").forEach(b => b.addEventListener("click", ()=>{
+    seite = +b.dataset.bt;
+    document.querySelectorAll("#dlg [data-bt]").forEach(x =>
+      x.setAttribute("aria-pressed", String(+x.dataset.bt === seite)));
+  }));
+  document.getElementById("bt-ok").addEventListener("click", ()=>{
+    const n = document.getElementById("bt-name").value.trim();
+    if (n.length < 2){ toast("Your name, please — the clan needs to know who is who."); return; }
+    S.name = n;
+    depotBlick = (seite === clanFaktion()) ? null : seite;
+    try { localStorage.setItem(BEITRITT_STORE, String(jetzt())); } catch(e){}
+    save(); closeDlg(); kopfzeile(); kraftLeiste(); depotZeichnen(); side();
+    toast(`Welcome, ${n}`);
+  });
+}
+
 /* ---- Schlachtanalyse -------------------------------------------------
    Was eine Seite aufstellen kann, folgt aus dem Vorrat am Ort und den Kosten
    eines Truppentyps. Beides steht in den Spieldateien: Infantry kostet 90
@@ -6898,6 +7675,9 @@ function setFeindArsenal(key, f, wert){
   const alt = (S.edep[key] && S.edep[key].ars) || {};
   setFeindTeil(key, {ars: Object.assign({}, alt, {[f]: wert})});
 }
+/* Hat diese Person die Seite zu uns gewechselt? Dann bleibt alles stehen,
+   zaehlt aber nicht mehr als offene Aufklaerung. */
+const uebergelaufen = key => !!(S.edep[key] && S.edep[key].ueber);
 const feindRollen = key => {
   const r = S.edep[key] && S.edep[key].rollen;
   return Array.isArray(r) ? r : [];
@@ -6934,7 +7714,8 @@ function feindDialog(key, name){
     <div class="dlg-h"><h2>${esc(name)}</h2>
       <p>${liste.length ? `<b>${atEcht(liste).length}</b> assault teams on record` : "Nothing on record yet"}${
         atOffen(liste).length ? ` · <b>${atOffen(liste).length}</b> placeholder${atOffen(liste).length===1?"":"s"}` : ""}${
-        f != null ? ` · fighting for <b style="color:${col(FACTIONS[f])}">${FACTIONS[f].name}</b>` : ""}</p></div>
+        f != null ? ` · fighting for <b style="color:${col(FACTIONS[f])}">${FACTIONS[f].name}</b>` : ""}${
+        uebergelaufen(key) ? ` · <b style="color:var(--accent)">plays with us now</b>` : ""}</p></div>
     <div class="tabs">
       <button data-ftab="teams" aria-pressed="true">Assault teams</button>
       <button data-ftab="ars"   aria-pressed="false">Arsenal</button>
@@ -8452,7 +9233,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-19 13:56</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-19 16:17</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
@@ -8705,14 +9486,17 @@ async function syncStart(){
   }
   if (!ich){
     syncMark("Rejected", "err");
+    CFG = null; localStorage.removeItem(CFG_KEY);
+    /* Zurueck ans Tor - ohne gueltigen Code hat hier niemand etwas zu sehen. */
+    if (hatBuiltin()){ torZeigen("That code was not accepted. Ask the clan leader."); return; }
     dialogFehler("That code was not accepted",
       "Either it is mistyped or it has not been approved. Ask whoever runs the map.");
-    CFG = null; localStorage.removeItem(CFG_KEY); return;
+    return;
   }
   CFG.room = ich.room; CFG.admin = !!ich.is_admin; CFG.name = ich.name;
   CFG.player = ich.player;
   mitgliederKnopf();
-  localStorage.setItem(CFG_KEY, JSON.stringify(CFG));
+  cfgSpeichern();
 
   /* Die anonyme Kennung wechselt beim Verbinden von der Zufallskennung
      dieses Browsers auf die aus dem Code abgeleitete - sonst stuende der
@@ -8906,6 +9690,8 @@ async function mitgliederDialog(meldung){
             <td style="text-align:right;white-space:nowrap">${ich ? "" : `
               <button class="btn" data-msg="${esc(m.player)}" style="padding:2px 7px;font-size:10.5px"
                 title="Copy the invite message for this person">Message</button>
+              <button class="btn" data-neu="${esc(m.player)}" style="padding:2px 7px;font-size:10.5px"
+                title="Forgot their password? A new code lets them set a new one. Everything they own stays theirs.">New code</button>
               <button class="btn" data-lock="${esc(m.player)}" data-to="${m.approved ? "0" : "1"}"
                 style="padding:2px 7px;font-size:10.5px">${m.approved ? "Lock" : "Unlock"}</button>
               <button class="btn" data-adm="${esc(m.player)}" data-to="${m.is_admin ? "0" : "1"}"
@@ -8916,7 +9702,9 @@ async function mitgliederDialog(meldung){
         }).join("")}</tbody>
       </table></div>
       <div class="note">A code is the key to this room — send it in a direct message, never in a public
-        channel. <b>Lock</b> shuts somebody out but keeps what they wrote; <b>Remove</b> deletes
+        channel. <b>New code</b> is for somebody who forgot their password: the old code stops working,
+        the new one lets them set a fresh one, and everything they own stays theirs.
+        <b>Lock</b> shuts somebody out but keeps what they wrote; <b>Remove</b> deletes
         their entry and the code stops working. Neither touches the map.</div>
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
@@ -8928,6 +9716,26 @@ async function mitgliederDialog(meldung){
   };
   document.querySelectorAll("#dlg [data-copy]").forEach(el =>
     el.addEventListener("click", ()=>kopiere(el.dataset.copy, "Code")));
+  document.querySelectorAll("#dlg [data-neu]").forEach(b => b.addEventListener("click", async ()=>{
+    const m = liste.find(x => x.player === b.dataset.neu);
+    if (!m) return;
+    if (!confirm(`New code for ${m.name}?\n\nTheir old code stops working at once. With the new `
+               + `one they set a fresh password. Depot, teams and history all stay theirs.`)) return;
+    try {
+      const r = await rpc("warmap_recode", {target_player: m.player});
+      const neu = Array.isArray(r) ? r[0] : r;
+      if (!neu || !neu.code) throw new Error("No code came back.");
+      await kopiere(einladungsText(neu.name, neu.code), "Invite message");
+      mitgliederDialog(`<div style="border-left:3px solid var(--accent);background:var(--panel2);
+        border-radius:2px;padding:9px 11px">
+        <div style="font-size:12px;color:var(--dim);margin-bottom:4px">New code for
+          <b style="color:var(--text)">${esc(neu.name)}</b> — already on your clipboard as a
+          ready-made message. Send it as a direct message; until they use it, their account is
+          open to whoever holds this code.</div>
+        <div class="mono" style="font-size:14px;color:var(--accent);word-break:break-all">${esc(neu.code)}</div>
+      </div>`);
+    } catch(e){ dialogFehler("Could not issue a new code", String(e.message || e)); }
+  }));
   document.querySelectorAll("#dlg [data-msg]").forEach(b => b.addEventListener("click", ()=>{
     const m = liste.find(x => x.player === b.dataset.msg);
     if (!m || !m.code) return toast("No code on that row.");
@@ -8941,6 +9749,20 @@ async function mitgliederDialog(meldung){
   document.getElementById("inv-go").addEventListener("click", async ()=>{
     const nm = document.getElementById("inv-name").value.trim();
     if (!nm){ toast("Type a name first."); return; }
+    /* Dieselbe Person darf nicht zweimal in der Datenbank stehen - einmal als
+       Mitglied und einmal als aufgeklaerter Gegner. Was wir ueber ihre
+       Kampfeinheiten wussten, nuetzt uns ohnehin nichts mehr, sobald sie mit
+       uns spielt. */
+    const schon = spielerListe().find(p => namKey(p.name) === namKey(nm));
+    if (schon && !uebergelaufen(schon.key)){
+      const dep = atEcht(feindDepot(schon.key)).length;
+      /* Nicht loeschen - umdeuten. Was wir ueber die Aufstellung wissen, fehlt
+         ab sofort dem Gegner, und wir wissen genau, was. */
+      setFeindTeil(schon.key, {ueber: 1});
+      toast(dep ? `${schon.name} was on record with ${dep} team${dep===1?"":"s"} — kept, now marked as ours`
+                : `${schon.name} was already on record — kept, now marked as ours`);
+      rebuildUnits();
+    }
     const adm = document.getElementById("inv-admin").checked;
     try {
       const r = await rpc("warmap_invite_me", {player_name: nm, make_admin: adm});
@@ -9000,7 +9822,21 @@ async function mitgliederDialog(meldung){
   rebuildUnits(); kopfzeile(); tally(); tips(); depotZeichnen(); boardZahl();
   kraftLeiste(); resize();
   mitgliederKnopf();
-  if (CFG) syncStart(); else syncMark("Sync off", "off");
+  texteAnwenden();
+  texteBeobachten();
+  document.addEventListener("click", textKlick, true);
+  layAnwenden();
+  if (torNoetig()){
+    /* Liegt ein verschlossener Code vor, wird nach dem Passwort gefragt -
+       sonst nach dem Code. */
+    if (CFG && CFG.schloss) passwortAbfragen();
+    else torZeigen();
+  }
+  else {
+    if (CFG) syncStart(); else syncMark("Sync off", "off");
+    /* Zuletzt, damit die Karte dahinter schon steht. */
+    if (!beigetreten()) setTimeout(beitrittDialog, 400);
+  }
 })();
 window.addEventListener("resize", resize);
 new MutationObserver(()=>{ draw(); side(); tally(); if (showKey) drawKey(); if (showDepot) depotZeichnen(); })
