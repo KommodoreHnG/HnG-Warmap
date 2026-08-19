@@ -218,9 +218,15 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
   padding:4px 5px;outline:0;font-size:11px;min-width:0}
 #depot-foot input{width:44px;background:var(--panel2);border:1px solid var(--line);
   border-radius:var(--r);padding:4px 5px;outline:0;font-size:11px}
+/* Beim Ziehen haengt die Einheit am Zeiger, wie im Spiel - mittig, nicht
+   daneben, und leicht durchscheinend, damit die Stadt darunter sichtbar
+   bleibt. */
 #ghost{position:fixed;pointer-events:none;z-index:70;display:none;background:var(--panel);
-  border:1px solid var(--accent);border-radius:var(--r);padding:3px 8px;font-size:11px;
-  box-shadow:0 6px 18px rgba(0,0,0,.5)}
+  border:1px solid var(--accent);border-radius:var(--r);padding:4px 9px;font-size:11px;
+  box-shadow:0 6px 18px rgba(0,0,0,.5);transform:translate(-50%,-50%);opacity:.92;
+  display:none;align-items:center;gap:7px;white-space:nowrap}
+#ghost.an{display:flex}
+#ghost svg{display:block}
 #hover{position:fixed;pointer-events:none;z-index:68;display:none;max-width:290px;
   background:rgba(20,16,11,.96);border:1px solid var(--accent-dk);border-radius:2px;
   padding:7px 10px;box-shadow:0 8px 24px rgba(0,0,0,.6);zoom:var(--ui,1)}
@@ -436,6 +442,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-members" style="display:none"
         title="Hand out codes and manage who is in this room">Members</button>
       <button class="btn" id="b-intel">Intel</button>
+      <button class="btn" id="b-battle">Battle</button>
       <button class="btn" id="b-clan">Clan depot</button>
       <button class="btn" id="b-arms">Arsenal</button>
       <button class="btn" id="b-board">Board</button>
@@ -957,9 +964,15 @@ function rangText(r){
 /* Welche Seite der Clan gerade spielt. Zentral gesetzt, weil sich das
    zwischen zwei Kriegen aendert und weil die Karte auch anderen Clans
    nuetzen soll. */
+/* Die eingestellte Seite bestimmt alles: welches Depot sichtbar ist, was das
+   Arsenal anbietet, unter welcher Seite neue Kampfeinheiten entstehen. Es gibt
+   deshalb keine zweite, persoenliche Einstellung, an die jemand denken
+   muesste - und keinen Zustand "keine Seite", denn eine Kampfeinheit ohne
+   Seite gibt es im Spiel nicht. */
+const KLAN_VORGABE = 2;                    // UdSSR
 const clanFaktion = () => {
   const v = S.meta.clanf && S.meta.clanf.v;
-  return (v === 0 || v === 1 || v === 2) ? v : null;
+  return (v === 0 || v === 1 || v === 2) ? v : KLAN_VORGABE;
 };
 function setClanFaktion(f){ stamp("meta", "clanf", f, {n: S.name || ""}); save(); }
 /* Kann diese Klasse auf dieser Stufe das ueberhaupt kaufen? Die av-Zeilen sind
@@ -1074,7 +1087,7 @@ function anonUmschalten(an){
 const STORE = "hng-warmap-v3";
 /* Every kind of timestamped entry. Arrows are a list, everything else a map. */
 const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot",
-                 "line","post","area","para","roster","est","edep","anon"];
+                 "line","post","area","para","roster","est","edep","anon","akt","btl"];
 const neu = () => Object.assign({me:"", name:"", arrows:[], gone:{}},
                                 ...BUCKETS.map(b => ({[b]:{}})));
 let S = neu();
@@ -1118,8 +1131,13 @@ const alter = t => jetzt() - (t||0);
    and "Peter123" are three different people and stay three entries — but
    typing "peter" has to surface all of them, so the key keeps the stripped
    form as a prefix and a short hash of the exact name behind it. */
+/* Buchstaben und Ziffern JEDER Schrift, nicht nur a-z. Ein arabischer oder
+   chinesischer Name wurde sonst zur leeren Kette, und die Spielersuche
+   verglich lauter leere Ketten miteinander. Fuer lateinische Namen bleibt
+   das Ergebnis dasselbe - Umlaute werden vorher zerlegt und die Beistriche
+   entfernt, "Muenchen" ergibt weiterhin "munchen". */
 const namKey = s => String(s).toLowerCase().normalize("NFKD")
-  .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  .replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]/gu, "");
 function namHash(s){
   let h = 5381;
   for (let i=0;i<s.length;i++) h = ((h*33) ^ s.charCodeAt(i)) >>> 0;
@@ -1135,7 +1153,10 @@ function merkeSpieler(name, f, clan){
   const neuF = f === undefined ? (av ? av.f : null) : f;
   const neuC = clan === undefined ? (av ? av.clan : "") : String(clan || "").trim();
   if (av && av.name === name && av.f === neuF && (av.clan||"") === (neuC||"")) return k;
-  S.roster[k] = {v:{name, f: neuF, clan: neuC}, t: jetzt(), by: S.me, n: S.name || ""};
+  /* Die vermutete Zeitzone bleibt erhalten - sie wird woanders gesetzt und
+     darf durch eine Fraktions- oder Clanaenderung nicht verlorengehen. */
+  S.roster[k] = {v:{name, f: neuF, clan: neuC, tz: av ? av.tz : undefined},
+                 t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`roster:${k}`); save();
   return k;
 }
@@ -1297,8 +1318,10 @@ function rebuildUnits(){
   depotIdx = new Map();
   for (const who of Object.keys(S.depot)){
     const e = S.depot[who];
+    /* Nur das Depot der eingestellten Seite - wer eine andere spielt, hat
+       hier nichts zu suchen. */
     if (e && Array.isArray(e.v))
-      depotIdx.set(who, {name: e.n || who, list: depotListe(e.v),
+      depotIdx.set(who, {name: e.n || who, list: aufSeite(depotListe(e.v), clanFaktion()),
                          h: verlaufVon(who), t: e.t,
                          arms: soldatenListe(e.arms)});
   }
@@ -1323,8 +1346,65 @@ function depotListe(roh){
     for (let i=0;i<(d.n||0);i++) raus.push({id: `${d.k}-${i}`, k: d.k, name: ""});
   return raus;
 }
+/* Zu welcher Seite gehoert ein Eintrag? Ohne Angabe ist es Altbestand - der
+   zaehlt zur eingestellten Seite und bekommt sie beim naechsten Schreiben. */
+const seiteVon = d => (d && (d.f === 0 || d.f === 1 || d.f === 2)) ? d.f : null;
+const aufSeite = (liste, f) => (liste || []).filter(d => {
+  const s = seiteVon(d);
+  return s === null || s === f;
+});
+/* Alle drei Depots zusammen - nur zum Schreiben, nie zum Anzeigen. */
+function myDepotAlle(){
+  return depotListe(S.depot[S.me] && S.depot[S.me].v).map(namenAn);
+}
+/* ---- Namen der eigenen Kampfeinheiten --------------------------------
+   Sie gehen niemanden sonst etwas an, also werden sie nicht uebertragen.
+   Sie liegen unter einem eigenen Schluessel in diesem Browser - ausserhalb
+   des synchronisierten Zustands und damit auch ausserhalb jedes
+   Teilen-Verweises. Die Sicherungsdatei nimmt sie mit. */
+const NAMEN_STORE = "hng-warmap-namen";
+let eigenNamen = {};
+function namenLaden(){
+  try { eigenNamen = JSON.parse(localStorage.getItem(NAMEN_STORE) || "{}") || {}; }
+  catch(e){ eigenNamen = {}; }
+}
+function namenSichern(){
+  try { localStorage.setItem(NAMEN_STORE, JSON.stringify(eigenNamen)); } catch(e){}
+}
+function namenAn(d){
+  const n = eigenNamen[d.id];
+  if (!n) return d;
+  const raus = {...d};
+  if (n.name) raus.name = n.name;
+  if (n.tag)  raus.tag  = n.tag;
+  return raus;
+}
+/* Name und Kuerzel heraustrennen: hierher merken, aus der geteilten Zeile
+   entfernen. */
+function namenTrennen(liste){
+  return (liste || []).map(d => {
+    const name = (d.name || "").trim(), tag = (d.tag || "").trim();
+    if (name || tag) eigenNamen[d.id] = {name, tag};
+    else delete eigenNamen[d.id];
+    const raus = {...d};
+    delete raus.name; delete raus.tag;
+    return raus;
+  });
+}
+/* Einmaliger Umzug: was noch Namen in der geteilten Zeile stehen hat, kommt
+   hierher. Laeuft still, sobald die Karte geoeffnet wird. */
+function namenUmziehen(){
+  const e = S.depot[S.me];
+  if (!e || !Array.isArray(e.v)) return;
+  if (!e.v.some(d => d && (d.name || d.tag))) return;
+  const ohne = namenTrennen(depotListe(e.v));
+  namenSichern();
+  S.depot[S.me] = {...e, v: ohne, t: jetzt()};
+  dirty.add(`depot:${S.me}`); save();
+}
+
 function myDepot(){
-  return depotListe(S.depot[S.me] && S.depot[S.me].v);
+  return aufSeite(myDepotAlle(), clanFaktion());
 }
 const teamById = id => myDepot().find(d => d.id === id);
 
@@ -1346,9 +1426,13 @@ const gleicheMischung = (a, b) => {
   const ka = Object.keys(a||{}), kb = Object.keys(b||{});
   return ka.length === kb.length && ka.every(k => a[k] === b[k]);
 };
-function verlaufFort(alt, list){
-  let h = (alt && Array.isArray(alt.h)) ? alt.h.slice() : [];
-  const altListe = depotListe(alt && alt.v);
+function verlaufFort(alt, list, f){
+  /* Je Seite ein eigener Verlauf. Ohne das spraenge die Kurve beim Wechsel,
+     und sie zeigte nebenbei Bestaende der anderen Seite. */
+  const bisher = (alt && alt.hf && Array.isArray(alt.hf[f])) ? alt.hf[f]
+               : ((alt && Array.isArray(alt.h)) ? alt.h : []);
+  let h = bisher.slice();
+  const altListe = aufSeite(depotListe(alt && alt.v), f);
   if (!h.length && altListe.length)                   // Altbestand als Startpunkt
     h = [{d: tagNr(alt.t), c: zusammensetzung(altListe)}];
   const c = zusammensetzung(list), d = tagNr();
@@ -1380,8 +1464,13 @@ function verlaufKuerzen(h){
 function verlaufVon(who){
   const e = S.depot[who];
   if (!e || !Array.isArray(e.v)) return [];
-  if (Array.isArray(e.h) && e.h.length) return e.h;
-  const liste = depotListe(e.v);
+  const f = clanFaktion();
+  if (e.hf && Array.isArray(e.hf[f]) && e.hf[f].length) return e.hf[f];
+  const liste = aufSeite(depotListe(e.v), f);
+  /* Ein Verlauf ohne Seitenangabe gehoert zum Altbestand, also nur dann, wenn
+     dieser Spieler ueberhaupt noch Eintraege ohne Seitenangabe hat. */
+  if (Array.isArray(e.h) && e.h.length
+      && depotListe(e.v).some(d => seiteVon(d) === null)) return e.h;
   return liste.length ? [{d: tagNr(e.t), c: zusammensetzung(liste)}] : [];
 }
 function deployedIds(who){
@@ -2115,7 +2204,39 @@ function stamp(bucket, i, val, extra){
   S[bucket][i] = Object.assign({v:val, t:jetzt(), by:S.me}, extra||{});
   dirty.add(`${bucket}:${i}`);
 }
-function save(){ try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e){} }
+/* Gebuendeltes Speichern. save() lief frueher bei jedem einzelnen Eintrag
+   und schrieb jedes Mal den ganzen Zustand - gemessen 302 ms fuer 200
+   Spieler, gegenueber 1 ms ohne. Bei Tausenden von Spielern stand die Karte.
+   Jetzt sammelt sich das und geht hoechstens alle 250 Tausendstel raus;
+   beim Verlassen der Seite sofort, damit nichts verlorengeht. */
+let sparUhr = null, sparOffen = false, sparWarnung = false;
+function saveSofort(){
+  sparOffen = false;
+  if (sparUhr){ clearTimeout(sparUhr); sparUhr = null; }
+  try {
+    const roh = JSON.stringify(S);
+    localStorage.setItem(STORE, roh);
+    /* Fuenf Megabyte sind die uebliche Grenze des Browserspeichers. Einmal
+       warnen, bevor sie erreicht ist - danach kaeme nur noch ein stiller
+       Fehlschlag. */
+    if (!sparWarnung && roh.length > 4.2e6){
+      sparWarnung = true;
+      toast("Local storage is nearly full — save a backup file.");
+    }
+  } catch(e){
+    if (!sparWarnung){
+      sparWarnung = true;
+      toast("This browser will not store any more. Save a backup file now.");
+    }
+  }
+}
+function save(){
+  sparOffen = true;
+  if (sparUhr) return;
+  sparUhr = setTimeout(()=>{ sparUhr = null; if (sparOffen) saveSofort(); }, 250);
+}
+addEventListener("visibilitychange", ()=>{ if (document.visibilityState === "hidden" && sparOffen) saveSofort(); });
+addEventListener("pagehide", ()=>{ if (sparOffen) saveSofort(); });
 function setOwner(i, f){ stamp("owner", i, f); save(); }
 function setFight(i, an){ stamp("fight", i, an ? 1 : null); save(); }
 function dropArrow(id){ S.gone[id] = {t:jetzt(), by:S.me}; dirty.add(`gone:${id}`); }
@@ -2131,11 +2252,23 @@ function depotSchreiben(felder){
   const liste = felder.list !== undefined ? felder.list
                                           : (Array.isArray(alt.v) ? alt.v : []);
   const arms  = soldatenListe(felder.arms !== undefined ? felder.arms : alt.arms);
-  S.depot[S.me] = {v: liste, t: jetzt(), by: S.me, n: S.name || "",
-                   h: verlaufFort(alt, liste), arms};
+  const f = clanFaktion();
+  const hf = Object.assign({}, alt.hf);
+  hf[f] = verlaufFort(alt, aufSeite(depotListe(liste), f), f);
+  /* Namen heraustrennen - geteilt wird nur, WAS jemand hat. */
+  const ohneNamen = namenTrennen(depotListe(liste));
+  namenSichern();
+  S.depot[S.me] = {v: ohneNamen, t: jetzt(), by: S.me, n: S.name || "", hf, arms};
   dirty.add(`depot:${S.me}`); rebuildUnits(); save(); kraftLeiste();
 }
-function setMyDepot(list){ depotSchreiben({list}); }
+/* Beim Schreiben bleiben die anderen beiden Depots unangetastet, und was neu
+   dazukommt, bekommt die eingestellte Seite eingetragen. */
+function setMyDepot(list){
+  const f = clanFaktion();
+  const fremd = myDepotAlle().filter(d => { const s = seiteVon(d); return s !== null && s !== f; });
+  const eigen = (list || []).map(d => seiteVon(d) === null ? {...d, f} : d);
+  depotSchreiben({list: fremd.concat(eigen)});
+}
 function setMyArms(arms){
   if (anonAn()) anonSchreiben(arms); else depotSchreiben({arms});
 }
@@ -2709,7 +2842,7 @@ function depotZeichnen(){
               placeholder="TAG" spellcheck="false" maxlength="10"></span>
           <em>${esc(atName(d.k))} · ${atText(d.k)}${drin?` · ${esc(MAP.n[town][0])}`:""}</em></span>
         ${drin ? `<button class="pull" data-pull="${esc(d.id)}" title="Pull back to depot">×</button>`
-               : `<span class="c">free</span>`}
+               : `<span class="c">available</span>`}
       </div>`;
   }).join("") : `<div class="empty" style="padding:6px 8px">${alle.length ? "Nothing of this type."
     : "Nothing yet. Add what you own below — give each team the name it has in the game. This stays across wars."}</div>`;
@@ -2735,15 +2868,17 @@ function depotZeichnen(){
       const d = teamById(el.dataset.id);
       if (!d) return;
       carrying = {id: d.id};
-      ghost.textContent = (d.tag ? d.tag + " · " : "") + (d.name || atName(d.k));
-      ghost.style.display = "block"; bewegeGhost(ev);
+      /* Mit Taktikzeichen - beim Ziehen soll man sehen, WAS man traegt. */
+      ghost.innerHTML = symbolSVG(d.k, col(FACTIONS[faction]), 26, 18)
+        + `<span>${esc((d.tag ? d.tag + " · " : "") + (d.name || atName(d.k)))}</span>`;
+      ghost.classList.add("an"); bewegeGhost(ev);
       cv.classList.add("dropping");
       el.setPointerCapture(ev.pointerId);
     });
     el.addEventListener("pointermove", ev => { if (carrying) bewegeGhost(ev); });
     el.addEventListener("pointerup", ev => {
       if (!carrying) return;
-      ghost.style.display = "none"; cv.classList.remove("dropping");
+      ghost.classList.remove("an"); cv.classList.remove("dropping");
       const r = cv.getBoundingClientRect();
       const x = ev.clientX - r.left, y = ev.clientY - r.top;
       if (x >= 0 && y >= 0 && x <= r.width && y <= r.height){
@@ -2761,8 +2896,10 @@ function depotZeichnen(){
   });
 }
 function bewegeGhost(ev){
-  ghost.style.left = (ev.clientX + 12) + "px";
-  ghost.style.top  = (ev.clientY - 10) + "px";
+  /* Mittig am Zeiger - die Verschiebung um die halbe eigene Groesse macht
+     das CSS, damit sie nicht von der Beschriftungslaenge abhaengt. */
+  ghost.style.left = ev.clientX + "px";
+  ghost.style.top  = ev.clientY + "px";
 }
 /* ---- Die Benennung des Spiels -----------------------------------------
    Am Kaufbildschirm abgelesen: Name "AT034 - Kommodore" (hoechstens 20
@@ -3855,17 +3992,22 @@ function intelDialog(tab){
     <div class="tabs">
       <button data-tab="clans"   aria-pressed="true">Clans</button>
       <button data-tab="players" aria-pressed="false">Players</button>
+      <button data-tab="gaps"    aria-pressed="false">Gaps</button>
+      <button data-tab="when"    aria-pressed="false">When</button>
       <button data-tab="spots"   aria-pressed="false">Sightings</button>
     </div>
     <div class="dlg-b">
       <div class="tabp on" data-tab="clans">
         ${clans.length ? `<div class="tw"><table>
           <thead><tr><th>Clan</th><th>Fights for</th><th>Players</th><th>Known teams</th>
-            <th>Seen</th><th colspan="2">What they field</th><th>Last</th></tr></thead>
+            <th>Seen</th><th colspan="2">What they field</th><th>Hours</th><th>Last</th></tr></thead>
           <tbody>${clans.map(cl=>`<tr class="fac-row"
               style="--f:${cl.top!=null?col(FACTIONS[cl.top]):"var(--dim2)"}">
             <td><b style="color:var(--accent)">${esc(cl.name)}</b></td>
-            <td style="text-align:left">${fBadge(cl.top)}</td>
+            <td style="text-align:left"><select data-clanfac="${esc(cl.name)}" class="mini">
+              <option value="">${cl.top!=null?FACTIONS[cl.top].tag:"—"}</option>
+              ${FACTIONS.map(f=>`<option value="${f.id}">→ ${f.tag}</option>`).join("")}
+            </select></td>
             <td>${cl.spieler.length}</td>
             <td>${cl.teams||"—"}</td>
             <td>${cl.gesehen||"—"}</td>
@@ -3873,13 +4015,16 @@ function intelDialog(tab){
               [...cl.kompo.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,v])=>
                 `<span title="${esc(atName(k))}" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px">
                    ${symbolSVG(k, c, 20, 14)}<small>${v}</small></span>`).join("") || "—"}</td>
+            <td style="color:var(--dim2)">${(()=>{ const z = clanZeit(cl.name);
+              return z ? `<span title="${z.von} of ${z.gesamt} recorded">${esc(tzText(z.tz))}</span>` : "—"; })()}</td>
             <td style="color:var(--dim2)">${cl.t?alterText(cl.t):"—"}</td>
           </tr>`).join("")}</tbody></table></div>`
           : `<div class="empty">No clans yet. Put a tag in a player's <b>clan</b> field on the
              Players tab and they group up here.</div>`}
         <div class="note">A clan's side follows the majority of its recorded players this war.
           “Known teams” is what we have written down; “seen” is what has been spotted
-          on the map.</div>
+          on the map. Setting a side here moves <b>every recorded member</b> of that clan —
+          until you know better about the individuals, the clan is the best guess you have.</div>
       </div>
 
       <div class="tabp" data-tab="players">
@@ -3897,7 +4042,7 @@ function intelDialog(tab){
           <button class="btn" id="en-ocr" style="flex:1">Read a battle screenshot …</button>
         </div>
         ${liste.length ? `<div class="tw"><table>
-          <thead><tr><th>Player</th><th>Clan</th><th>Fights for</th><th>Known teams</th><th>Seen</th><th>Towns</th><th>What</th><th>Last</th></tr></thead>
+          <thead><tr><th>Player</th><th>Clan</th><th>Fights for</th><th>Hours</th><th>Known teams</th><th>Seen</th><th>Towns</th><th>What</th><th>Last</th></tr></thead>
           <tbody>${liste.map(([key,d])=>`<tr>
             <td><a href="#" data-oeffne="${esc(key)}" style="color:var(--accent)">${esc(d.name)}</a></td>
             <td><input class="mini" data-clan="${esc(key)}" value="${esc((S.roster[key]&&S.roster[key].v&&S.roster[key].v.clan)||"")}"
@@ -3906,7 +4051,12 @@ function intelDialog(tab){
               <option value="">—</option>
               ${FACTIONS.map(f=>`<option value="${f.id}"${d.f===f.id?" selected":""}>${f.tag}</option>`).join("")}
             </select></td>
-            <td>${feindDepot(key).length || "—"}</td>
+            <td><select data-tz="${esc(key)}" class="mini" style="width:96px">
+              <option value="">—</option>
+              ${TZ_WAHL.map(([v,n2])=>`<option value="${v}"${spielerZeit(key)===v?" selected":""}
+                >${esc(n2)}</option>`).join("")}
+            </select></td>
+            <td>${atEcht(feindDepot(key)).length || "—"}</td>
             <td>${d.teams?nz(d.teams):"—"}</td>
             <td>${d.orte.size||"—"}</td>
             <td style="text-align:left">${[...d.arten.entries()].map(([k,v])=>
@@ -3915,6 +4065,102 @@ function intelDialog(tab){
             <td style="color:var(--dim2)">${d.t?alterText(d.t):"—"}</td>
           </tr>`).join("")}</tbody></table></div>` : `<div class="empty">Nobody on record yet.</div>`}
         <div class="note">Click a name to record the teams they own.</div>
+      </div>
+
+      <div class="tabp" data-tab="gaps">
+        ${(()=>{
+          const zeilen = [];
+          for (const [key, d] of proSpieler){
+            const dep = feindDepot(key);
+            const echt = atEcht(dep).length, offen = atOffen(dep).length;
+            const mind = atMindestens(dep);
+            const fehlt = Math.max(0, mind - echt);
+            if (!fehlt && !offen && echt) continue;      // vollstaendig, nichts zu tun
+            if (!fehlt && !offen && !echt && !d.teams) { zeilen.push({key, d, echt, offen, mind, fehlt:0, leer:true}); continue; }
+            if (!fehlt && !offen) continue;
+            zeilen.push({key, d, echt, offen, mind, fehlt, leer:false});
+          }
+          zeilen.sort((a,b)=> (b.fehlt+b.offen) - (a.fehlt+a.offen) || b.mind - a.mind);
+          if (!zeilen.length) return `<div class="empty">Nothing missing that we could tell.
+            Record a team with a numbered tag and the gaps show up here.</div>`;
+          return `<div class="tw"><table>
+            <thead><tr><th>Player</th><th>Clan</th><th>Recorded</th><th>At least</th>
+              <th>Missing</th><th>Placeholders</th></tr></thead>
+            <tbody>${zeilen.slice(0,300).map(z=>`<tr>
+              <td><a href="#" data-oeffne="${esc(z.key)}" style="color:var(--accent)">${esc(z.d.name)}</a></td>
+              <td style="color:var(--dim2)">${esc((S.roster[z.key]&&S.roster[z.key].v&&S.roster[z.key].v.clan)||"—")}</td>
+              <td>${z.echt||"—"}</td>
+              <td>${z.mind||"—"}</td>
+              <td style="color:${z.fehlt?"var(--accent)":"var(--dim2)"}"><b>${z.fehlt||"—"}</b></td>
+              <td style="color:var(--dim2)">${z.offen||"—"}</td>
+            </tr>`).join("")}</tbody></table></div>`;
+        })()}
+        <div class="note">How many assault teams somebody has follows from their tags: whoever
+          fields <b>USSR-012</b> owns twelve, even if only four are written down. <b>Missing</b> is
+          the difference — that is what to look for. <b>Placeholders</b> are entries created for
+          known gaps; they carry no information yet.</div>
+      </div>
+
+      <div class="tabp" data-tab="when">
+        <div class="row" style="align-items:center;gap:6px">
+          <select id="ak-f" style="width:110px">
+            ${FACTIONS.map(q=>`<option value="${q.id}">${q.tag}</option>`).join("")}
+          </select>
+          <input type="text" id="ak-clan" placeholder="clan (optional)" style="width:140px" dir="auto">
+          <input type="number" id="ak-n" placeholder="how many" style="width:100px" min="0" max="9999">
+          <button class="btn primary" id="ak-add">Record now</button>
+        </div>
+        ${(()=>{
+          const l = aktListe();
+          if (!l.length) return `<div class="empty">Nothing recorded yet. Enter how many of a side
+            are around right now — the timestamp comes along, and the picture builds itself.</div>`;
+          const m = aktMuster(l);
+          const maxS = Math.max(1, ...m.std), maxT = Math.max(1, ...m.tag);
+          const TAGE = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+          const balken = (wert, max, breit) => `<div style="background:var(--panel2);border-radius:2px;
+            height:9px;width:${breit}px;overflow:hidden"><div style="height:100%;
+            width:${Math.round(100*wert/max)}%;background:var(--accent)"></div></div>`;
+          return `<div style="display:flex;gap:18px;flex-wrap:wrap">
+            <div style="flex:1;min-width:230px">
+              <div style="font-size:11px;color:var(--dim);margin-bottom:4px">By hour, your time</div>
+              ${m.std.map((v,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:1px">
+                <span style="font-size:10px;color:var(--dim2);width:24px;text-align:right">${i}</span>
+                ${balken(v, maxS, 150)}
+                <span style="font-size:10px;color:var(--dim2)">${v||""}</span></div>`).join("")}
+            </div>
+            <div style="flex:1;min-width:200px">
+              <div style="font-size:11px;color:var(--dim);margin-bottom:4px">By weekday</div>
+              ${m.tag.map((v,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+                <span style="font-size:10px;color:var(--dim2);width:26px">${TAGE[i]}</span>
+                ${balken(v, maxT, 150)}
+                <span style="font-size:10px;color:var(--dim2)">${v||""}</span></div>`).join("")}
+              <div style="font-size:11px;color:var(--dim);margin:10px 0 4px">Last recorded</div>
+              ${l.slice(0,8).map(a=>`<div style="font-size:11px;color:var(--dim2)">
+                ${new Date(a.t).toLocaleString()} · ${FACTIONS[a.f]?FACTIONS[a.f].tag:"?"}${
+                a.clan?` · ${esc(a.clan)}`:""} · <b>${a.n}</b></div>`).join("")}
+            </div>
+          </div>`;
+        })()}
+        <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
+          <div style="font-size:12px;color:var(--dim);margin-bottom:5px">What changed in the game</div>
+          ${ereignisse().length ? `<div style="display:flex;flex-direction:column;gap:3px">${
+            ereignisse().map((e,i)=>`<div style="display:flex;align-items:center;gap:8px;font-size:11px">
+              <span style="color:var(--accent);width:82px">${esc(e.d||"")}</span>
+              <span style="flex:1" dir="auto">${esc(e.t||"")}</span>
+              <button class="btn" data-erm="${i}" style="font-size:10px;padding:0 5px">×</button>
+            </div>`).join("")}</div>`
+            : `<div style="font-size:11px;color:var(--dim2)">Nothing noted.</div>`}
+          <div class="row" style="margin-top:6px">
+            <input type="date" id="er-d" style="width:150px">
+            <input type="text" id="er-t" placeholder="gold is back, underpopulation bonus gone …"
+              style="flex:1" dir="auto">
+            <button class="btn" id="er-add">Note it</button>
+          </div>
+        </div>
+        <div class="note">Every entry carries its timestamp, so the picture builds itself — nobody
+          has to keep a statistic. The hours are shown in <b>your</b> time, because that is what you
+          plan in. Events sit next to it: otherwise nobody remembers why everything looks different
+          from one Tuesday on.</div>
       </div>
 
       <div class="tabp" data-tab="spots">
@@ -3953,6 +4199,45 @@ function intelDialog(tab){
     merkeSpieler(d.name, s.value === "" ? null : +s.value);
     draw(); toast("Faction updated");
   }));
+  document.querySelectorAll("[data-tz]").forEach(sel => sel.addEventListener("change", ()=>{
+    setSpielerZeit(sel.dataset.tz, sel.value === "" ? null : +sel.value);
+    toast("Noted");
+  }));
+  {
+    const ab = document.getElementById("ak-add");
+    if (ab) ab.addEventListener("click", ()=>{
+      const n = +document.getElementById("ak-n").value;
+      if (!(n >= 0)){ toast("How many?"); return; }
+      aktMelden(+document.getElementById("ak-f").value,
+                document.getElementById("ak-clan").value, n);
+      intelDialog("when"); toast("Recorded");
+    });
+    const eb = document.getElementById("er-add");
+    if (eb) eb.addEventListener("click", ()=>{
+      const d = document.getElementById("er-d").value;
+      const x = document.getElementById("er-t").value.trim();
+      if (!d || !x){ toast("Date and what happened, please."); return; }
+      setEreignisse(ereignisse().concat([{d, t:x}]));
+      intelDialog("when");
+    });
+    document.querySelectorAll("[data-erm]").forEach(b => b.addEventListener("click", ()=>{
+      const l = ereignisse(); l.splice(+b.dataset.erm, 1); setEreignisse(l); intelDialog("when");
+    }));
+  }
+  document.querySelectorAll("[data-clanfac]").forEach(sel => {
+    sel.addEventListener("change", ()=>{
+      const f = sel.value === "" ? null : +sel.value;
+      if (f === null) return;
+      const name = sel.dataset.clanfac;
+      const mit = spielerListe().filter(p => (p.clan||"").trim().toLowerCase() === name.trim().toLowerCase());
+      if (!mit.length) return;
+      if (!confirm(`Move all ${mit.length} recorded member${mit.length===1?"":"s"} of `
+                 + `${name} to ${FACTIONS[f].name}?`)){ intelDialog("clans"); return; }
+      for (const p of mit) merkeSpieler(p.name, f, p.clan);
+      intelDialog("clans");
+      toast(`${name}: ${mit.length} moved to ${FACTIONS[f].tag}`);
+    });
+  });
   document.querySelectorAll("[data-clan]").forEach(inp => {
     inp.addEventListener("click", ev => ev.stopPropagation());
     inp.addEventListener("change", ()=>{
@@ -4153,6 +4438,152 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
   });
 });
 
+
+/* ---- Das Fenster zur Schlachtanalyse --------------------------------- */
+document.getElementById("b-battle").addEventListener("click", ()=>battleDialog(sel));
+function battleDialog(ort){
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const i = (ort === null || ort === undefined) ? null : +ort;
+  const stand = i !== null ? (battleStand(i) || {}) : {};
+  const wirF = clanFaktion();
+  const vorrat = {wir: stand.wir || {}, sie: stand.sie || {}};
+  const art = stand.art || "assault";
+  const gruppen = ["army", "armor", "air"].filter(g => resListe().some(r => r.grp === g));
+  const wirKann = ausRessourcen(vorrat.wir), sieKann = ausRessourcen(vorrat.sie);
+  const urteil = schlachtUrteil(wirKann, sieKann);
+  /* Wer dort schon gesehen wurde - die Karte weiss es ohnehin. */
+  const gesehen = [];
+  if (i !== null){
+    for (const k of Object.keys(S.spot)){
+      if (+k.slice(0, k.indexOf(":")) !== i) continue;
+      const e = S.spot[k];
+      if (!e || !Array.isArray(e.v) || !imKrieg(e)) continue;
+      for (const u of e.v) if (u && u.owner) gesehen.push({name: u.owner, f: u.f, n: u.n, t: e.t});
+    }
+  }
+  const nameZuKey = new Map();
+  for (const g of gesehen) nameZuKey.set(g.name, spielerKey(g.name));
+  const eigene = i !== null ? unitsAt(i).filter(g=>g.mine).flatMap(g=>g.list) : [];
+  const eigMen = eigene.reduce((s,u)=>s + u.s*atMen(u.k), 0);
+  const eigVeh = eigene.reduce((s,u)=>s + u.s*atVeh(u.k), 0);
+  const zwName = z => (ZWEIGE.find(x=>x.k===z)||{name:z}).name;
+  const feld = (seite, r) => `<input type="number" min="0" data-vr="${seite}:${esc(r.k)}"
+      value="${+(vorrat[seite][r.k] || 0) || ""}" placeholder="0"
+      style="width:78px;padding:2px 4px;font-size:11px">`;
+  /* Die Auswertung fuer sich, damit sie beim Tippen neu gerechnet werden kann,
+     ohne dass die Eingabefelder verschwinden und der Fokus wegspringt. */
+  const auswertung = () => {
+    const kw = ausRessourcen(vorrat.wir), ks = ausRessourcen(vorrat.sie);
+    const u = schlachtUrteil(kw, ks);
+    return `<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:9px;
+           display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:250px">
+          <div style="font-size:11px;color:var(--dim);margin-bottom:4px">What you could field</div>
+          ${kannListe(kw)}
+          ${eigene.length ? `<div style="font-size:11px;color:var(--dim2);margin-top:6px">
+            Standing there now: <b>${eigene.reduce((s,x)=>s+x.s,0)}</b> of your teams ·
+            ${eigMen.toLocaleString("en")} men${eigVeh?` · ${eigVeh} vehicles`:""}</div>` : ""}
+        </div>
+        <div style="flex:1;min-width:250px">
+          <div style="font-size:11px;color:var(--dim);margin-bottom:4px">What they could field</div>
+          ${kannListe(ks)}
+        </div>
+      </div>
+      ${(u.fehlt.length || u.droht.length || u.stark.length) ? `
+      <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:9px;
+           display:flex;flex-direction:column;gap:4px">
+        ${u.fehlt.map(s=>`<div style="font-size:12px;color:#e03b32"><b>✕</b> ${esc(s)}</div>`).join("")}
+        ${u.droht.map(s=>`<div style="font-size:12px;color:var(--accent)"><b>!</b> ${esc(s)}</div>`).join("")}
+        ${u.stark.map(s=>`<div style="font-size:12px;color:var(--dim)"><b>✓</b> ${esc(s)}</div>`).join("")}
+      </div>` : ""}`;
+  };
+  const kannListe = liste => {
+    const m = zweigStaerke(liste);
+    const zs = ZWEIGE.filter(z => m.has(z.k));
+    if (!zs.length) return `<div style="font-size:11px;color:var(--dim2)">Nothing — no resources entered.</div>`;
+    return zs.map(z=>{
+      const d = m.get(z.k);
+      const top = d.typen.sort((a,b)=>b.n-a.n).slice(0,3);
+      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+        <span style="font-size:11px;color:var(--dim);width:74px">${esc(z.name)}</span>
+        <b style="width:44px;text-align:right">${d.best}</b>
+        <span style="flex:1;display:flex;gap:5px;flex-wrap:wrap">${top.map(x=>
+          `<span title="${esc(atName(x.k))}" style="display:inline-flex;align-items:center;gap:2px">
+            ${symbolSVG(x.k, c, 18, 12)}<small style="color:var(--dim2)">${x.n}</small></span>`).join("")}</span>
+      </div>`;}).join("");
+  };
+  openDlg(`
+    <div class="dlg-h"><h2>Battle analysis</h2>
+      <p>${i !== null ? `<b>${esc(MAP.n[i][0])}</b> · ${esc(MAP.typen[MAP.n[i][3]])}${
+          isCap(i)?" · capital":""} · held by ${ownerOf(i)>=0?`<b style="color:${col(FACTIONS[ownerOf(i)])}"
+          >${FACTIONS[ownerOf(i)].tag}</b>`:"nobody"}`
+        : "Pick a town on the map first, then open this window."}</p></div>
+    <div class="dlg-b">
+      ${i === null ? `<div class="empty">Click a town, then press <b>Battle</b>.</div>` : `
+      <div class="row" style="align-items:center;gap:8px">
+        <span style="font-size:12px;color:var(--dim);width:74px">Battle</span>
+        <div class="own4" style="flex:1">
+          ${[["assault","Assault"],["encounter","Encounter"],["skirmish","Skirmish"]].map(([k,n])=>
+            `<button data-art="${k}" aria-pressed="${art===k}">${n}</button>`).join("")}
+        </div>
+      </div>
+      <div class="note" style="font-size:11px">Type in the resource grid the game shows for this
+        battle — <b>${gruppen.map(g=>RES_GRP[g]).join("</b>, <b>")}</b>. From those and the cost of
+        each team type the map works out what either side can actually field.</div>
+      <div class="tw" style="margin-top:6px"><table>
+        <thead><tr><th style="text-align:left">Resource</th><th>Yours</th><th>Theirs</th></tr></thead>
+        <tbody>${gruppen.map(g=>`
+          <tr><td colspan="3" style="text-align:left;padding-top:7px;color:var(--accent);
+            font-size:10px;letter-spacing:.7px;text-transform:uppercase">${RES_GRP[g]}</td></tr>
+          ${resListe().filter(r=>r.grp===g).sort((a,b)=>a.ord-b.ord).map(r=>`
+            <tr><td style="text-align:left">${esc(resName(r.k))}</td>
+              <td>${feld("wir", r)}</td><td>${feld("sie", r)}</td></tr>`).join("")}
+        `).join("")}</tbody></table></div>
+
+      <div id="btl-erg">${auswertung()}</div>
+
+      ${gesehen.length ? `
+      <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:9px">
+        <div style="font-size:11px;color:var(--dim);margin-bottom:4px">Seen here</div>
+        ${gesehen.slice(0,12).map(g=>{
+          const key = nameZuKey.get(g.name);
+          const rollen = key ? feindRollen(key) : [];
+          const dep = key ? atEcht(feindDepot(key)).length : 0;
+          return `<div style="display:flex;align-items:center;gap:7px;font-size:11px;margin-bottom:2px">
+            <span style="flex:1" dir="auto">${esc(g.name)}</span>
+            ${g.f != null ? fBadge(g.f) : ""}
+            <span style="color:var(--dim2)">${g.n} team${g.n===1?"":"s"}</span>
+            ${dep ? `<span style="color:var(--dim2)">${dep} known</span>` : ""}
+            ${rollen.length ? `<span style="color:var(--accent)">${esc(rollen.join(", "))}</span>` : ""}
+          </div>`;}).join("")}
+      </div>` : ""}
+      <div class="note">Everyone in the clan sees the same figures for this town — a battle is
+        prepared together. Reading the grid straight from a screenshot comes next; until then it
+        is typed in.</div>`}
+    </div>
+    <div class="dlg-f"><button class="btn" id="d-close">Close</button></div>`, true);
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  if (i === null) return;
+  const sichern = () => {
+    setBattle(i, {art, wir: vorrat.wir, sie: vorrat.sie});
+  };
+  document.querySelectorAll("#dlg [data-vr]").forEach(inp => {
+    /* Beim Tippen nur speichern und die Auswertung neu rechnen - das Fenster
+       bleibt stehen, sonst waeren sechsunddreissig Felder nicht zu fuellen. */
+    inp.addEventListener("input", ()=>{
+      const [seite, k] = inp.dataset.vr.split(":");
+      const n = Math.max(0, +inp.value || 0);
+      if (n) vorrat[seite][k] = n; else delete vorrat[seite][k];
+      sichern();
+      const ziel = document.getElementById("btl-erg");
+      if (ziel) ziel.innerHTML = auswertung();
+    });
+  });
+  document.querySelectorAll("#dlg [data-art]").forEach(b => b.addEventListener("click", ()=>{
+    setBattle(i, {art: b.dataset.art, wir: vorrat.wir, sie: vorrat.sie});
+    battleDialog(i);
+  }));
+}
 /* ---- the text recogniser ---------------------------------------------
    Tesseract expects dark letters on a light ground and about 30 px of line
    height. A game screenshot is the exact opposite: small light letters on a
@@ -5766,7 +6197,7 @@ function endeStutzen(s){
 }
 function saeubern(s){
   return endeStutzen(String(s || "")
-    .replace(/[^\w \-\[\]()'.À-ɏ]+/g, " ")
+    .replace(/[^\p{L}\p{N}_ \-\[\]()'.]+/gu, " ")   // jede Schrift, nicht nur die lateinische
     .replace(/\s+/g, " ")
     .replace(/^[^\w\[(]+/, "").replace(/[^\w\])]+$/, "")
     .replace(/\s*[-–]\s*(\d+)$/, " - $1")
@@ -6183,43 +6614,534 @@ async function ocrLesen(datei){
 
 /* What we believe one enemy player owns. Shared, so the whole clan builds it
    up together; name and tag are there so nobody enters the same team twice. */
+/* ---- Gegnerische Kampfeinheiten: Zeile lesen und abgleichen ----------
+   Das Fenster ueber einer Einheit nennt sie "KUERZEL - NAME". Geteilt wird am
+   ERSTEN Trenner: der Name darf selbst welche enthalten, "BODEN1 -
+   BODENMAENNER - 1" hat das Kuerzel BODEN1.
+   Gekuerzt wird nach Fensterbreite, nicht nach Zeichenzahl - am Ende steht
+   dann ein Auslassungszeichen. Ein solcher Name ist unvollstaendig und wird
+   nie ergaenzt, nur vermerkt. */
+const AT_TRENNER = /\s[-\u2010-\u2015\u2212]\s/;
+function atZeileTeilen(zeile){
+  const s = String(zeile == null ? "" : zeile).replace(/\s+/g, " ").trim();
+  if (!s) return null;
+  const m = AT_TRENNER.exec(s);
+  if (!m) return {tag: "", name: s, kurz: /(\u2026|\.\.\.)$/.test(s)};
+  let tag = s.slice(0, m.index).trim();
+  let name = s.slice(m.index + m[0].length).trim();
+  const kurz = /(\u2026|\.\.\.)$/.test(name);
+  if (kurz) name = name.replace(/\s*(\u2026|\.\.\.)$/, "").trim();
+  return {tag, name, kurz};
+}
+/* Kuerzel vergleichbar machen, ohne Zeichen wegzuwerfen: nur Grossschreibung
+   und Leerraum. Welche Schrift jemand benutzt, geht uns nichts an. */
+const atTagKey = s => String(s == null ? "" : s).replace(/\s+/g, "").toUpperCase();
+/* Zwei Eintraege sind dieselbe Einheit, wenn die Kuerzel uebereinstimmen.
+   Fehlt eines, hilft der Name - ein abgeschnittener zaehlt als Treffer, wenn
+   der laengere so anfaengt. */
+function gleicheAT(a, b){
+  const ta = atTagKey(a.tag), tb = atTagKey(b.tag);
+  if (ta && tb) return ta === tb;
+  const na = String(a.name || "").trim().toLowerCase();
+  const nb = String(b.name || "").trim().toLowerCase();
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const kurz = a.kurz || b.kurz;
+  return kurz && (na.startsWith(nb) || nb.startsWith(na));
+}
+/* "USSR-003" -> Stamm "USSR-", Nummer 3, drei Stellen. Der Stamm ist alles vor
+   der abschliessenden Zahl - ob er mit der Fraktion beginnt oder mit "INF",
+   spielt keine Rolle. */
+function atNummer(tag){
+  const m = /^(.*?)(\d+)$/.exec(String(tag == null ? "" : tag).trim());
+  if (!m || !m[1]) return null;
+  return {stamm: m[1], zahl: +m[2], stellen: m[2].length};
+}
+/* Welche Nummern unterhalb der eingetragenen fehlen noch? */
+/* Bis wohin nehmen wir eine Nummer ernst? Kampfeinheiten kosten Befehls-
+   punkte und Kriegsgeld; einige Dutzend sind viel. Wer "-208" dranschreibt,
+   will nur groesser wirken. Ab 40 wird deshalb nicht mehr gefragt, und mehr
+   als zehn Luecken auf einmal gibt es nie - sonst ploppen zweihundert Zeilen
+   auf. */
+const AT_NUMMER_MAX = 40;
+const AT_LUECKEN_MAX = 15;
+function atLuecken(liste, tag){
+  const n = atNummer(tag);
+  if (!n || n.zahl < 2 || n.zahl > AT_NUMMER_MAX) return [];
+  const da = new Set();
+  for (const d of liste){
+    const q = atNummer(d.tag);
+    if (q && q.stamm === n.stamm) da.add(q.zahl);
+  }
+  const fehlt = [];
+  for (let i = 1; i < n.zahl; i++)
+    if (!da.has(i)) fehlt.push(n.stamm + String(i).padStart(n.stellen, "0"));
+  return fehlt.length > AT_LUECKEN_MAX ? [] : fehlt;
+}
+
+/* Ein Platzhalter ist bekannt, aber nicht aufgeklaert. */
+const atEcht  = l => (l || []).filter(d => !d.ung);
+const atOffen = l => (l || []).filter(d => d.ung);
+/* Aus der hoechsten Nummer folgt, wie viele es mindestens gibt: wer USSR-012
+   fuehrt, hat zwoelf Kampfeinheiten - auch wenn erst vier bekannt sind.
+   Angeberzahlen jenseits der Grenze zaehlen dabei nicht mit. */
+function atMindestens(liste){
+  let m = 0;
+  for (const d of (liste || [])){
+    const q = atNummer(d.tag);
+    if (q && q.zahl <= AT_NUMMER_MAX) m = Math.max(m, q.zahl);
+  }
+  return m;
+}
+
+/* ---- Zeichenhilfe ----------------------------------------------------
+   Namen kommen aus allen Schriften der Welt, und manche bestehen aus
+   Sonderzeichen, die auf keiner Tastatur liegen - 8.png ist siebenmal U+3020.
+   Eine Bildschirmtastatur dafuer gibt es nicht. Zwei Wege helfen wirklich:
+   das Zeichen ueber seine Nummer einfuegen, und eine Ablage der Zeichen, die
+   in dieser Datenbank schon vorkommen. Die wiederholen sich, weil dieselben
+   Leute dieselben Spielereien treiben. */
+function zeichenAblage(){
+  const zahl = new Map();
+  const nimm = s => {
+    for (const ch of String(s || "")){
+      if (ch.codePointAt(0) < 128) continue;          // gewoehnliche Tastatur
+      zahl.set(ch, (zahl.get(ch) || 0) + 1);
+    }
+  };
+  for (const e of Object.values(S.edep || {}))
+    for (const d of (Array.isArray(e.v) ? e.v : [])){ nimm(d.name); nimm(d.tag); }
+  for (const e of Object.values(S.roster || {})) nimm(e && e.v && e.v.name);
+  return [...zahl.entries()].sort((a,b)=>b[1]-a[1]).slice(0, 48).map(x=>x[0]);
+}
+/* "3020", "U+3020" oder "〠" selbst - alles ergibt dasselbe Zeichen. */
+function zeichenAus(eingabe){
+  const s = String(eingabe || "").trim();
+  if (!s) return "";
+  const m = /^(?:u\+?)?([0-9a-f]{2,6})$/i.exec(s);
+  if (m){
+    const n = parseInt(m[1], 16);
+    if (n > 0 && n <= 0x10ffff){ try { return String.fromCodePoint(n); } catch(e){ return ""; } }
+  }
+  return s;
+}
+
+/* ---- Schlachtanalyse -------------------------------------------------
+   Was eine Seite aufstellen kann, folgt aus dem Vorrat am Ort und den Kosten
+   eines Truppentyps. Beides steht in den Spieldateien: Infantry kostet 90
+   Infantryman, Recon 20 Recon. Das Minimum ueber alle benoetigten Ressourcen
+   ist die Zahl - mehr geht nicht, auch wenn von einer anderen Ressource noch
+   reichlich da ist. */
+const battleStand = i => (S.btl[i] && S.btl[i].v) || null;
+function setBattle(i, v){
+  S.btl[i] = {v, t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`btl:${i}`); save();
+}
+function ausRessourcen(vorrat){
+  const raus = [];
+  for (const a of MAP.at){
+    const kost = a.cost || {};
+    const ks = Object.keys(kost);
+    if (!ks.length) continue;
+    let n = Infinity;
+    for (const k of ks) n = Math.min(n, Math.floor((+vorrat[k] || 0) / kost[k]));
+    if (isFinite(n) && n > 0) raus.push({k: a.k, n, zweig: a.branch || "other"});
+  }
+  return raus.sort((x,y)=>y.n - x.n);
+}
+/* Je Zweig die staerkste Aufstellung - so bleibt die Gegenueberstellung
+   lesbar, statt achtzehn Zeilen nebeneinanderzustellen. */
+function zweigStaerke(liste){
+  const m = new Map();
+  for (const e of liste){
+    const d = m.get(e.zweig) || {zweig: e.zweig, best: 0, typen: []};
+    if (e.n > d.best) d.best = e.n;
+    d.typen.push(e);
+    m.set(e.zweig, d);
+  }
+  return m;
+}
+/* Was droht und was fehlt. Bewusst wenige, klare Saetze - wer vor einem
+   Kampf steht, liest keine Tabelle mit achtzehn Zeilen. */
+function schlachtUrteil(wir, sie){
+  const zw = z => (ZWEIGE.find(x=>x.k===z)||{name:z}).name;
+  const a = zweigStaerke(wir), b = zweigStaerke(sie);
+  const zweige = [...new Set([...a.keys(), ...b.keys()])];
+  const droht = [], fehlt = [], gleich = [];
+  for (const z of zweige){
+    const u = (a.get(z)||{best:0}).best, g = (b.get(z)||{best:0}).best;
+    if (!g && !u) continue;
+    if (g > 0 && u === 0) fehlt.push(`Nothing to answer their ${zw(z).toLowerCase()} — they can field ${g}, you none.`);
+    else if (g >= 2*u && g - u >= 2) droht.push(`${zw(z)}: they can field ${g}, you ${u}.`);
+    else if (u >= 2*g && u - g >= 2) gleich.push(`${zw(z)} is yours — ${u} against ${g}.`);
+  }
+  return {droht, fehlt, stark: gleich};
+}
+
+/* ---- Vermutete Zeitzone ----------------------------------------------
+   In Stunden gegen UTC, weil das die einzige Angabe ist, die sich aus einer
+   Beobachtung wirklich ableiten laesst - eine Region waere schon Deutung.
+   Der Clan erbt die haeufigste seiner erfassten Mitglieder. */
+const TZ_WAHL = [[-8,"UTC-8 US West"],[-5,"UTC-5 US Ost"],[-3,"UTC-3 Suedamerika"],
+                 [0,"UTC+0 UK/Portugal"],[1,"UTC+1 Mitteleuropa"],[2,"UTC+2 Osteuropa"],
+                 [3,"UTC+3 Moskau"],[5,"UTC+5 Zentralasien"],[8,"UTC+8 China"],
+                 [9,"UTC+9 Japan/Korea"],[10,"UTC+10 Australien"]];
+function setSpielerZeit(key, tz){
+  const e = S.roster[key];
+  if (!e || !e.v) return;
+  S.roster[key] = {...e, v: {...e.v, tz: (tz === null || tz === "") ? undefined : +tz},
+                   t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`roster:${key}`); save();
+}
+const spielerZeit = key => {
+  const v = S.roster[key] && S.roster[key].v;
+  return (v && typeof v.tz === "number") ? v.tz : null;
+};
+function clanZeit(clanName){
+  const z = new Map();
+  for (const p of spielerListe()){
+    if ((p.clan||"").trim().toLowerCase() !== String(clanName).trim().toLowerCase()) continue;
+    const tz = spielerZeit(p.key);
+    if (tz !== null) z.set(tz, (z.get(tz)||0) + 1);
+  }
+  if (!z.size) return null;
+  const best = [...z.entries()].sort((a,b)=>b[1]-a[1])[0];
+  return {tz: best[0], von: best[1], gesamt: [...z.values()].reduce((s,x)=>s+x,0)};
+}
+const tzText = tz => tz === null || tz === undefined ? "—"
+  : (TZ_WAHL.find(x=>x[0]===tz) || [tz, `UTC${tz>=0?"+":""}${tz}`])[1];
+
+/* ---- Wer ist gerade da? ----------------------------------------------
+   Jede Eingabe traegt ihren Zeitstempel. Daraus entsteht von selbst ein Bild
+   ueber die Stunden des Tages und ueber die Wochentage - ohne dass jemand
+   eine Statistik pflegen muesste. */
+function aktMelden(f, clan, n){
+  const id = Math.random().toString(36).slice(2,10);
+  S.akt[id] = {v: {f, clan: String(clan||"").trim(), n: Math.max(0, +n||0)},
+               t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`akt:${id}`); save();
+}
+function aktListe(){
+  const raus = [];
+  for (const k of Object.keys(S.akt || {})){
+    const e = S.akt[k];
+    if (!e || !e.v || !imKrieg(e)) continue;
+    raus.push({id:k, t:e.t||0, ...e.v});
+  }
+  return raus.sort((a,b)=>b.t-a.t);
+}
+/* Nach Stunde und nach Wochentag, in der Zeit des Betrachters - wer die Karte
+   liest, plant in seiner eigenen. */
+function aktMuster(liste){
+  const std = new Array(24).fill(0), tag = new Array(7).fill(0);
+  let hoechst = 0;
+  for (const a of liste){
+    const d = new Date(a.t);
+    std[d.getHours()] += a.n;
+    tag[d.getDay()] += a.n;
+    hoechst = Math.max(hoechst, a.n);
+  }
+  return {std, tag, hoechst};
+}
+
+/* ---- Ereignisse auf der Zeitachse ------------------------------------
+   Was das ganze Spiel verschiebt, gehoert neben die Aktivitaetskurve: sonst
+   erklaert niemand mehr, warum ab einem Dienstag alles anders aussieht. */
+function ereignisse(){
+  const e = S.meta.ereig;
+  return (e && Array.isArray(e.v)) ? e.v.slice().sort((a,b)=>String(a.d).localeCompare(String(b.d))) : [];
+}
+function setEreignisse(l){ setMeta("ereig", l); }
+
+/* ---- Gegnerisches Arsenal und Rollen ---------------------------------
+   Beides haengt an derselben Zeile wie die Kampfeinheiten - eine Zeile je
+   Spieler, damit der Abgleich zwischen den Clanmitgliedern einfach bleibt.
+   Je Fraktion ein eigenes Arsenal: dieselbe Person spielt in verschiedenen
+   Kriegen verschiedene Seiten, und was sie als Deutscher fuhr, sagt nichts
+   darueber, womit sie als Russe antritt. */
+function setFeindTeil(key, teil){
+  const alt = S.edep[key] || {};
+  S.edep[key] = Object.assign({}, alt, teil,
+                              {t: jetzt(), by: S.me, n: S.name || ""});
+  dirty.add(`edep:${key}`); save();
+}
+function feindArsenal(key, f){
+  const a = (S.edep[key] && S.edep[key].ars) || {};
+  const x = a[f] || a[String(f)] || {};
+  return {w: Array.isArray(x.w) ? x.w : [], v: Array.isArray(x.v) ? x.v : []};
+}
+function setFeindArsenal(key, f, wert){
+  const alt = (S.edep[key] && S.edep[key].ars) || {};
+  setFeindTeil(key, {ars: Object.assign({}, alt, {[f]: wert})});
+}
+const feindRollen = key => {
+  const r = S.edep[key] && S.edep[key].rollen;
+  return Array.isArray(r) ? r : [];
+};
+/* Der Fraktionscode der Spieldateien ist 1-basiert, 0 heisst "fuer alle". */
+const fuerSeite = (eintrag, f) => !eintrag.f || eintrag.f === f + 1;
+/* Vorschlaege fuer Rollen: was im Clan schon vergeben wurde, dazu ein paar
+   gaengige. So bildet sich eine gemeinsame Sprache statt fuenfzehn
+   Schreibweisen fuer dasselbe. */
+const ROLLEN_START = ["good pilot", "good tanker", "good at gunner", "sniper",
+                      "medic", "squad leader", "recon", "cheater?"];
+function rollenVorrat(){
+  const z = new Map();
+  for (const e of Object.values(S.edep || {}))
+    for (const r of (Array.isArray(e.rollen) ? e.rollen : []))
+      z.set(r, (z.get(r) || 0) + 1);
+  const raus = [...z.entries()].sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+  for (const r of ROLLEN_START) if (!z.has(r)) raus.push(r);
+  return raus.slice(0, 40);
+}
+
 function feindDialog(key, name){
   const c = light() ? "#1a2029" : "#e9e2d5";
   const liste = feindDepot(key);
   const eintrag = S.roster[key];
   const f = eintrag && eintrag.v ? eintrag.v.f : null;
+  const arsF = (feindDialog.seite != null) ? feindDialog.seite : (f != null ? f : clanFaktion());
+  const ars = feindArsenal(key, arsF);
+  const rollen = feindRollen(key);
+  const waffen = MAP.arms.filter(a => fuerSeite(a, arsF));
+  const fahrz  = MAP.veh.filter(v => fuerSeite(v, arsF));
+  const upgName = k => (MAP.upg.find(u=>u.k===k) || {}).name || k;
   openDlg(`
     <div class="dlg-h"><h2>${esc(name)}</h2>
-      <p>${liste.length ? `<b>${liste.length}</b> assault teams on record` : "Nothing on record yet"}${
+      <p>${liste.length ? `<b>${atEcht(liste).length}</b> assault teams on record` : "Nothing on record yet"}${
+        atOffen(liste).length ? ` · <b>${atOffen(liste).length}</b> placeholder${atOffen(liste).length===1?"":"s"}` : ""}${
         f != null ? ` · fighting for <b style="color:${col(FACTIONS[f])}">${FACTIONS[f].name}</b>` : ""}</p></div>
+    <div class="tabs">
+      <button data-ftab="teams" aria-pressed="true">Assault teams</button>
+      <button data-ftab="ars"   aria-pressed="false">Arsenal</button>
+      <button data-ftab="role"  aria-pressed="false">Roles</button>
+    </div>
     <div class="dlg-b">
+      <div class="tabp on" data-ftab="teams">
       ${liste.length ? `<div style="display:flex;flex-direction:column;gap:4px">
-        ${liste.map((d,i)=>`<div class="unit" style="--f:${f!=null?col(FACTIONS[f]):"var(--dim2)"}">
+        ${liste.map((d,i)=>`<div class="unit" style="--f:${d.ung?"var(--dim2)":(f!=null?col(FACTIONS[f]):"var(--dim2)")};${
+              d.ung?"opacity:.62":""}">
           <span class="sym">${symbolSVG(d.k, c)}</span>
-          <span class="n">${esc(d.name || atName(d.k))}<em>${esc(d.tag||"")}${d.tag?" · ":""}${esc(atName(d.k))}</em></span>
+          <span class="n" dir="auto">${esc(d.name || (d.ung ? "not scouted yet" : atName(d.k)))}${
+              d.kurz?'<span style="color:var(--dim2)">…</span>':""}<em dir="auto">${esc(d.tag||"")}${
+              d.tag?" · ":""}${d.ung?"placeholder":esc(atName(d.k))}</em></span>
           <button class="x" data-frm="${i}" title="Remove">×</button></div>`).join("")}
       </div>` : ""}
       <div style="border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:6px">
         <div class="row"><div id="fd-type" style="flex:1"></div></div>
         <div class="row">
-          <input type="text" id="fd-name" placeholder="team name as in game" style="flex:1">
-          <input type="text" id="fd-tag" placeholder="TAG" style="width:84px" maxlength="10">
+          <input type="text" id="fd-name" placeholder="paste the whole line from the game"
+            style="flex:1" dir="auto" spellcheck="false">
+          <input type="text" id="fd-tag" placeholder="TAG" style="width:110px" maxlength="24"
+            dir="auto" spellcheck="false">
           <button class="btn primary" id="fd-add">Add</button>
         </div>
+        <div class="row" style="align-items:center;gap:5px">
+          <input type="text" id="fd-uni" placeholder="U+3020" style="width:82px" spellcheck="false">
+          <button class="btn" id="fd-uni-add" style="font-size:11px">insert</button>
+          <div id="fd-glyphs" style="flex:1;display:flex;flex-wrap:wrap;gap:3px"></div>
+        </div>
       </div>
-      <div class="note">Everyone sees the same list — check the tag before adding, so a team is not entered twice.</div>
+      <div class="note">Everyone sees the same list. Paste the whole line from the game —
+        <b>tag - name</b> — and it splits itself. Matching goes by the tag, because the name
+        can be cut off by the window.</div>
+      </div>
+
+      <div class="tabp" data-ftab="ars">
+        <div class="row" style="align-items:center;gap:7px">
+          <span style="font-size:12px;color:var(--dim)">Arsenal for</span>
+          <div class="own4" style="flex:1">
+            ${FACTIONS.map(q=>`<button data-arsf="${q.id}" style="--f:${q.color}"
+              aria-pressed="${arsF===q.id}">${q.tag}</button>`).join("")}
+          </div>
+        </div>
+        <div class="row">
+          <select id="fa-w" style="flex:1">${waffen.map(a=>
+            `<option value="${esc(a.k)}">${esc(a.name)}</option>`).join("")}</select>
+          <button class="btn" id="fa-w-add">Add weapon</button>
+        </div>
+        ${ars.w.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${ars.w.map((k,i)=>{
+          const a = MAP.arms.find(x=>x.k===k) || {name:k};
+          return `<span class="chip">${esc(a.name)}<b data-wrm="${i}"
+            style="cursor:pointer;padding:0 0 0 5px;font-size:12px">×</b></span>`;}).join("")}</div>`
+          : `<div style="font-size:11px;color:var(--dim2)">No weapons recorded for this side.</div>`}
+        <div class="row" style="margin-top:8px">
+          <select id="fa-v" style="flex:1">${fahrz.map(v=>
+            `<option value="${esc(v.k)}">${esc(v.name)}</option>`).join("")}</select>
+          <button class="btn" id="fa-v-add">Add vehicle</button>
+        </div>
+        ${ars.v.length ? `<div style="display:flex;flex-direction:column;gap:5px">${ars.v.map((e,i)=>{
+          const v = MAP.veh.find(x=>x.k===e.k) || {name:e.k, upg:[]};
+          const drauf = Array.isArray(e.upg) ? e.upg : [];
+          return `<div style="border:1px solid var(--line);border-radius:var(--r);padding:5px 7px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <b style="flex:1">${esc(v.name)}</b>
+              <button class="btn" data-vrm="${i}" style="font-size:11px;padding:1px 6px">×</button></div>
+            ${(v.upg||[]).length ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">${
+              (v.upg||[]).map(u=>`<button class="btn" data-vup="${i}:${esc(u)}"
+                aria-pressed="${drauf.includes(u)}" style="font-size:10px;padding:1px 6px;
+                ${drauf.includes(u)?"border-color:var(--accent);color:var(--accent)":"opacity:.7"}"
+                >${esc(upgName(u))}</button>`).join("")}</div>`
+              : `<div style="font-size:10px;color:var(--dim2);margin-top:3px">No modifications.</div>`}
+          </div>`;}).join("")}</div>`
+          : `<div style="font-size:11px;color:var(--dim2)">No vehicles recorded for this side.</div>`}
+        <div class="note">Straight out of the game files — every weapon and vehicle that side can
+          buy, and for each vehicle exactly the modifications it can carry. Three arsenals because
+          the same person plays different sides in different wars.</div>
+      </div>
+
+      <div class="tabp" data-ftab="role">
+        ${rollen.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${rollen.map((r,i)=>
+          `<span class="chip" style="border-color:var(--accent);color:var(--accent)">${esc(r)}<b
+            data-rrm="${i}" style="cursor:pointer;padding:0 0 0 5px;font-size:12px">×</b></span>`).join("")}</div>`
+          : `<div style="font-size:11px;color:var(--dim2)">Nothing noted about how this one plays.</div>`}
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="fr-neu" placeholder="what stands out about this player"
+            style="flex:1" dir="auto" spellcheck="false">
+          <button class="btn" id="fr-add">Note it</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:5px">${
+          rollenVorrat().filter(r=>!rollen.includes(r)).map(r=>
+            `<button class="btn" data-rset="${esc(r)}" style="font-size:10px;padding:1px 6px;opacity:.8"
+              >+ ${esc(r)}</button>`).join("")}</div>
+        <div class="note">Free text — whatever the clan needs. Suggested are the ones already used
+          elsewhere, so a shared vocabulary forms instead of fifteen spellings for the same thing.</div>
+      </div>
     </div>
     <div class="dlg-f"><button class="btn" id="d-close">Back</button></div>`, true);
+  /* Reiter im Gegnerfenster */
+  document.querySelectorAll("#dlg [data-ftab]").forEach(b => {
+    if (b.tagName !== "BUTTON" || !b.parentElement.classList.contains("tabs")) return;
+    b.addEventListener("click", ()=>{
+      document.querySelectorAll("#dlg .tabs [data-ftab]").forEach(x =>
+        x.setAttribute("aria-pressed", String(x === b)));
+      document.querySelectorAll("#dlg .tabp[data-ftab]").forEach(p =>
+        p.classList.toggle("on", p.dataset.ftab === b.dataset.ftab));
+    });
+  });
+  const bleib = reiter => { feindDialog.reiter = reiter; };
+  document.querySelectorAll("#dlg [data-arsf]").forEach(b => b.addEventListener("click", ()=>{
+    feindDialog.seite = +b.dataset.arsf; feindDialog.reiter = "ars"; feindDialog(key, name);
+  }));
+  {
+    const a = feindArsenal(key, arsF);
+    const schreib = w => { setFeindArsenal(key, arsF, w); feindDialog.reiter = "ars"; feindDialog(key, name); };
+    const wa = document.getElementById("fa-w-add");
+    if (wa) wa.addEventListener("click", ()=>{
+      const k = document.getElementById("fa-w").value;
+      if (a.w.includes(k)){ toast("Already recorded."); return; }
+      schreib({w: a.w.concat([k]), v: a.v});
+    });
+    const va = document.getElementById("fa-v-add");
+    if (va) va.addEventListener("click", ()=>{
+      const k = document.getElementById("fa-v").value;
+      if (a.v.some(x=>x.k===k)){ toast("Already recorded."); return; }
+      schreib({w: a.w, v: a.v.concat([{k, upg:[]}])});
+    });
+    document.querySelectorAll("#dlg [data-wrm]").forEach(b => b.addEventListener("click", ()=>{
+      const w = a.w.slice(); w.splice(+b.dataset.wrm, 1); schreib({w, v: a.v});
+    }));
+    document.querySelectorAll("#dlg [data-vrm]").forEach(b => b.addEventListener("click", ()=>{
+      const v = a.v.slice(); v.splice(+b.dataset.vrm, 1); schreib({w: a.w, v});
+    }));
+    document.querySelectorAll("#dlg [data-vup]").forEach(b => b.addEventListener("click", ()=>{
+      const [i, u] = b.dataset.vup.split(":");
+      const v = a.v.map((e,k)=> k !== +i ? e : {...e,
+        upg: (e.upg||[]).includes(u) ? (e.upg||[]).filter(x=>x!==u) : (e.upg||[]).concat([u])});
+      schreib({w: a.w, v});
+    }));
+  }
+  {
+    const setz = liste2 => { setFeindTeil(key, {rollen: liste2}); feindDialog.reiter = "role"; feindDialog(key, name); };
+    const nf = document.getElementById("fr-neu");
+    const dazu = () => {
+      const s = (nf.value || "").trim();
+      if (!s || rollen.includes(s)) { nf.value = ""; return; }
+      setz(rollen.concat([s]));
+    };
+    const ab = document.getElementById("fr-add");
+    if (ab) ab.addEventListener("click", dazu);
+    if (nf) nf.addEventListener("keydown", ev => { if (ev.key === "Enter"){ ev.preventDefault(); dazu(); } });
+    document.querySelectorAll("#dlg [data-rset]").forEach(b => b.addEventListener("click", ()=>
+      setz(rollen.concat([b.dataset.rset]))));
+    document.querySelectorAll("#dlg [data-rrm]").forEach(b => b.addEventListener("click", ()=>{
+      const l = rollen.slice(); l.splice(+b.dataset.rrm, 1); setz(l);
+    }));
+  }
+  /* Nach einem Neuaufbau denselben Reiter wieder zeigen. */
+  if (feindDialog.reiter){
+    const b = document.querySelector(`#dlg .tabs [data-ftab="${feindDialog.reiter}"]`);
+    if (b) b.click();
+  }
   document.getElementById("d-close").addEventListener("click", ()=>{ closeDlg();
     intelDialog("players"); });
   symbolWahl(document.getElementById("fd-type"), MAP.at[0].k);
+  /* Zeichenhilfe: Nummer eingeben oder ein bekanntes Zeichen anklicken. Es
+     landet dort, wo zuletzt geschrieben wurde. */
+  {
+    const nf = document.getElementById("fd-name"), tf = document.getElementById("fd-tag");
+    let letztes = nf;
+    [nf, tf].forEach(f => f.addEventListener("focus", ()=>{ letztes = f; }));
+    const einsetzen = ch => {
+      if (!ch) return;
+      const f = letztes, a = f.selectionStart ?? f.value.length, b = f.selectionEnd ?? a;
+      f.value = f.value.slice(0, a) + ch + f.value.slice(b);
+      const p = a + ch.length;
+      f.focus(); try { f.setSelectionRange(p, p); } catch(e){}
+    };
+    const uf = document.getElementById("fd-uni");
+    document.getElementById("fd-uni-add").addEventListener("click", ()=>{
+      einsetzen(zeichenAus(uf.value)); uf.value = "";
+    });
+    uf.addEventListener("keydown", ev => {
+      if (ev.key === "Enter"){ ev.preventDefault(); einsetzen(zeichenAus(uf.value)); uf.value = ""; }
+    });
+    const ab = zeichenAblage();
+    document.getElementById("fd-glyphs").innerHTML = ab.length
+      ? ab.map(c=>`<button class="btn" data-gl="${esc(c)}" style="padding:1px 5px;font-size:13px;
+          line-height:1.3">${esc(c)}</button>`).join("")
+      : `<span style="font-size:10px;color:var(--dim2)">Characters seen so far appear here.</span>`;
+    document.querySelectorAll("#fd-glyphs [data-gl]").forEach(b =>
+      b.addEventListener("click", ()=> einsetzen(b.dataset.gl)));
+  }
   document.getElementById("fd-add").addEventListener("click", ()=>{
     const k = document.getElementById("fd-type").dataset.k;
-    const nm = document.getElementById("fd-name").value.trim();
-    const tag = document.getElementById("fd-tag").value.trim().toUpperCase();
-    const doppelt = liste.find(d => (tag && d.tag === tag) || (nm && d.name === nm));
-    if (doppelt){ toast(`Already recorded: ${doppelt.name || atName(doppelt.k)}`); return; }
-    setFeindDepot(key, liste.concat([{id: Math.random().toString(36).slice(2,9), k, name:nm, tag}]));
+    let nm = document.getElementById("fd-name").value.trim();
+    let tag = document.getElementById("fd-tag").value.trim();
+    /* Die ganze Zeile aus dem Spiel darf ins Namensfeld: "USSR-003 - AT003 -
+       SAKEDRI..." wird selbst zerlegt. */
+    const zerlegt = atZeileTeilen(nm);
+    let kurz = false;
+    if (zerlegt && zerlegt.tag && !tag){ tag = zerlegt.tag; nm = zerlegt.name; kurz = zerlegt.kurz; }
+    else if (zerlegt) kurz = zerlegt.kurz;
+    tag = tag.replace(/\s+/g, "").toUpperCase();
+    if (!nm && !tag){ toast("Enter the line from the game, or a tag."); return; }
+    const doppelt = liste.find(d => gleicheAT(d, {tag, name:nm, kurz}));
+    if (doppelt){
+      /* Ein Platzhalter wird durch die echte Sichtung ersetzt, nicht doppelt
+         angelegt - dafuer war er ja da. */
+      if (doppelt.ung){
+        const l = liste.map(d => d === doppelt ? {...d, k, name:nm||d.name, kurz, ung:0} : d);
+        setFeindDepot(key, l); feindDialog(key, name); toast("Placeholder confirmed");
+        return;
+      }
+      toast(`Already recorded: ${doppelt.tag || doppelt.name || atName(doppelt.k)}`);
+      return;
+    }
+    let neu = liste.concat([{id: Math.random().toString(36).slice(2,9), k, name:nm, tag,
+                             kurz: kurz ? 1 : 0}]);
+    /* Luecken anbieten: wer 003 sieht, weiss dass es 001 und 002 gibt - aber
+       nicht, was sie sind. Platzhalter tragen das ausdruecklich. */
+    const fehlt = atLuecken(neu, tag);
+    if (fehlt.length && confirm(
+        `${tag} suggests ${fehlt.length} earlier team${fehlt.length===1?"":"s"} exist:\n`
+        + fehlt.join(", ")
+        + `\n\nAdd them as placeholders? They will be marked as NOT scouted yet.`)){
+      for (const ft of fehlt)
+        neu = neu.concat([{id: Math.random().toString(36).slice(2,9), k:"infantry",
+                           name:"", tag:ft, ung:1}]);
+    }
+    setFeindDepot(key, neu);
     feindDialog(key, name); toast("Added");
   });
   document.querySelectorAll("[data-frm]").forEach(b => b.addEventListener("click", ()=>{
@@ -6429,7 +7351,7 @@ function clanDialog(tab){
           <div><span>Warfunds spent</span><b>${nz(wf)}</b></div>
         </div>
         <div class="tw"><table>
-          <thead><tr><th colspan="2">Type</th><th>Teams</th><th>Free</th><th>Men</th>
+          <thead><tr><th colspan="2">Type</th><th>Teams</th><th>Available</th><th>Men</th>
             <th>Vehicles</th><th>Owners</th><th>Warfunds</th></tr></thead>
           <tbody>${typen.map(d=>{
             const m = proTypSpieler.get(d.k) || new Map();
@@ -6515,7 +7437,7 @@ function clanDialog(tab){
           <div><span>Players in the field</span><b>${leute.filter(p=>p.drin).length}/${leute.length}</b></div>
         </div>
         <div class="tw"><table>
-          <thead><tr><th>Player</th><th>Free</th><th>Committed</th><th>Use</th>
+          <thead><tr><th>Player</th><th>Available</th><th>Committed</th><th>Use</th>
             <th>Towns</th><th>Where</th></tr></thead>
           <tbody>${leute.slice().sort((a,b)=>b.frei-a.frei||b.gesamt-a.gesamt).map(p=>{
             const q = p.gesamt ? Math.round(100*p.drin/p.gesamt) : 0;
@@ -6588,7 +7510,7 @@ function clanDialog(tab){
     ev.preventDefault(); sel = +a.dataset.go; closeDlg(); flyTo(sel); side(); draw();
   }));
   document.getElementById("cl-copy")?.addEventListener("click", async ()=>{
-    const zeilen = [["Player","Owned","Committed","Free","Men","Vehicles","CP","Warfunds"].join("\t")]
+    const zeilen = [["Player","Owned","Committed","Available","Men","Vehicles","CP","Warfunds"].join("\t")]
       .concat(leute.map(p=>[p.name, p.gesamt, p.drin, p.frei, p.men, p.veh, p.cp, p.wf].join("\t")))
       .concat([["TOTAL", teams, drin, teams-drin, men, veh, cp, wf].join("\t")]);
     try { await navigator.clipboard.writeText(zeilen.join("\n")); toast("Copied"); }
@@ -7139,6 +8061,7 @@ function kitWahl(host, art, ctx, beiWahl){
 /* ---------------- persistence, sharing, merging ---------------- */
 function load(){
   try { const s = localStorage.getItem(STORE); if (s) S = Object.assign(neu(), JSON.parse(s)); } catch(e){}
+  namenLaden();
 }
 function b64url(b){
   let s = "";
@@ -7154,8 +8077,35 @@ async function unpack(s){
   const st = new Blob([unb64(s)]).stream().pipeThrough(new DecompressionStream("gzip"));
   return JSON.parse(await new Response(st).text());
 }
+/* ---- Sicherheitskopie -------------------------------------------------
+   Der Schluessel hng-warmap-v3 darf sich NIE aendern - er ist der Grund,
+   warum ein Update der Karte keine Daten kostet. Wer ihn anfasst, faengt fuer
+   alle bei null an.
+   Bevor trotzdem etwas weggeworfen wird, kommt der bisherige Stand hierher.
+   Er ueberlebt genau einen solchen Schritt; das reicht gegen den Fehlklick. */
+const SICHER_STORE = "hng-warmap-sicherung";
+function sicherungAnlegen(grund){
+  try {
+    localStorage.setItem(SICHER_STORE, JSON.stringify(
+      {t: jetzt(), grund, s: S, namen: eigenNamen}));
+  } catch(e){}
+}
+function sicherungStand(){
+  try { const o = JSON.parse(localStorage.getItem(SICHER_STORE) || "null");
+        return (o && o.s) ? o : null; } catch(e){ return null; }
+}
+function sicherungZurueck(){
+  const o = sicherungStand();
+  if (!o) return false;
+  S = Object.assign(neu(), o.s, {me: S.me});
+  if (o.namen){ eigenNamen = o.namen; namenSichern(); }
+  return true;
+}
+
 async function saveFile(){
-  const text = JSON.stringify(S, null, 1);
+  /* Die Namen der eigenen Kampfeinheiten liegen nur in diesem Browser. Ohne
+     sie waere die Sicherung unvollstaendig, also fahren sie mit. */
+  const text = JSON.stringify({...S, _namen: eigenNamen}, null, 1);
   const host = (typeof claude !== "undefined" && claude.use) ? await claude.use("downloads") : null;
   if (host){
     try { await host.save({filename:"warmap.json", data:text}); closeDlg(); toast("Saved"); }
@@ -7242,7 +8192,6 @@ document.getElementById("b-load").addEventListener("click", ()=>{
           <div class="own4" style="flex:1">
             ${FACTIONS.map(q=>`<button data-cf="${q.id}" style="--f:${q.color}"
               aria-pressed="${clanFaktion()===q.id}">${q.tag}</button>`).join("")}
-            <button data-cf="" style="--f:${NEUTRAL.color}" aria-pressed="${clanFaktion()===null}">any</button>
           </div>
           <button class="btn" id="set-save">Save</button>
         </div>
@@ -7259,6 +8208,7 @@ document.getElementById("b-load").addEventListener("click", ()=>{
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;gap:7px;flex-wrap:wrap">
         <button class="btn danger" id="d-newwar">Start a new war</button>
         <span style="flex:1"></span>
+        <button class="btn" id="d-undo" style="font-size:11px">Undo the last reset</button>
         <button class="btn" id="d-wipe" style="font-size:11px">Forget the local copy</button>
       </div>
       <div class="note"><b>Start a new war</b> puts the start towns above on the map and clears
@@ -7315,9 +8265,9 @@ document.getElementById("b-load").addEventListener("click", ()=>{
 
   let neueFrak = clanFaktion();
   document.querySelectorAll("#dlg [data-cf]").forEach(b => b.addEventListener("click", ()=>{
-    neueFrak = b.dataset.cf === "" ? null : +b.dataset.cf;
+    neueFrak = +b.dataset.cf;
     document.querySelectorAll("#dlg [data-cf]").forEach(x => x.setAttribute("aria-pressed",
-      String((x.dataset.cf === "" ? null : +x.dataset.cf) === neueFrak)));
+      String(+x.dataset.cf === neueFrak)));
   }));
   document.getElementById("set-save").addEventListener("click", ()=>{
     setMeta("clan", document.getElementById("set-clan").value.trim() || "War Map");
@@ -7332,6 +8282,7 @@ document.getElementById("b-load").addEventListener("click", ()=>{
       if (!o){ toast("Paste a link or pick a file first."); return; }
       const {state, neuer} = merge(S, o);
       S = Object.assign(neu(), state, {me:S.me});
+      if (o._namen){ eigenNamen = Object.assign(eigenNamen, o._namen); namenSichern(); }
       after(); closeDlg(); toast(`Merged — ${neuer} newer entries taken over`);
     } catch(e){ toast("That link or file could not be read."); }
   });
@@ -7339,23 +8290,39 @@ document.getElementById("b-load").addEventListener("click", ()=>{
     try {
       const o = await hole();
       if (!o){ toast("Paste a link or pick a file first."); return; }
-      S = Object.assign(neu(), o, {me:S.me}); after(); closeDlg(); toast("Replaced");
+      S = Object.assign(neu(), o, {me:S.me});
+      if (o._namen){ eigenNamen = Object.assign(eigenNamen, o._namen); namenSichern(); }
+      after(); closeDlg(); toast("Replaced");
     } catch(e){ toast("That link or file could not be read."); }
   });
   document.getElementById("d-newwar").addEventListener("click", ()=>{
+    sicherungAnlegen("new war");
     if (!confirm("Start a new war?\n\nControl, battles, deployed teams, arrows, defence lines, "
                + "the board and all sightings go — for everyone.\n\nDepots, the arsenal, the "
                + "player list and everything recorded about the enemy are kept.")) return;
     neuerKrieg(); after(); closeDlg(); toast("New war — depots kept");
   });
+  {
+    const ub = document.getElementById("d-undo"), st = sicherungStand();
+    if (!st) ub.disabled = true;
+    else {
+      ub.title = `Saved before "${st.grund}" on ${new Date(st.t).toLocaleString()}`;
+      ub.addEventListener("click", ()=>{
+        if (!confirm("Go back to the state saved before the last reset?")) return;
+        if (sicherungZurueck()){ after(); closeDlg(); toast("Restored"); }
+        else toast("Nothing saved to go back to.");
+      });
+    }
+  }
   document.getElementById("d-wipe").addEventListener("click", ()=>{
     if (!confirm("Throw away the copy stored in this browser?\n\nDepots, the arsenal, the player "
                + "list and the enemy depot are kept. With live sync on, the rest comes back from "
                + "the server on the next connect.")) return;
+    sicherungAnlegen("forget local copy");
     const behalten = {};
     for (const b of KRIEG_BLEIBT) behalten[b] = S[b];
     S = Object.assign(neu(), behalten, {me:S.me, name:S.name});
-    after(); closeDlg(); toast("Local copy cleared — depots kept");
+    after(); closeDlg(); toast("Local copy cleared — depots kept, one undo available");
   });
 });
 
@@ -7371,7 +8338,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-18 23:19</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-19 12:29</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
@@ -7913,6 +8880,9 @@ async function mitgliederDialog(meldung){
      nie angewandt - auf einem 4K-Schirm blieb alles auf 100 Prozent stehen,
      obwohl 175 herausgekommen waren. */
   uiSetzen(uiScale); textSetzen(textScale);
+  /* Einmaliger Umzug der Kampfeinheiten-Namen aus der geteilten Zeile in
+     diesen Browser. Muss vor der ersten Anzeige laufen. */
+  namenUmziehen();
   rebuildUnits(); kopfzeile(); tally(); tips(); depotZeichnen(); boardZahl();
   kraftLeiste(); resize();
   mitgliederKnopf();
