@@ -207,6 +207,15 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 .dep.raus{border-left-color:var(--accent);background:rgba(226,172,72,.09)}
 .dep .pull{background:transparent;border:0;cursor:pointer;color:var(--dim2);font-size:15px;padding:0 3px}
 .dep .pull:hover{color:var(--su)}
+.dep .rechts{display:flex;align-items:center;gap:2px}
+/* Loeschen ist etwas anderes als Zurueckholen und sieht deshalb anders aus:
+   blass, bis man hinzeigt, und dann rot. */
+.dep .weg{background:transparent;border:0;cursor:pointer;color:var(--dim2);padding:1px 2px 0;
+  opacity:.45;line-height:0}
+.dep:hover .weg{opacity:1}
+.dep .weg:hover{color:var(--su)}
+.dep .weg svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round;display:block}
 .sympick{display:flex;align-items:center;justify-content:space-between;gap:6px;flex:1;min-width:0;
   background:var(--panel2);border:1px solid var(--line);border-radius:2px;padding:3px 6px;cursor:pointer}
 .sympick:hover{border-color:var(--accent-dk)}
@@ -366,6 +375,12 @@ body.txt-modus{cursor:text}
   border:1px solid var(--accent);border-radius:var(--r);padding:7px 11px;
   box-shadow:0 8px 26px rgba(0,0,0,.6);font-size:11.5px;zoom:var(--ui,1)}
 #txt-bar.an{display:flex}
+#meld-bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:82;
+  display:none;align-items:center;gap:11px;background:var(--panel);
+  border:1px solid var(--accent);border-radius:var(--r);padding:7px 11px;
+  box-shadow:0 8px 26px rgba(0,0,0,.6);font-size:11.5px;zoom:var(--ui,1)}
+#meld-bar.an{display:flex}
+body.meld-modus{cursor:help}
 #tor{position:fixed;inset:0;background:var(--bg,#0c0f14);display:none;align-items:center;
   justify-content:center;z-index:200;padding:24px}
 #tor .tor-box{width:100%;max-width:380px;display:flex;flex-direction:column;gap:9px;
@@ -537,6 +552,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-faction">Faction</button>
       <button class="btn" id="b-arms">Arsenal</button>
       <button class="btn" id="b-board">Board</button>
+      <button class="btn" id="b-note" title="Your own notebook — encrypted, nobody else can read it">Notebook</button>
       <button class="btn" id="b-shot">Read screenshot</button>
       <button class="btn" id="b-help">Help</button>
       <button class="btn" id="b-load">Load / Merge</button>
@@ -642,6 +658,8 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 <div id="zahnrad"></div>
 <div id="txt-bar" data-fest><span>Editing labels — click any wording to change it.</span>
   <button class="btn primary" id="txt-fertig">Done</button></div>
+<div id="meld-bar" data-fest><span>Point at whatever is wrong — click it and say what you mean.</span>
+  <button class="btn primary" id="meld-fertig">Done</button></div>
 <div id="ghost"></div>
 <div id="hover"></div>
 <div id="toast"></div>
@@ -1073,7 +1091,16 @@ const clanFaktion = () => {
   const v = S.meta.clanf && S.meta.clanf.v;
   return (v === 0 || v === 1 || v === 2) ? v : KLAN_VORGABE;
 };
-function setClanFaktion(f){ stamp("meta", "clanf", f, {n: S.name || ""}); save(); }
+function setClanFaktion(f){
+  /* Die Seite des Clans entscheidet, welches Depot alle sehen und was das
+     Arsenal anbietet. Das ist keine Ansichtssache, die jeder fuer sich
+     umstellt - deshalb haengt sie am Leiter. */
+  if (!istLeader()){
+    toast("Which side the clan plays is the leader's call.");
+    return;
+  }
+  stamp("meta", "clanf", f, {n: S.name || ""}); save();
+}
 /* Kann diese Klasse auf dieser Stufe das ueberhaupt kaufen? Die av-Zeilen sind
    [Fraktion, Klasse, Stufe] aus progressionUnlock; 0 heisst jeweils "alle".
    Wer keine Regel hat, wird nicht ausgeblendet - lieber eine Zeile zu viel
@@ -1186,7 +1213,8 @@ function anonUmschalten(an){
 const STORE = "hng-warmap-v3";
 /* Every kind of timestamped entry. Arrows are a list, everything else a map. */
 const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot",
-                 "line","post","area","para","roster","est","edep","anon","akt","btl"];
+                 "line","post","area","para","roster","est","edep","anon","akt","btl",
+                 "priv","todo","wish","ok","first"];
 const neu = () => Object.assign({me:"", name:"", arrows:[], gone:{}},
                                 ...BUCKETS.map(b => ({[b]:{}})));
 let S = neu();
@@ -1256,7 +1284,9 @@ function merkeSpieler(name, f, clan){
      darf durch eine Fraktions- oder Clanaenderung nicht verlorengehen. */
   S.roster[k] = {v:{name, f: neuF, clan: neuC, tz: av ? av.tz : undefined},
                  t: jetzt(), by: S.me, n: S.name || ""};
-  dirty.add(`roster:${k}`); save();
+  dirty.add(`roster:${k}`);
+  if (!av) gutschrift("pl", k);        // nur der erste Eintrag zaehlt
+  save();
   return k;
 }
 /* Clans are not a separate table — they are whatever players are tagged with.
@@ -1316,16 +1346,106 @@ function spielerSuche(q){
 /* Enemy depot: what we believe a given enemy player owns. Shared, everyone
    may add to it — with name and tag so nobody enters the same team twice. */
 const feindDepot = key => (S.edep[key] && Array.isArray(S.edep[key].v) && S.edep[key].v) || [];
+/* ---- Wer hat es gefunden ---------------------------------------------
+   Aufklaerung ist die undankbarste Arbeit im Krieg: wer eine feindliche
+   Kampfeinheit eintraegt, hat dafuer meist ein Flugzeug verloren. Bisher
+   stand davon nirgends etwas.
+
+   Gezaehlt wird nur beim Ersten. Jeder Anspruch liegt in einer eigenen
+   Zeile - first:<art><streuwert>:<spieler> -, damit keiner den eines
+   anderen ueberschreiben kann; ausgewertet gewinnt der fruehste
+   Zeitstempel. Zwei Leute, die dasselbe unabhaengig melden, schreiben also
+   beide, und der Zufall entscheidet nicht. */
+const AUFK_ARTEN = [
+  {k:"pl", n:"Players", feind:1,
+   d:"Somebody from the other side written into the register for the first time."},
+  {k:"at", n:"Their teams", feind:1,
+   d:"An enemy assault team put on record for the first time ever — the unit itself, "
+    + "regardless of where it stood."},
+  {k:"wp", n:"Their kit", feind:1,
+   d:"A weapon or a vehicle on one of their soldiers, recorded for the first time."},
+  {k:"sp", n:"Positions", feind:1,
+   d:"A sighting on the map: which unit stood where. Something else entirely — you have to "
+    + "go and look, and again next time."},
+  {k:"ow", n:"Our own", feind:0,
+   d:"Keeping our own picture current: where our teams are. Work as well, but nobody gets "
+    + "shot down for it — so it is counted apart."},
+];
+const AUFK_NAME = Object.fromEntries(AUFK_ARTEN.map(a => [a.k, a.n]));
+/* Kurzer Streuwert, damit der Schluessel unter die 64 Zeichen der Datenbank
+   passt. Zwei verschiedene Dinge auf denselben Wert: rechnerisch alle paar
+   Milliarden, und der Schaden waere ein falsch zugeordneter Punkt. */
+function fnv(s){
+  let x = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++){ x ^= s.charCodeAt(i); x = Math.imul(x, 0x01000193) >>> 0; }
+  return ("000000" + x.toString(36)).slice(-7);
+}
+function gutschrift(art, sache){
+  if (!S.me) return;
+  const id = `${art}${fnv(String(sache))}:${S.me}`;
+  if (S.first[id] && S.first[id].v) return;           // steht schon auf mich
+  S.first[id] = {v: 1, t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`first:${id}`); save();
+}
+/* Was eine feindliche Kampfeinheit ausmacht, ist ihr Name im Spiel - nicht
+   die Kennung, die beim Eintragen wuerfelt. Sonst zaehlte dieselbe Einheit
+   bei zwei Leuten als zwei Funde. */
+const atMarke = u => String(u.tag || u.name || u.k || "").trim().toLowerCase();
+
+function aufklaerungListe(nurKrieg){
+  const erste = new Map();
+  for (const [id, e] of Object.entries(S.first)){
+    if (!e || !e.v) continue;
+    if (nurKrieg && !imKrieg(e)) continue;
+    const p = id.lastIndexOf(":");
+    if (p < 1) continue;
+    const sache = id.slice(0, p), wer = id.slice(p + 1), zeit = e.t || 0;
+    const da = erste.get(sache);
+    /* Gleichstand nach Kennung aufloesen, damit die Liste bei allen gleich
+       aussieht - eine Rangliste, die je nach Rechner anders ausfaellt, ist
+       schlimmer als keine. */
+    if (!da || zeit < da.t || (zeit === da.t && wer < da.wer))
+      erste.set(sache, {t: zeit, wer, n: e.n || ""});
+  }
+  const leute = new Map();
+  for (const [sache, d] of erste){
+    const art = sache.slice(0, 2);
+    const p = leute.get(d.wer)
+           || {wer: d.wer, name: d.n, zahl: {}, feind: 0, eigen: 0, letzte: 0};
+    p.zahl[art] = (p.zahl[art] || 0) + 1;
+    if (art === "ow") p.eigen++; else p.feind++;
+    if (d.t > p.letzte) p.letzte = d.t;
+    if (d.n) p.name = d.n;
+    leute.set(d.wer, p);
+  }
+  for (const p of leute.values()){
+    const d = depotIdx.get(p.wer);
+    if (d && d.name) p.name = d.name;
+    if (p.wer === S.me) p.mine = true;
+  }
+  return [...leute.values()].sort((a,b)=> b.feind - a.feind || b.eigen - a.eigen
+                                       || String(a.name).localeCompare(String(b.name)));
+}
+
 function setFeindDepot(key, list){
-  S.edep[key] = {v: list.length ? list : null, t: jetzt(), by: S.me, n: S.name || ""};
-  dirty.add(`edep:${key}`); save();
+  /* Was neu dazukommt, wird gutgeschrieben - und nur das. Wer eine schon
+     bekannte Einheit noch einmal eintraegt, bekommt dafuer nichts. */
+  const vorher = new Set(feindDepot(key).map(atMarke));
+  for (const u of list){
+    const m = atMarke(u);
+    if (m && !vorher.has(m)) gutschrift("at", `${key}|${m}`);
+  }
+  /* Ueber setFeindTeil, nicht als ganze neue Zeile: sonst faellt beim
+     Eintragen einer Kampfeinheit das aufgenommene Arsenal, die Rollen und
+     der Uebergelaufen-Vermerk mit weg. */
+  setFeindTeil(key, {v: list.length ? list : null});
 }
 
 /* Welche Toepfe ihren Verfasser im Schluessel tragen, und als wievieltes
    Teil. Genau diese Zeilen darf nur ihr Verfasser schreiben - die Datenbank
    sieht das ebenso, deshalb muss die Seite es an einer Stelle wissen. */
 const AUTOR_TEIL = {depot: 1, units: 2, join: 2, post: 2, line: 2, spot: 2,
-                    area: 2, est: 2};
+                    area: 2, est: 2, priv: 1, wish: 1, first: 2};
 function autorVon(bucket, id){
   const n = AUTOR_TEIL[bucket];
   if (!n) return null;
@@ -1414,7 +1534,149 @@ function setClanBefehl(txt){
 }
 /* Wer die Karte allein benutzt, darf alles - sonst koennte niemand anfangen.
    Mit Anschluss entscheidet der Zugangscode. */
-const istLeiter = () => !CFG || !!CFG.admin;
+/* ---- Zwei Aemter ------------------------------------------------------
+   Verwalter (is_admin, steht in der Datenbank) haelt das Werkzeug am Laufen:
+   Codes ausgeben, Mitglieder sperren, Beschriftungen setzen. Das ist Technik.
+
+   Clanleiter (meta.leader) entscheidet operativ: welche Fraktion, welche
+   Befehle gelten, wer welchen Rang hat. Das ist Fuehrung.
+
+   Oft dieselbe Person, muss es aber nicht sein - und wo es das nicht ist,
+   soll der Verwalter nicht mitbefehlen koennen, nur weil ihm der Server
+   gehoert. Solange niemand zum Leiter bestimmt wurde, fuehrt der Verwalter:
+   sonst koennte den ersten Leiter niemand ernennen. */
+const istAdmin  = () => !CFG || !!CFG.admin;
+const leaderId  = () => (S.meta.leader && S.meta.leader.v) || null;
+const istLeader = () => !CFG ? true
+  : (leaderId() ? (CFG.player || S.me) === leaderId() : !!CFG.admin);
+function setLeader(player){ stamp("meta", "leader", player || null); save(); kopfzeile(); }
+
+/* ---- Raenge -----------------------------------------------------------
+   Der Leiter legt sie selbst an, weil kein Satz von mir zu jedem Clan passt.
+   Was ein Rang darf, steht als Haekchenliste daran - und die Rechte sind
+   bewusst die, bei denen Unfug teuer wird: Befehle geben, fremde Marken
+   loeschen, Hilfe rufen, die Fraktion umstellen. Wer eine Kampfeinheit hat,
+   braucht keinen Rang, der Grossoffensiven befiehlt. */
+const RECHTE = [
+  {k:"befehl",      n:"Give orders",
+   d:"Their arrows, lines, areas and para blocks count as orders. Everyone else's count as proposals."},
+  {k:"bestaetigen", n:"Confirm proposals",
+   d:"Turn somebody else's proposal into a standing order."},
+  {k:"loeschen",    n:"Clear other people's marks",
+   d:"Take anybody's arrow, line, area or board post off the map."},
+  {k:"hilfe",       n:"Call for help",
+   d:"Post a request that shows up clan-wide as a call for help."},
+  {k:"brett",       n:"Write on the board",
+   d:"Leave written orders and notes for everyone."},
+  {k:"aufklaerung", n:"File intel",
+   d:"Record sightings and what the other side is holding."},
+];
+/* Was NICHT in dieser Liste steht, laesst sich auch nicht verteilen: wer der
+   Leiter ist, welche Raenge es gibt, welche Seite der Clan spielt, und wann
+   ein neuer Krieg beginnt. Das haengt am Leiter allein - und zwar auch in
+   der Datenbank, nicht nur in dieser Seite. Waere es ein Rangrecht, muesste
+   die Datenbank Raenge lesen koennen; sie kann es nicht, und eine Regel, die
+   nur die Seite kennt, ist keine. */
+const RECHT_NAME = Object.fromEntries(RECHTE.map(r => [r.k, r.n]));
+/* Nur ein Anfang, damit die Liste nicht leer dasteht. Der Leiter schreibt sie um. */
+const ROLLEN_VORGABE = [
+  {id:"off", name:"Officer", rechte:{befehl:1,bestaetigen:1,loeschen:1,hilfe:1,brett:1,aufklaerung:1}},
+  {id:"sqd", name:"Squad lead", rechte:{hilfe:1,brett:1,aufklaerung:1}},
+  {id:"mem", name:"Member", rechte:{brett:1,aufklaerung:1}},
+];
+const rollenListe = () => {
+  const e = S.meta.rollen && S.meta.rollen.v;
+  return Array.isArray(e) && e.length ? e : ROLLEN_VORGABE;
+};
+const rangKarte  = () => (S.meta.rang && S.meta.rang.v) || {};
+/* Wer keinen Rang zugeteilt bekommen hat, faellt auf diesen zurueck - sonst
+   duerfte ein frisch Eingeladener gar nichts, nicht einmal aufs Brett. */
+const standardRang = () => {
+  const id = (S.meta.standrang && S.meta.standrang.v) || "mem";
+  const L = rollenListe();
+  return L.find(r => r.id === id) || L[L.length-1] || null;
+};
+function rollenVon(player){
+  const ids = rangKarte()[player];
+  const L = rollenListe();
+  const eigen = Array.isArray(ids) ? ids.map(id => L.find(r => r.id === id)).filter(Boolean) : [];
+  if (eigen.length) return eigen;
+  const s = standardRang();
+  return s ? [s] : [];
+}
+const meineRollen = () => rollenVon(S.me);
+const rangNamen = player => {
+  /* Ohne benannten Leiter fuehrt der Verwalter - dann soll oben auch nicht
+     "Member" stehen, waehrend man alles darf. */
+  if (leaderId() ? player === leaderId() : (player === S.me && istLeader())) return ["Leader"];
+  return rollenVon(player).map(r => r.name);
+};
+/* Darf ich das? Der Leiter immer, sonst muss es an einem meiner Raenge
+   haengen. Ohne Anschluss sitzt man allein am eigenen Rechner - da gibt es
+   niemanden, vor dem man sich rechtfertigen muesste. */
+function darf(recht){
+  if (!CFG) return true;
+  if (istLeader()) return true;
+  for (const r of meineRollen()) if (r.rechte && r.rechte[recht]) return true;
+  return false;
+}
+/* Ein ehrliches Wort dazu, wenn etwas nicht geht - "das darfst du nicht" ohne
+   zu sagen, wer es darf, ist die nutzloseste Meldung von allen. */
+function darfNicht(recht){
+  const wer = rollenListe().filter(r => r.rechte && r.rechte[recht]).map(r => r.name);
+  toast(`${RECHT_NAME[recht] || recht} is not yours to do — ${
+    wer.length ? "that is " + wer.join(" or ") : "only the clan leader"}.`);
+  return false;
+}
+function setRollen(liste){ stamp("meta", "rollen", liste && liste.length ? liste : null); save(); }
+/* ---- Befehl oder Vorschlag ----
+   art === 0 heisst Vorschlag. Fehlt art ganz, ist es ein Befehl: alles, was
+   vor dieser Regel entstanden ist, wurde frei gesetzt und soll nicht
+   nachtraeglich herabgestuft werden. */
+const bestaetigt = id => !!(id && S.ok[id] && imKrieg(S.ok[id]) && S.ok[id].v);
+const istBefehl  = (id, v) => !v || v.art !== 0 || bestaetigt(id);
+const artNeu     = () => darf("befehl") ? 1 : 0;
+function setBestaetigt(id, an){
+  if (!darf("bestaetigen")) return darfNicht("bestaetigen");
+  stamp("ok", id, an ? 1 : null, {n: S.name || ""});
+  save(); draw();
+  toast(an ? "Confirmed — it stands as an order now" : "Back to a proposal");
+}
+/* Loeschen darf, wem es gehoert - und wer die Karte aufraeumen soll. */
+const darfWeg = e => !!(e && e.by === S.me) || darf("loeschen");
+/* Wer bestaetigt hat, steht daneben: eine Bestaetigung ohne Namen ist im
+   Streitfall wertlos. */
+const okVon = id => bestaetigt(id) ? (S.ok[id].n || S.ok[id].by) : null;
+/* Der Kopfsatz ueber jeder Marke: gilt sie, und auf wessen Wort. */
+function standText(id, v, wer){
+  const von = wer ? ` by <b>${esc(wer)}</b>` : "";
+  if (istBefehl(id, v)){
+    const ok = okVon(id);
+    return ok ? `<span style="color:var(--accent)">Order</span>${von} — confirmed by <b>${esc(ok)}</b>.`
+              : `<span style="color:var(--accent)">Order</span>${von}.`;
+  }
+  return `<span style="color:var(--dim2)">Proposal</span>${von} — it does not count as an order `
+       + `until somebody who may give orders confirms it.`;
+}
+/* Die beiden Knoepfe, die an jeder Marke gleich aussehen sollen. */
+const okKnopf = (id, v) => (!istBefehl(id, v) && darf("bestaetigen"))
+  ? `<button class="btn" data-okmark="${esc(id)}" style="border-color:var(--accent)">Confirm as order</button>`
+  : (istBefehl(id, v) && bestaetigt(id) && darf("bestaetigen")
+     ? `<button class="btn" data-okweg="${esc(id)}" style="font-size:11px">Back to a proposal</button>` : "");
+function okVerdrahten(){
+  document.querySelectorAll("#dlg [data-okmark]").forEach(b => b.addEventListener("click", ()=>{
+    setBestaetigt(b.dataset.okmark, true); closeDlg();
+  }));
+  document.querySelectorAll("#dlg [data-okweg]").forEach(b => b.addEventListener("click", ()=>{
+    setBestaetigt(b.dataset.okweg, false); closeDlg();
+  }));
+}
+
+function setRang(player, ids){
+  const k = Object.assign({}, rangKarte());
+  if (ids && ids.length) k[player] = ids; else delete k[player];
+  stamp("meta", "rang", Object.keys(k).length ? k : null); save();
+}
 const warName   = () => (S.meta.war && S.meta.war.v) || "";
 
 let unitIdx = new Map(), depotIdx = new Map();
@@ -1711,11 +1973,11 @@ function draw(){
   }
 
   /* --- free-hand areas: enemy concentrations, zones, anything you circle --- */
-  for (const [id,e] of liveAreas()) drawArea(e.v, e);
+  for (const [id,e] of liveAreas()) drawArea(e.v, e, false, id);
   if (zieh && zieh.art === "area" && zieh.pts.length > 2)
     drawArea({pts: zieh.pts, f: faction, label: ""}, null, true);
 
-  for (const [id,e] of liveLines()) drawLine(e.v);
+  for (const [id,e] of liveLines()) drawLine(e.v, null, id);
   if (lineDraft && lineDraft.pts.length) drawLine({pts: lineDraft.pts, f: lineDraft.f}, lastMouse);
   if (zieh && zieh.art === "line" && zieh.pts.length) drawLine({pts: zieh.pts, f: faction}, lastMouse);
   if (zieh && zieh.art === "para") for (const p of zieh.pts){
@@ -2010,7 +2272,7 @@ function pictogram(x,y,r,typ,farbe){
 }
 
 /* Free-hand area — circle a region and say what is in it. */
-function drawArea(a, eintrag, entwurf){
+function drawArea(a, eintrag, entwurf, id){
   if (!a || !Array.isArray(a.pts) || a.pts.length < 3) return;
   const f = col(FACTIONS[a.f]);
   const p = a.pts.map(q => toScr(q[0], q[1]));
@@ -2018,10 +2280,11 @@ function drawArea(a, eintrag, entwurf){
   ctx.moveTo(p[0][0], p[0][1]);
   for (let i=1;i<p.length;i++) ctx.lineTo(p[i][0], p[i][1]);
   ctx.closePath();
-  ctx.globalAlpha = entwurf ? .18 : .14; ctx.fillStyle = f; ctx.fill();
-  ctx.globalAlpha = entwurf ? .95 : .8;
-  ctx.strokeStyle = f; ctx.lineWidth = 2*uiScale;
-  ctx.setLineDash(entwurf ? [5,4] : [9,5]); ctx.stroke(); ctx.setLineDash([]);
+  const vorA = a.art === 0 && !bestaetigt(id);
+  ctx.globalAlpha = entwurf ? .18 : (vorA ? .07 : .14); ctx.fillStyle = f; ctx.fill();
+  ctx.globalAlpha = entwurf ? .95 : (vorA ? .42 : .8);
+  ctx.strokeStyle = f; ctx.lineWidth = (vorA ? 1.4 : 2)*uiScale;
+  ctx.setLineDash(entwurf ? [5,4] : (vorA ? [2,4] : [9,5])); ctx.stroke(); ctx.setLineDash([]);
   ctx.globalAlpha = 1;
   if (a.label && !entwurf){
     let cx = 0, cy = 0;
@@ -2043,17 +2306,21 @@ function drawArea(a, eintrag, entwurf){
 
 /* Defence line: thick line through towns with tick marks on one side,
    the way a held position is drawn on a military map. */
-function drawLine(l, bisMaus){
+function drawLine(l, bisMaus, id){
   if (!l || !Array.isArray(l.pts)) return;
   const pts = l.pts.map(i => MAP.n[i] ? toScr(MAP.n[i][1], MAP.n[i][2]) : null).filter(Boolean);
   if (bisMaus) pts.push(bisMaus);
   if (pts.length < 2) return;
   const f = col(FACTIONS[l.f]);
   const br = Math.max(2.6, 3*Math.sqrt(view.z))*uiScale;
+  const vorL = l.art === 0 && !bestaetigt(id);
+  ctx.globalAlpha = vorL ? .45 : 1;
   ctx.strokeStyle = f; ctx.lineWidth = br; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (vorL) ctx.setLineDash([br*2.2, br*1.6]);
   ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
   for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
   ctx.stroke();
+  ctx.setLineDash([]);
   const zacke = br*1.9;
   ctx.lineWidth = Math.max(1.6, br*0.6);
   for (let i=0;i<pts.length-1;i++){
@@ -2073,6 +2340,7 @@ function drawLine(l, bisMaus){
     ctx.lineWidth = 3; ctx.strokeStyle = "rgba(5,8,12,.85)";
     ctx.strokeText(l.label, mx, my - 14); ctx.fillStyle = f; ctx.fillText(l.label, mx, my - 14);
   }
+  ctx.globalAlpha = 1;
 }
 
 /* A movement arrow is one filled body that tapers into a broad head — the
@@ -2126,11 +2394,19 @@ function drawArrow(a){
   }
   mitteVon.set(a.id, mitte);
 
+  /* Ein Vorschlag sieht aus wie einer: blass, gestrichelt umrandet. Wer ueber
+     die Karte schaut, soll auf einen Blick sehen, was gilt und was jemand
+     gern haette. */
+  const vor = !istBefehl(a.id, a);
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 1.5;
-  ctx.globalAlpha = .9; ctx.fillStyle = f; ctx.fill(pfad);
+  ctx.globalAlpha = vor ? .32 : .9; ctx.fillStyle = f; ctx.fill(pfad);
   ctx.restore();
-  ctx.strokeStyle = "rgba(0,0,0,.5)"; ctx.lineWidth = 1.1; ctx.stroke(pfad);
+  ctx.strokeStyle = vor ? f : "rgba(0,0,0,.5)";
+  ctx.lineWidth = vor ? 1.6*uiScale : 1.1;
+  if (vor) ctx.setLineDash([5,4]);
+  ctx.stroke(pfad);
+  ctx.setLineDash([]);
 
   if (view.z > 1.1 && (staerke || a.label)){
     const txt = (a.label ? a.label + "   " : "") + (staerke ? `${mit.length}× ${staerke}` : "");
@@ -2389,6 +2665,11 @@ function setOwner(i, f){ stamp("owner", i, f); save(); }
 function setFight(i, an){ stamp("fight", i, an ? 1 : null); save(); }
 function dropArrow(id){ S.gone[id] = {t:jetzt(), by:S.me}; dirty.add(`gone:${id}`); }
 function setMyUnits(i, list){
+  /* Unser eigenes Bild aktuell halten ist auch Arbeit - nur eben ohne
+     Risiko. Wird gezaehlt, aber nie mit der Feindaufklaerung verrechnet. */
+  const alt = new Set(((S.units[`${i}:${S.me}`] && S.units[`${i}:${S.me}`].v) || [])
+    .map(u => u.id || u.k));
+  for (const u of list) if (!alt.has(u.id || u.k)) gutschrift("ow", `${i}|${u.id || u.k}`);
   S.units[`${i}:${S.me}`] = {v: list.length ? list : null, t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`units:${i}:${S.me}`); rebuildUnits(); save(); kraftLeiste();
 }
@@ -2434,6 +2715,16 @@ function setJoin(arrowId, n){
 }
 function setSpot(town, list){
   const k = `${town}:${S.me}`;
+  /* Eine Position ist etwas anderes als der Fund der Einheit selbst: dafuer
+     muss jemand hinfahren und nachsehen, und beim naechsten Mal wieder.
+     Sie wird deshalb getrennt gezaehlt - und je Krieg neu, weil eine alte
+     Meldung nichts mehr wert ist. */
+  const alt = new Set(((S.spot[k] && S.spot[k].v) || [])
+    .map(u => `${u.k}|${(u.owner||"").toLowerCase()}`));
+  for (const u of list){
+    const m = `${u.k}|${(u.owner||"").toLowerCase()}`;
+    if (!alt.has(m)) gutschrift("sp", `${town}|${m}`);
+  }
   S.spot[k] = {v: list.length ? list : null, t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`spot:${k}`); save();
 }
@@ -2459,17 +2750,23 @@ function setEst(town, list){
 /* Para-blocking: denying an airfield's drop zone. Strategically decisive, so
    it gets its own mark — either already in place or planned. */
 function setPara(town, f, plan){
-  stamp("para", town, f == null ? null : {f, plan: !!plan}, {n: S.name || ""});
+  stamp("para", town, f == null ? null : {f, plan: !!plan, art: artNeu()}, {n: S.name || ""});
   save();
 }
 const paraAt = i => (imKrieg(S.para[i]) && S.para[i].v) || null;
 const allPara = () => Object.keys(S.para).filter(i => imKrieg(S.para[i]) && S.para[i].v)
   .map(i => ({town:+i, ...S.para[i].v, t:S.para[i].t, by:S.para[i].n || S.para[i].by}));
 function addPost(text, town, prio, req){
+  /* Schreiben darf, wer einen Rang mit diesem Recht hat. Der Hilferuf ist
+     davon noch einmal getrennt: er geht dem ganzen Clan an, und wer eine
+     einzelne Kampfeinheit fuehrt, soll damit nicht die halbe Front rufen. */
+  if (!darf("brett")){ darfNicht("brett"); return false; }
+  if (req && !darf("hilfe")){ darfNicht("hilfe"); return false; }
   const id = Math.random().toString(36).slice(2,10);
   const k = `${id}:${S.me}`;
   S.post[k] = {v: {text, town, prio, req: !!req}, t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`post:${k}`); save();
+  return true;
 }
 function dropEntry(bucket, id){
   S.gone[id] = {t: jetzt(), by: S.me}; dirty.add(`gone:${id}`);
@@ -2478,14 +2775,17 @@ function dropEntry(bucket, id){
 }
 function lineSpeichern(pts){
   const id = Math.random().toString(36).slice(2,10), k = `${id}:${S.me}`;
-  S.line[k] = {v:{pts, f: faction, label: ""}, t: jetzt(), by: S.me, n: S.name || ""};
+  S.line[k] = {v:{pts, f: faction, label: "", art: artNeu()}, t: jetzt(), by: S.me,
+               n: S.name || ""};
   dirty.add(`line:${k}`); save(); draw();
-  toast(`Defence line over ${pts.length} towns — click it to label it`);
+  toast(artNeu() ? `Defence line over ${pts.length} towns — click it to label it`
+                 : `Proposed a line over ${pts.length} towns — it needs confirming to count`);
 }
 function areaSpeichern(pts){
   const id = Math.random().toString(36).slice(2,10), k = `${id}:${S.me}`;
   const rund = pts.map(p => [Math.round(p[0]*10)/10, Math.round(p[1]*10)/10]);
-  S.area[k] = {v:{pts: rund, f: faction, label: ""}, t: jetzt(), by: S.me, n: S.name || ""};
+  S.area[k] = {v:{pts: rund, f: faction, label: "", art: artNeu()}, t: jetzt(), by: S.me,
+               n: S.name || ""};
   dirty.add(`area:${k}`); save(); draw();
   areaDialog(k, S.area[k], true);
 }
@@ -2539,6 +2839,9 @@ const setStartStaedte = o => setMeta("start", o);
 
 const KRIEG_BLEIBT = ["depot", "roster", "edep", "meta"];
 function neuerKrieg(){
+  /* Ein neuer Krieg legt alles still, was geschrieben wurde. Das ist der
+     folgenschwerste Knopf im Werkzeug und gehoert deshalb dem Leiter. */
+  if (!istLeader()){ toast("Starting a new war is the leader's call."); return; }
   const linien = liveLines().map(([id]) => id);
   const briefe = livePosts().map(([id]) => id);
   const zonen  = liveAreas().map(([id]) => id);
@@ -2593,6 +2896,23 @@ function deployTeam(town, id){
 function withdrawTeam(id){
   const alt = townOfTeam(id);
   if (alt !== null) setMyUnits(alt, myUnits(alt).filter(u => u.id !== id));
+}
+/* Endgueltig weg - aus dem Depot und vom Feld. Erst vom Feld holen, sonst
+   bliebe in der Stadt ein Eintrag stehen, zu dem es keine Einheit mehr gibt.
+   Rueckgaengig gibt es nicht: der Stand wird sofort verteilt, und ein
+   Papierkorb, den ausser mir niemand sieht, waere nur Schein. */
+function teamLoeschen(id){
+  const d = teamById(id);
+  if (!d) return;
+  const wie = (d.tag ? d.tag + " · " : "") + (d.name || atName(d.k));
+  const drin = townOfTeam(id) !== null;
+  if (!confirm(`Delete ${wie}?\n\n`
+             + (drin ? `It comes off the map and out of your depot. ` : `It goes out of your depot. `)
+             + `Nothing else of yours changes — but this cannot be undone.`)) return;
+  withdrawTeam(id);
+  setMyDepot(myDepot().filter(x => x.id !== id));
+  depotZeichnen(); side(); draw(); kraftLeiste(); tally();
+  toast(`${wie} deleted`);
 }
 
 /* ---------------- interaction ----------------
@@ -2714,7 +3034,8 @@ window.addEventListener("mouseup", e => {
     const bis = hitTest(x, y);
     if (bis !== null && bis !== zieh.von){
       const id = Math.random().toString(36).slice(2,10);
-      S.arrows.push({from:zieh.von, to:bis, f:faction, label:"", t:jetzt(), by:S.me, id});
+      S.arrows.push({from:zieh.von, to:bis, f:faction, label:"", art:artNeu(),
+                     t:jetzt(), by:S.me, id});
       dirty.add(`arrow:${id}`); save();
       toast(`${MAP.n[zieh.von][0]} → ${MAP.n[bis][0]}`);
     }
@@ -2758,7 +3079,8 @@ cv.addEventListener("click", e => {
     if (arrowFrom === null) arrowFrom = i;
     else if (arrowFrom !== i){
       const id = Math.random().toString(36).slice(2,10);
-      S.arrows.push({from:arrowFrom, to:i, f:faction, label:"", t:jetzt(), by:S.me, id});
+      S.arrows.push({from:arrowFrom, to:i, f:faction, label:"", art:artNeu(),
+                     t:jetzt(), by:S.me, id});
       dirty.add(`arrow:${id}`); arrowFrom = null; save();
     }
   } else if (tool === "line"){
@@ -3018,8 +3340,13 @@ function depotZeichnen(){
             <input class="ttag" data-id="${esc(d.id)}" value="${esc(d.tag||"")}"
               placeholder="TAG" spellcheck="false" maxlength="10"></span>
           <em>${esc(atName(d.k))} · ${atText(d.k)}${drin?` · ${esc(MAP.n[town][0])}`:""}</em></span>
-        ${drin ? `<button class="pull" data-pull="${esc(d.id)}" title="Pull back to depot">×</button>`
-               : `<span class="c">available</span>`}
+        <span class="rechts">
+          ${drin ? `<button class="pull" data-pull="${esc(d.id)}" title="Pull back to depot">×</button>`
+                 : `<span class="c">available</span>`}
+          <button class="weg" data-weg="${esc(d.id)}" title="Delete this team for good">
+            <svg viewBox="0 0 24 24"><path d="M4 6.6h16"/><path d="M9.4 6.6V4.2h5.2v2.4"/><path d="M6.6 6.6l.9 13h9l.9-13"/><path d="M10.3 9.9v6.4M13.7 9.9v6.4"/></svg>
+          </button>
+        </span>
       </div>`;
   }).join("") : `<div class="empty" style="padding:6px 8px">${alle.length ? "Nothing of this type."
     : "Nothing yet. Add what you own below — give each team the name it has in the game. This stays across wars."}</div>`;
@@ -3038,9 +3365,13 @@ function depotZeichnen(){
     b.addEventListener("pointerdown", ev => ev.stopPropagation());
     b.addEventListener("click", ()=>{ withdrawTeam(b.dataset.pull); depotZeichnen(); side(); draw(); });
   });
+  liste.querySelectorAll("[data-weg]").forEach(b => {
+    b.addEventListener("pointerdown", ev => ev.stopPropagation());
+    b.addEventListener("click", ev => { ev.stopPropagation(); teamLoeschen(b.dataset.weg); });
+  });
   liste.querySelectorAll(".dep").forEach(el => {
     el.addEventListener("pointerdown", ev => {
-      if (ev.target.classList.contains("tname") || ev.target.dataset.pull) return;
+      if (ev.target.classList.contains("tname") || ev.target.closest("[data-pull],[data-weg]")) return;
       ev.preventDefault();
       const d = teamById(el.dataset.id);
       if (!d) return;
@@ -3199,7 +3530,11 @@ function kraftLeiste(){
   const mein = myDepot(), raus = deployedIds(S.me);
   if (mein.length || S.name){
     mich.style.display = "flex";
-    mich.innerHTML = `<span class="k">you</span>
+    /* Der eigene Rang steht ueber dem Namen. Wer nicht weiss, was er darf,
+       versucht es sonst und bekommt eine Absage - das ist die schlechtere
+       Reihenfolge. */
+    const rang = rangNamen(S.me);
+    mich.innerHTML = `<span class="k">${esc(rang.length ? rang.join(" · ") : "you")}</span>
       <span class="v">${esc(S.name || "unnamed")}</span>
       <span class="u">${mein.length ? `${mein.length - raus.size} free of ${mein.length}`
                                      : "no depot yet"}</span>`;
@@ -3471,6 +3806,7 @@ function arrowDialog(a){
   const raus = deployedBy(S.me), habe = Object.values(raus).reduce((s,n)=>s+n,0);
   openDlg(`
     <div class="dlg-h"><h2>${esc(MAP.n[a.from][0])} → ${esc(MAP.n[a.to][0])}</h2>
+      <p>${standText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>
       <p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
           <b>${gesamt}</b> assault teams.` : "Nobody has committed to this move yet."}</p></div>
     <div class="dlg-b">
@@ -3490,10 +3826,13 @@ function arrowDialog(a){
         it does not move anything by itself.</div>
     </div>
     <div class="dlg-f">
-      ${a.by === S.me ? `<button class="btn danger" id="a-del">Delete arrow</button>` : ""}
+      ${darfWeg(a) ? `<button class="btn danger" id="a-del">Delete arrow</button>` : ""}
+      ${okKnopf(a.id, a)}
+      <span style="flex:1"></span>
       <button class="btn primary" id="d-close">Close</button>
     </div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  okVerdrahten();
   document.getElementById("a-join").addEventListener("click", ()=>{
     setJoin(a.id, Math.max(0, Math.min(99, +document.getElementById("a-n").value || 0)));
     const lbl = document.getElementById("a-lbl").value.trim();
@@ -3501,6 +3840,8 @@ function arrowDialog(a){
     closeDlg(); draw(); toast("Saved");
   });
   document.getElementById("a-del")?.addEventListener("click", ()=>{
+    if (a.by !== S.me && !confirm(`Delete ${(a.n || a.by) === S.me ? "this" : "somebody else's"} arrow?`
+        + `\n\nIt is off the map for the whole clan.`)) return;
     dropArrow(a.id); save(); closeDlg(); draw(); toast("Arrow removed");
   });
 }
@@ -3833,7 +4174,7 @@ function areaDialog(id, e, neuGezogen){
   openDlg(`
     <div class="dlg-h"><h2>${neuGezogen ? "What is in there?" : "Marked area"}</h2>
       <p>${neuGezogen ? "Give it a short label — that is what everyone reads on the map."
-                      : `Drawn by ${esc(e.n || e.by)} · ${alterText(e.t)}`}</p></div>
+                      : standText(id, a, e.n || e.by) + " · " + alterText(e.t)}</p></div>
     <div class="dlg-b">
       <div class="row">
         <input type="text" id="ar-lbl" value="${esc(a.label||"")}" style="flex:1"
@@ -3846,11 +4187,14 @@ function areaDialog(id, e, neuGezogen){
         before drawing and the area reads as theirs.</div>
     </div>
     <div class="dlg-f">
-      ${meins ? `<button class="btn danger" id="ar-del">Delete</button>` : ""}
+      ${darfWeg(e) ? `<button class="btn danger" id="ar-del">Delete</button>` : ""}
+      ${neuGezogen ? "" : okKnopf(id, a)}
+      <span style="flex:1"></span>
       <button class="btn" id="d-close">Close</button>
       ${meins ? `<button class="btn primary" id="ar-save">Save</button>` : ""}
     </div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  okVerdrahten();
   document.querySelectorAll("[data-vor]").forEach(b => b.addEventListener("click", ()=>{
     document.getElementById("ar-lbl").value = b.dataset.vor;
   }));
@@ -3869,7 +4213,8 @@ function lineDialog(id, e){
   const l = e.v;
   openDlg(`
     <div class="dlg-h"><h2>Defence line</h2>
-      <p>${l.pts.length} towns · drawn by ${esc(e.n || e.by)} · ${alterText(e.t)}</p></div>
+      <p>${standText(id, l, e.n || e.by)}</p>
+      <p>${l.pts.length} towns · ${alterText(e.t)}</p></div>
     <div class="dlg-b">
       <div style="font-size:12px;color:var(--dim)">${l.pts.map(i=>esc(MAP.n[i]?MAP.n[i][0]:"?")).join(" → ")}</div>
       <div class="row" style="align-items:center">
@@ -3878,11 +4223,14 @@ function lineDialog(id, e){
       </div>
     </div>
     <div class="dlg-f">
-      ${e.by === S.me ? `<button class="btn danger" id="l-del">Delete line</button>` : ""}
+      ${darfWeg(e) ? `<button class="btn danger" id="l-del">Delete line</button>` : ""}
+      ${okKnopf(id, l)}
+      <span style="flex:1"></span>
       <button class="btn" id="d-close">Close</button>
       ${e.by === S.me ? `<button class="btn primary" id="l-save">Save</button>` : ""}
     </div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  okVerdrahten();
   document.getElementById("l-save")?.addEventListener("click", ()=>{
     S.line[id] = {v:{...l, label: document.getElementById("l-lbl").value.trim()},
                   t: jetzt(), by: S.me, n: S.name || ""};
@@ -3957,7 +4305,7 @@ document.getElementById("b-board").addEventListener("click", ()=>{
   document.getElementById("p-add").addEventListener("click", ()=>{
     const t = document.getElementById("p-text").value.trim();
     if (!t){ toast("Write something first."); return; }
-    addPost(t, stadtAus("p-town"), +document.getElementById("p-prio").value);
+    if (!addPost(t, stadtAus("p-town"), +document.getElementById("p-prio").value)) return;
     closeDlg(); boardZahl(); draw(); toast("Posted");
   });
   document.querySelectorAll("#dlg [data-del]").forEach(a => a.addEventListener("click", ev=>{
@@ -4126,6 +4474,70 @@ document.getElementById("b-intel").addEventListener("click", ()=>intelDialog());
 document.getElementById("b-faction").addEventListener("click", ()=>intelDialog("players", clanFaktion()));
 /* seite === undefined: alle. Eine Zahl: nur diese Fraktion - damit wird aus
    demselben Fenster die Uebersicht ueber die eigene Seite. */
+/* ---- Die Aufklaerungstafel ----
+   Bewusst ohne Gesamtpunktzahl aus allen Spalten. Eine Position ist nicht
+   drei Waffen wert, und ich kenne den Wechselkurs nicht - wer ihn erfindet,
+   erzeugt nur eine Zahl, der man ansieht, dass sie gewuerfelt ist. Sortiert
+   wird nach der Feindaufklaerung; das eigene Bild steht daneben und wird nie
+   dazugezaehlt. */
+let tafelKrieg = true;
+function tafelZeichnen(){
+  const feld = document.getElementById("in-scout");
+  if (!feld) return;
+  const liste = aufklaerungListe(tafelKrieg);
+  const nz = n => (n||0).toLocaleString("en");
+  const summe = k => liste.reduce((s,p)=> s + (p.zahl[k]||0), 0);
+  feld.innerHTML = `
+    <div class="row" style="align-items:center;gap:8px">
+      <div class="own4" style="flex:0 0 auto">
+        <button data-tk="1" aria-pressed="${tafelKrieg}">This war</button>
+        <button data-tk="0" aria-pressed="${!tafelKrieg}">All time</button>
+      </div>
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--dim2)">${liste.length} ${
+        liste.length===1?"person has":"people have"} put something on record</span>
+    </div>
+    ${liste.length ? `<div class="tw"><table>
+      <thead><tr><th>Player</th>
+        ${AUFK_ARTEN.filter(a=>a.feind).map(a=>`<th title="${esc(a.d)}">${esc(a.n)}</th>`).join("")}
+        <th title="Everything above added up. This is the risky half.">Enemy total</th>
+        ${AUFK_ARTEN.filter(a=>!a.feind).map(a=>`<th title="${esc(a.d)}">${esc(a.n)}</th>`).join("")}
+        <th>Last</th></tr></thead>
+      <tbody>${liste.map(p=>`<tr${p.mine?' class="me"':''}>
+        <td style="text-align:left">${esc(p.name || p.wer)}${p.mine?" <em>you</em>":""}</td>
+        ${AUFK_ARTEN.filter(a=>a.feind).map(a=>`<td>${p.zahl[a.k]?nz(p.zahl[a.k]):"—"}</td>`).join("")}
+        <td><b style="color:var(--accent)">${nz(p.feind)}</b></td>
+        ${AUFK_ARTEN.filter(a=>!a.feind).map(a=>`<td style="color:var(--dim2)"
+          >${p.zahl[a.k]?nz(p.zahl[a.k]):"—"}</td>`).join("")}
+        <td style="color:var(--dim2)">${alterText(p.letzte)}</td>
+      </tr>`).join("")}</tbody>
+      <tfoot><tr><td style="text-align:left;color:var(--dim2)">together</td>
+        ${AUFK_ARTEN.filter(a=>a.feind).map(a=>`<td>${nz(summe(a.k))}</td>`).join("")}
+        <td><b>${nz(liste.reduce((s,p)=>s+p.feind,0))}</b></td>
+        ${AUFK_ARTEN.filter(a=>!a.feind).map(a=>`<td style="color:var(--dim2)">${nz(summe(a.k))}</td>`).join("")}
+        <td></td></tr></tfoot></table></div>`
+      : `<div class="empty">Nothing on record yet. Every first entry counts from now on —
+          older ones were made before anybody was keeping score.</div>`}
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:7px;
+         margin-top:10px">
+      ${AUFK_ARTEN.map(a=>`<div style="background:var(--panel2);border-radius:2px;padding:7px 9px;
+        border-left:3px solid ${a.feind?"var(--accent-dk)":"var(--line)"}">
+        <b style="font-size:11px;font-family:var(--schmal);text-transform:uppercase;
+           letter-spacing:.08em;color:${a.feind?"var(--accent)":"var(--dim2)"}">${esc(a.n)}</b>
+        <div style="font-size:11px;color:var(--dim);margin-top:2px;line-height:1.4">${esc(a.d)}</div>
+      </div>`).join("")}
+    </div>
+    <div class="note">Only the first entry counts. Two people who find the same thing without
+      knowing of each other both write it down — the earlier timestamp takes it, not chance.
+      <b>Our own</b> is never added into the enemy total: a position over their airfield and a
+      note about our own depot are not the same kind of work, and no exchange rate between them
+      would be anything but invented.</div>`;
+  feld.querySelectorAll("[data-tk]").forEach(b => b.addEventListener("click", ()=>{
+    tafelKrieg = b.dataset.tk === "1"; tafelZeichnen();
+  }));
+}
+
 function intelDialog(tab, seite){
   const nurSeite = (seite === 0 || seite === 1 || seite === 2) ? seite : null;
   const c = light() ? "#1a2029" : "#e9e2d5";
@@ -4183,6 +4595,7 @@ function intelDialog(tab, seite){
       <button data-tab="gaps"    aria-pressed="false">Gaps</button>
       <button data-tab="when"    aria-pressed="false">When</button>
       <button data-tab="spots"   aria-pressed="false">Sightings</button>
+      <button data-tab="scout"   aria-pressed="false">Who found it</button>
     </div>
     <div class="dlg-b">
       <div class="tabp on" data-tab="clans">
@@ -4370,9 +4783,12 @@ function intelDialog(tab, seite){
         <div class="note">Reports fade on the map after ${Math.round(FRISCH/3600e3)} hours and go pale
           after a day. Click a row to fly there.</div>
       </div>
+
+      <div class="tabp" data-tab="scout"><div id="in-scout"></div></div>
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
   tabsAktiv(document.getElementById("dlg"), tab);
+  tafelZeichnen();
   document.getElementById("d-close").addEventListener("click", closeDlg);
   document.getElementById("en-add").addEventListener("click", ()=>{
     const nm = document.getElementById("en-name").value.trim();
@@ -7243,11 +7659,21 @@ function zahnradZeichnen(){
       <button class="btn" id="zr-aus">Log out</button>`
     : `<div class="note" style="margin-top:0">Not signed in.</div>`}
 
-    ${istLeiter() ? `
+    <h3>Something wrong?</h3>
+    <div class="note" style="margin-top:0">Anything broken, in the way or missing — say so here.
+      It lands on the admin's list with your name and where you saw it, so nothing has to go
+      through Discord and get lost there.</div>
+    <button class="btn" id="zr-meld">Report or suggest …</button>
+    <button class="btn" id="zr-zeig">Report by pointing at it</button>
+
+    ${istAdmin() ? `
       <h3>Admin</h3>
       <div class="note" style="margin-top:0">Renaming a label changes it for everyone on this
         map — a shared wording is worth more than mine.</div>
-      <button class="btn" id="zr-txt">Edit labels …</button>` : ""}`;
+      <button class="btn" id="zr-txt">Edit labels …</button>
+      <button class="btn" id="zr-todo">Open points${
+        (()=>{ const n = meldungen().filter(([,e])=>!e.v.st).length; return n ? ` · ${n}` : ""; })()
+      } …</button>` : ""}`;
 
   el.querySelector("#zr-zu").addEventListener("click", zahnradZu);
   el.querySelector("#zr-zwei").addEventListener("change", ev => {
@@ -7287,6 +7713,9 @@ function zahnradZeichnen(){
   el.querySelector("#zr-auto")?.addEventListener("change", ev => autoSetzen(ev.target.checked));
   el.querySelector("#zr-aus")?.addEventListener("click", abmelden);
   el.querySelector("#zr-txt")?.addEventListener("click", ()=>textModusSetzen(true));
+  el.querySelector("#zr-meld")?.addEventListener("click", ()=>{ zahnradZu(); meldeFenster(""); });
+  el.querySelector("#zr-zeig")?.addEventListener("click", ()=>meldeModusSetzen(true));
+  el.querySelector("#zr-todo")?.addEventListener("click", ()=>{ zahnradZu(); todoFenster(); });
 }
 document.getElementById("b-gear").addEventListener("click", ev => {
   ev.stopPropagation(); zahnradAuf();
@@ -7342,6 +7771,301 @@ async function codeOeffnen(schloss, passwort){
                                            unb(schloss.ct));
   return new TextDecoder().decode(klar);
 }
+
+/* ---- Meldungen ---------------------------------------------------------
+   Wer im Werkzeug etwas sieht, das stoert, soll es dort melden koennen, wo
+   es stoert - nicht spaeter aus dem Gedaechtnis in einem Chat. Man zeigt auf
+   die Stelle, schreibt zwei Saetze, fertig.
+
+   Beim Verwalter sammelt sich daraus eine Liste, die sich als Text ausgeben
+   laesst. Damit haengt der Informationsfluss nicht daran, dass gerade jemand
+   auf Discord online ist. */
+const TODO_ART = [["bug","Something is broken"], ["weg","This should go"],
+                  ["neu","Something is missing"], ["idee","Just an idea"]];
+const TODO_ST  = ["open", "done", "not doing"];
+const meldungen = () => Object.entries(S.todo)
+  .filter(([,e]) => e && e.v)
+  .sort((a,b) => (a[1].v.st||0) - (b[1].v.st||0) || (b[1].t||0) - (a[1].t||0));
+function meldungSenden(art, text, wo){
+  const id = Math.random().toString(36).slice(2,10);
+  S.todo[id] = {v: {art, text: String(text).trim().slice(0,600),
+                    wo: String(wo||"").trim().slice(0,120), st: 0},
+                t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`todo:${id}`); save();
+  toast("Sent — it is on the admin's list now");
+}
+function meldungStand(id, st){
+  const e = S.todo[id];
+  if (!e || !e.v) return;
+  S.todo[id] = {...e, v: {...e.v, st}, t: jetzt()};
+  dirty.add(`todo:${id}`); save();
+}
+
+/* ---- Zeigen statt beschreiben ---- */
+let meldeModus = false;
+function meldeModusSetzen(an){
+  meldeModus = !!an;
+  document.body.classList.toggle("meld-modus", meldeModus);
+  document.getElementById("meld-bar").classList.toggle("an", meldeModus);
+  if (meldeModus) zahnradZu();
+}
+function meldeKlick(ev){
+  if (!meldeModus || textModus) return;
+  const el = ev.target;
+  if (!el || txtTabu(el)) return;
+  ev.preventDefault(); ev.stopPropagation();
+  let wo = "";
+  for (const n of (el.childNodes || []))
+    if (n.nodeType === 3 && n.nodeValue.trim()){ wo = n.nodeValue.trim(); break; }
+  if (!wo) wo = (el.textContent || "").trim().slice(0, 60);
+  if (el.id) wo = wo ? `${wo} (${el.id})` : el.id;
+  meldeModusSetzen(false);
+  meldeFenster(wo);
+}
+function meldeFenster(wo){
+  openDlg(`
+    <div class="dlg-h"><h2>Tell the admin</h2>
+      <p>Broken, in the way, or missing — it lands on his list with your name on it.</p></div>
+    <div class="dlg-b">
+      ${wo ? `<div class="note" style="margin-top:0">About: <b>${esc(wo)}</b></div>` : ""}
+      <div class="row" style="flex-wrap:wrap;gap:5px">
+        ${TODO_ART.map(([k,n],i)=>`<button class="btn" data-art="${k}"
+          aria-pressed="${i===0}" style="font-size:11px;padding:3px 9px">${esc(n)}</button>`).join("")}
+      </div>
+      <textarea id="md-text" style="min-height:96px" dir="auto"
+        placeholder="What did you expect, and what happened instead? One or two sentences are plenty."></textarea>
+      ${wo ? "" : `<div class="note">Want to point at it instead? Close this and pick
+        <b>Report by pointing</b> in the gear menu — then click the thing itself.</div>`}
+    </div>
+    <div class="dlg-f">
+      <button class="btn" id="d-close">Cancel</button>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="md-go">Send</button>
+    </div>`);
+  let art = TODO_ART[0][0];
+  document.querySelectorAll("#dlg [data-art]").forEach(b => b.addEventListener("click", ()=>{
+    art = b.dataset.art;
+    document.querySelectorAll("#dlg [data-art]").forEach(x =>
+      x.setAttribute("aria-pressed", String(x.dataset.art === art)));
+  }));
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  document.getElementById("md-go").addEventListener("click", ()=>{
+    const txt = document.getElementById("md-text").value.trim();
+    if (txt.length < 4){ toast("A sentence, please — otherwise nobody can act on it."); return; }
+    meldungSenden(art, txt, wo);
+    closeDlg(); zahnradZeichnen();
+  });
+  setTimeout(()=>document.getElementById("md-text")?.focus(), 60);
+}
+
+/* ---- Die Liste beim Verwalter ---- */
+function todoText(){
+  const artName = Object.fromEntries(TODO_ART);
+  const zeilen = [`# ${clanName()} — war map, open points`,
+                  `${new Date().toISOString().slice(0,10)} · ${meldungen().length} in total`, ""];
+  for (const st of [0,1,2]){
+    const teil = meldungen().filter(([,e]) => (e.v.st||0) === st);
+    if (!teil.length) continue;
+    zeilen.push(`## ${TODO_ST[st]} (${teil.length})`, "");
+    for (const [id,e] of teil){
+      zeilen.push(`- **${artName[e.v.art] || e.v.art}**${e.v.wo ? ` — *${e.v.wo}*` : ""}`);
+      zeilen.push(`  ${e.v.text.replace(/\n+/g, " ")}`);
+      zeilen.push(`  <sub>${e.n || e.by} · ${new Date(e.t).toISOString().slice(0,16).replace("T"," ")} · ${id}</sub>`);
+      zeilen.push("");
+    }
+  }
+  return zeilen.join("\n");
+}
+function todoFenster(){
+  const artName = Object.fromEntries(TODO_ART);
+  const liste = meldungen();
+  openDlg(`
+    <div class="dlg-h"><h2>Open points</h2>
+      <p>${liste.length ? `<b>${liste.filter(([,e])=>!e.v.st).length}</b> still open of
+        ${liste.length}.` : "Nothing reported yet."} Everything anybody flagged in the tool.</p></div>
+    <div class="dlg-b">
+      ${liste.length ? `<div style="display:flex;flex-direction:column;gap:5px">
+        ${liste.map(([id,e]) => `
+          <div style="background:var(--panel2);border-radius:2px;padding:7px 9px;
+               border-left:3px solid ${e.v.st ? "var(--dim2)" : "var(--accent)"};
+               opacity:${e.v.st ? ".55" : "1"}">
+            <div class="row" style="align-items:baseline;gap:8px">
+              <b style="font-size:11px;color:var(--accent);font-family:var(--schmal);
+                 text-transform:uppercase;letter-spacing:.08em">${esc(artName[e.v.art]||e.v.art)}</b>
+              ${e.v.wo ? `<span style="font-size:11px;color:var(--dim2)">${esc(e.v.wo)}</span>` : ""}
+              <span style="flex:1"></span>
+              <span style="font-size:10px;color:var(--dim2)">${esc(e.n||e.by)} · ${alterText(e.t)}</span>
+            </div>
+            <div style="font-size:12.5px;margin-top:3px;white-space:pre-wrap">${esc(e.v.text)}</div>
+            ${istAdmin() ? `<div class="row" style="gap:4px;margin-top:5px">
+              ${[0,1,2].map(s=>`<button class="btn" data-st="${s}" data-id="${esc(id)}"
+                aria-pressed="${(e.v.st||0)===s}" style="font-size:10.5px;padding:2px 8px"
+                >${esc(TODO_ST[s])}</button>`).join("")}</div>` : ""}
+          </div>`).join("")}
+      </div>` : `<div class="empty">Nothing yet. Anybody can flag something from the gear menu.</div>`}
+    </div>
+    <div class="dlg-f">
+      ${liste.length ? `<button class="btn" id="td-copy">Copy as a list</button>
+        <button class="btn" id="td-file">Save as a file</button>` : ""}
+      <span style="flex:1"></span>
+      <button class="btn primary" id="d-close">Close</button>
+    </div>`);
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  document.querySelectorAll("#dlg [data-st]").forEach(b => b.addEventListener("click", ()=>{
+    meldungStand(b.dataset.id, +b.dataset.st); todoFenster();
+  }));
+  document.getElementById("td-copy")?.addEventListener("click", async ()=>{
+    try { await navigator.clipboard.writeText(todoText()); toast("Copied — paste it wherever it has to go"); }
+    catch(e){ toast("The browser would not let me use the clipboard — use Save as a file."); }
+  });
+  document.getElementById("td-file")?.addEventListener("click", ()=>{
+    const b = new Blob([todoText()], {type:"text/markdown;charset=utf-8"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = `warmap-todo-${new Date().toISOString().slice(0,10)}.md`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  });
+}
+document.getElementById("meld-fertig").addEventListener("click", ()=>meldeModusSetzen(false));
+document.addEventListener("click", meldeKlick, true);
+
+/* ---- Privates Notizbuch ----------------------------------------------
+   Jeder hat eines, der Leiter wie jedes Mitglied. Was darin steht, geht
+   verschluesselt auf den Server - nicht als Versprechen, sondern als Bauart:
+   der Schluessel entsteht aus dem eigenen Passwort und liegt nur in diesem
+   Browser. Die Datenbank sieht Zufall, ich auch.
+
+   Der Preis dafuer steht im Fenster: wer sein Passwort verliert, verliert
+   das Notizbuch. Es gibt niemanden, der es aufmachen koennte. Genau das ist
+   der Punkt - eine Hintertuer fuer mich waere eine fuer jeden, der an die
+   Datenbank kommt. */
+let privKey = null, pwSession = null;
+const PRIVK_STORE = "hng-warmap-notizschluessel";
+const privRec = () => (S.priv[S.me] && S.priv[S.me].v) || null;
+
+async function pwPacken(roh, passwort){
+  const salz = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const s = await pwSchluessel(passwort, salz);
+  return {s: b64(salz), iv: b64(iv),
+          ct: b64(await crypto.subtle.encrypt({name:"AES-GCM", iv}, s, roh))};
+}
+/* Der eigentliche Schluessel ist zufaellig, nicht das Passwort selbst. So
+   laesst er sich spaeter mit einem neuen Passwort neu einpacken, ohne dass
+   das Notizbuch neu geschrieben werden muss - und er kann nebenbei in diesem
+   Browser liegen, damit "angemeldet bleiben" auch das Notizbuch aufbekommt. */
+async function notizSchluessel(){
+  if (privKey) return privKey;
+  try {
+    const roh = localStorage.getItem(PRIVK_STORE);
+    if (roh){
+      privKey = await crypto.subtle.importKey("raw", unb(roh), "AES-GCM", true,
+                                              ["encrypt","decrypt"]);
+      return privKey;
+    }
+  } catch(e){}
+  const rec = privRec();
+  if (rec && rec.k){
+    if (!pwSession) return null;               // verschlossen, Passwort fehlt
+    try {
+      const wrap = await pwSchluessel(pwSession, unb(rec.k.s));
+      const roh = await crypto.subtle.decrypt({name:"AES-GCM", iv: unb(rec.k.iv)},
+                                              wrap, unb(rec.k.ct));
+      privKey = await crypto.subtle.importKey("raw", roh, "AES-GCM", true,
+                                              ["encrypt","decrypt"]);
+      try { localStorage.setItem(PRIVK_STORE, b64(roh)); } catch(e){}
+      return privKey;
+    } catch(e){ return null; }
+  }
+  /* Noch keines - eines anlegen. */
+  privKey = await crypto.subtle.generateKey({name:"AES-GCM", length:256}, true,
+                                            ["encrypt","decrypt"]);
+  try {
+    localStorage.setItem(PRIVK_STORE, b64(await crypto.subtle.exportKey("raw", privKey)));
+  } catch(e){}
+  return privKey;
+}
+async function notizLesen(){
+  const rec = privRec();
+  if (!rec || !rec.d) return "";
+  const k = await notizSchluessel();
+  if (!k) return null;
+  try {
+    const klar = await crypto.subtle.decrypt({name:"AES-GCM", iv: unb(rec.d.iv)}, k,
+                                             unb(rec.d.ct));
+    return new TextDecoder().decode(klar);
+  } catch(e){ return null; }
+}
+async function notizSpeichern(text){
+  const k = await notizSchluessel();
+  if (!k) return false;
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({name:"AES-GCM", iv}, k,
+                                         new TextEncoder().encode(text));
+  const rec = {d: {iv: b64(iv), ct: b64(ct)}};
+  const alt = privRec();
+  if (alt && alt.k) rec.k = alt.k;
+  else if (pwSession)
+    rec.k = await pwPacken(await crypto.subtle.exportKey("raw", k), pwSession);
+  S.priv[S.me] = {v: rec, t: jetzt(), by: S.me};
+  dirty.add(`priv:${S.me}`); save();
+  return true;
+}
+
+let notizUhr = null;
+async function notizFenster(){
+  const text = await notizLesen();
+  const rec = privRec();
+  const verschlossen = text === null;
+  const wandert = !!(rec && rec.k);          // laesst sich auf anderen Geraeten oeffnen
+  openDlg(`
+    <div class="dlg-h"><h2>Notebook</h2>
+      <p>Yours alone. It is encrypted on this computer before it is sent, so the map,
+        the clan and whoever runs the server all see nothing but noise.</p></div>
+    <div class="dlg-b">
+      ${verschlossen ? `
+        <div class="note" style="border-left:3px solid var(--su);padding-left:9px">
+          <b>This notebook cannot be opened here.</b> It was written on another computer, or with
+          another password. Log out in the gear menu and sign in with your password — that is what
+          unlocks it. Nothing is lost in the meantime.</div>`
+      : `
+        <textarea id="nz-text" style="min-height:320px;line-height:1.5" dir="auto"
+          spellcheck="false" placeholder="Whatever you want to keep to yourself — who owes you a favour, what you want to try next war, which of them keeps showing up in the same town.">${esc(text)}</textarea>
+        <div class="row" style="align-items:center;gap:9px">
+          <span id="nz-stand" style="font-size:11px;color:var(--dim2)">Saved automatically.</span>
+          <span style="flex:1"></span>
+          <button class="btn" id="nz-save">Save now</button>
+        </div>
+        <div class="note">${wandert
+          ? `Your password unlocks this on any computer you sign in from.`
+          : `<b>Only on this computer for now.</b> Sign in with your password once — from then on
+             it travels with you. Right now the key lives here and nowhere else.`}
+          Lose the password and the notebook is gone: nobody can open it for you, and that is the
+          whole point.</div>`}
+    </div>
+    <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`);
+  document.getElementById("d-close").addEventListener("click", ()=>{
+    const f = document.getElementById("nz-text");
+    if (f) notizSpeichern(f.value);
+    closeDlg();
+  });
+  const feld = document.getElementById("nz-text");
+  if (!feld) return;
+  const stand = document.getElementById("nz-stand");
+  const sichern = async (wort) => {
+    const ok = await notizSpeichern(feld.value);
+    if (stand) stand.textContent = ok ? (wort || "Saved.") : "Could not save.";
+  };
+  feld.addEventListener("input", ()=>{
+    if (stand) stand.textContent = "…";
+    clearTimeout(notizUhr);
+    notizUhr = setTimeout(sichern, 700);
+  });
+  document.getElementById("nz-save").addEventListener("click", ()=>sichern("Saved."));
+  setTimeout(()=>{ if (document.body.contains(feld)) feld.focus(); }, 60);
+}
+document.getElementById("b-note").addEventListener("click", notizFenster);
 
 /* ---- Das Tor ---------------------------------------------------------
    Ist die Karte fuer einen Raum gebaut, kommt ohne gueltigen Code niemand
@@ -7428,6 +8152,7 @@ function passwortAnlegen(ich, meldung){
     knopf.disabled = true; knopf.textContent = "Working …";
     try {
       CFG.schloss = await codeSperren(CFG.code, a);
+      pwSession = a;                    // fuer das Notizbuch, nur in diesem Lauf
       /* Wer das ankreuzt, laesst den Code offen in diesem Browser liegen -
          bequem auf dem eigenen Rechner, unklug auf einem geteilten. Aendern
          laesst es sich jederzeit im Zahnrad. */
@@ -7467,6 +8192,7 @@ function passwortAbfragen(meldung){
     knopf.disabled = true; knopf.textContent = "Checking …";
     try {
       CFG.code = await codeOeffnen(CFG.schloss, a);
+      pwSession = a;                    // fuer das Notizbuch, nur in diesem Lauf
       torZu(); syncStart();
       if (!beigetreten()) setTimeout(beitrittDialog, 500);
     } catch(e){
@@ -7509,9 +8235,14 @@ function beitrittDialog(){
     <div class="dlg-b">
       <div class="row" style="align-items:center;gap:8px">
         <span style="font-size:12px;color:var(--dim);width:96px">Your name</span>
-        <input type="text" id="bt-name" value="${esc(S.name||"")}" style="flex:1"
-          placeholder="the name you play under" dir="auto" spellcheck="false">
+        <input type="text" id="bt-name" value="${esc((CFG && CFG.name) || S.name || "")}" style="flex:1"
+          placeholder="the name you play under" dir="auto" spellcheck="false"
+          ${CFG && CFG.name ? "readonly" : ""}>
       </div>
+      ${CFG && CFG.name ? `<div class="note" style="font-size:11px">This is the name you gave when
+        you asked for your code, and it has to be your name in the game — otherwise nobody can tell
+        on the map who brought what. Wrong or misspelled? Ask on Discord, it is changed in a
+        moment.</div>` : ""}
       <div class="row" style="align-items:center;gap:8px">
         <span style="font-size:12px;color:var(--dim);width:96px">Joining as</span>
         <div class="own4" style="flex:1">
@@ -7541,7 +8272,8 @@ function beitrittDialog(){
       x.setAttribute("aria-pressed", String(+x.dataset.bt === seite)));
   }));
   document.getElementById("bt-ok").addEventListener("click", ()=>{
-    const n = document.getElementById("bt-name").value.trim();
+    /* Im Raum gilt der Name aus der Einladung, egal was im Feld steht. */
+    const n = (CFG && CFG.name) || document.getElementById("bt-name").value.trim();
     if (n.length < 2){ toast("Your name, please — the clan needs to know who is who."); return; }
     S.name = n;
     depotBlick = (seite === clanFaktion()) ? null : seite;
@@ -7697,6 +8429,15 @@ function feindArsenal(key, f){
 }
 function setFeindArsenal(key, f, wert){
   const alt = (S.edep[key] && S.edep[key].ars) || {};
+  const vor = feindArsenal(key, f);
+  const hatte = new Set(vor.w.map(x => "w|" + x)
+                 .concat(vor.v.map(x => "v|" + (x && x.k ? x.k : x))));
+  for (const w of (wert.w || []))
+    if (!hatte.has("w|" + w)) gutschrift("wp", `${key}|${f}|w|${w}`);
+  for (const v of (wert.v || [])){
+    const kk = v && v.k ? v.k : v;
+    if (!hatte.has("v|" + kk)) gutschrift("wp", `${key}|${f}|v|${kk}`);
+  }
   setFeindTeil(key, {ars: Object.assign({}, alt, {[f]: wert})});
 }
 /* Hat diese Person die Seite zu uns gewechselt? Dann bleibt alles stehen,
@@ -8097,6 +8838,213 @@ const RANGLISTEN = [
 ];
 
 document.getElementById("b-clan").addEventListener("click", ()=>clanDialog());
+/* ---- Was einer im naechsten Krieg machen will ----
+   Die einzige Angabe im ganzen Werkzeug, die von unten nach oben laeuft.
+   Wer weiss, dass drei Leute Panzer grinden wollen, teilt anders ein als
+   jemand, der nur die Depotzahlen sieht. */
+const ZWEIGWAHL = [["inf","Infantry"], ["rec","Recon"], ["arm","Armour"],
+                   ["air","Air"], ["par","Airborne"]];
+const wunschVon = p => (S.wish[p] && S.wish[p].v) || null;
+function setWunsch(text, zweige){
+  const leer = !String(text||"").trim() && !(zweige||[]).length;
+  S.wish[S.me] = {v: leer ? null : {text: String(text||"").trim().slice(0,300), zweige: zweige||[]},
+                  t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`wish:${S.me}`); save();
+}
+
+/* ---- Der Reiter "People" ----
+   Wird nachgereicht, weil die Mitgliederliste vom Server kommt. Ohne
+   Anschluss steht hier, wen die Karte selbst kennt - das sind alle, die ein
+   Depot angelegt haben. */
+async function leuteFuellen(){
+  const feld = document.getElementById("cl-people");
+  if (!feld) return;
+  let liste = null;
+  if (CFG && CFG.code){
+    try { liste = await rpc("warmap_members"); } catch(e){ liste = null; }
+  }
+  if (!document.getElementById("cl-people")) return;      // Fenster schon zu
+  if (!liste){
+    liste = [...depotIdx.entries()].map(([who, d]) => ({player: who, name: d.name || who,
+                                                        approved: true, is_admin: false}));
+    if (!liste.some(m => m.player === S.me))
+      liste.unshift({player: S.me, name: S.name || "you", approved: true, is_admin: false});
+  }
+  liste.sort((a,b)=> (b.player===leaderId()) - (a.player===leaderId())
+                  || String(a.name||"").toLowerCase().localeCompare(String(b.name||"").toLowerCase()));
+  leuteZeichnen(liste);
+}
+let leuteListe = [];
+function leuteZeichnen(liste){
+  leuteListe = liste || leuteListe;
+  const feld = document.getElementById("cl-people");
+  if (!feld) return;
+  const R = rollenListe(), darfRollen = istLeader(), verwalter = istAdmin();
+  const mein = wunschVon(S.me) || {text:"", zweige:[]};
+  const teamsVon = p => { const d = depotIdx.get(p); return d ? d.list.length : 0; };
+
+  feld.innerHTML = `
+    <div class="sec">
+      <h3>Clan leader</h3>
+      ${leaderId()
+        ? `<div style="font-size:13px">Right now that is
+            <b style="color:var(--accent)">${esc((leuteListe.find(m=>m.player===leaderId())||{}).name
+              || leaderId())}</b>.</div>`
+        : `<div class="note" style="margin-top:0">Nobody has been named yet, so whoever runs the
+            map decides. Name a leader and that stops — the map stops being the admin's map and
+            becomes the clan's.</div>`}
+      ${verwalter ? `<div class="row" style="align-items:center;margin-top:6px">
+        <span style="font-size:12px;color:var(--dim);flex:1">Name the leader</span>
+        <select id="lp-leader" style="min-width:170px">
+          <option value="">— nobody —</option>
+          ${leuteListe.map(m=>`<option value="${esc(m.player)}"
+            ${m.player===leaderId()?"selected":""}>${esc(m.name||m.player)}</option>`).join("")}
+        </select></div>
+        <div class="note">This is the one thing the admin decides and the leader cannot. Everything
+          operational — orders, ranks, which side the clan plays — is the leader's from then on.</div>`
+        : ""}
+    </div>
+
+    <div class="sec">
+      <h3>Ranks</h3>
+      ${darfRollen ? "" : `<div class="note" style="margin-top:0">Only the clan leader changes
+        these. Here is what they mean.</div>`}
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${R.map(r => `
+          <div style="background:var(--panel2);border-radius:2px;padding:7px 9px;
+               border-left:3px solid var(--accent-dk)">
+            <div class="row" style="align-items:center;gap:7px">
+              ${darfRollen
+                ? `<input type="text" class="mini" data-rname="${esc(r.id)}" value="${esc(r.name)}"
+                     maxlength="24" style="font-size:12px;flex:1">`
+                : `<b style="flex:1;font-size:12.5px">${esc(r.name)}</b>`}
+              ${darfRollen ? `<button class="btn" data-rweg="${esc(r.id)}"
+                  style="font-size:10.5px;padding:2px 7px">Remove</button>` : ""}
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));
+                 gap:2px 10px;margin-top:5px">
+              ${RECHTE.map(x => `
+                <label class="toggle" title="${esc(x.d)}" style="font-size:11px">
+                  <input type="checkbox" data-rid="${esc(r.id)}" data-rk="${esc(x.k)}"
+                    ${r.rechte && r.rechte[x.k] ? "checked" : ""} ${darfRollen ? "" : "disabled"}>
+                  <span>${esc(x.n)}</span></label>`).join("")}
+            </div>
+          </div>`).join("")}
+      </div>
+      ${darfRollen ? `<div class="row" style="align-items:center;margin-top:7px">
+        <input type="text" id="lp-neu" placeholder="name of a new rank" style="flex:1" maxlength="24">
+        <button class="btn" id="lp-neu-go">Add rank</button>
+        <span style="font-size:11px;color:var(--dim);margin-left:8px">Everyone without a rank counts as</span>
+        <select id="lp-std">${R.map(r=>`<option value="${esc(r.id)}"
+          ${r.id===(standardRang()||{}).id?"selected":""}>${esc(r.name)}</option>`).join("")}</select>
+      </div>` : ""}
+    </div>
+
+    <div class="sec">
+      <h3>Who is here</h3>
+      <div class="tw"><table>
+        <thead><tr><th>Name</th><th>Rank</th><th>Teams</th><th>Wants next war</th></tr></thead>
+        <tbody>${leuteListe.map(m => {
+          const w = wunschVon(m.player);
+          const ist = (rangKarte()[m.player] || [])[0] || "";
+          const fuehrt = m.player === leaderId();
+          return `<tr${m.player===S.me?' class="me"':''}>
+            <td>${esc(m.name||m.player)}${m.player===S.me?" <em>you</em>":""}
+              ${m.approved===false?` <span style="color:var(--su);font-size:10px">locked</span>`:""}</td>
+            <td style="text-align:left">${fuehrt
+              ? `<b style="color:var(--accent)">Leader</b>`
+              : (darfRollen
+                 ? `<select data-rangfuer="${esc(m.player)}" style="font-size:11px">
+                      <option value="">— ${esc((standardRang()||{name:"none"}).name)} —</option>
+                      ${R.map(r=>`<option value="${esc(r.id)}" ${r.id===ist?"selected":""}
+                        >${esc(r.name)}</option>`).join("")}</select>`
+                 : esc(rangNamen(m.player).join(", ") || "—"))}</td>
+            <td>${teamsVon(m.player) || "—"}</td>
+            <td style="text-align:left;font-size:11.5px;color:var(--dim)">${
+              w ? `${(w.zweige||[]).map(z=>`<span class="chip">${esc((ZWEIGWAHL.find(q=>q[0]===z)||[,z])[1])}</span>`).join(" ")}
+                   ${esc(w.text||"")}` : "—"}</td>
+          </tr>`;
+        }).join("")}</tbody></table></div>
+    </div>
+
+    <div class="sec">
+      <h3>What I want next war</h3>
+      <div class="row" style="flex-wrap:wrap;gap:8px">
+        ${ZWEIGWAHL.map(([k,n])=>`<label class="toggle"><input type="checkbox" data-wz="${k}"
+          ${(mein.zweige||[]).includes(k)?"checked":""}><span>${esc(n)}</span></label>`).join("")}
+      </div>
+      <textarea id="lp-wunsch" style="min-height:52px" maxlength="300" dir="auto"
+        placeholder="e.g. I want to grind tank crew — happy to sit in a defence, less happy to lead one.">${esc(mein.text||"")}</textarea>
+      <div class="row"><span style="flex:1"></span>
+        <button class="btn" id="lp-wunsch-go">Save what I want</button></div>
+      <div class="note">The whole clan reads this. It is the one thing here that runs upwards —
+        somebody who knows three of you want armour splits the war differently than somebody
+        reading depot totals.</div>
+    </div>`;
+
+  /* ---- Verdrahtung ---- */
+  document.getElementById("lp-leader")?.addEventListener("change", ev => {
+    const p = ev.target.value || null;
+    const wer = (leuteListe.find(m=>m.player===p)||{}).name || "nobody";
+    if (!confirm(p ? `Make ${wer} the clan leader?\n\nFrom then on they set the side, the orders `
+                   + `and the ranks — you keep the codes and the member list.`
+                   : `Take the leader role away?\n\nUntil somebody else is named, the admin decides `
+                   + `again.`)){ ev.target.value = leaderId() || ""; return; }
+    setLeader(p); leuteZeichnen();
+    toast(p ? `${wer} leads the clan now` : "No leader named");
+  });
+  feld.querySelectorAll("[data-rid]").forEach(c => c.addEventListener("change", ()=>{
+    const L = rollenListe().map(r => ({...r, rechte: {...(r.rechte||{})}}));
+    const r = L.find(x => x.id === c.dataset.rid);
+    if (!r) return;
+    if (c.checked) r.rechte[c.dataset.rk] = 1; else delete r.rechte[c.dataset.rk];
+    setRollen(L); leuteZeichnen();
+  }));
+  feld.querySelectorAll("[data-rname]").forEach(i => i.addEventListener("change", ()=>{
+    const L = rollenListe().map(r => ({...r}));
+    const r = L.find(x => x.id === i.dataset.rname);
+    if (!r) return;
+    r.name = i.value.trim().slice(0,24) || r.name;
+    setRollen(L); leuteZeichnen();
+  }));
+  feld.querySelectorAll("[data-rweg]").forEach(b => b.addEventListener("click", ()=>{
+    const id = b.dataset.rweg, L = rollenListe();
+    if (L.length <= 1){ toast("There has to be one rank left."); return; }
+    const wieviele = Object.values(rangKarte()).filter(v => (v||[]).includes(id)).length;
+    if (!confirm(`Remove this rank?${wieviele ? `\n\n${wieviele} ${wieviele===1?"person":"people"} `
+      + `hold it and drop back to the default rank.` : ""}`)) return;
+    setRollen(L.filter(r => r.id !== id));
+    const k = {};
+    for (const [p, ids] of Object.entries(rangKarte())){
+      const rest = (ids||[]).filter(x => x !== id);
+      if (rest.length) k[p] = rest;
+    }
+    stamp("meta", "rang", Object.keys(k).length ? k : null); save();
+    leuteZeichnen();
+  }));
+  document.getElementById("lp-neu-go")?.addEventListener("click", ()=>{
+    const n = document.getElementById("lp-neu").value.trim();
+    if (n.length < 2){ toast("Give the rank a name first."); return; }
+    const id = "r" + Math.random().toString(36).slice(2,7);
+    setRollen(rollenListe().concat([{id, name: n.slice(0,24), rechte:{brett:1,aufklaerung:1}}]));
+    leuteZeichnen();
+    toast(`${n} added — tick what it may do`);
+  });
+  document.getElementById("lp-std")?.addEventListener("change", ev => {
+    stamp("meta", "standrang", ev.target.value); save(); leuteZeichnen();
+  });
+  feld.querySelectorAll("[data-rangfuer]").forEach(s => s.addEventListener("change", ()=>{
+    setRang(s.dataset.rangfuer, s.value ? [s.value] : null);
+    leuteZeichnen(); kraftLeiste();
+  }));
+  document.getElementById("lp-wunsch-go")?.addEventListener("click", ()=>{
+    const z = [...feld.querySelectorAll("[data-wz]")].filter(c=>c.checked).map(c=>c.dataset.wz);
+    setWunsch(document.getElementById("lp-wunsch").value, z);
+    leuteZeichnen();
+    toast("Noted — the leader sees it in the clan window");
+  });
+}
+
 function clanDialog(tab){
   const c = light() ? "#1a2029" : "#e9e2d5";
   const nz = n => n.toLocaleString("en");
@@ -8167,12 +9115,13 @@ function clanDialog(tab){
       <button data-tab="deploy" aria-pressed="false">In the field</button>
       <button data-tab="pool"   aria-pressed="false">Faction pool</button>
       <button data-tab="req"    aria-pressed="false">Requests${anfragen.length?` ${anfragen.length}`:""}</button>
+      <button data-tab="people" aria-pressed="false">People</button>
     </div>
     <div class="dlg-b">
 
       <div class="tabp on" data-tab="clan">
         ${(()=>{
-          const leiter = istLeiter(), bf = clanBefehl(), st = startStaedte();
+          const leiter = istLeader(), bf = clanBefehl(), st = startStaedte();
           const wf = clanFaktion();
           return `
           <div class="row" style="align-items:center;gap:8px">
@@ -8358,7 +9307,7 @@ function clanDialog(tab){
             <span style="font-size:12px">${esc(e.v.text)}
               ${e.v.town!=null&&MAP.n[e.v.town]?`<a href="#" data-go="${e.v.town}" style="color:var(--accent)"> → ${esc(MAP.n[e.v.town][0])}</a>`:""}</span>
             <span style="font-size:10px;color:var(--dim2);white-space:nowrap">${esc(e.n||e.by)} · ${alterText(e.t)}
-              ${e.by===S.me?` · <a href="#" data-del="${id}" style="color:var(--su)">done</a>`:""}</span>
+              ${darfWeg(e)?` · <a href="#" data-del="${id}" style="color:var(--su)">done</a>`:""}</span>
           </div>`).join("")}
         </div>` : `<div class="empty">Nothing requested.</div>`}
         <div class="row" style="flex-wrap:wrap;gap:5px">
@@ -8372,6 +9321,9 @@ function clanDialog(tab){
         </div>
         <div class="note">A request lands on the board as urgent. Mark it <b>done</b> when it is covered.</div>
       </div>
+
+      <div class="tabp" data-tab="people"><div id="cl-people">
+        <div class="empty">Loading …</div></div></div>
     </div>
     <div class="dlg-f">
       ${leute.length ? `<button class="btn" id="cl-copy">Copy as table</button>` : ""}
@@ -8418,16 +9370,19 @@ The depot of that side becomes the `
   document.getElementById("rq-add")?.addEventListener("click", ()=>{
     const txt = document.getElementById("rq-txt").value.trim();
     if (!txt){ toast("Say what you need first."); return; }
-    addPost("Needs " + txt, stadtAus("rq-town"), 2, true);
+    if (!addPost("Needs " + txt, stadtAus("rq-town"), 2, true)) return;
     closeDlg(); boardZahl(); draw(); toast("Request posted");
   });
   document.querySelectorAll("#dlg [data-del]").forEach(a => a.addEventListener("click", ev=>{
-    ev.preventDefault(); dropEntry("post", a.dataset.del); closeDlg(); boardZahl();
+    ev.preventDefault();
+    if (!darfWeg(S.post[a.dataset.del])){ darfNicht("loeschen"); return; }
+    dropEntry("post", a.dataset.del); closeDlg(); boardZahl();
     clanDialog("req");
   }));
   document.querySelectorAll("#dlg [data-go]").forEach(a => a.addEventListener("click", ev=>{
     ev.preventDefault(); sel = +a.dataset.go; closeDlg(); flyTo(sel); side(); draw();
   }));
+  leuteFuellen();
   document.getElementById("cl-copy")?.addEventListener("click", async ()=>{
     const zeilen = [["Player","Owned","Committed","Available","Men","Vehicles","CP","Warfunds"].join("\t")]
       .concat(leute.map(p=>[p.name, p.gesamt, p.drin, p.frei, p.men, p.veh, p.cp, p.wf].join("\t")))
@@ -9257,7 +10212,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-19 16:35</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-19 17:26</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
@@ -9559,7 +10514,9 @@ async function syncStart(){
       if (S.gone[id] && S.gone[id].by === alt) S.gone[id].by = neuId;
     S.me = neuId;
   }
-  S.name = ich.name || S.name;
+  /* Der Server hat das letzte Wort ueber den Namen. Steht hier lokal etwas
+     anderes, war es ein Eigenname - der gilt nicht mehr. */
+  if (ich.name && ich.name !== S.name){ S.name = ich.name; dirty.add(`depot:${S.me}`); }
   rebuildUnits(); save();
 
   /* Beim Verbinden alles Eigene einmal hochschieben - aber nur das Eigene.
@@ -9714,6 +10671,9 @@ async function mitgliederDialog(meldung){
             <td style="text-align:right;white-space:nowrap">${ich ? "" : `
               <button class="btn" data-msg="${esc(m.player)}" style="padding:2px 7px;font-size:10.5px"
                 title="Copy the invite message for this person">Message</button>
+              <button class="btn" data-ren="${esc(m.player)}" data-name="${esc(m.name || "")}"
+                style="padding:2px 7px;font-size:10.5px"
+                title="Their name in the game — this is what everybody sees on the map">Rename</button>
               <button class="btn" data-neu="${esc(m.player)}" style="padding:2px 7px;font-size:10.5px"
                 title="Forgot their password? A new code lets them set a new one. Everything they own stays theirs.">New code</button>
               <button class="btn" data-lock="${esc(m.player)}" data-to="${m.approved ? "0" : "1"}"
@@ -9740,6 +10700,14 @@ async function mitgliederDialog(meldung){
   };
   document.querySelectorAll("#dlg [data-copy]").forEach(el =>
     el.addEventListener("click", ()=>kopiere(el.dataset.copy, "Code")));
+  document.querySelectorAll("#dlg [data-ren]").forEach(b => b.addEventListener("click", ()=>{
+    const jetztName = b.dataset.name || "";
+    const neu = prompt("Their name in the game — spelled exactly as it appears there:", jetztName);
+    if (neu === null) return;
+    if (neu.trim().length < 2){ toast("A name needs at least two characters."); return; }
+    handeln(() => rpc("warmap_member_set", {target_player: b.dataset.ren, set_name: neu.trim()}),
+            `Renamed to ${neu.trim()}`);
+  }));
   document.querySelectorAll("#dlg [data-neu]").forEach(b => b.addEventListener("click", async ()=>{
     const m = liste.find(x => x.player === b.dataset.neu);
     if (!m) return;
