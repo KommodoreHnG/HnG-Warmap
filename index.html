@@ -413,6 +413,61 @@ body.txt-modus{cursor:text}
   box-shadow:0 8px 26px rgba(0,0,0,.6);font-size:11.5px;zoom:var(--ui,1)}
 #meld-bar.an{display:flex}
 body.meld-modus{cursor:help}
+/* ---------- Radarraum ----------
+   Ein eigenes Fenster ohne den ganzen Kartenkram drumherum: wer hier sitzt,
+   arbeitet an einer Sache, alles andere waere im Weg. Gruener Phosphor, weil
+   das Geraet aus dem Krieg stammt, aus dem auch die Karte stammt. */
+#radar{position:fixed;inset:0;z-index:120;display:none;background:#070c08;
+  grid-template-columns:1fr auto;font-family:var(--schmal)}
+#radar.an{display:grid}
+.rd-schirm{position:relative;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 50%, #0d1a10 0%, #060b07 72%, #04070a 100%)}
+.rd-schirm canvas{position:absolute;inset:0;width:100%;height:100%}
+.rd-zu{position:absolute;top:12px;right:12px;z-index:3;background:transparent;border:0;
+  color:#4d7a56;font-size:26px;line-height:1;cursor:pointer;padding:2px 8px}
+.rd-zu:hover{color:#8fe6a2}
+/* Das Pult: Metall, und nur die Regler, die wirklich etwas tun. */
+.rd-pult{width:272px;background:linear-gradient(180deg,#25231d,#171612);
+  border-left:2px solid #0c0f0b;padding:16px 18px;overflow-y:auto;
+  display:flex;flex-direction:column;gap:15px;
+  box-shadow:inset 3px 0 10px rgba(0,0,0,.6)}
+.rd-marke{border-bottom:1px solid #3a382e;padding-bottom:9px}
+.rd-marke b{display:block;font-size:15px;letter-spacing:.06em;color:#cbb27a;line-height:1.2}
+.rd-marke span{display:block;font-size:9.5px;letter-spacing:.14em;color:#7d7461;
+  text-transform:uppercase;margin-top:3px}
+.rd-teil{display:flex;flex-direction:column;align-items:center;gap:6px}
+.rd-lbl{font-size:10px;letter-spacing:.16em;color:#9c9280;text-transform:uppercase;
+  text-align:center;line-height:1.3}
+.rd-lbl em{display:block;font-style:normal;font-size:8.5px;letter-spacing:.09em;color:#6b6455}
+/* Kurbel und Drehschalter sind gezeichnet, nicht bebildert - so bleiben sie
+   in jeder Groesse scharf. */
+.rd-kurbel,.rd-dial{cursor:grab;touch-action:none;display:block}
+.rd-kurbel:active,.rd-dial:active{cursor:grabbing}
+.rd-schalter{width:100%;background:#141310;border:1px solid #3a382e;border-radius:3px;
+  color:#8a8270;font-family:var(--schmal);font-size:12px;letter-spacing:.12em;
+  text-transform:uppercase;padding:9px 0;cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.rd-schalter.an{background:linear-gradient(180deg,#3d2a12,#2a1d0c);border-color:#8a6a2a;
+  color:#f0c169;box-shadow:inset 0 0 12px rgba(226,172,72,.25)}
+.rd-schalter:hover{border-color:#6a6455}
+.rd-anz{background:#0b1109;border:1px solid #2c3a2c;border-radius:2px;padding:8px 10px;
+  font-family:ui-monospace,Consolas,monospace}
+.rd-anz .z{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  font-size:11px;color:#6f8a72;padding:1px 0}
+.rd-anz .z b{color:#8fe6a2;font-variant-numeric:tabular-nums}
+.rd-ziel{border:1px solid #8a6a2a;border-radius:2px;padding:8px 10px;
+  background:rgba(226,172,72,.07)}
+.rd-ziel .s{font-size:20px;color:#f0c169;letter-spacing:.08em;line-height:1}
+.rd-ziel .o{font-size:12px;color:#cbb27a;margin-top:2px;font-family:var(--schrift)}
+.rd-ziel .h{font-size:10px;color:#7d7461;margin-top:5px;line-height:1.45;
+  font-family:var(--schrift)}
+.rd-fuss{margin-top:auto;font-size:9.5px;color:#5e594c;line-height:1.5;
+  font-family:var(--schrift)}
+@media (max-width: 900px){
+  #radar.an{grid-template-columns:1fr;grid-template-rows:1fr auto}
+  .rd-pult{width:auto;border-left:0;border-top:2px solid #0c0f0b;max-height:46vh}
+}
+
 /* Laeuft die Wache, steht das sichtbar da. Etwas, das im Hintergrund den
    Bildschirm mitliest, gehoert nicht versteckt. */
 #wache{bottom:10px;left:128px;z-index:12;display:none;align-items:center;gap:10px;
@@ -703,6 +758,11 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 <div id="tor"></div>
 <div id="zahnrad"></div>
 <div id="zwrap"><div id="zw"></div></div>
+<div id="radar" data-fest>
+  <div class="rd-schirm"><canvas id="rd-cv"></canvas></div>
+  <aside class="rd-pult" id="rd-pult"></aside>
+  <button class="rd-zu" id="rd-zu" title="Close">&times;</button>
+</div>
 <div id="txt-bar" data-fest><span>Editing labels — click any wording to change it.</span>
   <button class="btn primary" id="txt-fertig">Done</button></div>
 <div id="meld-bar" data-fest><span>Point at whatever is wrong — click it and say what you mean.</span>
@@ -1261,7 +1321,7 @@ const STORE = "hng-warmap-v3";
 /* Every kind of timestamped entry. Arrows are a list, everything else a map. */
 const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot",
                  "line","post","area","para","roster","est","edep","anon","akt","btl",
-                 "priv","todo","wish","ok","first"];
+                 "priv","todo","wish","ok","first","sweep"];
 const neu = () => Object.assign({me:"", name:"", arrows:[], gone:{}},
                                 ...BUCKETS.map(b => ({[b]:{}})));
 let S = neu();
@@ -1439,11 +1499,35 @@ function gutschrift(art, sache){
    bei zwei Leuten als zwei Funde. */
 const atMarke = u => String(u.tag || u.name || u.k || "").trim().toLowerCase();
 
+/* Positionen und eigene Meldungen gelten nur fuer ihren Krieg - wo eine
+   Einheit im letzten Krieg stand, sagt heute nichts mehr. Sie werden beim
+   Start weggeraeumt, sobald ihr Krieg vorbei ist. Ohne das waechst der Topf
+   ohne Grenze, und der Browserspeicher ist bei fuenf Megabyte zu Ende: dann
+   steht die ganze Karte, nicht nur die Rangliste.
+
+   Was einmal gefunden wurde - Spieler, ihre Einheiten, ihre Ausruestung -
+   bleibt. Das ist von sich aus begrenzt und ueber Kriege hinweg wertvoll. */
+const ANSPRUCH_KRIEG = new Set(["sp", "ow"]);
+function ansprucheAufraeumen(){
+  const grenze = epoche();
+  if (!grenze) return 0;
+  let weg = 0;
+  for (const [id, e] of Object.entries(S.first)){
+    if (!ANSPRUCH_KRIEG.has(id.slice(0,2))) continue;
+    if ((e && e.t || 0) >= grenze) continue;
+    delete S.first[id]; weg++;
+  }
+  return weg;
+}
+
 function aufklaerungListe(nurKrieg){
   const erste = new Map();
   for (const [id, e] of Object.entries(S.first)){
     if (!e || !e.v) continue;
-    if (nurKrieg && !imKrieg(e)) continue;
+    /* Positionen und eigene Meldungen zaehlen immer nur im laufenden Krieg -
+       eine Rangliste "aller Zeiten" ueber Meldungen, die es laengst nicht
+       mehr gibt, waere eine Zahl ohne Deckung. */
+    if ((nurKrieg || ANSPRUCH_KRIEG.has(id.slice(0,2))) && !imKrieg(e)) continue;
     const p = id.lastIndexOf(":");
     if (p < 1) continue;
     const sache = id.slice(0, p), wer = id.slice(p + 1), zeit = e.t || 0;
@@ -1492,7 +1576,7 @@ function setFeindDepot(key, list){
    Teil. Genau diese Zeilen darf nur ihr Verfasser schreiben - die Datenbank
    sieht das ebenso, deshalb muss die Seite es an einer Stelle wissen. */
 const AUTOR_TEIL = {depot: 1, units: 2, join: 2, post: 2, line: 2, spot: 2,
-                    area: 2, est: 2, priv: 1, wish: 1, first: 2};
+                    area: 2, est: 2, priv: 1, wish: 1, first: 2, sweep: 1};
 function autorVon(bucket, id){
   const n = AUTOR_TEIL[bucket];
   if (!n) return null;
@@ -4142,6 +4226,13 @@ document.getElementById("b-shot").addEventListener("click", ()=>{
         <div style="font-size:12.5px;line-height:1.5">Put the war map on a screen at the zoom you
           like, then let this read it every so often. It is the same reading as above — you just
           do not have to sit next to it.</div>
+        <div style="border-left:3px solid var(--su);background:var(--panel2);border-radius:2px;
+             padding:8px 11px;margin-top:9px;font-size:12px;line-height:1.5">
+          <b style="color:var(--su)">The game must not be in exclusive fullscreen.</b>
+          There the browser only ever gets a black picture — and the game sits in front of
+          everything anyway, so nothing could run behind it. Set the game to
+          <b>borderless</b> or <b>windowed</b>; then it can stay in front and this still sees it.
+        </div>
         <div class="row" style="align-items:center;margin-top:8px">
           <span style="font-size:12px;color:var(--dim);flex:1">Look every</span>
           <select id="wa-sek" style="width:120px">
@@ -4152,14 +4243,23 @@ document.getElementById("b-shot").addEventListener("click", ()=>{
           </select>
           <button class="btn primary" id="wa-go">${"Pick a window …"}</button>
         </div>
+        <button class="btn" id="wa-radar" style="width:100%;margin-top:7px;justify-content:center">
+          Open the radar room …</button>
         <div class="note">Your browser asks which window it may see and shows for the whole time
           that it is being shared — that cannot be hidden, and it should not be. Nothing is
           recorded and nothing leaves this computer except the town colours, exactly as if you had
-          pressed <b>Apply to map</b> yourself.<br><br>
-          The game has to run <b>borderless or windowed</b>; in exclusive fullscreen the browser
-          only gets a black picture. If something else is on that window when it looks, the reading
-          simply fails and <b>nothing is written</b> — a gap costs nothing, a wrongly repainted map
-          costs the evening.</div>
+          pressed <b>Apply to map</b> yourself. If something else is on that window when it looks,
+          the reading fails and <b>nothing is written</b>: a gap costs nothing, a wrongly repainted
+          map costs the evening.<br><br>
+          <b>Drive around while it runs.</b> Every picture is fitted on its own, so a close-in view
+          works just as well as the whole map — and reads more cleanly, because the dots are
+          bigger. Pan across at a zoom you can actually see something at and it collects the map
+          piece by piece; the strip counts how far you have got. What it will <b>not</b> do is move
+          the map itself. That would mean driving the game, and that is the line I am not
+          crossing.<br><br>
+          With this browser window hidden behind the game, the check stretches to about a minute
+          however short you set it — browsers throttle background pages, and no setting here
+          changes that.</div>
       </div>
     </div>
     <div class="dlg-f">
@@ -4168,6 +4268,7 @@ document.getElementById("b-shot").addEventListener("click", ()=>{
     </div>`, true);
   document.getElementById("d-close").addEventListener("click", closeDlg);
   bildQuelle("shot-file", screenshotLesen);
+  document.getElementById("wa-radar").addEventListener("click", ()=>{ closeDlg(); radarAuf(); });
   {
     const knopf = document.getElementById("wa-go");
     const setzKnopf = () => knopf.textContent = wacheLaeuft() ? "Stop watching" : "Pick a window …";
@@ -4281,6 +4382,601 @@ async function screenshotLesen(datei){
   document.getElementById("shot-take").disabled = n === 0;
 }
 
+/* ---- Das Suchraster ---------------------------------------------------
+   Ein Raster ueber der Karte, damit "wo war lange keiner mehr" ueberhaupt
+   eine Frage mit Antwort wird.
+
+   Ohne Gewichtung nach Front und Hinterland, und das ist Absicht: wo die
+   Front verlaeuft, weiss man nur aus dem, was zuletzt aufgeklaert wurde.
+   Ausgerechnet ein Sektor, in dem seit zwei Tagen niemand war, ist der, in
+   dem sie sich verschoben haben koennte. Hinterland aus alten Daten zu
+   bestimmen waere eine Selbstbestaetigung, keine Auskunft. */
+const RASTER_SP = 8, RASTER_ZE = 5;
+let sektorNetz = null;
+function sektoren(){
+  if (sektorNetz) return sektorNetz;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const n of MAP.n){
+    if (n[1] < x0) x0 = n[1];
+    if (n[1] > x1) x1 = n[1];
+    if (n[2] < y0) y0 = n[2];
+    if (n[2] > y1) y1 = n[2];
+  }
+  const bw = (x1-x0)/RASTER_SP || 1, bh = (y1-y0)/RASTER_ZE || 1;
+  const felder = [];
+  for (let r = 0; r < RASTER_ZE; r++)
+    for (let c = 0; c < RASTER_SP; c++)
+      felder.push({k: String.fromCharCode(65+c) + (r+1), c, r, orte: [], name: "",
+                   x0: x0+c*bw, y0: y0+r*bh, x1: x0+(c+1)*bw, y1: y0+(r+1)*bh});
+  const vonOrt = new Int16Array(MAP.n.length);
+  for (let i = 0; i < MAP.n.length; i++){
+    const c = Math.min(RASTER_SP-1, Math.max(0, Math.floor((MAP.n[i][1]-x0)/bw)));
+    const r = Math.min(RASTER_ZE-1, Math.max(0, Math.floor((MAP.n[i][2]-y0)/bh)));
+    const s = r*RASTER_SP + c;
+    vonOrt[i] = s; felder[s].orte.push(i);
+  }
+  /* Ein Sektor heisst nach dem, was man dort kennt - "C3" allein findet
+     niemand im Spiel. Hauptstadt zuerst, sonst der bestvernetzte Ort: die
+     Zahl der Versorgungslinien ist der beste Anhaltspunkt dafuer, was auf
+     der Karte auffaellt. Die erste Stadt der Liste zu nehmen brachte
+     Namen wie "Budky" - ein Dorf, nach dem niemand sucht. */
+  const grad = new Uint16Array(MAP.n.length);
+  for (const [a,b] of MAP.e){ if (grad[a] !== undefined) grad[a]++; if (grad[b] !== undefined) grad[b]++; }
+  for (const f of felder){
+    if (!f.orte.length) continue;
+    const cap = f.orte.find(isCap);
+    let i = cap;
+    if (i === undefined){
+      let best = -1;
+      for (const o of f.orte){
+        const w = grad[o]*2 + (isObj(o) ? 3 : 0);
+        if (w > best){ best = w; i = o; }
+      }
+    }
+    f.name = MAP.n[i] ? MAP.n[i][0] : "";
+  }
+  /* Die Reihenfolge, in der die Antenne laeuft: zeilenweise, jede zweite
+     Zeile rueckwaerts. So wandert sie ohne Spruenge ueber die Karte, wie ein
+     Suchscheinwerfer und nicht wie ein Karussell. Leere Sektoren - Meer,
+     Randstreifen - kommen nicht vor. */
+  const folge = [];
+  for (let r = 0; r < RASTER_ZE; r++){
+    const zeile = [];
+    for (let c = 0; c < RASTER_SP; c++) zeile.push(r*RASTER_SP + c);
+    if (r % 2) zeile.reverse();
+    for (const s of zeile) if (felder[s].orte.length) folge.push(s);
+  }
+  sektorNetz = {felder, vonOrt, folge, x0, y0, x1, y1, bw, bh};
+  return sektorNetz;
+}
+
+/* ---- Wann zuletzt jemand hingesehen hat ---- */
+const sweepVon = p => (S.sweep[p] && S.sweep[p].v) || null;
+/* Clanweit zaehlt der juengste Blick, egal von wem: was der Nachbar vor zehn
+   Minuten gesehen hat, muss ich nicht noch einmal abfahren. */
+function sweepStand(){
+  const st = {};
+  for (const [p, e] of Object.entries(S.sweep)){
+    if (!e || !e.v) continue;
+    for (const [k, zeit] of Object.entries(e.v))
+      if (!st[k] || zeit > st[k].t) st[k] = {t: zeit, wer: e.n || p};
+  }
+  return st;
+}
+function sweepMerken(schluessel){
+  if (!schluessel || !schluessel.length) return 0;
+  const alt = sweepVon(S.me) || {}, jetztT = jetzt();
+  let neue = 0;
+  const neu = Object.assign({}, alt);
+  for (const k of schluessel){
+    /* Nicht bei jedem Durchgang schreiben: ein Sektor, den ich vor einer
+       Minute schon gemeldet habe, ist keine Neuigkeit, und eine Zeile je
+       Minute je Mitglied summiert sich. */
+    if ((alt[k] || 0) > jetztT - 90000) continue;
+    neu[k] = jetztT; neue++;
+  }
+  if (!neue) return 0;
+  S.sweep[S.me] = {v: neu, t: jetztT, by: S.me, n: S.name || ""};
+  dirty.add(`sweep:${S.me}`); save();
+  return neue;
+}
+/* Welche Sektoren ein Bild wirklich abgedeckt hat. Ein Streifzug am Rand
+   zaehlt nicht - aber die Schwelle darf auch nicht so hoch liegen, dass sie
+   nie faellt.
+
+   Gemessen an einem echten Bild der Kriegskarte: der bestgelesene Sektor kam
+   auf 33 Prozent seiner Staedte, die naechsten auf 28 bis 30. Eine Schwelle
+   bei einem Drittel haette also NICHTS durchgelassen, obwohl der Ausschnitt
+   die halbe Karte zeigte - Farberkennung liest nun einmal nicht jede Stadt.
+
+   Daher zwei Bedingungen nebeneinander: ein Fuenftel der Staedte eines
+   Sektors, und mindestens acht davon. Die zweite haelt einen angeschnittenen
+   Zipfel draussen, in dem zufaellig nur drei Staedte liegen. Das ist eine
+   Ermessensfrage, keine Messung - wer es anders haben will, dreht hier. */
+const SEKTOR_ANTEIL = 0.22, SEKTOR_MIND = 8;
+function sektorenAusLesung(besitz){
+  const netz = sektoren(), zahl = new Map();
+  for (const idx of Object.keys(besitz)){
+    const s = netz.vonOrt[+idx];
+    zahl.set(s, (zahl.get(s) || 0) + 1);
+  }
+  const raus = [];
+  for (const [s, n] of zahl){
+    const f = netz.felder[s];
+    if (!f.orte.length) continue;
+    if (n >= Math.min(SEKTOR_MIND, f.orte.length) && n / f.orte.length >= SEKTOR_ANTEIL)
+      raus.push(f.k);
+  }
+  return raus;
+}
+/* Wie frisch ist ein Sektor - in Stufen, weil "vor 3 h 12 min" niemand
+   liest und "warm" sofort verstanden wird. */
+const SWEEP_STUFEN = [
+  {bis: 15*60e3,  k:"frisch", n:"just now",     f:"#7dff9b"},
+  {bis: 2*3600e3, k:"warm",   n:"within hours", f:"#d8e86a"},
+  {bis: 12*3600e3,k:"kuehl",  n:"today",        f:"#e8a34a"},
+  {bis: Infinity, k:"kalt",   n:"long ago",     f:"#c8453a"},
+];
+const sweepStufe = t => t ? SWEEP_STUFEN.find(s => jetzt()-t < s.bis) : null;
+
+/* ---- Der Radarraum ---------------------------------------------------
+   Die Kurbel fuehrt die Antenne ueber das eigene Suchraster und sagt, wohin
+   man im Spiel fahren soll. Sie bewegt nichts im Spiel - das ist der ganze
+   Unterschied zwischen einem Geraet und einem Bot.
+
+   Die Beschriftung folgt der Fraktion des Clans, darunter steht dasselbe auf
+   Englisch. Die Geraete gab es wirklich: RUS-2 war die sowjetische
+   Frueherkennung, Wuerzburg das deutsche Feuerleitradar, SCR-270 das
+   amerikanische, das in Pearl Harbor die Anflugmeldung gab, die niemand
+   ernst nahm. */
+const RD_WORTE = [
+  {marke:"SCR-270-B", werk:"Signal Corps Radio · Camp Evans",
+   suche:"SEARCH", freq:"FREQUENCY", kraft:"POWER", ein:"ON", aus:"OFF",
+   ziel:"TRAINED ON", abdeckung:"COVERAGE", sektoren:"SECTORS SWEPT",
+   sicht:"IN VIEW", ton:"AUDIO"},
+  {marke:"FuMG 62 «Würzburg»", werk:"Telefunken · Berlin",
+   suche:"SUCHLAUF", freq:"FREQUENZ", kraft:"BETRIEB", ein:"EIN", aus:"AUS",
+   ziel:"AUFGESCHALTET", abdeckung:"ERFASSUNG", sektoren:"SEKTOREN",
+   sicht:"IM BILD", ton:"TON"},
+  {marke:"РУС-2 «Пегматит»", werk:"НИИ-20 · Москва",
+   suche:"ПОИСК", freq:"ЧАСТОТА", kraft:"ПИТАНИЕ", ein:"ВКЛ", aus:"ВЫКЛ",
+   ziel:"НАВЕДЕНИЕ", abdeckung:"ОХВАТ", sektoren:"СЕКТОРЫ",
+   sicht:"НА ЭКРАНЕ", ton:"ЗВУК"},
+];
+const rdWorte = () => RD_WORTE[clanFaktion()] || RD_WORTE[0];
+
+let radarOffen = false, radarZeiger = 0, radarWinkel = 0, radarBild = null;
+let radarTon = true, radarKurbelWeg = 0, radarKlang = null, radarBlitz = 0;
+
+function radarPing(hoch){
+  if (!radarTon) return;
+  try {
+    radarKlang = radarKlang || new (window.AudioContext || window.webkitAudioContext)();
+    if (radarKlang.state === "suspended") radarKlang.resume();
+    const n = radarKlang.currentTime, o = radarKlang.createOscillator(), g = radarKlang.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(hoch ? 1320 : 760, n);
+    o.frequency.exponentialRampToValueAtTime(hoch ? 990 : 620, n + 0.28);
+    g.gain.setValueAtTime(0.0001, n);
+    g.gain.exponentialRampToValueAtTime(0.07, n + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, n + 0.34);
+    o.connect(g); g.connect(radarKlang.destination);
+    o.start(n); o.stop(n + 0.36);
+  } catch(e){}
+  radarBlitz = jetzt();
+}
+/* Ein Rasten beim Kurbeln - kurz und trocken, kein Ton zum Zuhoeren. */
+function radarKlack(){
+  if (!radarTon) return;
+  try {
+    radarKlang = radarKlang || new (window.AudioContext || window.webkitAudioContext)();
+    if (radarKlang.state === "suspended") radarKlang.resume();
+    const n = radarKlang.currentTime, o = radarKlang.createOscillator(), g = radarKlang.createGain();
+    o.type = "square"; o.frequency.setValueAtTime(220, n);
+    g.gain.setValueAtTime(0.03, n);
+    g.gain.exponentialRampToValueAtTime(0.0001, n + 0.05);
+    o.connect(g); g.connect(radarKlang.destination);
+    o.start(n); o.stop(n + 0.06);
+  } catch(e){}
+}
+
+/* Welcher Sektor gerade aufgeschaltet ist. Der Zeiger laeuft ueber die
+   Reihenfolge des Suchrasters, nicht ueber die Sektornummern - so wandert er
+   ohne Spruenge. */
+const radarZiel = () => {
+  const netz = sektoren();
+  return netz.felder[netz.folge[((radarZeiger % netz.folge.length) + netz.folge.length)
+                                % netz.folge.length]];
+};
+function radarDrehen(schritte){
+  if (!schritte) return;
+  radarZeiger += schritte;
+  radarKlack();
+  radarPult(); radarZeichnen();
+}
+/* Nach einem Treffer weiter zum naechsten, den lange niemand gesehen hat -
+   das ist es, was ein Suchlauf tut. Sind alle frisch, bleibt er stehen. */
+function radarWeiterZumAeltesten(){
+  const netz = sektoren(), st = sweepStand();
+  let besterZeiger = null, aeltest = Infinity;
+  for (let i = 1; i <= netz.folge.length; i++){
+    const f = netz.felder[netz.folge[(radarZeiger + i) % netz.folge.length]];
+    const zeit = (st[f.k] && st[f.k].t) || 0;
+    if (zeit < aeltest){ aeltest = zeit; besterZeiger = radarZeiger + i; }
+  }
+  if (besterZeiger !== null && aeltest < jetzt() - 15*60e3) radarZeiger = besterZeiger;
+}
+
+function radarAuf(){
+  if (radarOffen) return;
+  sektoren();
+  radarOffen = true;
+  document.getElementById("radar").classList.add("an");
+  /* Beim Aufmachen dorthin schauen, wo es am noetigsten ist. */
+  radarZeiger = 0; radarWeiterZumAeltesten();
+  radarPult(); radarSchleife();
+}
+function radarZu(){
+  if (!radarOffen) return;
+  radarOffen = false;
+  document.getElementById("radar").classList.remove("an");
+  if (radarBild){ cancelAnimationFrame(radarBild); radarBild = null; }
+}
+function radarSchleife(){
+  if (!radarOffen) return;
+  radarWinkel += wacheLaeuft() ? 0.011 : 0.0035;   // steht die Anlage, dreht sie langsam leer
+  radarZeichnen();
+  radarBild = requestAnimationFrame(radarSchleife);
+}
+
+/* ---- Das Pult ---- */
+function radarPult(){
+  const el = document.getElementById("rd-pult");
+  if (!el || !radarOffen) return;
+  const W = rdWorte(), netz = sektoren(), st = sweepStand(), ziel = radarZiel();
+  const zielStand = st[ziel.k];
+  const frisch = netz.folge.filter(s => {
+    const z = st[netz.felder[s].k];
+    return z && jetzt() - z.t < 2*3600e3;
+  }).length;
+  const proz = Math.round(100*frisch/netz.folge.length);
+  const laeuft = wacheLaeuft();
+  const orte = ziel.orte.slice(0, 5).map(i => MAP.n[i][0]);
+
+  el.innerHTML = `
+    <div class="rd-marke"><b>${esc(W.marke)}</b><span>${esc(W.werk)}</span></div>
+
+    <div class="rd-ziel">
+      <div class="rd-lbl" style="text-align:left;margin-bottom:3px">${esc(W.ziel)}
+        <em>trained on</em></div>
+      <div class="s">${esc(ziel.k)}</div>
+      <div class="o">${esc(ziel.name || "—")}</div>
+      <div class="h">${zielStand
+        ? `Last seen ${esc(alterText(zielStand.t))} by ${esc(zielStand.wer)}.`
+        : `<b style="color:#e8a34a">Nobody has looked here yet.</b>`}<br>
+        Pan the war map over ${esc(orte.slice(0,3).join(", "))}${
+          ziel.orte.length > 3 ? ` and ${ziel.orte.length-3} more` : ""}.</div>
+    </div>
+
+    <div class="rd-teil">
+      <svg class="rd-kurbel" id="rd-kurbel" viewBox="0 0 120 120" width="118" height="118"></svg>
+      <div class="rd-lbl">${esc(W.suche)}<em>turn to sweep</em></div>
+    </div>
+
+    <div class="rd-teil">
+      <svg class="rd-dial" id="rd-dial" viewBox="0 0 120 90" width="118" height="88"></svg>
+      <div class="rd-lbl">${esc(W.freq)}<em>${wacheSek()} s between looks</em></div>
+    </div>
+
+    <button class="rd-schalter ${laeuft?"an":""}" id="rd-kraft">
+      ${esc(W.kraft)} · ${esc(laeuft ? W.ein : W.aus)}</button>
+
+    <div class="rd-anz">
+      <div class="z"><span>${esc(W.abdeckung)}</span><b>${proz} %</b></div>
+      <div class="z"><span>${esc(W.sektoren)}</span><b>${frisch} / ${netz.folge.length}</b></div>
+      <div class="z"><span>${esc(W.sicht)}</span><b>${laeuft ? (wache.gelesen||0) : "—"}</b></div>
+    </div>
+
+    <button class="rd-schalter ${radarTon?"an":""}" id="rd-ton"
+      style="font-size:10.5px;padding:6px 0">${esc(W.ton)}</button>
+
+    <div class="rd-fuss">The crank steers this set's own search pattern, nothing in the game.
+      Where the front runs is only known from what was last scouted — so no sector counts for
+      less than another here. The one nobody has looked at for two days is exactly the one where
+      it may have moved.</div>`;
+
+  kurbelZeichnen(); dialZeichnen();
+  el.querySelector("#rd-kraft").addEventListener("click", async ()=>{
+    if (wacheLaeuft()){ wacheStop(false); radarPult(); return; }
+    await wacheStart(wacheSek());
+    radarPult();
+  });
+  el.querySelector("#rd-ton").addEventListener("click", ()=>{
+    radarTon = !radarTon;
+    try { localStorage.setItem("hng-warmap-radarton", radarTon ? "1" : "0"); } catch(e){}
+    if (radarTon) radarKlack();
+    radarPult();
+  });
+  kurbelGriff(); dialGriff();
+}
+
+/* ---- Kurbel und Drehschalter ---- */
+function kurbelZeichnen(){
+  const s = document.getElementById("rd-kurbel");
+  if (!s) return;
+  const w = radarKurbelWeg;
+  const hx = 60 + Math.cos(w)*34, hy = 60 + Math.sin(w)*34;
+  s.innerHTML = `
+    <circle cx="60" cy="60" r="52" fill="#1b1a15" stroke="#3a382e" stroke-width="2"/>
+    <circle cx="60" cy="60" r="44" fill="none" stroke="#2a2822" stroke-width="1"/>
+    ${Array.from({length:12}, (_,i)=>{
+      const a = i*Math.PI/6, r1 = 44, r2 = 49;
+      return `<line x1="${60+Math.cos(a)*r1}" y1="${60+Math.sin(a)*r1}"
+                    x2="${60+Math.cos(a)*r2}" y2="${60+Math.sin(a)*r2}"
+                    stroke="#4d4a3d" stroke-width="1.5"/>`;
+    }).join("")}
+    <line x1="60" y1="60" x2="${hx}" y2="${hy}" stroke="#6b6455" stroke-width="7"
+      stroke-linecap="round"/>
+    <circle cx="${hx}" cy="${hy}" r="9" fill="#cbb27a" stroke="#8a6a2a" stroke-width="2"/>
+    <circle cx="${hx}" cy="${hy}" r="3" fill="#7d6535"/>
+    <circle cx="60" cy="60" r="11" fill="#2f2c24" stroke="#4d4a3d" stroke-width="2"/>`;
+}
+function dialZeichnen(){
+  const s = document.getElementById("rd-dial");
+  if (!s) return;
+  const i = WACHE_STUFEN.indexOf(wacheSek());
+  const a = -Math.PI*0.86 + (Math.PI*0.72) * (i < 0 ? 1 : i) / (WACHE_STUFEN.length-1);
+  s.innerHTML = `
+    <path d="M8 78 A 52 52 0 0 1 112 78" fill="none" stroke="#2a2822" stroke-width="10"/>
+    ${WACHE_STUFEN.map((v,k)=>{
+      const b = -Math.PI*0.86 + (Math.PI*0.72)*k/(WACHE_STUFEN.length-1);
+      const x1 = 60+Math.cos(b)*44, y1 = 78+Math.sin(b)*44;
+      const x2 = 60+Math.cos(b)*54, y2 = 78+Math.sin(b)*54;
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+        stroke="${k===i?"#f0c169":"#5e594c"}" stroke-width="${k===i?3:1.6}"/>
+        <text x="${60+Math.cos(b)*63}" y="${78+Math.sin(b)*63+3}" text-anchor="middle"
+          font-size="9" fill="${k===i?"#f0c169":"#6b6455"}"
+          font-family="ui-monospace,Consolas,monospace">${v<60?v+"s":(v/60)+"m"}</text>`;
+    }).join("")}
+    <line x1="60" y1="78" x2="${60+Math.cos(a)*38}" y2="${78+Math.sin(a)*38}"
+      stroke="#f0c169" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="60" cy="78" r="9" fill="#2f2c24" stroke="#4d4a3d" stroke-width="2"/>`;
+}
+/* Ziehen dreht - und alle dreissig Grad rastet ein Schritt ein. */
+function kurbelGriff(){
+  const s = document.getElementById("rd-kurbel");
+  if (!s) return;
+  let letzter = null, sammel = 0;
+  const winkel = ev => {
+    const r = s.getBoundingClientRect();
+    return Math.atan2(ev.clientY - (r.top + r.height/2), ev.clientX - (r.left + r.width/2));
+  };
+  s.addEventListener("pointerdown", ev => {
+    s.setPointerCapture(ev.pointerId); letzter = winkel(ev); ev.preventDefault();
+  });
+  s.addEventListener("pointermove", ev => {
+    if (letzter === null) return;
+    const w = winkel(ev);
+    let d = w - letzter;
+    while (d > Math.PI) d -= 2*Math.PI;
+    while (d < -Math.PI) d += 2*Math.PI;
+    letzter = w; radarKurbelWeg += d; sammel += d;
+    const raster = Math.PI/6;                       // 30 Grad je Schritt
+    while (Math.abs(sammel) >= raster){
+      const v = Math.sign(sammel);
+      sammel -= v*raster;
+      radarZeiger += v; radarKlack();
+    }
+    kurbelZeichnen(); radarZielAnzeige(); radarZeichnen();
+  });
+  const los = ev => { if (letzter !== null){ letzter = null; sammel = 0; radarPult(); } };
+  s.addEventListener("pointerup", los);
+  s.addEventListener("pointercancel", los);
+  s.addEventListener("wheel", ev => {
+    ev.preventDefault();
+    radarKurbelWeg += Math.sign(ev.deltaY)*Math.PI/6;
+    radarDrehen(Math.sign(ev.deltaY));
+  }, {passive:false});
+}
+const WACHE_STUFEN = [30, 60, 120, 300];
+let wacheStufe = 1;
+const wacheSek = () => WACHE_STUFEN[wacheStufe];
+function dialGriff(){
+  const s = document.getElementById("rd-dial");
+  if (!s) return;
+  const setz = i => {
+    const neu = Math.max(0, Math.min(WACHE_STUFEN.length-1, i));
+    if (neu === wacheStufe) return;
+    wacheStufe = neu; radarKlack();
+    if (wacheLaeuft()) wache.sek = wacheSek();
+    radarPult();
+  };
+  s.addEventListener("wheel", ev => {
+    ev.preventDefault(); setz(wacheStufe + Math.sign(ev.deltaY));
+  }, {passive:false});
+  s.addEventListener("pointerdown", ev => {
+    const r = s.getBoundingClientRect();
+    const x = (ev.clientX - r.left)/r.width;
+    setz(Math.round(x*(WACHE_STUFEN.length-1)));
+  });
+}
+/* Nur den Zielkasten neu schreiben, waehrend gekurbelt wird - das ganze Pult
+   neu zu bauen risse einem den Zeiger unter der Hand weg. */
+function radarZielAnzeige(){
+  const el = document.querySelector("#rd-pult .rd-ziel");
+  if (!el) return;
+  const ziel = radarZiel(), st = sweepStand()[ziel.k];
+  el.querySelector(".s").textContent = ziel.k;
+  el.querySelector(".o").textContent = ziel.name || "—";
+  el.querySelector(".h").innerHTML = (st
+    ? `Last seen ${esc(alterText(st.t))} by ${esc(st.wer)}.`
+    : `<b style="color:#e8a34a">Nobody has looked here yet.</b>`)
+    + `<br>Pan the war map over ${esc(ziel.orte.slice(0,3).map(i=>MAP.n[i][0]).join(", "))}${
+        ziel.orte.length > 3 ? ` and ${ziel.orte.length-3} more` : ""}.`;
+}
+
+/* ---- Der Schirm ---- */
+function radarZeichnen(){
+  if (!radarOffen) return;
+  const cv = document.getElementById("rd-cv");
+  if (!cv) return;
+  const wrap = cv.parentElement.getBoundingClientRect();
+  const dp = Math.min(window.devicePixelRatio || 1, 2);
+  const W = Math.max(200, Math.round(wrap.width)), H = Math.max(200, Math.round(wrap.height));
+  if (cv.width !== W*dp || cv.height !== H*dp){ cv.width = W*dp; cv.height = H*dp; }
+  const g = cv.getContext("2d");
+  g.setTransform(dp, 0, 0, dp, 0, 0);
+  /* Der Grund wird selbst gemalt, nicht vom Rahmen durchgelassen: so sieht
+     ein herausgezogenes Bild genauso aus wie das Fenster. */
+  const grund = g.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.hypot(W,H)/2);
+  grund.addColorStop(0, "#0e1d12");
+  grund.addColorStop(0.72, "#070d08");
+  grund.addColorStop(1, "#04070a");
+  g.fillStyle = grund; g.fillRect(0, 0, W, H);
+
+  const netz = sektoren(), st = sweepStand();
+  const rand = 46;
+  const sk = Math.min((W-2*rand)/(netz.x1-netz.x0), (H-2*rand)/(netz.y1-netz.y0));
+  const ox = (W - (netz.x1-netz.x0)*sk)/2 - netz.x0*sk;
+  const oy = (H - (netz.y1-netz.y0)*sk)/2 - netz.y0*sk;
+  const P = (x,y) => [x*sk+ox, y*sk+oy];
+  const mx = W/2, my = H/2;
+
+  /* Ringe und Speichen - Zierrat, aber der Zierrat, der ein Radar ausmacht. */
+  g.strokeStyle = "rgba(90,160,105,.13)"; g.lineWidth = 1;
+  const rmax = Math.hypot(W, H)/2;
+  for (let r = rmax/5; r < rmax; r += rmax/5){
+    g.beginPath(); g.arc(mx, my, r, 0, 6.284); g.stroke();
+  }
+  for (let a = 0; a < 12; a++){
+    const w = a*Math.PI/6;
+    g.beginPath(); g.moveTo(mx, my);
+    g.lineTo(mx + Math.cos(w)*rmax, my + Math.sin(w)*rmax); g.stroke();
+  }
+
+  /* Sektoren: gefuellt nach Frische. Das ist die eigentliche Auskunft. */
+  for (const s of netz.folge){
+    const f = netz.felder[s];
+    const [x0,y0] = P(f.x0, f.y0), [x1,y1] = P(f.x1, f.y1);
+    const stand = st[f.k], stufe = sweepStufe(stand && stand.t);
+    g.fillStyle = stufe ? stufe.f : "#c8453a";
+    g.globalAlpha = stufe ? (stufe.k === "frisch" ? .17 : stufe.k === "warm" ? .11
+                            : stufe.k === "kuehl" ? .07 : .05) : .05;
+    g.fillRect(x0, y0, x1-x0, y1-y0);
+    g.globalAlpha = 1;
+    /* Ein Sektor, in den noch nie jemand gesehen hat, bekommt einen eigenen
+       Rand. Das ist der einzige Zustand, aus dem sich etwas zu tun ergibt -
+       "alt" heisst nachsehen, "nie" heisst: wir wissen dort gar nichts. */
+    if (!stand){
+      g.strokeStyle = "rgba(200,69,58,.55)"; g.lineWidth = 1.4;
+      g.setLineDash([5,4]);
+      g.strokeRect(x0+1, y0+1, x1-x0-2, y1-y0-2);
+      g.setLineDash([]);
+    }
+    g.strokeStyle = "rgba(120,200,140,.16)"; g.lineWidth = 1;
+    g.strokeRect(x0, y0, x1-x0, y1-y0);
+    g.fillStyle = "rgba(150,230,175,.55)";
+    g.font = `11px ui-monospace,Consolas,monospace`;
+    g.textAlign = "left"; g.textBaseline = "top";
+    g.fillText(f.k, x0+4, y0+3);
+  }
+
+  /* Die Versorgungslinien zeichnen die Form der Karte - ohne sie waere es
+     eine Punktwolke, mit ihnen erkennt man Europa. */
+  g.strokeStyle = "rgba(90,190,120,.17)"; g.lineWidth = 1;
+  g.beginPath();
+  for (const [a,b] of MAP.e){
+    const A = MAP.n[a], B = MAP.n[b];
+    if (!A || !B) continue;
+    const p = P(A[1],A[2]), q = P(B[1],B[2]);
+    g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]);
+  }
+  g.stroke();
+
+  /* Die Staedte als Echos, in der Farbe dessen, dem sie gehoeren. */
+  for (let i = 0; i < MAP.n.length; i++){
+    const n = MAP.n[i], [x,y] = P(n[1], n[2]);
+    const o = S.owner[i] && S.owner[i].v;
+    const c = (o === undefined || o === null) ? "#5c7a64" : col(FACTIONS[o]);
+    const stand = st[netz.felder[netz.vonOrt[i]].k];
+    const alt = stand ? Math.min(1, (jetzt()-stand.t)/(6*3600e3)) : 1;
+    /* Was lange niemand gesehen hat, verglimmt - aber es verschwindet nicht:
+       ein Echo, das man nicht mehr sieht, waere eine Luecke, die man auch
+       nicht mehr bemerkt. */
+    g.globalAlpha = 1 - 0.55*alt;
+    g.fillStyle = c;
+    const r = isCap(i) ? 3.8 : isObj(i) ? 2.6 : 1.8;
+    if (isCap(i)){
+      g.shadowColor = c; g.shadowBlur = 9;
+    }
+    g.beginPath(); g.arc(x, y, r, 0, 6.284); g.fill();
+    g.shadowBlur = 0;
+  }
+  g.globalAlpha = 1;
+
+  /* Der aufgeschaltete Sektor - Klammern, kein Kasten: man soll hindurchsehen. */
+  const ziel = radarZiel();
+  const [zx0,zy0] = P(ziel.x0, ziel.y0), [zx1,zy1] = P(ziel.x1, ziel.y1);
+  const blitz = jetzt() - radarBlitz < 700;
+  g.strokeStyle = blitz ? "#8fe6a2" : "#f0c169";
+  g.lineWidth = 2;
+  const e = Math.min(22, (zx1-zx0)/3);
+  for (const [ex,ey,dx,dy] of [[zx0,zy0,1,1],[zx1,zy0,-1,1],[zx0,zy1,1,-1],[zx1,zy1,-1,-1]]){
+    g.beginPath();
+    g.moveTo(ex, ey+dy*e); g.lineTo(ex, ey); g.lineTo(ex+dx*e, ey);
+    g.stroke();
+  }
+  g.fillStyle = blitz ? "#8fe6a2" : "#f0c169";
+  g.font = `600 13px ${SCHMAL}`;
+  g.textBaseline = "bottom";
+  /* Am rechten Rand nach innen ausrichten, sonst laeuft der Name aus dem
+     Bild - und ausgerechnet der sagt, wohin man fahren soll. */
+  const beschr = `${ziel.k} · ${ziel.name || ""}`;
+  if (zx0 + g.measureText(beschr).width > W - 12){
+    g.textAlign = "right"; g.fillText(beschr, zx1, zy0-5);
+  } else {
+    g.textAlign = "left"; g.fillText(beschr, zx0, zy0-5);
+  }
+
+  /* Der Suchstrahl. Laeuft die Anlage, dreht er zuegig; steht sie, schleicht
+     er - man soll auf einen Blick sehen, ob etwas passiert. */
+  const grad = g.createConicGradient
+    ? g.createConicGradient(radarWinkel, mx, my)
+    : null;
+  if (grad){
+    grad.addColorStop(0, "rgba(130,240,160,.20)");
+    grad.addColorStop(0.06, "rgba(130,240,160,.05)");
+    grad.addColorStop(0.3, "rgba(130,240,160,0)");
+    grad.addColorStop(1, "rgba(130,240,160,0)");
+    g.fillStyle = grad;
+    g.beginPath(); g.moveTo(mx,my); g.arc(mx,my,rmax,0,6.284); g.fill();
+  }
+  g.strokeStyle = "rgba(150,255,180,.5)"; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(mx,my);
+  g.lineTo(mx + Math.cos(radarWinkel)*rmax, my + Math.sin(radarWinkel)*rmax);
+  g.stroke();
+
+  /* Legende unten links - vier Stufen, mehr muss man nicht wissen. */
+  g.font = `10px ui-monospace,Consolas,monospace`;
+  g.textAlign = "left"; g.textBaseline = "middle";
+  SWEEP_STUFEN.forEach((s, i) => {
+    const y = H - 16 - i*15;
+    g.fillStyle = s.f; g.globalAlpha = .8;
+    g.fillRect(16, y-5, 10, 10); g.globalAlpha = 1;
+    g.fillStyle = "rgba(160,210,175,.75)";
+    g.fillText(s.n, 32, y);
+  });
+}
+
+document.getElementById("rd-zu").addEventListener("click", radarZu);
+document.addEventListener("keydown", ev => {
+  if (!radarOffen) return;
+  if (ev.key === "Escape"){ radarZu(); return; }
+  if (ev.key === "ArrowRight" || ev.key === "ArrowDown"){ ev.preventDefault(); radarDrehen(1); }
+  if (ev.key === "ArrowLeft" || ev.key === "ArrowUp"){ ev.preventDefault(); radarDrehen(-1); }
+});
+window.addEventListener("resize", ()=>{ if (radarOffen) radarZeichnen(); });
+try { radarTon = localStorage.getItem("hng-warmap-radarton") !== "0"; } catch(e){}
+
 /* ---- Die Wache -------------------------------------------------------
    Ein zweiter Spieler, der die Karte abfaehrt, waere ein Bot - der faellt
    aus. Das hier ist etwas anderes: der eigene Bildschirm, die eigene
@@ -4306,12 +5002,20 @@ async function wacheStart(sek){
   const video = document.createElement("video");
   video.srcObject = stream; video.muted = true; video.playsInline = true;
   try { await video.play(); } catch(e){}
-  wache = {stream, video, sek, laeufe:0, gelesen:0, gesamt:0, letzte:0, zuletzt:0,
-           meldung:"", wartet:null};
+  wache = {stream, video, sek: Math.max(10, sek), laeufe:0, gelesen:0, gesamt:0, letzte:0,
+           zuletzt:0, meldung:"", wartet:null, gesehen:new Set(), dran:0, sektoren:[]};
   stream.getVideoTracks()[0].addEventListener("ended", ()=>wacheStop(true));
   wacheAnzeigen();
   setTimeout(wacheTick, 900);                 // dem Bild einen Moment geben
-  wache.uhr = setInterval(wacheTick, Math.max(10, sek)*1000);
+  /* Jede Sekunde nachsehen, ob es Zeit ist - nicht im gewuenschten Takt
+     ticken. Ein Browser bremst Zeitgeber in einem verdeckten Fenster auf
+     etwa einen Aufruf je Minute; ein fester Takt verlaengert sich dann still
+     und leise. So wird stattdessen die verstrichene Zeit gemessen, und der
+     naechste Aufruf holt nach, was ausgefallen ist. */
+  wache.uhr = setInterval(()=>{
+    if (!wache) return;
+    if (jetzt() - wache.dran >= wache.sek*1000) wacheTick();
+  }, 1000);
   return true;
 }
 function wacheStop(vonAussen){
@@ -4319,13 +5023,15 @@ function wacheStop(vonAussen){
   clearInterval(wache.uhr);
   try { wache.stream.getTracks().forEach(x => x.stop()); } catch(e){}
   try { wache.video.srcObject = null; } catch(e){}
+  const gesehen = wache.gesehen ? wache.gesehen.size : 0, geaendert = wache.gesamt;
   wache = null;
-  wacheAnzeigen();
-  toast(vonAussen ? "Sharing ended — the war map is no longer being watched"
-                  : "Stopped watching the war map");
+  wacheAnzeigen(); radarZeichnen();
+  toast(`${vonAussen ? "Sharing ended" : "Stopped watching"} — ${gesehen} of ${MAP.n.length} `
+      + `towns were seen, ${geaendert} changed.`);
 }
 function wacheTick(){
   if (!wache) return;
+  wache.dran = jetzt();
   const res = kartenAusBild(wache.video, null);
   wache.laeufe++;
   if (res.fehler){ wache.meldung = res.fehler; wacheAnzeigen(); return; }
@@ -4347,12 +5053,29 @@ function wacheTick(){
     wacheAnzeigen(); return;
   }
   wache.wartet = null;
+  /* Erst zaehlen, wenn es auch uebernommen wurde. Ein Bild, das die Bremse
+     zurueckgehalten hat, war kein Blick auf die Karte - es als Abdeckung zu
+     zaehlen hiesse, sich reicher zu rechnen als man ist. */
+  for (const idx of Object.keys(res.erg.besitz)) wache.gesehen.add(+idx);
+  const frisch = sektorenAusLesung(res.erg.besitz);
+  wache.sektoren = frisch;
+  if (sweepMerken(frisch)){
+    /* War der aufgeschaltete Sektor dabei, ist die Aufgabe erledigt - dann
+       rueckt der Suchlauf von selbst zum naechsten, den lange niemand
+       gesehen hat. Genau das tut ein Suchlauf. */
+    const getroffen = radarOffen && frisch.includes(radarZiel().k);
+    radarPing(getroffen);
+    if (getroffen) radarWeiterZumAeltesten();
+    if (radarOffen) radarPult();
+  }
+  radarZeichnen();
   wache.letzte = besitzUebernehmen(res.erg.besitz);
   wache.gesamt += wache.letzte;
   wache.zuletzt = jetzt();
   wacheAnzeigen();
 }
 function wacheAnzeigen(){
+  radarZeichnen();
   const el = document.getElementById("wache");
   if (!el) return;
   if (!wache){ el.classList.remove("an"); el.innerHTML = ""; return; }
@@ -4363,13 +5086,15 @@ function wacheAnzeigen(){
       <b>Watching the war map</b>
       <em>${wache.meldung
         ? esc(wache.meldung)
-        : `${wache.gelesen} towns read${wache.zuletzt
-            ? ` · ${wache.gesamt} changed so far · last ${alterText(wache.zuletzt)}`
-            : ""}`}</em>
+        : `${wache.gelesen} towns in view · <b style="color:var(--accent)">${
+            wache.gesehen.size}</b> of ${MAP.n.length} seen${wache.zuletzt
+            ? ` · ${wache.gesamt} changed` : ""}`}</em>
     </span>
     ${wache.wartet ? `<button class="btn" id="wa-doch" style="font-size:10.5px">Apply anyway</button>` : ""}
+    <button class="btn" id="wa-scope" style="font-size:10.5px">Scope</button>
     <button class="btn" id="wa-stop" style="font-size:10.5px">Stop</button>`;
   el.querySelector("#wa-stop").addEventListener("click", ()=>wacheStop(false));
+  el.querySelector("#wa-scope").addEventListener("click", radarAuf);
   el.querySelector("#wa-doch")?.addEventListener("click", ()=>{
     if (!wache || !wache.wartet) return;
     wache.letzte = besitzUebernehmen(wache.wartet);
@@ -4740,7 +5465,11 @@ function tafelZeichnen(){
         <div style="font-size:11px;color:var(--dim);margin-top:2px;line-height:1.4">${esc(a.d)}</div>
       </div>`).join("")}
     </div>
-    <div class="note">Only the first entry counts. Two people who find the same thing without
+    <div class="note"><b>Positions</b> and <b>Our own</b> always count for the running war only —
+      where a unit stood last war says nothing today, and a lifetime tally of reports that no
+      longer exist would be a number without cover. The three on the left keep counting across
+      wars: a player, a team or a piece of kit is found once, and that stands.<br><br>
+      Only the first entry counts. Two people who find the same thing without
       knowing of each other both write it down — the earlier timestamp takes it, not chance.
       <b>Our own</b> is never added into the enemy total: a position over their airfield and a
       note about our own depot are not the same kind of work, and no exchange rate between them
@@ -8225,6 +8954,10 @@ document.addEventListener("click", meldeKlick, true);
    das Notizbuch. Es gibt niemanden, der es aufmachen koennte. Genau das ist
    der Punkt - eine Hintertuer fuer mich waere eine fuer jeden, der an die
    Datenbank kommt. */
+/* Die Datenbank nimmt eine Zeile bis 20 KB, der Abgleich bremst bei 18 KB.
+   Verschluesselt und in Base64 wird aus einem Zeichen ungefaehr eineinhalb -
+   das hier ist der Rest, der fuer Text uebrigbleibt, mit Luft nach oben. */
+const NOTIZ_MAX = 12000;
 let privKey = null, pwSession = null;
 const PRIVK_STORE = "hng-warmap-notizschluessel";
 const privRec = () => (S.priv[S.me] && S.priv[S.me].v) || null;
@@ -8297,6 +9030,10 @@ async function notizSpeichern(text){
   dirty.add(`priv:${S.me}`); save();
   return true;
 }
+/* Wieviel vom Platz verbraucht ist. Gemessen in Bytes, nicht in Zeichen:
+   ein Umlaut zaehlt fuer eins und belegt zwei, und arabisch oder chinesisch
+   belegt drei. */
+const notizVoll = text => byteLaenge(String(text || "")) / NOTIZ_MAX;
 
 let notizUhr = null;
 async function notizFenster(){
@@ -8320,6 +9057,7 @@ async function notizFenster(){
         <div class="row" style="align-items:center;gap:9px">
           <span id="nz-stand" style="font-size:11px;color:var(--dim2)">Saved automatically.</span>
           <span style="flex:1"></span>
+          <span id="nz-voll" style="font-size:10.5px;color:var(--dim2)"></span>
           <button class="btn" id="nz-save">Save now</button>
         </div>
         <div class="note">${wandert
@@ -8337,16 +9075,34 @@ async function notizFenster(){
   });
   const feld = document.getElementById("nz-text");
   if (!feld) return;
-  const stand = document.getElementById("nz-stand");
+  const stand = document.getElementById("nz-stand"), voll = document.getElementById("nz-voll");
+  /* Ehrlich sagen, bevor es zu spaet ist: eine zu lange Zeile weist die
+     Datenbank ab, und danach steht das Notizbuch nur noch hier. */
+  const fuellstand = () => {
+    if (!voll) return;
+    const p = notizVoll(feld.value);
+    if (p < 0.7){ voll.textContent = ""; return; }
+    voll.textContent = `${Math.round(p*100)} % full`;
+    voll.style.color = p >= 1 ? "var(--su)" : p >= 0.9 ? "#ffc9a0" : "var(--dim2)";
+    voll.title = p >= 1
+      ? "Past this it no longer travels: it stays on this computer and is gone if you clear the browser."
+      : "A notebook has room for about twelve thousand characters. Past that it stops travelling between your computers.";
+  };
   const sichern = async (wort) => {
     const ok = await notizSpeichern(feld.value);
-    if (stand) stand.textContent = ok ? (wort || "Saved.") : "Could not save.";
+    if (stand) stand.textContent = ok
+      ? (notizVoll(feld.value) >= 1
+         ? "Saved here only — too long to travel."
+         : (wort || "Saved."))
+      : "Could not save.";
   };
   feld.addEventListener("input", ()=>{
     if (stand) stand.textContent = "…";
+    fuellstand();
     clearTimeout(notizUhr);
     notizUhr = setTimeout(sichern, 700);
   });
+  fuellstand();
   document.getElementById("nz-save").addEventListener("click", ()=>sichern("Saved."));
   setTimeout(()=>{ if (document.body.contains(feld)) feld.focus(); }, 60);
 }
@@ -10497,7 +11253,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game installation.
-         <span style="color:var(--dim2)">· build 2026-08-19 17:50</span></p></div>
+         <span style="color:var(--dim2)">· build 2026-08-19 19:31</span></p></div>
     <div class="dlg-b">
       <div class="keys">
         <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
@@ -11093,6 +11849,8 @@ async function mitgliederDialog(meldung){
      nie angewandt - auf einem 4K-Schirm blieb alles auf 100 Prozent stehen,
      obwohl 175 herausgekommen waren. */
   uiSetzen(uiScale); textSetzen(textScale);
+  /* Was zum letzten Krieg gehoert, muss nicht mitgeschleppt werden. */
+  if (ansprucheAufraeumen()) save();
   /* Einmaliger Umzug der Kampfeinheiten-Namen aus der geteilten Zeile in
      diesen Browser. Muss vor der ersten Anzeige laufen. */
   namenUmziehen();
