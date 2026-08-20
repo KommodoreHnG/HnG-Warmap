@@ -10400,7 +10400,26 @@ function sbRangLesen(B, tab, y, E, nurFraktion){
    der "kenne ich" von "kenne ich nicht" trennt. Deshalb schlaegt der
    Abdruck vor und entscheidet nie - der Streifen steht daneben, das Auge
    entscheidet. */
-const FP_B = 64, FP_H = 16;
+/* 48x12, nicht 64x16 - gemessen an 300 einzigartigen, realistischen Namen,
+   je 150 Abfragen mit Unterabtastung, halber Aufloesung und Bildrauschen:
+
+              richtig   falsch eingetragen   kein Vorschlag   Zeichen
+     32x8     134/150          16                  0            344
+     48x12    146/150           4                  2            768
+     64x16    149/150           1                  28          1368
+
+   64x16 ist minimal treffsicherer, gibt aber in 28 von 150 Faellen GAR
+   KEINEN Vorschlag: seine Werte liegen niedriger und fallen unter die
+   Eintragungsschwelle. In der Praxis also unbrauchbarer - bei 78 % mehr
+   Platz. Und der zaehlt: der Abdruck ist Base64 aus Bildpunkten und
+   komprimiert nicht (gemessen: 101 % des Textes auf der Platte), waehrend
+   eine Soldatenliste auf 12 % schrumpft. Er wird ausserdem in JEDEM Clan
+   gespeichert, der den Spieler aufgeklaert hat - er vervielfacht sich also
+   mit der Zahl der Clans.
+
+   Falsch VORANGEHAKT wurde in keiner der drei Groessen ein einziges Mal.
+   Der Vorsprungsvorbehalt traegt. */
+const FP_B = 48, FP_H = 12;
 
 function sbAbdruck(B, tab, y, E, pitch, von, bis){
   const x0 = tab.x0 + von*SB_BREITE*E, x1 = tab.x0 + bis*SB_BREITE*E;
@@ -13860,7 +13879,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f565a070bb</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 91ddb8c177</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
