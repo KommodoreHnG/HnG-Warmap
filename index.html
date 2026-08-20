@@ -391,6 +391,11 @@ body.txt-modus{cursor:text}
 /* ---------- Zahnrad ----------
    Wie im Spiel oben rechts in der Ecke: alles, was nur das eigene Aussehen
    betrifft, an einer Stelle statt verstreut zwischen den Werkzeugen. */
+/* Ein Mass fuer alle Zeichen in der Kopfleiste, damit sie nebeneinander
+   ruhig stehen. stroke-linejoin:round nimmt den Spitzen die Haerte. */
+.btn .ico{width:15px;height:15px;display:block;flex:0 0 auto;stroke:currentColor;
+  fill:none;stroke-width:1.7;stroke-linejoin:round;stroke-linecap:round}
+#b-radar{display:flex;align-items:center;gap:5px}
 #b-gear{padding:4px 7px;line-height:1}
 #b-gear svg{width:15px;height:15px;display:block;stroke:currentColor;fill:none;stroke-width:1.7;
   stroke-linecap:round;stroke-linejoin:round}
@@ -876,7 +881,15 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-view">View</button>
       <button class="btn" id="b-shot">Read screenshot</button>
       <button class="btn" id="b-war">War</button>
-      <button class="btn primary" id="b-share">Share</button>
+      <!-- Der Radarraum ist die zentrale Funktion und war unter "Read
+           screenshot" in einem zugeklappten Bereich versteckt. -->
+      <button class="btn" id="b-radar" title="Watch the war map — reads towns as you play">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.3"/><circle cx="12" cy="12" r="4.7"/>
+          <path d="M12 12 L18.6 5.4"/>
+          <circle cx="16.4" cy="8.2" r="1.3" fill="currentColor" stroke="none"/>
+        </svg><span class="txt">Radar</span>
+      </button>
       <div id="menubar"></div>
       <button class="btn" id="b-burger" aria-label="Menu" aria-expanded="false">☰</button>
       <button class="btn" id="b-sync"><span class="dot"></span><span class="txt">Sync off</span></button>
@@ -884,8 +897,12 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
         title="Hand out codes and manage who is in this room">Members</button>
       <button class="btn" id="b-help">Help</button>
       <button class="btn" id="b-gear" title="Settings — layout, sizes, your account">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/>
-          <path d="M12 2.6l1.5 2.5 2.9-.5.6 2.9 2.6 1.4-1.3 2.6 1.3 2.6-2.6 1.4-.6 2.9-2.9-.5L12 21.4l-1.5-2.5-2.9.5-.6-2.9L4.4 15l1.3-2.6L4.4 9.8 7 8.4l.6-2.9 2.9.5z"/></svg>
+        <!-- Sechs Zaehne, gerechnet statt gezeichnet. Das alte hatte acht
+             ungleiche und war bei 60-Grad-Drehung um 2,96 Punkte daneben;
+             dieses um 0,10 - und das ist der Abstand zweier Messpunkte. -->
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.3"/>
+          <path d="M9.17 5.16 L10.00 1.69 A10.50 10.50 0 0 1 14.00 1.69 L14.83 5.16 A7.40 7.40 0 0 1 16.50 6.13 L19.92 5.11 A10.50 10.50 0 0 1 21.93 8.58 L19.34 11.03 A7.40 7.40 0 0 1 19.34 12.97 L21.93 15.42 A10.50 10.50 0 0 1 19.92 18.89 L16.50 17.87 A7.40 7.40 0 0 1 14.83 18.84 L14.00 22.31 A10.50 10.50 0 0 1 10.00 22.31 L9.17 18.84 A7.40 7.40 0 0 1 7.50 17.87 L4.08 18.89 A10.50 10.50 0 0 1 2.07 15.42 L4.66 12.97 A7.40 7.40 0 0 1 4.66 11.03 L2.07 8.58 A10.50 10.50 0 0 1 4.08 5.11 L7.50 6.13 A7.40 7.40 0 0 1 9.17 5.16 Z"/></svg>
       </button>
     </div>
   </header>
@@ -10567,7 +10584,7 @@ const MENUES = [
   /* Hilfe darf jeder - sie hat unter "Admin" nichts verloren. Solange sie
      dort stand, bekam die Gruppe fuer JEDEN einen Titel, und ein einfaches
      Mitglied sah "ADMIN" in der Leiste. */
-  {id:"werkz", titel:"Tools",    knoepfe:["b-shot","b-war","b-share","b-help"]},
+  {id:"werkz", titel:"Tools",    knoepfe:["b-shot","b-war","b-help"]},
   {id:"verw",  titel:"Admin",    knoepfe:["b-members"]},
 ];
 let menuOffen = null;
@@ -13537,31 +13554,7 @@ function merge(mine, theirs){
   return {state: out, neuer};
 }
 
-document.getElementById("b-share").addEventListener("click", async ()=>{
-  let code;
-  try { code = await pack(S); }
-  catch(e){ toast("This browser cannot build share links."); return; }
-  const url = location.origin + location.pathname + "#m=" + code;
-  openDlg(`
-    <div class="dlg-h"><h2>Share this picture</h2>
-      <p>The link carries the whole map.</p></div>
-    <div class="dlg-b">
-      <div id="linkout">${esc(url)}</div>
-      <div style="font-size:11.5px;color:var(--dim)">${url.length} characters${url.length>7500?" — some chats will cut this. Save as a file instead.":""}</div>
-      
-    </div>
-    <div class="dlg-f">
-      <button class="btn" id="d-file">Save as file</button>
-      <button class="btn" id="d-close">Close</button>
-      <button class="btn primary" id="d-copy">Copy link</button>
-    </div>`);
-  document.getElementById("d-copy").addEventListener("click", async ()=>{
-    try { await navigator.clipboard.writeText(url); toast("Link copied"); closeDlg(); }
-    catch(e){ toast("Clipboard blocked — select the link by hand."); }
-  });
-  document.getElementById("d-file").addEventListener("click", saveFile);
-  document.getElementById("d-close").addEventListener("click", closeDlg);
-});
+document.getElementById("b-radar").addEventListener("click", radarAuf);
 
 /* Das Einlesen fremder Staende ueberschneidet sich mit dem Kartenscan und
    braucht es nur ohne Anschluss. Es bleibt - aber zusammengeklappt, unter
@@ -13747,7 +13740,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build e05b762f1d</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 48380858d6</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
