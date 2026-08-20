@@ -101,11 +101,12 @@ button,input,select,textarea{font:inherit;color:inherit}
 #forces .fz{display:flex;align-items:center;gap:5px;font-size:11px;line-height:1.25}
 #forces .fz .fn{color:var(--dim);font-size:10px;max-width:96px;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
-#forces .fz b{font-family:var(--schmal);font-variant-numeric:tabular-nums;font-weight:600;
-  min-width:32px;text-align:right}
-#forces .fz i{font-style:normal;font-size:9px;color:var(--accent);
-  font-variant-numeric:tabular-nums}
-#forces .fz i::before{content:"+"}
+/* Die Zahl der Trupps steht VORNE - das ist die Frage, die zuerst kommt.
+   Dahinter die Ausruestung, ausgeschrieben. */
+#forces .fz b.fat{font-family:var(--schmal);font-variant-numeric:tabular-nums;
+  font-weight:600;min-width:14px;text-align:right;color:var(--accent)}
+#forces .fz .fw{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums;
+  white-space:nowrap}
 @media (max-width:1500px){#forces{grid-template-columns:repeat(2,auto)}}
 /* Die Navigation im Spiel ist gross und gesperrt gesetzt - hier genauso,
    damit die Leiste nicht wie eine Werkzeugzeile wirkt. */
@@ -607,6 +608,14 @@ body.meld-modus{cursor:help}
 #veil{position:fixed;inset:0;background:rgba(4,7,11,.72);display:none;align-items:center;
   justify-content:center;z-index:50;padding:20px}
 #veil.on{display:flex}
+/* Kein Clanname gesetzt: grau und kursiv, damit es nicht wie einer aussieht. */
+#clan-name.unbenannt{color:var(--dim2);font-style:italic;font-weight:400}
+/* Ein Fenster, das man bestaetigen MUSS, ruettelt beim Klick daneben. Ohne
+   das sieht es aus, als klemme etwas. */
+@keyframes ruettel{0%,100%{transform:translateX(0)}
+  18%{transform:translateX(-7px)}36%{transform:translateX(7px)}
+  54%{transform:translateX(-4px)}72%{transform:translateX(4px)}}
+.dlg.ruettelt{animation:ruettel .3s ease}
 .dlg{background:linear-gradient(180deg,#211b14,#181309);border:1px solid var(--accent-dk);
   border-radius:3px;max-width:620px;width:100%;
   max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
@@ -855,7 +864,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
     <div id="brand"><b id="clan-name">War Map</b><span id="war-label">Heroes &amp; Generals</span></div>
     <div id="tally"></div>
     <div id="me-tile"></div>
-    <div id="forces" title="Your clan's forces — number is vehicles where it has them, otherwise men. Small figure = still free. Click for the full depot."></div>
+    <div id="forces" title="Your clan's forces — how many assault teams of each kind, and what they carry. Click for the full depot."></div>
     <div id="top-right">
       <button class="btn" id="b-clan">Clan</button>
       <button class="btn" id="b-faction" title="The same register, our half">Our side</button>
@@ -1927,6 +1936,11 @@ const allSpots = () => {
   }
   return [...m.values()].sort((a,b)=> b.t - a.t);
 };
+/* "War Map" ist der Name des WERKZEUGS. Solange niemand einen Clannamen
+   gesetzt hat, darf er nicht an der Stelle stehen, an der sonst der Clan
+   steht - zusammen mit dem Rang daneben las sich das als "Mitglied im Clan
+   War Map". Eine ehrliche Leerstelle ist besser als ein erfundener Name. */
+const clanGesetzt = () => !!(S.meta.clan && String(S.meta.clan.v || "").trim());
 const clanName  = () => (S.meta.clan && S.meta.clan.v) || "War Map";
 /* Was zentral gilt. Eine Zeile fuer alle, mit Verfasser und Zeitpunkt -
    sonst weiss niemand, ob der Befehl von gestern noch steht. */
@@ -3576,6 +3590,11 @@ cv.addEventListener("wheel", e => {
 
 document.addEventListener("keydown", e => {
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)){ if (e.key === "Escape") e.target.blur(); return; }
+  /* Ein Fenster, das bestaetigt werden muss, darf auch ueber die Tastatur
+     nicht zu umgehen sein. Escape schloss es, und die Buchstabenkuerzel
+     weiter unten haetten einfach das naechste Fenster darueber gelegt -
+     die Zustimmung waere weg, ohne dass jemand etwas anklickt. */
+  if (dlgPflicht){ if (e.key === "Escape") dlgRuetteln(); return; }
   const k = e.key.toLowerCase();
   const t = {"1":"inspect","2":"owner","3":"unit","4":"arrow","5":"line","6":"para",
              "7":"area","8":"spot","9":"battle","0":"erase"}[e.key];
@@ -3982,7 +4001,15 @@ document.getElementById("dep-add").addEventListener("click", ()=>{
 
 /* ---------------- tally ---------------- */
 function kopfzeile(){
-  document.getElementById("clan-name").textContent = clanName();
+  {
+    const el = document.getElementById("clan-name");
+    const gesetzt = clanGesetzt();
+    el.textContent = gesetzt ? clanName() : "unnamed clan";
+    el.classList.toggle("unbenannt", !gesetzt);
+    el.title = gesetzt ? ""
+      : (istLeader() ? "No clan name yet — set it under War."
+                     : "No clan name has been set yet. Only the leader can set it.");
+  }
   const f = clanFaktion();
   document.getElementById("war-label").innerHTML =
     `${esc(warName() || "Heroes & Generals")} · <b style="color:${col(FACTIONS[f])}"
@@ -4035,15 +4062,25 @@ function kraftLeiste(){
   } else { mich.style.display = "none"; mich.innerHTML = ""; }
   if (!typen.length){ box.innerHTML = ""; box.style.display = "none"; return; }
   box.style.display = "grid";
+  /* Vorher stand hier "const wert = d.veh || d.men" - also das Fahrzeug,
+     wenn es eines gibt, sonst die Mannschaft. Bei Pathfinders erschien
+     dadurch die 9 (Flugzeuge) direkt hinter dem Namen und las sich als
+     "9 Pathfinders". Es sind aber 36 Mann mit 9 Flugzeugen.
+     Und die freie Zahl kam als "+4" heraus (das + steckt im CSS) - das sah
+     nach Zuwachs aus, nicht nach Bestand.
+     Jetzt: Trupps vor dem Namen, Ausruestung dahinter, beides benannt. */
   box.innerHTML = typen.map(d => {
-    const wert = d.veh || d.men;
-    const was = d.veh ? atVehName(d.k).toLowerCase() : "men";
-    return `<div class="fz" title="${esc(atName(d.k))} — ${d.teams} team${d.teams===1?"":"s"}, ${
-        d.veh?`${d.veh} ${was}, `:""}${d.men} men${d.frei?`, ${d.frei} still free`:", all committed"}">
+    const was = d.veh ? atVehName(d.k).toLowerCase() : "";
+    const teile = [`${d.men.toLocaleString("en")} men`];
+    if (d.veh) teile.push(`${d.veh.toLocaleString("en")} ${was}`);
+    if (d.frei) teile.push(`${d.frei} free`);
+    return `<div class="fz" title="${esc(atName(d.k))} — ${d.teams} assault team${
+        d.teams===1?"":"s"}: ${d.men} men${d.veh?`, ${d.veh} ${was}`:""}${
+        d.frei?`, ${d.frei} still free`:", all committed"}">
+      <b class="fat">${d.teams.toLocaleString("en")}</b>
       ${symbolSVG(d.k, c, 21, 15)}
       <span class="fn">${esc(atName(d.k))}</span>
-      <b>${wert.toLocaleString("en")}</b>
-      ${d.frei ? `<i>${d.frei}</i>` : ""}</div>`;
+      <span class="fw">${teile.join(" · ")}</span></div>`;
   }).join("");
 }
 document.getElementById("forces").addEventListener("click", ()=>document.getElementById("b-clan").click());
@@ -9740,7 +9777,7 @@ function textFenster(vorgabe){
   document.getElementById("tx-weg").addEventListener("click", ()=>fertig(null));
   feld.addEventListener("keydown", ev => {
     if (ev.key === "Enter" && !ev.shiftKey){ ev.preventDefault(); fertig(feld.value); }
-    if (ev.key === "Escape") closeDlg();
+    if (ev.key === "Escape"){ if (dlgPflicht) dlgRuetteln(); else closeDlg(); }
   });
   setTimeout(()=>{ feld.focus(); feld.select(); }, 60);
 }
@@ -10523,10 +10560,15 @@ function fingerSteuerung(){
    alles weiter, was vorher funktioniert hat - auch die Tastenkuerzel. */
 const MENUES = [
   {id:"clan",  titel:"Clan",      knoepfe:["b-clan","b-faction","b-arms","b-note"]},
-  {id:"lage",  titel:"Situation", knoepfe:["b-intel","b-battle","b-board"]},
-  {id:"sicht", titel:"View",      werkzeuge:true},
-  {id:"werkz", titel:"Tools",     knoepfe:["b-shot","b-war","b-share"]},
-  {id:"verw",  titel:"Admin",     knoepfe:["b-members","b-help"]},
+  /* "Situation" musste erklaert werden - dann ist der Name falsch. Was hier
+     steckt, meldet man oder sieht man nach: Gegner, Schlacht, Brett. */
+  {id:"lage",  titel:"Reports",  knoepfe:["b-intel","b-battle","b-board"]},
+  {id:"sicht", titel:"View",     werkzeuge:true},
+  /* Hilfe darf jeder - sie hat unter "Admin" nichts verloren. Solange sie
+     dort stand, bekam die Gruppe fuer JEDEN einen Titel, und ein einfaches
+     Mitglied sah "ADMIN" in der Leiste. */
+  {id:"werkz", titel:"Tools",    knoepfe:["b-shot","b-war","b-share","b-help"]},
+  {id:"verw",  titel:"Admin",    knoepfe:["b-members"]},
 ];
 let menuOffen = null;
 function menueSchliessen(){
@@ -10535,6 +10577,68 @@ function menueSchliessen(){
   document.querySelector(`#menubar [data-menue="${menuOffen}"]`)?.setAttribute("aria-expanded","false");
   menuOffen = null;
 }
+/* Setzt das Blatt auf eine BILDSCHIRM-Position, egal welcher Massstab
+   dazwischenliegt.
+
+   Der Grund: #menus traegt zoom:var(--ui). getBoundingClientRect liefert
+   Bildschirmpunkte - der Massstab steckt darin schon drin. Schreibt man
+   diesen Wert nach style.left, multipliziert der Zoom ihn ein zweites Mal.
+   Gemessen bei Massstab 1,25: das Blatt sass 127 Punkte zu weit rechts und
+   lief aus dem Bild. Bei Massstab 1 stimmte es, deshalb fiel es nie auf.
+
+   Der Faktor wird nicht geraten, sondern gemessen: zwei Probeschreiben
+   verraten Ursprung und Massstab exakt. Das haelt auch, wenn der Zoom aus
+   mehreren Quellen kommt oder ein Browser ihn anders auslegt. */
+function aufBildschirm(el, xSchirm, ySchirm){
+  el.style.left = "0px"; el.style.top = "0px";
+  const a = el.getBoundingClientRect();
+  el.style.left = "100px"; el.style.top = "100px";
+  const b = el.getBoundingClientRect();
+  const sx = (b.left - a.left) / 100 || 1, sy = (b.top - a.top) / 100 || 1;
+  el.style.left = ((xSchirm - a.left) / sx) + "px";
+  el.style.top  = ((ySchirm - a.top)  / sy) + "px";
+}
+
+function menuePlatzieren(){
+  if (!menuOffen) return;
+  const menu = document.getElementById("m-" + menuOffen);
+  const titel = document.querySelector(`#menubar [data-menue="${menuOffen}"]`);
+  if (!menu || !titel) return menueSchliessen();
+  /* Im Telefonlayout klappt alles in ein gemeinsames Blatt - dort wird
+     nichts gerechnet, sonst kaeme die Rechnung dem Layout in die Quere. */
+  if (getComputedStyle(menu).position !== "fixed"){
+    menu.style.left = ""; menu.style.top = "";
+    return;
+  }
+  const r = titel.getBoundingClientRect();
+  /* Ein versteckter Titel liefert lauter Nullen. Vorher landete das Blatt
+     dann in der linken oberen Ecke - das sah aus wie ein Geisterfenster. */
+  if (!r.width || !r.height) return menueSchliessen();
+  const breite = menu.getBoundingClientRect().width || 212;
+  aufBildschirm(menu, Math.max(6, Math.min(innerWidth - breite - 6, r.left)), r.bottom + 3);
+}
+
+/* Ein Gruppentitel ohne sichtbaren Eintrag darf nicht dastehen. Sonst sieht
+   ein einfaches Mitglied "ADMIN" in der Leiste, obwohl nichts dahinter ist -
+   und haelt es fuer ein Leck. Die Pruefung sitzt hier und nicht an der
+   einzelnen Stelle, damit sie auch fuer kuenftige Gruppen gilt. */
+function menueTitelPruefen(){
+  for (const m of MENUES){
+    const titel = document.querySelector(`#menubar [data-menue="${m.id}"]`);
+    const kasten = document.getElementById("m-" + m.id);
+    if (!titel || !kasten) continue;
+    const hat = [...kasten.children].some(el =>
+      getComputedStyle(el).display !== "none" && el.offsetParent !== null);
+    /* offsetParent ist null, solange die Leiste selbst verdeckt ist (Tor,
+       Telefonlayout). Dann darf nicht voreilig ausgeblendet werden. */
+    const sichtbarePruefungMoeglich = titel.offsetParent !== null;
+    const zeigen = !sichtbarePruefungMoeglich || hat
+      || [...kasten.children].some(el => getComputedStyle(el).display !== "none");
+    titel.style.display = zeigen ? "" : "none";
+    if (!zeigen && menuOffen === m.id) menueSchliessen();
+  }
+}
+
 function menueOeffnen(id){
   if (menuOffen === id){ menueSchliessen(); return; }
   menueSchliessen();
@@ -10543,11 +10647,12 @@ function menueOeffnen(id){
   if (!menu || !titel) return;
   menu.classList.add("an");
   titel.setAttribute("aria-expanded","true");
-  const r = titel.getBoundingClientRect();
-  menu.style.left = Math.max(6, Math.min(innerWidth - menu.offsetWidth - 6, r.left)) + "px";
-  menu.style.top = (r.bottom + 3) + "px";
   menuOffen = id;
+  menuePlatzieren();
 }
+/* Bei Groessenaenderung nachziehen. Wechselt dabei das Layout, schliesst
+   menuePlatzieren von selbst - besser als ein Blatt mit alten Koordinaten. */
+addEventListener("resize", menuePlatzieren);
 /* Werkzeuge in einen eigenen, rollbaren Behaelter - damit die Fraktionswahl
    darunter stehenbleiben kann. */
 function leisteBauen(){
@@ -10590,6 +10695,7 @@ function menueBauen(){
       }
     }
     kasten.dataset.titel = m.titel;
+    titel.dataset.fuer = m.id;
     titel.addEventListener("click", ev => { ev.stopPropagation(); menueOeffnen(m.id); });
     /* Steht ein Menue offen, folgt das Zeigen dem Finger - wie gewohnt. */
     titel.addEventListener("mouseenter", () => { if (menuOffen) menueOeffnen(m.id); });
@@ -11672,7 +11778,7 @@ function beitrittDialog(){
     </div>
     <div class="dlg-f">
       <button class="btn primary" id="bt-ok" style="width:100%">Agreed — let me in</button>
-    </div>`);
+    </div>`, false, true);   /* Pflicht: hier wird zugestimmt, nicht weggeklickt */
   let seite = f;
   document.querySelectorAll("#dlg [data-bt]").forEach(b => b.addEventListener("click", ()=>{
     seite = +b.dataset.bt;
@@ -13641,7 +13747,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c1b81fe12b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build e05b762f1d</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -13708,12 +13814,27 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   document.getElementById("d-close").addEventListener("click", closeDlg);
 });
 
-function openDlg(html, breit){
+/* Manche Fenster muss man bestaetigen. Eine Zusage, die man wegklicken
+   kann, ist keine - und beim ersten Anmelden war genau das der Fall: der
+   Klick daneben und die Escape-Taste kamen beide daran vorbei. */
+let dlgPflicht = false;
+function openDlg(html, breit, pflicht){
   if (bildAbmelden) bildAbmelden();     // Zuhoerer des vorigen Fensters
   const d = document.getElementById("dlg");
   d.className = "dlg" + (breit === true ? " wide" : breit ? " " + breit : "");
   d.innerHTML = html;
+  dlgPflicht = !!pflicht;
   document.getElementById("veil").classList.add("on");
+}
+/* Sichtbar machen, dass das Absicht ist. Ein Fenster, das auf einen Klick
+   gar nicht reagiert, wirkt kaputt. */
+function dlgRuetteln(){
+  const d = document.getElementById("dlg");
+  if (!d) return;
+  d.classList.remove("ruettelt");
+  void d.offsetWidth;                   // Neustart der Bewegung erzwingen
+  d.classList.add("ruettelt");
+  setTimeout(() => d.classList.remove("ruettelt"), 340);
 }
 /* The two big windows hold several views. Tabs keep them apart without
    hiding anything behind a menu — one click, no scrolling past what you
@@ -13729,6 +13850,7 @@ function tabsAktiv(host, start){
   waehle(btns.some(b => b.dataset.tab === start) ? start : btns[0].dataset.tab);
 }
 function closeDlg(){
+  dlgPflicht = false;
   document.getElementById("veil").classList.remove("on");
   shotState = null;
   if (bildAbmelden) bildAbmelden();
@@ -13741,7 +13863,11 @@ function closeDlg(){
     if (v && !v.classList.contains("on")) document.getElementById("dlg").innerHTML = "";
   }, 0);
 }
-document.getElementById("veil").addEventListener("click", e => { if (e.target.id === "veil") closeDlg(); });
+document.getElementById("veil").addEventListener("click", e => {
+  if (e.target.id !== "veil") return;
+  if (dlgPflicht){ dlgRuetteln(); return; }
+  closeDlg();
+});
 let toastT;
 function toast(t){
   const el = document.getElementById("toast");
@@ -14121,6 +14247,9 @@ document.getElementById("b-sync").addEventListener("click", ()=>{
 function mitgliederKnopf(){
   const b = document.getElementById("b-members");
   if (b) b.style.display = (CFG && CFG.admin) ? "" : "none";
+  /* Der Knopf allein reicht nicht - der Gruppentitel "Admin" stand sonst
+     auch fuer ein einfaches Mitglied in der Leiste. */
+  if (typeof menueTitelPruefen === "function") menueTitelPruefen();
 }
 /* Ein Aufruf einer Datenbankfunktion. PostgREST verpackt Fehler als JSON mit
    "message" - das ist die Meldung, die der Verwalter sehen soll. */
