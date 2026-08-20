@@ -11125,6 +11125,66 @@ const b64 = a => btoa(String.fromCharCode(...new Uint8Array(a)));
 const unb = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 /* Den Code einschliessen. Was danach im Browser liegt, ist ohne das Passwort
    nichts wert. */
+/* ---- Der Code ist eine Zutrittskarte, kein Dauerschluessel ----------
+   Er bringt einen einmal herein. Danach wird er gegen einen neuen getauscht,
+   den nur dieser Browser kennt - der Einladungscode ist tot, auch die Kopie
+   beim Ausstellenden.
+
+   Das schliesst die Luecke, die das Streichen von warmap_recode offen
+   gelassen hatte: warmap_members() zeigte jedem Verwalter die Klartextcodes
+   aller Mitglieder. Zum Auftreten unter fremdem Namen brauchte es keine
+   Funktion, nur einen Blick in die Liste. */
+const EINLOES_STORE = "hng-warmap-einloesung";
+
+const codeWuerfeln = () => {
+  const b = crypto.getRandomValues(new Uint8Array(24));
+  return [...b].map(x => x.toString(16).padStart(2, "0")).join("");
+};
+const einloesungOffen = () => {
+  try { return JSON.parse(localStorage.getItem(EINLOES_STORE) || "null"); }
+  catch(e){ return null; }
+};
+const einloesungAbhaken = () => {
+  try { localStorage.removeItem(EINLOES_STORE); } catch(e){}
+};
+
+/* Gibt true zurueck, wenn CFG.code danach der neue ist. Schlaegt der Aufruf
+   fehl, bleibt der alte gueltig und der Vermerk liegen - dann greift beim
+   naechsten Anmelden die Uebernahme unten. */
+async function codeEinloesen(){
+  if (!CFG || !CFG.code) return false;
+  const neu = codeWuerfeln();
+  /* ZUERST vermerken, dann tauschen. Geht die Antwort verloren, nachdem der
+     Server getauscht hat, ist der alte Code tot und der neue nur hier
+     bekannt - ohne diesen Vermerk waere das Konto verloren. */
+  try {
+    localStorage.setItem(EINLOES_STORE,
+      JSON.stringify({raum: CFG.room || "", alt: CFG.code, neu}));
+  } catch(e){ return false; }        // ohne Netz darunter lieber gar nicht tauschen
+  try {
+    const r = await rpc("warmap_einloesen", {neuer_code: neu});
+    const stand = Array.isArray(r) ? r[0] : r;
+    if (stand === "getauscht" || stand === "schon"){
+      CFG.code = neu;
+      einloesungAbhaken();
+      return true;
+    }
+  } catch(e){ /* Der alte Code laeuft weiter; der Vermerk bleibt liegen. */ }
+  return false;
+}
+
+/* Beim Anmelden: hat ein frueherer Tausch geklappt, ohne dass die Antwort
+   ankam? Dann traegt der Vermerk den gueltigen Code. Hier ist das Passwort
+   in der Hand, also laesst er sich gleich richtig verschliessen. */
+async function einloesungUebernehmen(passwort){
+  const p = einloesungOffen();
+  if (!p || !p.neu || !CFG || p.alt !== CFG.code) return false;
+  CFG.code = p.neu;
+  try { CFG.schloss = await codeSperren(CFG.code, passwort); } catch(e){}
+  cfgSpeichern();
+  return true;
+}
+
 async function codeSperren(code, passwort){
   const salz = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -11637,6 +11697,10 @@ function passwortAnlegen(ich, meldung){
     const knopf = document.getElementById("pw-go");
     knopf.disabled = true; knopf.textContent = "Working …";
     try {
+      /* Erst einloesen, dann verschliessen: Schloss und Sicherungsdatei
+         muessen den NEUEN Code tragen. Umgekehrt waere beides sofort
+         wertlos. */
+      const getauscht = await codeEinloesen();
       CFG.schloss = await codeSperren(CFG.code, a);
       pwSession = a;                    // fuer das Notizbuch, nur in diesem Lauf
       await anonFestlegen(a);           // und fuer die anonyme Kennung
@@ -11648,7 +11712,10 @@ function passwortAnlegen(ich, meldung){
       const gespeichert = sicherungLaden(CFG.code, ich.name || CFG.name);
       torFertig();
       setTimeout(() => toast(gespeichert
-        ? "A backup file with your code was saved — move it somewhere safe."
+        ? (getauscht
+            ? "Your invite code is used up and no longer works — not even for whoever gave it "
+              + "to you. A backup file with your new one was saved; move it somewhere safe."
+            : "A backup file with your code was saved — move it somewhere safe.")
         : "Could not save the backup file. Copy your code from Settings → Account."), 700);
     } catch(e){
       passwortAnlegen(ich, "That did not work. Try again.");
@@ -11686,6 +11753,10 @@ function passwortAbfragen(meldung){
     knopf.disabled = true; knopf.textContent = "Checking …";
     try {
       CFG.code = await codeOeffnen(CFG.schloss, a);
+      /* Ist ein Tausch liegengeblieben, weil die Antwort verlorenging?
+         Dann traegt der Vermerk den gueltigen Code, und hier ist das
+         Passwort in der Hand, um ihn richtig zu verschliessen. */
+      await einloesungUebernehmen(a);
       pwSession = a;                    // fuer das Notizbuch, nur in diesem Lauf
       await anonFestlegen(a);           // und fuer die anonyme Kennung
       torZu(); syncStart();
@@ -13740,7 +13811,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 48380858d6</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 51ce3525f7</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -14080,6 +14151,9 @@ async function syncStart(){
     dialogFehler("Could not reach the server", String(e.message || e));
     CFG = null; localStorage.removeItem(CFG_KEY); return;
   }
+  /* Die Verbindung steht - ein liegengebliebener Vermerk hat sich damit
+     erledigt. */
+  if (ich) einloesungAbhaken();
   if (!ich){
     syncMark("Rejected", "err");
     CFG = null; localStorage.removeItem(CFG_KEY);
