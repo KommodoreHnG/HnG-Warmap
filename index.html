@@ -1673,6 +1673,15 @@ function anonSchreiben(liste){
    Timestamped entries so two people's maps can be merged; v===null is a
    tombstone so deletions survive a sync.                                */
 const STORE = "hng-warmap-v3";
+/* Je Konto ein eigener Platz. Der allgemeine STORE haelt immer den GERADE
+   angemeldeten Stand; die anderen liegen daneben und warten.
+
+   Warum das noetig wurde: zwei Konten im selben Browser teilten sich einen
+   Bestand, und die Umschluesselung beim Anmelden schrieb ihn auch noch auf
+   den Namen des zweiten um. Gemessen an Ennos Bildschirm: der Server hatte
+   drei besetzte Staedte im laufenden Krieg, die Anzeige 78 - der Rest kam
+   aus der Sitzung davor. */
+const KONTO_PLATZ = (raum, spieler) => STORE + ":" + raum + ":" + spieler;
 /* Every kind of timestamped entry. Arrows are a list, everything else a map. */
 const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot",
                  "line","post","area","para","roster","est","edep","anon","akt","btl",
@@ -11047,7 +11056,15 @@ function autoSetzen(an){
 }
 /* Abmelden wirft nichts weg: der verschlossene Code bleibt liegen, nur der
    offene verschwindet. Beim naechsten Mal reicht das Passwort. */
+/* Beim Abmelden den Stand unter seinem Kontoplatz sichern, damit er beim
+   naechsten Anmelden wieder da ist. */
+function kontoSichern(){
+  if (!S.konto) return;
+  try { localStorage.setItem(KONTO_PLATZ(S.konto.room, S.konto.player), JSON.stringify(S)); }
+  catch(e){}
+}
 function abmelden(){
+  kontoSichern();
   if (!CFG) return;
   if (!CFG.schloss){
     if (!confirm("There is no password on this browser yet, so logging out means "
@@ -13978,7 +13995,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build bad0f568ae</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 4280d4fb92</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -14343,6 +14360,33 @@ async function syncStart(){
   /* Die anonyme Kennung wechselt beim Verbinden von der Zufallskennung
      dieses Browsers auf die aus dem Code abgeleitete - sonst stuende der
      Eintrag nach dem Anmelden verwaist im Raum. */
+  /* ---- Kontowechsel? Dann trennen statt umschreiben ----
+     Ohne vermerktes Konto gab es nur oertliche Arbeit - die gehoert dem, der
+     sich jetzt anmeldet, und wird unten umgeschluesselt. Mit vermerktem und
+     ABWEICHENDEM Konto ist es ein Wechsel: dann darf nichts uebernommen
+     werden. */
+  const kontoAlt = S.konto;
+  const kontoNeu = {room: ich.room, player: ich.player};
+  if (kontoAlt && (kontoAlt.room !== kontoNeu.room || kontoAlt.player !== kontoNeu.player)){
+    try {
+      localStorage.setItem(KONTO_PLATZ(kontoAlt.room, kontoAlt.player), JSON.stringify(S));
+    } catch(e){}
+    let zurueck = null;
+    try {
+      zurueck = JSON.parse(localStorage.getItem(KONTO_PLATZ(kontoNeu.room, kontoNeu.player)) || "null");
+    } catch(e){}
+    S = zurueck || neu();
+    S.me = ich.player;
+    /* Die Warteschlange gehoert dem alten Konto - sonst gingen dessen
+       offene Aenderungen unter dem neuen Namen hinaus. */
+    dirty.clear();
+    lastSeen = "1970-01-01T00:00:00Z";
+    privVergessen();
+    toast(zurueck ? "Switched account — your own map is back."
+                  : "Switched account — starting clean. The other one is kept.");
+  }
+  S.konto = kontoNeu;
+
   S.anon ||= {};
   const anonAlt = anonLokal(), anonNeu = anonAusCode(CFG.code);
   if (anonAlt !== anonNeu && S.anon[anonAlt] && S.anon[anonAlt].v){
