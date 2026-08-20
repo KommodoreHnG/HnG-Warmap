@@ -1741,7 +1741,10 @@ function merkeSpieler(name, f, clan, fp){
       && (av.fp||"") === (neuFp||"")) return k;
   /* Die vermutete Zeitzone bleibt erhalten - sie wird woanders gesetzt und
      darf durch eine Fraktions- oder Clanaenderung nicht verlorengehen. */
-  S.roster[k] = {v:{name, f: neuF, clan: neuC, tz: av ? av.tz : undefined, fp: neuFp},
+  /* Kein tz mehr: eine geschaetzte Zeitzone, einer Person zugeordnet, ist
+     Profilbildung ueber einen einzelnen Menschen. Alte Werte werden beim
+     naechsten Schreiben nicht mitgenommen und verschwinden dadurch. */
+  S.roster[k] = {v:{name, f: neuF, clan: neuC, fp: neuFp},
                  t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`roster:${k}`);
   if (!av) gutschrift("pl", k);        // nur der erste Eintrag zaehlt
@@ -6946,7 +6949,7 @@ function intelDialog(tab, seite){
       <div class="tabp on" data-tab="clans">
         ${clans.length ? `<div class="tw"><table>
           <thead><tr><th>Clan</th><th>Fights for</th><th>Players</th><th>Known teams</th>
-            <th>Seen</th><th colspan="2">What they field</th><th>Hours</th><th>Last</th></tr></thead>
+            <th>Seen</th><th colspan="2">What they field</th><th>Last</th></tr></thead>
           <tbody>${clans.map(cl=>`<tr class="fac-row"
               style="--f:${cl.top!=null?col(FACTIONS[cl.top]):"var(--dim2)"}">
             <td><b style="color:var(--accent)">${esc(cl.name)}</b></td>
@@ -6961,8 +6964,6 @@ function intelDialog(tab, seite){
               [...cl.kompo.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,v])=>
                 `<span title="${esc(atName(k))}" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px">
                    ${symbolSVG(k, c, 20, 14)}<small>${v}</small></span>`).join("") || "—"}</td>
-            <td style="color:var(--dim2)">${(()=>{ const z = clanZeit(cl.name);
-              return z ? `<span title="${z.von} of ${z.gesamt} recorded">${esc(tzText(z.tz))}</span>` : "—"; })()}</td>
             <td style="color:var(--dim2)">${cl.t?alterText(cl.t):"—"}</td>
           </tr>`).join("")}</tbody></table></div>`
           : `<div class="empty">No clans yet. Put a tag in a player's <b>clan</b> field on the
@@ -6986,7 +6987,7 @@ function intelDialog(tab, seite){
           <button class="btn" id="en-ocr" style="flex:1">Read a battle screenshot …</button>
         </div>
         ${liste.length ? `<div class="tw"><table>
-          <thead><tr><th>Player</th><th>Clan</th><th>Fights for</th><th>Hours</th><th>Known teams</th><th>Seen</th><th>Towns</th><th>What</th><th>Last</th></tr></thead>
+          <thead><tr><th>Player</th><th>Clan</th><th>Fights for</th><th>Known teams</th><th>Seen</th><th>Towns</th><th>What</th><th>Last</th></tr></thead>
           <tbody>${liste.map(([key,d])=>`<tr>
             <td><a href="#" data-oeffne="${esc(key)}" style="color:var(--accent)">${esc(d.name)}</a>${
               uebergelaufen(key) ? ` <em style="color:var(--accent);font-size:10px">ours</em>` : ""}</td>
@@ -6995,11 +6996,6 @@ function intelDialog(tab, seite){
             <td><select data-fac="${esc(key)}" class="mini">
               <option value="">—</option>
               ${FACTIONS.map(f=>`<option value="${f.id}"${d.f===f.id?" selected":""}>${f.tag}</option>`).join("")}
-            </select></td>
-            <td><select data-tz="${esc(key)}" class="mini" style="width:96px">
-              <option value="">—</option>
-              ${TZ_WAHL.map(([v,n2])=>`<option value="${v}"${spielerZeit(key)===v?" selected":""}
-                >${esc(n2)}</option>`).join("")}
             </select></td>
             <td>${atEcht(feindDepot(key)).length || "—"}</td>
             <td>${d.teams?nz(d.teams):"—"}</td>
@@ -7058,27 +7054,15 @@ function intelDialog(tab, seite){
           const l = aktListe();
           if (!l.length) return `<div class="empty">Nothing recorded yet. Enter how many of a side
             are around right now — the timestamp comes along, and the picture builds itself.</div>`;
-          const m = aktMuster(l);
-          const maxS = Math.max(1, ...m.std), maxT = Math.max(1, ...m.tag);
-          const TAGE = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-          const balken = (wert, max, breit) => `<div style="background:var(--panel2);border-radius:2px;
-            height:9px;width:${breit}px;overflow:hidden"><div style="height:100%;
-            width:${Math.round(100*wert/max)}%;background:var(--accent)"></div></div>`;
+          /* Kein Stunden- und Wochentagsdiagramm mehr. Es bezog sich zwar
+             auf Fraktion und Clan, nicht auf eine Person - aber bei einem
+             kleinen Clan ist das kein Unterschied, der traegt.
+             Die Kopfzahlen selbst bleiben: eine Gruppenzahl ohne
+             Personenbezug, und die Grundlage fuer "wie stark ist diese
+             Seite gerade". */
           return `<div style="display:flex;gap:18px;flex-wrap:wrap">
-            <div style="flex:1;min-width:230px">
-              <div style="font-size:11px;color:var(--dim);margin-bottom:4px">By hour, your time</div>
-              ${m.std.map((v,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:1px">
-                <span style="font-size:10px;color:var(--dim2);width:24px;text-align:right">${i}</span>
-                ${balken(v, maxS, 150)}
-                <span style="font-size:10px;color:var(--dim2)">${v||""}</span></div>`).join("")}
-            </div>
             <div style="flex:1;min-width:200px">
-              <div style="font-size:11px;color:var(--dim);margin-bottom:4px">By weekday</div>
-              ${m.tag.map((v,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
-                <span style="font-size:10px;color:var(--dim2);width:26px">${TAGE[i]}</span>
-                ${balken(v, maxT, 150)}
-                <span style="font-size:10px;color:var(--dim2)">${v||""}</span></div>`).join("")}
-              <div style="font-size:11px;color:var(--dim);margin:10px 0 4px">Last recorded</div>
+              <div style="font-size:11px;color:var(--dim);margin:0 0 4px">Last recorded</div>
               ${l.slice(0,8).map(a=>`<div style="font-size:11px;color:var(--dim2)">
                 ${new Date(a.t).toLocaleString()} · ${FACTIONS[a.f]?FACTIONS[a.f].tag:"?"}${
                 a.clan?` · ${esc(a.clan)}`:""} · <b>${a.n}</b> · <span title="${
@@ -7147,10 +7131,6 @@ function intelDialog(tab, seite){
     draw(); toast("Faction updated");
   }));
   const neuAuf = reiter => intelDialog(reiter, nurSeite === null ? undefined : nurSeite);
-  document.querySelectorAll("[data-tz]").forEach(sel => sel.addEventListener("change", ()=>{
-    setSpielerZeit(sel.dataset.tz, sel.value === "" ? null : +sel.value);
-    toast("Noted");
-  }));
   {
     const ab = document.getElementById("ak-add");
     if (ab) ab.addEventListener("click", ()=>{
@@ -12054,34 +12034,6 @@ function schlachtUrteil(wir, sie){
    In Stunden gegen UTC, weil das die einzige Angabe ist, die sich aus einer
    Beobachtung wirklich ableiten laesst - eine Region waere schon Deutung.
    Der Clan erbt die haeufigste seiner erfassten Mitglieder. */
-const TZ_WAHL = [[-8,"UTC-8 US West"],[-5,"UTC-5 US Ost"],[-3,"UTC-3 Suedamerika"],
-                 [0,"UTC+0 UK/Portugal"],[1,"UTC+1 Mitteleuropa"],[2,"UTC+2 Osteuropa"],
-                 [3,"UTC+3 Moskau"],[5,"UTC+5 Zentralasien"],[8,"UTC+8 China"],
-                 [9,"UTC+9 Japan/Korea"],[10,"UTC+10 Australien"]];
-function setSpielerZeit(key, tz){
-  const e = S.roster[key];
-  if (!e || !e.v) return;
-  S.roster[key] = {...e, v: {...e.v, tz: (tz === null || tz === "") ? undefined : +tz},
-                   t: jetzt(), by: S.me, n: S.name || ""};
-  dirty.add(`roster:${key}`); save();
-}
-const spielerZeit = key => {
-  const v = S.roster[key] && S.roster[key].v;
-  return (v && typeof v.tz === "number") ? v.tz : null;
-};
-function clanZeit(clanName){
-  const z = new Map();
-  for (const p of spielerListe()){
-    if ((p.clan||"").trim().toLowerCase() !== String(clanName).trim().toLowerCase()) continue;
-    const tz = spielerZeit(p.key);
-    if (tz !== null) z.set(tz, (z.get(tz)||0) + 1);
-  }
-  if (!z.size) return null;
-  const best = [...z.entries()].sort((a,b)=>b[1]-a[1])[0];
-  return {tz: best[0], von: best[1], gesamt: [...z.values()].reduce((s,x)=>s+x,0)};
-}
-const tzText = tz => tz === null || tz === undefined ? "—"
-  : (TZ_WAHL.find(x=>x[0]===tz) || [tz, `UTC${tz>=0?"+":""}${tz}`])[1];
 
 /* ---- Wer ist gerade da? ----------------------------------------------
    Jede Eingabe traegt ihren Zeitstempel. Daraus entsteht von selbst ein Bild
@@ -12124,17 +12076,6 @@ function aktListe(){
 }
 /* Nach Stunde und nach Wochentag, in der Zeit des Betrachters - wer die Karte
    liest, plant in seiner eigenen. */
-function aktMuster(liste){
-  const std = new Array(24).fill(0), tag = new Array(7).fill(0);
-  let hoechst = 0;
-  for (const a of liste){
-    const d = new Date(a.t);
-    std[d.getHours()] += a.n;
-    tag[d.getDay()] += a.n;
-    hoechst = Math.max(hoechst, a.n);
-  }
-  return {std, tag, hoechst};
-}
 
 /* ---- Ereignisse auf der Zeitachse ------------------------------------
    Was das ganze Spiel verschiebt, gehoert neben die Aktivitaetskurve: sonst
@@ -13924,7 +13865,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 150fb463ef</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bae1125098</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
