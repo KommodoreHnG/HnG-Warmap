@@ -1,0 +1,5 @@
+# Git wandelt sonst Zeilenenden um - je nach Rechner und Einstellung.
+# Damit waere die ausgelieferte Datei nicht mehr byteweise die gebaute,
+# und die Pruefsumme in PRUEFSUMME.txt liesse sich nicht mehr nachrechnen.
+# Hier wird nichts angefasst.
+* -text
