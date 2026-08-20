@@ -3246,7 +3246,21 @@ function lineHit(sx, sy){
   }
   return null;
 }
-function setMeta(k, v){ stamp("meta", k, v); save(); kopfzeile(); }
+/* Alles unter meta: bindet den ganzen Clan - Seite, Krieg, Startstaedte,
+   Befehl, Beschriftungen. Es gibt keinen persoenlichen meta-Schluessel.
+   Frueher liess die Datenbank sie durch und die Seite gatterte nur einen
+   Teil: wer nicht fuehrte, aenderte etwas, sah es lokal, und der Abgleich
+   warf es danach stillschweigend weg.
+   Die Pruefung steht hier und nicht an den sieben Aufrufstellen, damit sie
+   auch fuer meta-Schluessel gilt, die es noch nicht gibt.
+   Ohne Anschluss ist istLeader() wahr - Alleinbetrieb bleibt unberuehrt. */
+function setMeta(k, v){
+  if (!istLeader()){
+    toast("That setting binds the whole clan — only the leader can change it.");
+    return false;
+  }
+  stamp("meta", k, v); save(); kopfzeile(); return true;
+}
 
 /* Einen neuen Krieg beginnen. Fort muss alles, was zu diesem Krieg gehoert -
    Besitz, Schlachten, aufgestellte Einheiten, Pfeile, Linien, Brett und
@@ -13200,6 +13214,10 @@ const IMPORT_HTML = `
       </details>`;
 
 document.getElementById("b-war").addEventListener("click", ()=>{
+  /* Seite, Kriegsname und Startstadt gelten fuer alle. Wer nicht fuehrt,
+     soll sie sehen und nicht verstellen koennen - ein abgeblendetes Feld
+     ist ehrlicher als ein Knopf, der nachher nichts bewirkt. */
+  const leiter = istLeader();
   openDlg(`
     <div class="dlg-h"><h2>War</h2>
       <p>Which side the clan plays, where it starts, and when a new war begins.</p></div>
@@ -13207,22 +13225,25 @@ document.getElementById("b-war").addEventListener("click", ()=>{
       <div style="display:flex;flex-direction:column;gap:8px">
         <div class="row" style="align-items:center">
           <span style="font-size:12px;color:var(--dim);width:74px">Clan</span>
-          <input type="text" id="set-clan" value="${esc(clanName())}" style="flex:1" placeholder="Red Onion Soldiers">
+          <input type="text" id="set-clan" value="${esc(clanName())}" style="flex:1"
+            placeholder="Red Onion Soldiers" ${leiter?"":"disabled"}>
         </div>
         <div class="row" style="align-items:center">
           <span style="font-size:12px;color:var(--dim);width:74px">War</span>
-          <input type="text" id="set-war" value="${esc(warName())}" style="flex:1" placeholder="e.g. 1940 The Start_112">
+          <input type="text" id="set-war" value="${esc(warName())}" style="flex:1"
+            placeholder="e.g. 1940 The Start_112" ${leiter?"":"disabled"}>
         </div>
         <div class="row" style="align-items:center">
           <span style="font-size:12px;color:var(--dim);width:74px">Our side</span>
           <div class="own4" style="flex:1">
             ${FACTIONS.map(q=>`<button data-cf="${q.id}" style="--f:${q.color}"
-              aria-pressed="${clanFaktion()===q.id}">${q.tag}</button>`).join("")}
+              aria-pressed="${clanFaktion()===q.id}" ${leiter?"":"disabled"}>${q.tag}</button>`).join("")}
           </div>
-          <button class="btn" id="set-save">Save</button>
+          <button class="btn" id="set-save" ${leiter?"":"disabled"}>Save</button>
         </div>
         <div class="note" style="font-size:11px">Which side the clan plays this war. The
-          <b>Arsenal</b> then only offers what your people can buy.</div>
+          <b>Arsenal</b> then only offers what your people can buy.${leiter?"":`
+          <br><b>Read-only for you</b> — this binds the whole clan, so it is the leader's to set.`}</div>
       </div>
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;flex-direction:column;gap:8px">
         <span style="font-size:12px;color:var(--dim)">Start town</span>
@@ -13363,7 +13384,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c82f2606e9</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 359dff2ccb</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -13533,15 +13554,18 @@ function stempelZaehmen(wert){
    Damit faellt der mitgeschickte Zeitstempel als Entscheidungsgrundlage
    weg. Vorher gewann eine Zeile mit dem Jahr 2100 fuer immer, und fuer die
    meisten Toepfe gibt es keinen Loeschweg. */
-function applyRemote(key, val, serverZeit){
+function applyRemote(key, val){
+  /* Faengt nur noch, was ohne Server hereinkommt: Altzeilen von vor dieser
+     Aenderung, eingelesene Dateien, geteilte Verweise. */
   stempelZaehmen(val);
-  /* Der mitgeschickte Zeitstempel wird durch die SERVERZEIT ersetzt. Danach
-     ist jedes t im Speicher eine Serverzeit, und alles Nachgelagerte stimmt
-     von selbst: Anzeige, Sortierung, Verblassen, Kriegsepoche. Ohne das
-     entschied die Uhr des Absenders darueber, ob sein Eintrag zum laufenden
-     Krieg gehoert - und eine nachgehende Uhr liess ihn stillschweigend
-     verschwinden. */
-  if (serverZeit) val.t = serverZeit;
+  /* t steht bereits richtig IM Wert - der Ausloeser in der Datenbank setzt
+     es beim Schreiben auf die Serverzeit, und zwar nur bei einer echten
+     inhaltlichen Aenderung.
+     Hier NICHT updated_at einsetzen: das ist die Abholmarke, die bei jedem
+     Schreibvorgang hochgeht. Da die Seite beim Verbinden alle eigenen
+     Zeilen erneut hochschiebt, waere danach jeder eigene Eintrag "gerade
+     eben" gewesen - und Eintraege aus einem abgeschlossenen Krieg waeren
+     ueber den Kriegsschnitt zurueckgesprungen. */
   const p = key.indexOf(":");
   const bucket = key.slice(0, p), id = key.slice(p+1);
   /* Eigene, noch nicht abgeschickte Aenderung schlaegt alles. */
@@ -13571,8 +13595,7 @@ async function syncPull(){
     const rows = await r.json();
     let n = 0;
     for (const row of rows){
-      const sz = Date.parse(row.updated_at);
-      if (applyRemote(row.key, row.value, isNaN(sz) ? 0 : sz)) n++;
+      if (applyRemote(row.key, row.value)) n++;
       if (row.updated_at > lastSeen) lastSeen = row.updated_at;
     }
     if (n){ rebuildUnits(); save(); side(); tally(); draw(); kopfzeile(); boardZahl();
