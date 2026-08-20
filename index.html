@@ -1651,7 +1651,7 @@ function namHash(s){
   return h.toString(36).slice(0,5);
 }
 const spielerKey = name => `${namKey(name).slice(0,28) || "x"}-${namHash(name)}`;
-function merkeSpieler(name, f, clan){
+function merkeSpieler(name, f, clan, fp){
   name = String(name).trim();
   if (name.length < 2) return null;
   const k = spielerKey(name), alt = S.roster[k], av = alt && alt.v;
@@ -1659,10 +1659,14 @@ function merkeSpieler(name, f, clan){
      waere das "—" in der Fraktionsauswahl ein stiller Blindgaenger. */
   const neuF = f === undefined ? (av ? av.f : null) : f;
   const neuC = clan === undefined ? (av ? av.clan : "") : String(clan || "").trim();
-  if (av && av.name === name && av.f === neuF && (av.clan||"") === (neuC||"")) return k;
+  /* Ein einmal hinterlegter Abdruck bleibt, wenn keiner mitgeliefert wird -
+     die OCR-Maske kennt keinen. */
+  const neuFp = fp === undefined ? (av ? av.fp : undefined) : (fp || undefined);
+  if (av && av.name === name && av.f === neuF && (av.clan||"") === (neuC||"")
+      && (av.fp||"") === (neuFp||"")) return k;
   /* Die vermutete Zeitzone bleibt erhalten - sie wird woanders gesetzt und
      darf durch eine Fraktions- oder Clanaenderung nicht verlorengehen. */
-  S.roster[k] = {v:{name, f: neuF, clan: neuC, tz: av ? av.tz : undefined},
+  S.roster[k] = {v:{name, f: neuF, clan: neuC, tz: av ? av.tz : undefined, fp: neuFp},
                  t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`roster:${k}`);
   if (!av) gutschrift("pl", k);        // nur der erste Eintrag zaehlt
@@ -9770,6 +9774,114 @@ const amHandy = () => matchMedia("(max-width: 760px)").matches;
 /* Was der Scoreboard-Leser gefunden hat, vorlegen - und die Kopfzahlen mit
    einem Klick in die Aktivitaetsliste uebernehmen. */
 let SB_LETZTE = null;
+/* ---- Die Namensmaske ------------------------------------------------
+   Der Streifen steht neben dem Feld. Das ist der ganze Trick: das Auge
+   entscheidet in einer Sekunde, was kein Verfahren zuverlaessig kann.
+
+   Die Schwellen sind gemessen (siehe namensSuche): der Wertebereich eines
+   UNBEKANNTEN Namens (0.431 bis 0.853) ueberlappt den eines BEKANNTEN
+   (0.790 bis 0.922). Es gibt also keine saubere Grenze. Deshalb drei
+   Stufen - und ein Haken, der sich nur bei sicherem UND deutlichem
+   Vorsprung von selbst setzt. */
+const FP_SICHER = 0.82, FP_AHNUNG = 0.65, FP_VORSPRUNG = 0.05;
+
+function sbNamenHTML(r){
+  const leute = [];
+  for (const tab of (r.tabellen || []))
+    for (const p of (tab.leute || []))
+      if (p && p.nameBild) leute.push({p, f: tab.fraktion});
+  if (!leute.length) return "";
+
+  const zeile = ({p, f}, i) => {
+    const rang = namensSuche(p.nameFp, 2);
+    const b = rang[0], zw = rang[1];
+    const vorsprung = (b && zw) ? (b.wert - zw.wert) : (b ? 1 : 0);
+    const sicher = b && b.wert >= FP_SICHER;
+    const ahnung = b && !sicher && b.wert >= FP_AHNUNG;
+    const setzen = sicher && vorsprung >= FP_VORSPRUNG;
+    const hinweis = sicher
+      ? `known — ${Math.round(b.wert*100)} %${vorsprung < FP_VORSPRUNG
+          ? ` · <b style="color:var(--warn,#d08b3a)">but ${esc(zw.name)} is almost as close —
+              check the strip</b>` : ""}`
+      : ahnung
+        ? `closest is <a href="#" data-sbnimm="${i}" style="color:var(--accent)">${esc(b.name)}</a>
+           — only ${Math.round(b.wert*100)} %, so type it if that is wrong`
+        : `not seen before`;
+    return `<div class="sb-zeile" data-i="${i}" data-fp="${esc(abdruckText(p.nameFp||[]))}"
+        data-f="${f == null ? "" : f}" data-vor="${b ? esc(b.name) : ""}"
+        style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:3px 0;
+        border-bottom:1px solid var(--line)">
+      <input type="checkbox" ${setzen ? "checked" : ""} style="flex:0 0 auto">
+      <img src="${p.nameBild}" alt="" style="height:19px;image-rendering:pixelated;
+        background:#000;border-radius:2px;flex:0 0 auto">
+      <input type="text" class="sb-nam" value="${sicher ? esc(b.name) : ""}"
+        placeholder="type the name" style="flex:1;min-width:120px;font-size:12px">
+      ${p.truppBild ? `<img src="${p.truppBild}" alt="" style="height:19px;
+        image-rendering:pixelated;background:#000;border-radius:2px;flex:0 0 auto">` : ""}
+      <input type="text" class="sb-clan" placeholder="unit / clan"
+        style="width:120px;font-size:12px">
+      <span style="flex-basis:100%;font-size:10.5px;color:var(--dim2);padding-left:26px">
+        ${hinweis}</span>
+    </div>`;
+  };
+
+  return `<div style="border-top:1px solid var(--line);margin-top:9px;padding-top:8px">
+    <div class="row" style="align-items:center;gap:7px">
+      <span style="font-family:var(--schmal);font-size:9.5px;letter-spacing:.09em;
+        color:var(--dim2);text-transform:uppercase;flex:1">Who was there — ${leute.length}</span>
+      <button class="btn" id="sb-alle" style="font-size:10.5px">Tick all</button>
+      <button class="btn" id="sb-namen" style="font-size:11.5px">Add ticked</button>
+    </div>
+    <div class="note" style="margin:5px 0 7px">Names cannot be read reliably, so they are cut
+      out and shown. Type each one <b>once</b> — from then on the strip is recognised and the
+      field fills itself. A suggestion is only a suggestion: the picture is right there, check
+      it. Nothing is written without a tick.</div>
+    <div style="max-height:32vh;overflow-y:auto;display:flex;flex-direction:column">
+      ${leute.map(zeile).join("")}</div>
+  </div>`;
+}
+
+/* Die Knoepfe der Namensmaske. Getrennt von der Erzeugung, weil die Maske
+   bei jedem neuen Bild neu entsteht. */
+function sbNamenVerdrahten(box){
+  const zeilen = [...box.querySelectorAll(".sb-zeile")];
+  if (!zeilen.length) return;
+  box.querySelectorAll("[data-sbnimm]").forEach(a => a.addEventListener("click", ev => {
+    ev.preventDefault();
+    const z = zeilen[+a.dataset.sbnimm];
+    if (!z) return;
+    z.querySelector(".sb-nam").value = z.dataset.vor || "";
+    z.querySelector("input[type=checkbox]").checked = true;
+  }));
+  box.querySelector("#sb-alle")?.addEventListener("click", ()=>{
+    /* Nur Zeilen mit einem Namen darin - ein Haken an einem leeren Feld
+       traegt nichts ein und macht nur Hoffnung. */
+    let n = 0;
+    for (const z of zeilen){
+      const hat = !!z.querySelector(".sb-nam").value.trim();
+      z.querySelector("input[type=checkbox]").checked = hat;
+      if (hat) n++;
+    }
+    toast(n ? `${n} ticked — the empty ones still need a name.`
+            : "Nothing to tick yet — type the names first.");
+  });
+  box.querySelector("#sb-namen")?.addEventListener("click", ()=>{
+    let n = 0, leer = 0;
+    for (const z of zeilen){
+      if (!z.querySelector("input[type=checkbox]").checked) continue;
+      const nm = z.querySelector(".sb-nam").value.trim();
+      if (!nm){ leer++; continue; }
+      const f = z.dataset.f === "" ? undefined : +z.dataset.f;
+      const clan = z.querySelector(".sb-clan").value.trim();
+      if (merkeSpieler(nm, f, clan || undefined, z.dataset.fp || undefined)) n++;
+    }
+    neuAuf("players");
+    toast(n ? `${n} name${n===1?"":"s"} kept — next time the strip fills itself.${
+                leer ? ` ${leer} ticked but empty.` : ""}`
+            : "Nothing added — tick a row and give it a name.");
+  });
+}
+
 async function sbAnzeigen(datei, quelle){
   const box = document.getElementById("sb-box");
   if (!box) return;
@@ -9823,6 +9935,7 @@ async function sbAnzeigen(datei, quelle){
         }</span>
     </div>`;
   };
+  box.style.display = "";
   box.innerHTML = `
     <div style="border:1px solid var(--accent-dk);border-radius:2px;padding:9px 11px;
          background:rgba(226,172,72,.05);display:flex;flex-direction:column;gap:5px">
@@ -9837,8 +9950,10 @@ async function sbAnzeigen(datei, quelle){
         <span style="font-size:11px;color:var(--dim2)">Staged? Then leave it — nothing is
           written.</span>
       </div>
+      ${sbNamenHTML(r)}
     </div>`;
   box.style.display = "";
+  sbNamenVerdrahten(box);
   document.getElementById("sb-zahlen").addEventListener("click", ()=>{
     /* Die Aktivitaetsliste ist eine KRIEGSstatistik. Was aus einem
        Uebungsgefecht stammt, gehoert nicht hinein - und ob es eines war,
@@ -10167,6 +10282,82 @@ function sbRangLesen(B, tab, y, E, nurFraktion){
 
 /* Ein Ausschnitt als Bild, zum Vorlegen. Doppelt so gross gezeichnet und
    ohne Glaettung - abtippen soll man es koennen. */
+
+/* ---- Namensstreifen wiedererkennen ---------------------------------
+   Gemessen an 21 Namen mit absichtlich verwechselbaren Paaren, jeder
+   zweimal gezeichnet (Unterabtastung, halbe Aufloesung, andere Helligkeit,
+   Bildrauschen):
+
+     Rangfolge richtig               21 von 21
+     kleinster Abstand zum Zweiten   0.0084
+     unbekannter Name, bester Wert   0.431 ... 0.853
+     bekannter Name, richtiger Wert  0.790 ... 0.922
+
+   Die letzten beiden Zeilen UEBERLAPPEN. Es gibt also keinen Schwellwert,
+   der "kenne ich" von "kenne ich nicht" trennt. Deshalb schlaegt der
+   Abdruck vor und entscheidet nie - der Streifen steht daneben, das Auge
+   entscheidet. */
+const FP_B = 64, FP_H = 16;
+
+function sbAbdruck(B, tab, y, E, pitch, von, bis){
+  const x0 = tab.x0 + von*SB_BREITE*E, x1 = tab.x0 + bis*SB_BREITE*E;
+  const w = Math.max(2, Math.round(x1-x0)), hh = Math.max(2, Math.round(pitch));
+  const c = document.createElement("canvas");
+  c.width = FP_B; c.height = FP_H;
+  const g = c.getContext("2d", {willReadFrequently:true});
+  /* Geglaettet herunterrechnen: das macht den Abdruck unabhaengig davon, ob
+     die Aufnahme in 1080p oder 4K entstanden ist. */
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+  g.drawImage(B.c, x0, y, w, hh, 0, 0, FP_B, FP_H);
+  const d = g.getImageData(0, 0, FP_B, FP_H).data, b = new Uint8Array(FP_B*FP_H);
+  for (let i = 0; i < b.length; i++)
+    b[i] = Math.max(0, Math.min(255,
+      Math.round(d[i*4]*0.299 + d[i*4+1]*0.587 + d[i*4+2]*0.114)));
+  return b;
+}
+const abdruckText = b => { try {
+  let s = ""; for (const x of b) s += String.fromCharCode(x); return btoa(s);
+} catch(e){ return ""; } };
+const abdruckBytes = s => { try {
+  const r = atob(String(s||"")), b = new Uint8Array(r.length);
+  for (let i = 0; i < r.length; i++) b[i] = r.charCodeAt(i);
+  return b;
+} catch(e){ return null; } };
+
+/* Mittelwertfrei und auf Laenge eins. Danach ist das Skalarprodukt
+   unabhaengig von Helligkeit und Kontrast der Aufnahme - zwei Bilder
+   desselben Namens bei verschiedener Beleuchtung ergeben denselben Wert. */
+function abdruckNorm(b){
+  const v = new Float32Array(b.length);
+  let s = 0;
+  for (let i = 0; i < b.length; i++){ v[i] = b[i]; s += b[i]; }
+  const m = s/v.length;
+  let q = 0;
+  for (let i = 0; i < v.length; i++){ v[i] -= m; q += v[i]*v[i]; }
+  q = Math.sqrt(q) || 1;
+  for (let i = 0; i < v.length; i++) v[i] /= q;
+  return v;
+}
+
+/* Die naechstliegenden Eintraege im Verzeichnis - eine Rangfolge, kein
+   Urteil. Wer den ersten ungeprueft uebernimmt, macht es falsch. */
+function namensSuche(bytes, wieviele){
+  if (!bytes) return [];
+  const a = abdruckNorm(bytes), raus = [];
+  for (const k of Object.keys(S.roster || {})){
+    const e = S.roster[k];
+    if (!e || !e.v || !e.v.fp || !e.v.name) continue;
+    const b = abdruckBytes(e.v.fp);
+    if (!b || b.length !== a.length) continue;
+    const n = abdruckNorm(b);
+    let s = 0;
+    for (let i = 0; i < a.length; i++) s += a[i]*n[i];
+    raus.push({k, name: e.v.name, wert: s});
+  }
+  raus.sort((x, y) => y.wert - x.wert);
+  return raus.slice(0, wieviele || 3);
+}
+
 function sbSchnitt(B, tab, y, E, pitch, von, bis){
   const x0 = tab.x0 + von*SB_BREITE*E, x1 = tab.x0 + bis*SB_BREITE*E;
   const w = Math.max(2, Math.round(x1-x0)), hh = Math.max(2, Math.round(pitch));
@@ -10202,8 +10393,12 @@ function scoreboardLesen(quelle){
     zeilen.forEach((y, i) => {
       const r = fk ? (sbRangLesen(B, tab, y, E, fk) || erst[i]) : erst[i];
       leute.push({rang: r,
-                  nameBild: sbSchnitt(B, tab, y, E, pitch, SB.namX0, SB.namX1),
-                  truppBild: sbSchnitt(B, tab, y, E, pitch, SB.truX0, SB.truX1)});
+                  nameBild:  sbSchnitt(B, tab, y, E, pitch, SB.namX0, SB.namX1),
+                  truppBild: sbSchnitt(B, tab, y, E, pitch, SB.truX0, SB.truX1),
+                  /* Der Abdruck wird HIER gebildet, aus dem Vollbild - nicht
+                     spaeter aus der Streifen-Bildadresse. Der Umweg ueber ein
+                     PNG und ein Image-Element waere langsam und asynchron. */
+                  nameFp: sbAbdruck(B, tab, y, E, pitch, SB.namX0, SB.namX1)});
     });
     raus.push({seite: tab.seite,
                raenge: leute.filter(p => p.rang && p.rang.rang !== null).length,
@@ -13446,7 +13641,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 4506101751</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c1b81fe12b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
