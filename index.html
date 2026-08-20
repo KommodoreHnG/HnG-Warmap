@@ -13363,7 +13363,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 528fa781b0</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c82f2606e9</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -13904,8 +13904,6 @@ async function mitgliederDialog(meldung){
               <button class="btn" data-ren="${esc(m.player)}" data-name="${esc(m.name || "")}"
                 style="padding:2px 7px;font-size:10.5px"
                 title="Their name in the game — this is what everybody sees on the map">Rename</button>
-              <button class="btn" data-neu="${esc(m.player)}" style="padding:2px 7px;font-size:10.5px"
-                title="Forgot their password? A new code lets them set a new one. Everything they own stays theirs.">New code</button>
               <button class="btn" data-lock="${esc(m.player)}" data-to="${m.approved ? "0" : "1"}"
                 style="padding:2px 7px;font-size:10.5px">${m.approved ? "Lock" : "Unlock"}</button>
               <button class="btn" data-adm="${esc(m.player)}" data-to="${m.is_admin ? "0" : "1"}"
@@ -13916,8 +13914,9 @@ async function mitgliederDialog(meldung){
         }).join("")}</tbody>
       </table></div>
       <div class="note">A code is the key to this room — send it in a direct message, never in a public
-        channel. <b>New code</b> is for somebody who forgot their password: the old code stops working,
-        the new one lets them set a fresh one, and everything they own stays theirs.
+        channel. Nobody here can hand out a replacement: whoever forgets their password uses the
+        <b>backup file</b> they were given when they signed up. That way not even a leader can slip
+        into somebody else's account.
         <b>Lock</b> shuts somebody out but keeps what they wrote; <b>Remove</b> deletes
         their entry and the code stops working. Neither touches the map.</div>
     </div>
@@ -13937,26 +13936,6 @@ async function mitgliederDialog(meldung){
     if (neu.trim().length < 2){ toast("A name needs at least two characters."); return; }
     handeln(() => rpc("warmap_member_set", {target_player: b.dataset.ren, set_name: neu.trim()}),
             `Renamed to ${neu.trim()}`);
-  }));
-  document.querySelectorAll("#dlg [data-neu]").forEach(b => b.addEventListener("click", async ()=>{
-    const m = liste.find(x => x.player === b.dataset.neu);
-    if (!m) return;
-    if (!confirm(`New code for ${m.name}?\n\nTheir old code stops working at once. With the new `
-               + `one they set a fresh password. Depot, teams and history all stay theirs.`)) return;
-    try {
-      const r = await rpc("warmap_recode", {target_player: m.player});
-      const neu = Array.isArray(r) ? r[0] : r;
-      if (!neu || !neu.code) throw new Error("No code came back.");
-      await kopiere(einladungsText(neu.name, neu.code), "Invite message");
-      mitgliederDialog(`<div style="border-left:3px solid var(--accent);background:var(--panel2);
-        border-radius:2px;padding:9px 11px">
-        <div style="font-size:12px;color:var(--dim);margin-bottom:4px">New code for
-          <b style="color:var(--text)">${esc(neu.name)}</b> — already on your clipboard as a
-          ready-made message. Send it as a direct message; until they use it, their account is
-          open to whoever holds this code.</div>
-        <div class="mono" style="font-size:14px;color:var(--accent);word-break:break-all">${esc(neu.code)}</div>
-      </div>`);
-    } catch(e){ dialogFehler("Could not issue a new code", String(e.message || e)); }
   }));
   document.querySelectorAll("#dlg [data-msg]").forEach(b => b.addEventListener("click", ()=>{
     const m = liste.find(x => x.player === b.dataset.msg);
