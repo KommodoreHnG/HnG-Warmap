@@ -4440,16 +4440,20 @@ function bildFreigabeBeenden(){
 /* Verdrahtet alle drei Wege für ein geöffnetes Fenster. */
 function bildQuelle(id, beiBild){
   const dlg = document.getElementById("dlg");
-  const nimm = f => { if (f && /^image\//.test(f.type || "")) beiBild(f); };
+  /* Die Herkunft wird mitgereicht. Sie ist an jeder der vier Eingangsstellen
+     bekannt und wurde vorher weggeworfen - danach sah eine Zahl aus einer
+     hochgeladenen Datei genauso aus wie eine aus einer Live-Aufnahme. */
+  const nimm = (f, q) => { if (f && /^image\//.test(f.type || "")) beiBild(f, q); };
 
-  document.getElementById(id)?.addEventListener("change", ev => nimm(ev.target.files[0]));
+  document.getElementById(id)?.addEventListener("change",
+    ev => nimm(ev.target.files[0], "file"));
 
   const einfuegen = ev => {
     const daten = ev.clipboardData || window.clipboardData;
     for (const eintrag of (daten && daten.items) || []){
       if (eintrag.kind === "file" && /^image\//.test(eintrag.type || "")){
         const f = eintrag.getAsFile();
-        if (f){ ev.preventDefault(); nimm(f); return; }
+        if (f){ ev.preventDefault(); nimm(f, "paste"); return; }
       }
     }
   };
@@ -4458,7 +4462,7 @@ function bildQuelle(id, beiBild){
   const fallen = ev => {
     ev.preventDefault(); weg();
     nimm([...((ev.dataTransfer && ev.dataTransfer.files) || [])]
-         .find(f => /^image\//.test(f.type || "")));
+         .find(f => /^image\//.test(f.type || "")), "drop");
   };
   document.addEventListener("paste", einfuegen);
   dlg.addEventListener("dragover", ueber);
@@ -4468,7 +4472,7 @@ function bildQuelle(id, beiBild){
   dlg.querySelectorAll('[data-bild="grab"]').forEach(b => b.addEventListener("click", async ()=>{
     const alt = b.textContent;
     b.disabled = true; b.textContent = "Grabbing …";
-    try { nimm(await bildAufnehmen()); }
+    try { nimm(await bildAufnehmen(), "live"); }
     catch(e){
       const m = String(e.message || e);
       toast(/denied|Permission/i.test(m) ? "Screen sharing was declined." : m);
@@ -6970,7 +6974,9 @@ function intelDialog(tab, seite){
               <div style="font-size:11px;color:var(--dim);margin:10px 0 4px">Last recorded</div>
               ${l.slice(0,8).map(a=>`<div style="font-size:11px;color:var(--dim2)">
                 ${new Date(a.t).toLocaleString()} · ${FACTIONS[a.f]?FACTIONS[a.f].tag:"?"}${
-                a.clan?` · ${esc(a.clan)}`:""} · <b>${a.n}</b></div>`).join("")}
+                a.clan?` · ${esc(a.clan)}`:""} · <b>${a.n}</b> · <span title="${
+                esc(AKT_HER[a.q]?.lang || AKT_HER.unbekannt.lang)}">${
+                esc(AKT_HER[a.q]?.kurz || AKT_HER.unbekannt.kurz)}</span></div>`).join("")}
             </div>
           </div>`;
         })()}
@@ -7044,7 +7050,7 @@ function intelDialog(tab, seite){
       const n = +document.getElementById("ak-n").value;
       if (!(n >= 0)){ toast("How many?"); return; }
       aktMelden(+document.getElementById("ak-f").value,
-                document.getElementById("ak-clan").value, n);
+                document.getElementById("ak-clan").value, n, "hand");
       neuAuf("when"); toast("Recorded");
     });
     const eb = document.getElementById("er-add");
@@ -9364,11 +9370,11 @@ function ocrDialog(){
     toast(`${n} name${n===1?"":"s"} recorded${stadtTxt}`);
   });
 }
-async function ocrLesen(datei){
+async function ocrLesen(datei, quelle){
   const st = document.getElementById("ocr-status");
   const setz = s => { if (st) st.innerHTML = s; };
   /* Erst die Struktur - die geht ohne Netz und in einer halben Sekunde. */
-  try { await sbAnzeigen(datei); } catch(e){}
+  try { await sbAnzeigen(datei, quelle); } catch(e){}
   /* Hier bleibt das Bild zunaechst unangetastet. Der Schlachtbildschirm ist
      schon hell auf dunkel und gross gesetzt - gemessen liest Tesseract ihn
      roh besser als aufbereitet, weil die Aufbereitung die Kantenglaettung
@@ -9764,7 +9770,7 @@ const amHandy = () => matchMedia("(max-width: 760px)").matches;
 /* Was der Scoreboard-Leser gefunden hat, vorlegen - und die Kopfzahlen mit
    einem Klick in die Aktivitaetsliste uebernehmen. */
 let SB_LETZTE = null;
-async function sbAnzeigen(datei){
+async function sbAnzeigen(datei, quelle){
   const box = document.getElementById("sb-box");
   if (!box) return;
   const bild = await new Promise((ok, err) => {
@@ -9843,7 +9849,7 @@ async function sbAnzeigen(datei){
     let n = 0;
     for (const t of r.tabellen){
       if (t.fraktion == null) continue;
-      aktMelden(t.fraktion, "", t.leute.length); n++;
+      aktMelden(t.fraktion, "", t.leute.length, quelle || "unbekannt"); n++;
     }
     toast(n ? `${n} head count${n===1?"":"s"} recorded` : "No side was clear enough to record");
   });
@@ -11579,9 +11585,29 @@ const tzText = tz => tz === null || tz === undefined ? "—"
    Jede Eingabe traegt ihren Zeitstempel. Daraus entsteht von selbst ein Bild
    ueber die Stunden des Tages und ueber die Wochentage - ohne dass jemand
    eine Statistik pflegen muesste. */
-function aktMelden(f, clan, n){
+/* q haelt fest, WOHER die Zahl stammt. Ohne das sah eine von Hand getippte
+   Zahl genauso aus wie eine, die vom Scoreboard gelesen wurde - und eine aus
+   einer hochgeladenen Datei genauso wie eine aus einer Live-Aufnahme.
+   Verbieten laesst sich das Faelschen nicht (wer die Entwicklerwerkzeuge
+   oeffnet, reicht jedes Bild herein). Sichtbar machen schon - und das ist
+   der Punkt: eine Faelschung, der man ansieht, woher sie kommt, kostet
+   Ansehen. Altdaten haben kein q und bleiben "unbekannt". */
+/* Kurz genug fuer die Liste, lang genug fuer den Mauszeiger. */
+const AKT_HER = {
+  live:      {kurz: "captured",  lang: "Read from a live window capture."},
+  file:      {kurz: "from file", lang: "Read from an uploaded picture file — that file could "
+                                     + "have been edited before it was uploaded."},
+  paste:     {kurz: "pasted",    lang: "Read from a picture pasted from the clipboard."},
+  drop:      {kurz: "dropped",   lang: "Read from a picture dropped into the window."},
+  hand:      {kurz: "typed",     lang: "Somebody typed this number."},
+  unbekannt: {kurz: "unknown",   lang: "Recorded before the source was kept — no way to tell."},
+};
+function aktMelden(f, clan, n, quelle){
   const id = Math.random().toString(36).slice(2,10);
-  S.akt[id] = {v: {f, clan: String(clan||"").trim(), n: Math.max(0, +n||0)},
+  /* Vorgabe ist "unbekannt", nicht "hand": wer die Herkunft nicht mitgibt,
+     soll keine zugesprochen bekommen, die er nicht belegen kann. */
+  S.akt[id] = {v: {f, clan: String(clan||"").trim(), n: Math.max(0, +n||0),
+                   q: quelle || "unbekannt"},
                t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`akt:${id}`); save();
 }
@@ -13420,7 +13446,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 702faa21f1</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 4506101751</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
