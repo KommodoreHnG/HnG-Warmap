@@ -12924,7 +12924,13 @@ function clanDialog(tab){
 
       <div class="tabp on" data-tab="clan">
         ${(()=>{
-          const leiter = istLeader(), bf = clanBefehl(), st = startStaedte();
+          /* Zwei Stufen: Clanname, Fraktion und Befehle gehoeren dem
+             Leiter, der KRIEGSNAME dem Verwalter. So steht es seit heute in
+             der Datenbank, und die Seite muss dasselbe zeigen - sonst
+             aendert jemand etwas, sieht es wirken, und der Abgleich wirft
+             es weg. */
+          const leiter = istLeader(), verw = istAdmin();
+          const bf = clanBefehl(), st = startStaedte();
           const wf = clanFaktion();
           return `
           <div class="row" style="align-items:center;gap:8px">
@@ -12944,8 +12950,9 @@ function clanDialog(tab){
           <div class="row" style="align-items:center;gap:8px">
             <span style="font-size:12px;color:var(--dim);width:86px">War</span>
             <input type="text" id="cl-war" value="${esc(warName())}" style="flex:1"
-              placeholder="e.g. 1940 The Start_113" ${leiter?"":"disabled"}>
-            <button class="btn primary" id="cl-save" ${leiter?"":"disabled"}>Save</button>
+              placeholder="e.g. 1940 The Start_113" ${verw?"":"disabled"}
+              title="${verw ? "" : "The war name belongs to the war itself — an admin sets it."}">
+            <button class="btn primary" id="cl-save" ${(leiter||verw)?"":"disabled"}>Save</button>
           </div>
           <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:9px">
             <div style="font-size:12px;color:var(--dim);margin-bottom:5px">Standing orders</div>
@@ -12962,7 +12969,8 @@ function clanDialog(tab){
               : `<div class="note" style="font-size:11px">Only the clan leader writes these.</div>`}
           </div>
           <div class="note">Sets which depot is shown, what the <b>Arsenal</b> offers, and the
-            side of new teams.${leiter?"":" Leader only — read-only for you."}</div>`;
+            side of new teams.${leiter?"":" Leader only — read-only for you."}${
+            verw?"":" The <b>war name</b> belongs to the war itself and is the admin's to set."}</div>`;
         })()}
       </div>
 
@@ -13136,8 +13144,11 @@ function clanDialog(tab){
   document.getElementById("d-close").addEventListener("click", closeDlg);
   /* Clan-Reiter: Name, Seite, Krieg, Befehle. */
   document.getElementById("cl-save")?.addEventListener("click", ()=>{
-    setMeta("clan", document.getElementById("cl-name").value.trim() || "War Map");
-    setMeta("war", document.getElementById("cl-war").value.trim());
+    /* Nur schreiben, was der Betreffende darf. Vorher ging beides raus, und
+       ein Leiter ohne Verwalterrecht haette den Clannamen gespeichert und
+       den Kriegsnamen still verloren. */
+    if (istLeader()) setMeta("clan", document.getElementById("cl-name").value.trim() || "War Map");
+    if (istAdmin())  setMeta("war",  document.getElementById("cl-war").value.trim());
     kopfzeile(); clanDialog("clan"); toast("Saved");
   });
   document.querySelectorAll("#dlg [data-clf]").forEach(b => b.addEventListener("click", ()=>{
@@ -13927,10 +13938,20 @@ document.getElementById("b-war").addEventListener("click", ()=>{
       String(+x.dataset.cf === neueFrak)));
   }));
   document.getElementById("set-save").addEventListener("click", ()=>{
-    setMeta("clan", document.getElementById("set-clan").value.trim() || "War Map");
-    setMeta("war", document.getElementById("set-war").value.trim());
-    setClanFaktion(neueFrak);
-    setStartStaedte(startNeu);
+    /* Jede Zeile nur, wenn der Betreffende sie auch schreiben darf. Vorher
+       ging alles auf einmal raus: ein Leiter ohne Verwalterrecht haette
+       Clanname und Fraktion gespeichert und Kriegsname und Startstaedte
+       still verloren - der Abgleich weist sie ab.
+       Clanname und Fraktion gehoeren dem Leiter, Kriegsname und
+       Startstaedte dem Verwalter. */
+    if (istLeader()){
+      setMeta("clan", document.getElementById("set-clan").value.trim() || "War Map");
+      setClanFaktion(neueFrak);
+    }
+    if (istAdmin()){
+      setMeta("war", document.getElementById("set-war").value.trim());
+      setStartStaedte(startNeu);
+    }
     closeDlg(); toast("Saved");
   });
   document.getElementById("d-merge").addEventListener("click", async ()=>{
@@ -13995,7 +14016,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 4280d4fb92</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 2715336fdb</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
