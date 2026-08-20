@@ -61,8 +61,14 @@
 .float,#hits,#ghost,#toast,#menus,#menubar{zoom:var(--ui,1)}
 /* Der Radarraum war von jeder Groesseneinstellung ausgenommen - wer die
    Oberflaeche groesser stellt, weil er sonst nichts lesen kann, bekam
-   ausgerechnet dort weiter Kleinstschrift. */
-.rd-pult{zoom:var(--ui,1)}
+   ausgerechnet dort weiter Kleinstschrift.
+
+   Danach hing er am ROHEN Gesamtregler, als einziger Bereich, und wurde auf
+   Full HD zu gross: 413 von 1920 Punkten breit, und mit laufender Wache
+   hoeher als das Fenster. Jetzt hat er seinen eigenen Faktor wie alle
+   anderen - und darueber einen gemessenen Deckel (--rd-z), damit der
+   Voreinstellwert nicht doch wieder ueber die Kante schiebt. */
+.rd-pult{zoom:var(--rd-z,1)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
 body{background:var(--ground);color:var(--text);font-family:var(--schrift);
@@ -2466,6 +2472,8 @@ function resize(){
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   cv.width = Math.round(r.width*dpr); cv.height = Math.round(r.height*dpr);
   draw();
+  /* Der Radarpult haengt an der Fensterhoehe, nicht nur am Regler. */
+  if (typeof radarMassHalten === "function") radarMassHalten();
 }
 function fit(){
   const r = cv.parentElement.getBoundingClientRect();
@@ -4774,7 +4782,10 @@ function spurTransform(mk, punkte, tr0, weit){
   return {guete:g[0], s:g[1], ox:g[2], oy:g[3]};
 }
 
-function findeTransform(mk, punkte, melde){
+/* sHint - der Massstab, den der geeichte Zoomregler des Spiels erwarten
+   laesst (Bildpunkte je Karteneinheit). Ohne ihn wird wie bisher blind
+   ueber das Fuenffache gesucht. */
+function findeTransform(mk, punkte, melde, sHint){
   const {m, W, H} = mk;
   const dichte = mk.n / (W*H);
   // Momente als Startschaetzung
@@ -4792,13 +4803,25 @@ function findeTransform(mk, punkte, melde){
     ? punkte.filter((_,i)=> i % Math.ceil(punkte.length/420) === 0) : punkte;
   let best = null;
   const skalen = [];
-  for (let f=0.45; f<=2.25; f*=1.035) skalen.push(s0*f);
+  if (sHint > 0){
+    /* Der Zoomregler ist geeicht - dann muss der Massstab nicht geraten
+       werden. Plusminus 18 Prozent decken die Ungenauigkeit der Eichung ab
+       (die Stuetzstellen liegen 0.06 Reglerweite auseinander). */
+    for (let f=0.82; f<=1.19; f*=1.02) skalen.push(sHint*f);
+  } else {
+    for (let f=0.45; f<=2.25; f*=1.035) skalen.push(s0*f);
+  }
   skalen.forEach((s, si) => {
     if (si % 12 === 0) melde && melde(si/skalen.length);
     const ox0 = mx - pmx*s, oy0 = my - pmy*s;
     let lokal = null;
     for (let schritt of [14, 4]){
-      const spanne = schritt === 14 ? 8 : 5;
+      /* Steht der Massstab fest, kostet der Faecher nur noch 18 statt 47
+         Stufen - die gesparte Zeit geht in ein weiteres Versatzfenster.
+         Es reicht damit ueber 280 statt ueber 112 Bildpunkte. Das ist noch
+         immer nicht genug fuer eine stark hineingezoomte Ansicht (gemessen
+         bis 3100 daneben), aber es ist mehr, und es kostet nichts. */
+      const spanne = schritt === 14 ? (sHint > 0 ? 20 : 8) : 5;
       const bx = lokal ? lokal[1] : ox0, by = lokal ? lokal[2] : oy0;
       for (let dx=-spanne; dx<=spanne; dx++) for (let dy=-spanne; dy<=spanne; dy++){
         const ox = bx + dx*schritt, oy = by + dy*schritt;
@@ -4930,7 +4953,10 @@ const trAusQuelle = (q, a) => ({s: q.s*a.k, ox: q.ox*a.k + a.tx, oy: q.oy*a.k + 
    opt.feld  - Ausschnitt. Ohne Angabe werden Ausschnitt UND Vollbild
                probiert und das bessere genommen: eine Datei, die jemand
                selbst zugeschnitten hat, darf nicht nochmal beschnitten
-               werden. */
+               werden.
+   opt.spanne- die zu erwartende Kartenbreite in Karteneinheiten, aus dem
+               geeichten Zoomregler des Spiels. Daraus wird der Massstab, und
+               die globale Suche muss ihn nicht mehr raten. */
 function kartenAusBild(quelle, melde, opt){
   const o = opt || {};
   const punkte = MAP.n.map(n => [n[1] + (MAP.x0||0), n[2] + (MAP.y0||0)]);
@@ -4943,8 +4969,12 @@ function kartenAusBild(quelle, melde, opt){
       letzterFehler = `only ${a.mk.n} coloured pixels — is that the war map?`;
       continue;
     }
+    /* Die Spanne ist massstabsfrei (Bildbreite geteilt durch Massstab), also
+       gilt sie fuer jede Arbeitsbreite - hier wird sie in den Massstab
+       DIESES Arbeitsbildes umgerechnet. */
+    const sSoll = o.spanne > 0 ? a.W / o.spanne : 0;
     let tr = o.spur ? spurTransform(a.mk, punkte, trAusQuelle(o.spur, a))
-                    : findeTransform(a.mk, punkte, melde || (()=>{}));
+                    : findeTransform(a.mk, punkte, melde || (()=>{}), sSoll);
     if (!tr){ letzterFehler = "no match — try the map zoomed further out"; continue; }
     let g = passungGuete(a.mk, punkte, tr);
     /* Sitzt die mitgefuehrte Lage nicht, war der Sprung vermutlich groesser
@@ -5765,7 +5795,7 @@ async function radarAuf(){
   radarOffen = true;
   document.getElementById("radar").classList.add("an");
   if (radarZiel === null) zielZiehen();
-  radarPult(); radarSchleife();
+  radarPult(); radarMassHalten(); radarSchleife();
   /* Wer den Radarraum aufmacht, will messen - also gleich nach dem Fenster
      fragen, statt ihn erst einen Knopf suchen zu lassen. */
   if (!wacheLaeuft()){
@@ -5940,6 +5970,10 @@ function radarFrisch(){
 function radarPult(){
   const el = document.getElementById("rd-pult");
   if (!el || !radarOffen) return;
+  /* Nach dem Neuaufbau nachmessen: mit laufender Wache kommen die Zoomleiste
+     und eine zweizeilige Ansage dazu, und dann passt der bisherige Faktor
+     nicht mehr. Ein Bild spaeter, damit der Umbruch schon stattgefunden hat. */
+  requestAnimationFrame(radarMassHalten);
   const W = rdWorte();
   const L = radarLage();
   const {netz, laeuft, frisch, zo, sagen, ohneFix, proz, sig, scan} = L;
@@ -6111,6 +6145,38 @@ function breiteGriff(){
     radarBeam = Math.max(0, Math.min(1, radarBeam - Math.sign(ev.deltaY)/8));
     radarKlack(); breiteZeichnen(); radarWerte(); radarZeichnen();
   }, {passive:false});
+}
+
+/* ---- Wieviel Pult passt ins Fenster? ----
+   Der Wunsch ist Gesamtregler mal Radarfaktor. Der Deckel ist das, was
+   tatsaechlich hineingeht - in der Hoehe, damit nichts unter der Kante
+   verschwindet, und in der Breite, damit dem Schirm genug bleibt.
+
+   Gemessen wird die Summe der Kindinhalte plus Abstaende plus Rand. Nicht
+   scrollHeight: der Pult ist eine Flexspalte, und deren scrollHeight sagt
+   je nach Fuellstand etwas anderes. Und nicht der Zoom kurz auf 1: alle
+   Masse innerhalb eines zoom-Kastens kommen ohnehin in dessen eigenen
+   Punkten, das Umschalten waere zwei Umbrueche fuer nichts. */
+const RD_BREIT = 330;          /* der Pult in eigenen Punkten */
+const RD_ANTEIL = 0.26;        /* hoechstens so viel vom Fenster */
+function radarMassHalten(){
+  const p = document.querySelector(".rd-pult");
+  const wunsch = (typeof uiScale === "number" ? uiScale : 1)
+               * (typeof layGr === "function" ? layGr("radar") : 1);
+  let f = wunsch;
+  if (p && radarOffen && p.children.length){
+    const st = getComputedStyle(p);
+    let braucht = (parseFloat(st.paddingTop) || 0) + (parseFloat(st.paddingBottom) || 0);
+    const abstand = parseFloat(st.rowGap) || 0;
+    braucht += abstand * (p.children.length - 1);
+    /* scrollHeight je Kind, nicht clientHeight: ein geschrumpftes Kind
+       verschweigt sonst genau den Teil, der nicht mehr passt. */
+    for (const c of p.children) braucht += Math.max(c.scrollHeight, c.clientHeight);
+    if (braucht > 0) f = Math.min(f, window.innerHeight / braucht);
+  }
+  f = Math.min(f, (window.innerWidth * RD_ANTEIL) / RD_BREIT);
+  /* Unter 0.85 wird es unleserlich - dann lieber doch rollen lassen. */
+  document.documentElement.style.setProperty("--rd-z", String(Math.max(0.85, f)));
 }
 
 /* ---- Der Schirm ---- */
@@ -6469,13 +6535,39 @@ function wacheTickIntern(){
   if (wache.tr)
     res = kartenAusBild(wache.video, null,
                         {spur: wache.tr, feld: wache.feld, maxb: PEIL_BREITE});
+  /* Ist die Spur weg, erst die LETZTE gute Lage nochmal verfolgen. Vorher
+     wurde sie bei jedem Fehlschlag geloescht, und ein Menue ueber der Karte
+     reichte, um die Verfolgung endgueltig zu verlieren. Das kostet 13
+     Millisekunden statt 80 und geht auch hineingezoomt. */
+  if ((!res || res.fehler) && wache.trAlt && wache.trAlt !== wache.tr){
+    const zurueck = kartenAusBild(wache.video, null,
+                        {spur: wache.trAlt, feld: wache.feldAlt, maxb: PEIL_BREITE});
+    if (!zurueck.fehler) res = zurueck;
+  }
   if (!res || res.fehler){
     /* Neu einrasten braucht mehr Bild: gemessen rastet die globale Suche bei
-       900 Bildpunkten nicht mehr ein, bei 1600 schon. Das passiert selten
-       genug, dass die 80 Millisekunden nicht stoeren. */
-    const neu = kartenAusBild(wache.video, null, {maxb: LOCK_BREITE});
-    if (!neu.fehler && wache.tr) wache.verloren = (wache.verloren||0) + 1;
-    res = neu;
+       900 Bildpunkten nicht mehr ein, bei 1600 schon. Sie kostet dafuer rund
+       80 Millisekunden - bei 200 Millisekunden Takt waeren das bis zu 40
+       Prozent der Zeit, auf dem Hauptfaden, also genau dort, wo auch
+       gezeichnet wird. Deshalb gedrosselt: nach einem Fehlschlag wird
+       gewartet, und die Wartezeit verdoppelt sich bis drei Sekunden. Fand
+       sie im einen Bild nichts, findet sie im naechsten fast sicher auch
+       nichts. */
+    if (nun >= (wache.lockAb || 0)){
+      const neu = kartenAusBild(wache.video, null,
+                      {maxb: LOCK_BREITE, spanne: spanneAusRegler(wache.zoom)});
+      if (neu.fehler){
+        wache.lockWarte = Math.min(3000, (wache.lockWarte || 250) * 2);
+        wache.lockAb = nun + wache.lockWarte;
+      } else {
+        wache.lockWarte = 0; wache.lockAb = 0;
+        if (wache.tr) wache.verloren = (wache.verloren||0) + 1;
+      }
+      res = neu;
+    } else if (!res || res.fehler){
+      const rest = Math.ceil((wache.lockAb - nun)/100)/10;
+      res = {fehler: `lost the map — searching again in ${rest.toFixed(1)} s`};
+    }
   }
   wache.laeufe++;
   wache.keinFix = false;
@@ -6494,6 +6586,14 @@ function wacheTickIntern(){
   }
   wache.jeGefixt = true;
   wache.tr = res.trQ; wache.feld = res.feld; wache.guete = res.guete;
+  /* Die letzte GUTE Lage bleibt liegen, auch wenn die naechste danebengeht.
+     Sie ist der billige Weg zurueck. */
+  if (res.sicher){
+    wache.trAlt = res.trQ; wache.feldAlt = res.feld;
+    /* Und die Drosselung faengt wieder bei null an - sonst haengt nach einer
+       laengeren Durststrecke noch drei Sekunden Wartezeit an der naechsten. */
+    wache.lockWarte = 0; wache.lockAb = 0;
+  }
   const anz = Object.keys(res.erg.besitz).length;
   /* Frueher standen hier vierzig Staedte als Untergrenze - das schloss jede
      hineingezoomte Ansicht aus, obwohl gerade die gewollt ist. Ob die Lage
@@ -10995,11 +11095,13 @@ const ABSCHNITTE = [
   {k:"bar",    v:"--f-bar",    n:"Tool bar"},
   {k:"rechts", v:"--f-rechts", n:"Right column"},
   {k:"dlg",    v:"--f-dlg",    n:"Windows"},
+  {k:"radar",  v:"--f-radar",  n:"Radar console"},
 ];
 const layGr = k => (LAY.gr && LAY.gr[k]) || 1;
 function groessenAnwenden(){
   for (const a of ABSCHNITTE)
     document.documentElement.style.setProperty(a.v, String(layGr(a.k)));
+  radarMassHalten();
 }
 
 /* Die Reihenfolge wird ueber die CSS-Eigenschaft order gesetzt, nicht durch
@@ -14044,7 +14146,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build dcfb1fe710</span></p></div>
+         installation. <span style="color:var(--dim2)">· build fdb3b85a29</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
