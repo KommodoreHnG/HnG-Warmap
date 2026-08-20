@@ -13384,7 +13384,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 359dff2ccb</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c49fdf9062</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -13672,13 +13672,21 @@ async function syncPush(){
        eine einzelne Zeile, die die Datenbank nicht will. Um die eine nicht
        alles andere blockieren zu lassen: einzeln nachfassen. */
     let weg = 0, durch = 0;
+    const abgelehnt = [];
     for (let i = 0; i < rows.length; i++){
       try { await senden([rows[i]]); abhaken(i); durch++; }
-      catch(e2){ dirty.delete(merk[i][0]); weg++; }
+      catch(e2){ dirty.delete(merk[i][0]); weg++; abgelehnt.push(merk[i][1]); }
     }
     if (weg){
       syncMark(`${weg} refused`, "err");
-      toast(`${weg} entr${weg === 1 ? "y was" : "ies were"} refused by the database and dropped.`);
+      /* Sagen, WAS abgewiesen wurde - und das Unangenehme dazu: der Eintrag
+         ist nur aus der Warteschlange gefallen. Auf dem eigenen Bildschirm
+         steht er weiter, nur sieht ihn sonst niemand. Wer das nicht weiss,
+         verlaesst sich auf einen Befehl, den ausser ihm keiner hat. */
+      const welche = [...new Set(abgelehnt)].join(", ");
+      toast(`${weg} entr${weg === 1 ? "y" : "ies"} refused by the database (${welche}). `
+          + `Still on your screen, but nobody else will see ${weg === 1 ? "it" : "them"} — `
+          + `usually that means it was not yours to change.`);
     } else syncMark(durch ? "Live" : "Offline", durch ? "ok" : "err");
   }
 }
@@ -13761,8 +13769,14 @@ async function syncStart(){
       if (autor && autor !== S.me) continue;
       dirty.add(`${b}:${id}`);
     }
-  for (const a of S.arrows) dirty.add(`arrow:${a.id}`);
-  for (const id of Object.keys(S.gone)) dirty.add(`gone:${id}`);
+  /* Pfeile und Grabsteine tragen ihren Verfasser nicht im Schluessel,
+     sondern in der Zeile - autorVon() oben laeuft bei ihnen ins Leere.
+     Ohne diese Pruefung schiebt jeder Client alle FREMDEN Pfeile und
+     Grabsteine erneut hoch. Seit die Datenbank einen Pfeil seinem Zeichner
+     zuordnet, gaebe das bei jedem Verbinden eine Reihe Ablehnungen. */
+  for (const a of S.arrows) if (a.by === S.me) dirty.add(`arrow:${a.id}`);
+  for (const id of Object.keys(S.gone))
+    if (S.gone[id] && S.gone[id].by === S.me) dirty.add(`gone:${id}`);
   syncTimer = setInterval(async ()=>{ await syncPush(); await syncPull(); }, 3500);
   await syncPull(); await syncPush();
   toast(`Connected as ${ich.name || ich.player}`);
