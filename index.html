@@ -872,7 +872,8 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
     <div id="forces" title="Your clan's forces — how many assault teams of each kind, and what they carry. Click for the full depot."></div>
     <div id="top-right">
       <button class="btn" id="b-clan">Clan</button>
-      <button class="btn" id="b-faction" title="The same register, our half">Our side</button>
+      <button class="btn" id="b-faction"
+        title="Everyone fighting for your faction — the same register, your half">Allies</button>
       <button class="btn" id="b-arms">Arsenal</button>
       <button class="btn" id="b-note" title="Your own notebook — encrypted, nobody else can read it">Notebook</button>
       <button class="btn" id="b-intel">Intel</button>
@@ -1547,6 +1548,41 @@ const anonKennung = () => {
 /* Aus dem Passwort eine Kennung, mit demselben Verfahren wie das Notizbuch.
    Das Salz ist fest und oeffentlich - es soll hier nur zwei Clans mit
    demselben Passwort auseinanderhalten, nicht ein Geheimnis sein. */
+/* ---- Der Zeuge ------------------------------------------------------
+   Die Soldatenliste traegt ihren Besitzer mit Absicht nicht im Schluessel -
+   sonst waere sie nicht anonym. Damit fehlte ihr aber auch jeder Schutz:
+   gemessen konnte ein beliebiges Mitglied die Liste eines anderen leeren.
+
+   Der Zeuge loest beides. Er wird wie die anonyme Kennung aus dem Passwort
+   abgeleitet, nur mit anderem Salz - und er ist laenger, weil er ein
+   Geheimnis ist und die Kennung nicht.
+
+   Beim Schreiben geht er im Feld "z" mit. Der Ausloeser in der Datenbank
+   nimmt ihn aus dem Wert heraus und legt ihn in eine Spalte, die fuer
+   niemanden ausser dem Server lesbar ist. Wer eine fremde Zeile
+   ueberschreiben will, muesste denselben Zeugen vorlegen: er kann ihn nicht
+   ausrechnen (dazu braeuchte er das Passwort) und nicht abschreiben (die
+   Spalte ist gesperrt).
+
+   Was der Server dabei lernt: nichts. Er vergleicht zwei undurchsichtige
+   Zeichenketten. */
+const ZEUGE_ID = "hng-warmap-zeuge";
+
+async function zeugeAusPasswort(passwort){
+  const enc = new TextEncoder();
+  const k = await crypto.subtle.importKey("raw", enc.encode(passwort), "PBKDF2",
+                                          false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    {name:"PBKDF2", salt: enc.encode("hng-warmap|zeuge|v1"), iterations: 310000,
+     hash:"SHA-256"}, k, 256);
+  return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2,"0")).join("");
+}
+async function zeugeFestlegen(passwort){
+  if (!passwort) return;
+  try { schreib(ZEUGE_ID, await zeugeAusPasswort(passwort)); } catch(e){}
+}
+const zeugeKennung = () => lies(ZEUGE_ID, null);
+
 async function anonAusPasswort(passwort){
   const enc = new TextEncoder();
   const k = await crypto.subtle.importKey("raw", enc.encode(passwort), "PBKDF2",
@@ -1563,16 +1599,25 @@ async function anonFestlegen(passwort){
   let neu;
   try { neu = await anonAusPasswort(passwort); } catch(e){ return; }
   const alt = lies(ANON_ID, null) || ((CFG && CFG.code) ? anonAusCode(CFG.code) : null);
-  if (alt === neu){ schreib(ANON_ID, neu); return; }
+  /* Gleiche Kennung heisst: dasselbe Passwort wie beim letzten Mal. Der
+     Zeuge muss trotzdem gesetzt werden - sonst haette ihn nur, wer sein
+     Passwort einmal gewechselt hat, und alle anderen schrieben ohne. */
+  if (alt === neu){ schreib(ANON_ID, neu); await zeugeFestlegen(passwort); return; }
   schreib(ANON_ID, neu);
   S.anon ||= {};
   const inhalt = alt ? anonSoldaten(alt) : [];
   if (inhalt.length){
-    S.anon[neu] = {v: inhalt, t: jetzt()};
-    S.anon[alt] = {v: null, t: jetzt()};     // Grabstein, sonst kaeme die Zeile zurueck
+    /* Der Zeuge des NEUEN Passworts fuer die neue Zeile - und der ALTE fuer
+       den Grabstein, denn die alte Zeile gehoert noch dem alten Zeugen. */
+    const zNeu = await zeugeAusPasswort(passwort).catch(() => null);
+    const zAlt = zeugeKennung();
+    S.anon[neu] = zNeu ? {v: inhalt, t: jetzt(), z: zNeu} : {v: inhalt, t: jetzt()};
+    S.anon[alt] = zAlt ? {v: null, t: jetzt(), z: zAlt} : {v: null, t: jetzt()};
     dirty.add(`anon:${neu}`); dirty.add(`anon:${alt}`);
     save();
   }
+  /* Erst jetzt umstellen: der Grabstein oben brauchte noch den alten. */
+  await zeugeFestlegen(passwort);
 }
 const anonSoldaten = k => soldatenListe(S.anon && S.anon[k] && S.anon[k].v);
 /* Soldaten liegen IMMER anonym. Das war einmal ein Schalter, den man
@@ -1604,7 +1649,11 @@ function anonSchreiben(liste){
   const k = anonKennung(), l = soldatenListe(liste);
   /* Kein by, kein n: was hier steht, traegt keinen Verfasser. Deshalb zieht
      auch der Kennungswechsel beim Verbinden nichts daran nach. */
-  S.anon[k] = {v: l.length ? l : null, t: jetzt()};
+  /* Der Zeuge geht mit. Ohne ihn nimmt die Datenbank die Zeile nur an,
+     solange noch niemand sie beansprucht hat. */
+  const z = zeugeKennung();
+  S.anon[k] = z ? {v: l.length ? l : null, t: jetzt(), z}
+                : {v: l.length ? l : null, t: jetzt()};
   dirty.add(`anon:${k}`); save();
 }
 
@@ -6891,7 +6940,7 @@ function intelDialog(tab, seite){
       <button data-tab="gaps"    aria-pressed="false">Gaps</button>
       <button data-tab="when"    aria-pressed="false">When</button>
       <button data-tab="spots"   aria-pressed="false">Sightings</button>
-      <button data-tab="scout"   aria-pressed="false">Who found it</button>
+      <button data-tab="scout"   aria-pressed="false">Scouts</button>
     </div>
     <div class="dlg-b">
       <div class="tabp on" data-tab="clans">
@@ -13661,7 +13710,7 @@ document.getElementById("b-war").addEventListener("click", ()=>{
             placeholder="e.g. 1940 The Start_112" ${leiter?"":"disabled"}>
         </div>
         <div class="row" style="align-items:center">
-          <span style="font-size:12px;color:var(--dim);width:74px">Our side</span>
+          <span style="font-size:12px;color:var(--dim);width:74px">Faction</span>
           <div class="own4" style="flex:1">
             ${FACTIONS.map(q=>`<button data-cf="${q.id}" style="--f:${q.color}"
               aria-pressed="${clanFaktion()===q.id}" ${leiter?"":"disabled"}>${q.tag}</button>`).join("")}
@@ -13811,7 +13860,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 51ce3525f7</span></p></div>
+         installation. <span style="color:var(--dim2)">· build f565a070bb</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -13854,7 +13903,8 @@ document.getElementById("b-help").addEventListener("click", ()=>{
         <div class="note" style="margin-top:0"><b>Read screenshot</b> sets every town's owner from
           one war-map picture, zoomed all the way out.</div>
         <div class="note"><b>Intel</b> (<kbd>I</kbd>): clans, players, their teams, sightings.
-          Names match loosely. <b>Our side</b> is the same window, our half.</div>
+          Names match loosely. <b>Allies</b> is the same window, narrowed to your own
+          faction.</div>
         <div class="note"><b>Clan</b> (<kbd>C</kbd>) is what we own: the depot, how it grew, who
           carries which share, what is in the field, reinforcement requests, and the ranks.</div>
         <div class="note"><b>Your depot</b> survives a new war. You set it up once and afterwards
@@ -14002,6 +14052,10 @@ function stempelZaehmen(wert){
    weg. Vorher gewann eine Zeile mit dem Jahr 2100 fuer immer, und fuer die
    meisten Toepfe gibt es keinen Loeschweg. */
 function applyRemote(key, val){
+  /* Der Server schickt den Zeugen nie zurueck - er steht in einer gesperrten
+     Spalte. Sollte doch einer im Wert stehen (alte Zeile, eigener Nachhall),
+     hat er im Speicher nichts verloren. */
+  if (val && typeof val === "object" && "z" in val) delete val.z;
   /* Faengt nur noch, was ohne Server hereinkommt: Altzeilen von vor dieser
      Aenderung, eingelesene Dateien, geteilte Verweise. */
   stempelZaehmen(val);
