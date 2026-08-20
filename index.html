@@ -3333,16 +3333,28 @@ function lineHit(sx, sy){
   }
   return null;
 }
-/* Alles unter meta: bindet den ganzen Clan - Seite, Krieg, Startstaedte,
-   Befehl, Beschriftungen. Es gibt keinen persoenlichen meta-Schluessel.
-   Frueher liess die Datenbank sie durch und die Seite gatterte nur einen
-   Teil: wer nicht fuehrte, aenderte etwas, sah es lokal, und der Abgleich
-   warf es danach stillschweigend weg.
-   Die Pruefung steht hier und nicht an den sieben Aufrufstellen, damit sie
-   auch fuer meta-Schluessel gilt, die es noch nicht gibt.
-   Ohne Anschluss ist istLeader() wahr - Alleinbetrieb bleibt unberuehrt. */
+/* Alles unter meta: bindet mehr als eine Person - aber nicht alles dasselbe.
+   Der KRIEG gehoert dem Verwalter, der CLAN dem Leiter.
+
+   Warum der Krieg nicht beim Leiter bleibt: bei einem Clan faellt es nicht
+   auf, bei mehreren waere es fatal. meta:epoch gilt pro Raum, und ein
+   Leiter koennte damit den Krieg fuer alle beenden.
+
+   Die Liste steht hier EINMAL und wird an beiden Stellen benutzt - zwei
+   getrennte Aufzaehlungen laufen sonst irgendwann auseinander. Sie
+   entspricht der Regel in der Datenbank; die Seite zeigt nur, was dort
+   ohnehin gilt. Wer die Seite bearbeitet, kommt nicht daran vorbei.
+
+   Ohne Anschluss sind istLeader() und istAdmin() wahr - Alleinbetrieb
+   bleibt unberuehrt. */
+const META_VERWALTER = ["epoch", "war", "start"];
 function setMeta(k, v){
-  if (!istLeader()){
+  if (META_VERWALTER.includes(k)){
+    if (!istAdmin()){
+      toast("That belongs to the war itself — only an admin can change it.");
+      return false;
+    }
+  } else if (!istLeader()){
     toast("That setting binds the whole clan — only the leader can change it.");
     return false;
   }
@@ -3384,8 +3396,10 @@ const setStartStaedte = o => setMeta("start", o);
 const KRIEG_BLEIBT = ["depot", "roster", "edep", "meta"];
 function neuerKrieg(){
   /* Ein neuer Krieg legt alles still, was geschrieben wurde. Das ist der
-     folgenschwerste Knopf im Werkzeug und gehoert deshalb dem Leiter. */
-  if (!istLeader()){ toast("Starting a new war is the leader's call."); return; }
+     folgenschwerste Knopf im Werkzeug - und er gehoert dem VERWALTER, nicht
+     dem Leiter. Bei einem Clan ist das dasselbe; bei mehreren koennte ein
+     Leiter sonst den Krieg fuer alle beenden. */
+  if (!istAdmin()){ toast("Starting a new war is the admin's call."); return; }
   const linien = liveLines().map(([id]) => id);
   const briefe = livePosts().map(([id]) => id);
   const zonen  = liveAreas().map(([id]) => id);
@@ -13695,10 +13709,10 @@ const IMPORT_HTML = `
       </details>`;
 
 document.getElementById("b-war").addEventListener("click", ()=>{
-  /* Seite, Kriegsname und Startstadt gelten fuer alle. Wer nicht fuehrt,
-     soll sie sehen und nicht verstellen koennen - ein abgeblendetes Feld
-     ist ehrlicher als ein Knopf, der nachher nichts bewirkt. */
-  const leiter = istLeader();
+  /* Zwei Stufen in einem Fenster: Clanname und Seite gehoeren dem Leiter,
+     Kriegsname und Startstadt dem Verwalter. Abgeblendete Felder sind
+     ehrlicher als Knoepfe, die nachher nichts bewirken. */
+  const leiter = istLeader(), verw = istAdmin();
   openDlg(`
     <div class="dlg-h"><h2>War</h2>
       <p>Which side the clan plays, where it starts, and when a new war begins.</p></div>
@@ -13712,7 +13726,7 @@ document.getElementById("b-war").addEventListener("click", ()=>{
         <div class="row" style="align-items:center">
           <span style="font-size:12px;color:var(--dim);width:74px">War</span>
           <input type="text" id="set-war" value="${esc(warName())}" style="flex:1"
-            placeholder="e.g. 1940 The Start_112" ${leiter?"":"disabled"}>
+            placeholder="e.g. 1940 The Start_112" ${verw?"":"disabled"}>
         </div>
         <div class="row" style="align-items:center">
           <span style="font-size:12px;color:var(--dim);width:74px">Faction</span>
@@ -13720,11 +13734,13 @@ document.getElementById("b-war").addEventListener("click", ()=>{
             ${FACTIONS.map(q=>`<button data-cf="${q.id}" style="--f:${q.color}"
               aria-pressed="${clanFaktion()===q.id}" ${leiter?"":"disabled"}>${q.tag}</button>`).join("")}
           </div>
-          <button class="btn" id="set-save" ${leiter?"":"disabled"}>Save</button>
+          <button class="btn" id="set-save" ${(leiter||verw)?"":"disabled"}>Save</button>
         </div>
         <div class="note" style="font-size:11px">Which side the clan plays this war. The
           <b>Arsenal</b> then only offers what your people can buy.${leiter?"":`
-          <br><b>Read-only for you</b> — this binds the whole clan, so it is the leader's to set.`}</div>
+          <br><b>Read-only for you</b> — this binds the whole clan, so it is the leader's to set.`}${
+          verw?"":`<br>The <b>war name</b> and the <b>start town</b> belong to the war itself and
+          are the admin's to set.`}</div>
       </div>
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;flex-direction:column;gap:8px">
         <span style="font-size:12px;color:var(--dim)">Start town</span>
@@ -13865,7 +13881,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build bae1125098</span></p></div>
+         installation. <span style="color:var(--dim2)">· build cc317bc784</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
