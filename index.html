@@ -11217,7 +11217,14 @@ function zwInhalt(k){
       <div class="note" style="margin-top:0">Your code then lies unlocked in this browser —
         fine on your own machine, not on a shared one.</div>
       <button class="btn" id="zr-aus">Log out</button>
-      <div class="note">Nothing is lost: next time your password is enough.</div>`;
+      <div class="note">Nothing is lost: next time your password is enough.</div>
+      <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:9px">
+        <button class="btn danger" id="zr-frisch" style="font-size:11.5px">Start fresh on this
+          computer</button>
+        <div class="note">Throws away everything this browser holds for this account and pulls it
+          back from the server. A backup file is written first. Use it if this browser was used
+          by somebody else before you — their map could still be sitting here under your name.</div>
+      </div>`;
   }
   return "";
 }
@@ -11226,6 +11233,27 @@ function zwVerdrahten(k){
   const el = document.getElementById("zw");
   el.querySelectorAll('input[name="thema"]').forEach(r =>
     r.addEventListener("change", ()=>{ if (r.checked) themaSetzen(r.value); }));
+  el.querySelector("#zr-frisch")?.addEventListener("click", ()=>{
+    if (!confirm("Throw away everything this browser holds for this account?\n\n"
+               + "Depot, arsenal, the player register, the map — all of it. A backup file is "
+               + "written first, and whatever lives on the server comes back on the next "
+               + "connect. Only what was never synced is gone for good.")) return;
+    sicherungAnlegen("start fresh");
+    /* Auch den beiseitegelegten Stand dieses Kontos - sonst kaeme er beim
+       naechsten Wechsel zurueck. */
+    try {
+      if (S.konto) localStorage.removeItem(KONTO_PLATZ(S.konto.room, S.konto.player));
+    } catch(e){}
+    const konto = S.konto, ich = S.me, nm = S.name;
+    S = Object.assign(neu(), {me: ich, name: nm, konto});
+    dirty.clear();
+    lastSeen = "1970-01-01T00:00:00Z";
+    try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e){}
+    toast("Cleared — pulling everything back from the server.");
+    /* Neu laden ist ehrlicher als nachzuzeichnen: so ist sicher nichts von
+       vorher noch im Speicher. */
+    setTimeout(() => location.reload(), 600);
+  });
   el.querySelector("#zr-zwei")?.addEventListener("change", ev => {
     LAY.zwei = ev.target.checked; laySpeichern(); spaltenAnwenden();
   });
@@ -14016,7 +14044,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 2715336fdb</span></p></div>
+         installation. <span style="color:var(--dim2)">· build dcfb1fe710</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
