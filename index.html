@@ -4785,6 +4785,308 @@ function spurTransform(mk, punkte, tr0, weit){
 /* sHint - der Massstab, den der geeichte Zoomregler des Spiels erwarten
    laesst (Bildpunkte je Karteneinheit). Ohne ihn wird wie bisher blind
    ueber das Fuenffache gesucht. */
+/* ---------------------------------------------------------------------
+   Die Sternenkarte: die Lage aus den Stadtscheiben bestimmen.
+
+   Warum es die alte Suche nicht konnte, gemessen und im Pruefstand
+   festgehalten: sie setzt fuer jeden Massstab den Schwerpunkt der farbigen
+   Bildpunkte auf den Schwerpunkt ALLER 1438 Staedte. Zeigt das Bild nur
+   einen Ausschnitt, ist das der Schwerpunkt der SICHTBAREN Staedte - und der
+   liegt woanders, bis zu 3100 Bildpunkte. Ihre Nachsuche reicht ueber gut
+   hundert.
+
+   Die Sternenkarte kennt keinen Startversatz. Sie findet die Scheiben, holt
+   sich den Massstab aus deren Durchmesser und laesst dann jedes Paar aus
+   Scheibe und Katalogstadt EINEN Kartenursprung vorschlagen. Der haeufigste
+   gewinnt. Geprueft wird er von den Versorgungslinien.                    */
+
+/* Gemessen an einem Bild mit exakt bekannter Lage: eine Stadtscheibe ist
+   3,97 Karteneinheiten breit, bei jedem Zoom (neun Staedte, Streuung 1 %). */
+const SCHEIBE_EINH = 3.97;
+const STERN_KANTEN_MIN = 0.5;   /* Katalogkanten je zugeordneter Stadt */
+const STERN_ANTEIL_MIN = 0.25;  /* so viele gefundene Scheiben muessen sitzen */
+
+/* Ein Gitter ueber den Katalog. Ohne das kostet jede Zuordnung 1438
+   Vergleiche je Gipfel, und sie laeuft neunhundertmal je Einrastung.
+   Die Zellenweite ist grosszuegig: bei zehn Karteneinheiten liegen im
+   dichtesten Teil Europas eine Handvoll Staedte in einer Zelle. */
+const STERN_ZELLE = 10;
+let STERN_GITTER = null;
+function sternGitter(punkte){
+  if (STERN_GITTER && STERN_GITTER.n === punkte.length) return STERN_GITTER;
+  let x0=Infinity, y0=Infinity, x1=-Infinity, y1=-Infinity;
+  for (const p of punkte){
+    if (p[0]<x0) x0=p[0]; if (p[0]>x1) x1=p[0];
+    if (p[1]<y0) y0=p[1]; if (p[1]>y1) y1=p[1];
+  }
+  const bx = Math.max(1, Math.ceil((x1-x0)/STERN_ZELLE)+1);
+  const by = Math.max(1, Math.ceil((y1-y0)/STERN_ZELLE)+1);
+  const zellen = new Array(bx*by);
+  for (let i=0; i<punkte.length; i++){
+    const cx = Math.floor((punkte[i][0]-x0)/STERN_ZELLE);
+    const cy = Math.floor((punkte[i][1]-y0)/STERN_ZELLE);
+    const k = cy*bx + cx;
+    (zellen[k] || (zellen[k] = [])).push(i);
+  }
+  return (STERN_GITTER = {n: punkte.length, x0, y0, bx, by, zellen});
+}
+
+/* Die Kanten einmal als Satz - fuer den Zeugen unten. */
+let STERN_KANTEN = null;
+function sternKantenSatz(){
+  if (STERN_KANTEN) return STERN_KANTEN;
+  STERN_KANTEN = new Set();
+  for (const [a,b] of (MAP.e||[])) STERN_KANTEN.add(Math.min(a,b)*10000 + Math.max(a,b));
+  return STERN_KANTEN;
+}
+
+/* Summenbild: damit kostet die Summe ueber ein Quadrat vier Zugriffe statt
+   seiner Flaeche. Ohne das waere die Scheibensuche nicht bezahlbar. */
+function sternSummen(m, W, H){
+  const I = new Int32Array((W+1)*(H+1));
+  const W1 = W+1;
+  for (let y=0; y<H; y++){
+    let z = 0;
+    const zeile = y*W, unten = (y+1)*W1, oben = y*W1;
+    for (let x=0; x<W; x++){
+      if (m[zeile+x]) z++;
+      I[unten + x + 1] = I[oben + x + 1] + z;
+    }
+  }
+  return I;
+}
+
+/* Wo sitzt eine Scheibe vom Radius r?
+   Eine Scheibe ist innen voll und aussen herum leer. Eine Linie ist innen
+   auch voll, aussen herum aber in zwei Richtungen ebenfalls - das trennt.
+
+   Die Kastengroessen sind gemessen, nicht geraten. Beim ersten Versuch war
+   der Kranz 3r weit; auf dieser Karte stehen Nachbarstaedte aber nur rund
+   2,5 Durchmesser auseinander, also verschluckte der Kranz die NACHBARN und
+   jede echte Scheibe fiel durch. Beim richtigen Radius fand er weniger als
+   fuenf Scheiben - die richtige Stufe wurde nie geprueft. */
+/* Die farbigen Punkte einmal einsammeln - die Scheibensuche braucht nur
+   diese, und sie laeuft vierzigmal. */
+function sternFarbliste(m, W, H, rand){
+  const aus = [];
+  for (let y=rand; y<H-rand-1; y++){
+    const zeile = y*W;
+    for (let x=rand; x<W-rand-1; x++) if (m[zeile+x]) aus.push(zeile+x);
+  }
+  return aus;
+}
+function sternScheiben(m, I, W, H, r, schwelle, liste){
+  const a = Math.max(1, Math.round(0.60*r));      /* Kern, ganz innen */
+  const b = Math.max(a+1, Math.round(1.15*r));    /* Kranz beginnt aussen */
+  const c = Math.max(b+1, Math.round(1.60*r));    /* und endet vor dem Nachbarn */
+  if (2*c + 2 >= Math.min(W, H)) return [];
+  const W1 = W+1;
+  const kernF = 1/((2*a+1)*(2*a+1));
+  const kranzF = 1/Math.max(1, (2*c+1)*(2*c+1) - (2*b+1)*(2*b+1));
+  const kand = [];
+  /* Eine Scheibenmitte ist immer farbig - deshalb nur diese Punkte. */
+  for (let q=0; q<liste.length; q++){
+    const idx = liste[q], y = (idx/W)|0, x = idx - y*W;
+    if (x < c || y < c || x >= W-c-1 || y >= H-c-1) continue;
+    const kern = (I[(y+a+1)*W1 + x+a+1] - I[(y-a)*W1 + x+a+1]
+                - I[(y+a+1)*W1 + x-a]   + I[(y-a)*W1 + x-a]) * kernF;
+    /* Der Kranz kann den Wert nur senken; ohne vollen Kern also zwecklos. */
+    if (kern < schwelle) continue;
+    const innen  = I[(y+b+1)*W1 + x+b+1] - I[(y-b)*W1 + x+b+1]
+                 - I[(y+b+1)*W1 + x-b]   + I[(y-b)*W1 + x-b];
+    const aussen = I[(y+c+1)*W1 + x+c+1] - I[(y-c)*W1 + x+c+1]
+                 - I[(y+c+1)*W1 + x-c]   + I[(y-c)*W1 + x-c];
+    const wert = kern - 1.3*(aussen - innen)*kranzF;
+    if (wert > schwelle) kand.push([wert, x, y]);
+  }
+  if (!kand.length) return [];
+  /* Gipfelunterdrueckung: der staerkste zuerst, danach nichts mehr in
+     seiner Naehe. */
+  kand.sort((p,q)=>q[0]-p[0]);
+  const mind = Math.max(1, 1.2*r), m2 = mind*mind, aus = [];
+  for (const [w,x,y] of kand){
+    let frei = true;
+    for (const p of aus){
+      const dx = p[0]-x, dy = p[1]-y;
+      if (dx*dx + dy*dy < m2){ frei = false; break; }
+    }
+    if (frei){ aus.push([x,y,w]); if (aus.length >= 400) break; }
+  }
+  return aus;
+}
+
+/* Die Abstimmung - und zwar in KARTENEINHEITEN.
+   Bildpunkte waeren falsch: hineingezoomt ist der Versatz einige tausend
+   Punkte gross, und ein Prozent Massstabsfehler streut die richtigen
+   Stimmen dann ueber ein halbes Dutzend Behaelter. Nach dem Teilen durch
+   den Massstab wirkt derselbe Fehler nur noch ueber die sichtbare Breite. */
+/* Ein Zaehlfeld statt einer Map: derselbe Vorgang, aber ohne Hashen und
+   ohne dass fuer jede Zelle ein Objekt entsteht. Geleert wird ueber die
+   Liste der beruehrten Zellen, nicht ueber das ganze Feld.
+   Genau werden muss die Mitte hier nicht - gleich danach werden Massstab
+   und Versatz aus den Paaren neu bestimmt. */
+let STERN_TOPF = null, STERN_BERUEHRT = null;
+function sternStimmen(P, punkte, s, weite, wieviele, W, H){
+  const g = sternGitter(punkte);
+  /* Wie weit reicht ein Vorschlag? Er ist Bildpunkt/Massstab minus
+     Katalogpunkt, also von "minus groesste Katalogkoordinate" bis
+     "sichtbare Breite minus kleinste". Das ist der ganze Feldbedarf.
+     Beim ersten Anlauf stand hier ein falscher Ursprung, und samtliche
+     Stimmen fielen aus dem Feld - das Geraet fand danach gar nichts mehr. */
+  const maxX = g.x0 + g.bx*STERN_ZELLE, maxY = g.y0 + g.by*STERN_ZELLE;
+  const ux = -maxX - weite, uy = -maxY - weite;
+  const nx = Math.ceil((W/s + maxX - g.x0 + 2*weite)/weite) + 2;
+  const ny = Math.ceil((H/s + maxY - g.y0 + 2*weite)/weite) + 2;
+  const anz = nx*ny;
+  if (!STERN_TOPF || STERN_TOPF.length < anz){
+    STERN_TOPF = new Int32Array(anz); STERN_BERUEHRT = new Int32Array(anz);
+  }
+  const topf = STERN_TOPF, beruehrt = STERN_BERUEHRT;
+  let nb = 0;
+  for (let i=0; i<P.length; i++){
+    const mx = P[i][0]/s, my = P[i][1]/s;
+    for (let j=0; j<punkte.length; j++){
+      const bx = ((mx - punkte[j][0] - ux)/weite + 0.5)|0;
+      const by = ((my - punkte[j][1] - uy)/weite + 0.5)|0;
+      if (bx < 0 || by < 0 || bx >= nx || by >= ny) continue;
+      const k = by*nx + bx;
+      if (topf[k] === 0) beruehrt[nb++] = k;
+      topf[k]++;
+    }
+  }
+  const alle = [];
+  for (let q=0; q<nb; q++){
+    const k = beruehrt[q];
+    if (topf[k] >= 3) alle.push([topf[k], k]);
+    topf[k] = 0;
+  }
+  alle.sort((p,q)=>q[0]-p[0]);
+  return alle.slice(0, wieviele).map(([z,k]) => {
+    const by = (k/nx)|0, bx = k - by*nx;
+    return [bx*weite + ux, by*weite + uy, z];
+  });
+}
+
+/* Zuordnen, und zwar EINEINDEUTIG. Ohne das war der gefaehrlichste Fehler
+   moeglich: eine falsche Lage meldete zehn von vierzehn Gipfeln zugeordnet -
+   es waren aber nur zwei verschiedene Staedte, auf die zehn Gipfel gemeinsam
+   einrasteten. Vergeben wird gierig nach Abstand. */
+function sternZuordnen(P, punkte, s, ox, oy, tol){
+  const t2 = tol*tol, vor = [];
+  const g = sternGitter(punkte);
+  /* Wie weit reicht die Toleranz im Gitter? Meist eine Zelle, bei sehr
+     grossen Scheiben zwei. */
+  const tolK = tol/s, rw = Math.max(1, Math.ceil(tolK/STERN_ZELLE));
+  for (let j=0; j<P.length; j++){
+    const mx = (P[j][0]-ox)/s, my = (P[j][1]-oy)/s;
+    const cx = Math.floor((mx-g.x0)/STERN_ZELLE), cy = Math.floor((my-g.y0)/STERN_ZELLE);
+    /* Nur die Nachbarzellen durchsehen statt aller 1438 Staedte. */
+    for (let dy=-rw; dy<=rw; dy++) for (let dx=-rw; dx<=rw; dx++){
+      const zx = cx+dx, zy = cy+dy;
+      if (zx < 0 || zy < 0 || zx >= g.bx || zy >= g.by) continue;
+      const zelle = g.zellen[zy*g.bx + zx];
+      if (!zelle) continue;
+      for (const i of zelle){
+        const ex = punkte[i][0]*s + ox - P[j][0];
+        const ey = punkte[i][1]*s + oy - P[j][1];
+        const d = ex*ex + ey*ey;
+        if (d < t2) vor.push([d,j,i]);
+      }
+    }
+  }
+  vor.sort((p,q)=>p[0]-q[0]);
+  const gWeg = new Set(), sWeg = new Set(), paare = [];
+  for (const [,j,i] of vor){
+    if (gWeg.has(j) || sWeg.has(i)) continue;
+    gWeg.add(j); sWeg.add(i); paare.push([j,i]);
+  }
+  return paare;
+}
+
+/* Massstab und Versatz aus den Paaren neu bestimmen. Damit muss der Radius
+   nicht genau stimmen - nur nah genug, dass die Abstimmung zusammenfindet. */
+function sternNachrechnen(P, punkte, paare){
+  const n = paare.length;
+  if (n < 3) return null;
+  let sx=0, sy=0, sX=0, sY=0;
+  for (const [j,i] of paare){
+    sx += punkte[i][0]; sy += punkte[i][1];
+    sX += P[j][0];      sY += P[j][1];
+  }
+  const mx=sx/n, my=sy/n, mX=sX/n, mY=sY/n;
+  let oben=0, unten=0;
+  for (const [j,i] of paare){
+    const ax = punkte[i][0]-mx, ay = punkte[i][1]-my;
+    oben  += ax*(P[j][0]-mX) + ay*(P[j][1]-mY);
+    unten += ax*ax + ay*ay;
+  }
+  if (unten < 1e-9) return null;
+  const s = oben/unten;
+  if (!(s > 0)) return null;
+  return {s, ox: mX - s*mx, oy: mY - s*my};
+}
+
+/* Der zweite Zeuge: die Versorgungslinien. Bei einer richtigen Lage sind die
+   zugeordneten Staedte untereinander verbunden, bei einer falschen nicht.
+   Gemessen an acht Bildern: richtig 0,67 bis 1,40 Kanten je Stadt, falsch
+   0,00 bis 0,60. */
+function sternKantenmass(paare){
+  const st = [...new Set(paare.map(p=>p[1]))].sort((a,b)=>a-b);
+  if (st.length < 2) return 0;
+  const satz = sternKantenSatz();
+  let k = 0;
+  for (let a=0; a<st.length; a++)
+    for (let b=a+1; b<st.length; b++)
+      if (satz.has(st[a]*10000 + st[b])) k++;
+  return k/st.length;
+}
+
+/* opt.spanne - die zu erwartende Kartenbreite aus dem geeichten Zoomregler.
+   Damit schrumpft der Radiusfaecher von vierzig Stufen auf eine Handvoll. */
+function sternLage(mk, punkte, opt){
+  const o = opt || {};
+  const {m, W, H} = mk;
+  const I = sternSummen(m, W, H);
+  const liste = sternFarbliste(m, W, H, 2);
+  let rmin = 2.5, rmax = Math.min(60, Math.min(W,H)/7);
+  if (o.spanne > 0){
+    const rSoll = SCHEIBE_EINH * (W/o.spanne) / 2;
+    rmin = Math.max(2.0, rSoll*0.72);
+    rmax = Math.max(rmin*1.1, Math.min(Math.min(W,H)/7, rSoll*1.40));
+  }
+  if (rmax <= rmin) return null;
+  const stufen = Math.max(4, Math.min(40, Math.ceil(Math.log(rmax/rmin)/Math.log(1.085))));
+  let best = null;
+  for (let k=0; k<stufen; k++){
+    const r = rmin*Math.pow(rmax/rmin, stufen===1 ? 0 : k/(stufen-1));
+    const P = sternScheiben(m, I, W, H, r, 0.45, liste);
+    /* Ueber 250 Gipfeln ist es die Broesel-Gegend: zerfallene
+       Versorgungslinien, nie eine Lage. Und zum Abstimmen reichen die
+       staerksten 120 - mehr kippt keine Mehrheit. */
+    if (P.length < 5 || P.length > 250) continue;
+    const PS = P.length > 120 ? P.slice(0, 120) : P;
+    const s0 = 2*r/SCHEIBE_EINH, tol = Math.max(3, 0.5*r);
+    for (const [mx,my] of sternStimmen(PS, punkte, s0, 3.0, 4, W, H)){
+      let s=s0, ox=mx*s0, oy=my*s0;
+      let paare = sternZuordnen(P, punkte, s, ox, oy, tol);
+      for (let w=0; w<2; w++){
+        const nn = sternNachrechnen(P, punkte, paare);
+        if (!nn) break;
+        s = nn.s; ox = nn.ox; oy = nn.oy;
+        paare = sternZuordnen(P, punkte, s, ox, oy, tol);
+      }
+      const n = paare.length, anteil = n/P.length;
+      if (n < 5 || anteil < STERN_ANTEIL_MIN) continue;
+      const km = sternKantenmass(paare);
+      if (km < STERN_KANTEN_MIN) continue;      /* Veto der Versorgungslinien */
+      const wert = anteil*anteil*Math.sqrt(n)*km;
+      if (!best || wert > best.wert)
+        best = {wert, s, ox, oy, guete: anteil, treffer: n, ganz: P.length, kanten: km};
+    }
+  }
+  return best;
+}
+
 function findeTransform(mk, punkte, melde, sHint){
   const {m, W, H} = mk;
   const dichte = mk.n / (W*H);
@@ -4973,8 +5275,28 @@ function kartenAusBild(quelle, melde, opt){
        gilt sie fuer jede Arbeitsbreite - hier wird sie in den Massstab
        DIESES Arbeitsbildes umgerechnet. */
     const sSoll = o.spanne > 0 ? a.W / o.spanne : 0;
-    let tr = o.spur ? spurTransform(a.mk, punkte, trAusQuelle(o.spur, a))
-                    : findeTransform(a.mk, punkte, melde || (()=>{}), sSoll);
+    /* Erst die Sternenkarte. Sie kennt keinen Startversatz und rastet auch
+       hineingezoomt ein, wo die alte Suche strukturell versagt. Findet sie
+       nichts, laeuft alles wie bisher - deshalb steht sie davor und nicht
+       an ihrer Stelle. */
+    let tr = null;
+    if (o.spur) tr = spurTransform(a.mk, punkte, trAusQuelle(o.spur, a));
+    else {
+      /* Die Sternenkarte arbeitet auf einem kleineren Bild. Gemessen an
+         sechs Ansichten von weit bis nah ist sie bei 1100 Punkten genauso
+         treffsicher wie bei 1600 und dreimal schneller (330 statt 940 ms);
+         bei 800 kippen zwei davon. Die alte Suche bleibt bei voller Breite -
+         fuer sie ist gemessen, dass sie unter 1600 nicht mehr einrastet. */
+      const aS = a.W > 1250 ? maskeAus(quelle, F, STERN_BREITE) : a;
+      const st = aS ? sternLage(aS.mk, punkte, {spanne: o.spanne}) : null;
+      if (st){
+        const q = trZuQuelle({s: st.s, ox: st.ox, oy: st.oy}, aS);
+        tr = trAusQuelle(q, a);
+        tr.guete = st.guete; tr.stern = true;
+      } else {
+        tr = findeTransform(a.mk, punkte, melde || (()=>{}), sSoll);
+      }
+    }
     if (!tr){ letzterFehler = "no match — try the map zoomed further out"; continue; }
     let g = passungGuete(a.mk, punkte, tr);
     /* Sitzt die mitgefuehrte Lage nicht, war der Sprung vermutlich groesser
@@ -6423,6 +6745,8 @@ const WACHE_BREMSE = 150;
 const PEIL_TAKT = 200;
 const PEIL_BREITE = 800;
 const LOCK_BREITE = 1600;
+/* Arbeitsbreite der Sternenkarte - siehe die Messung bei kartenAusBild. */
+const STERN_BREITE = 1100;
 const ERNTE_MIN = 12;
 let wache = null;
 /* Was die Einpassung ueber die Lage der Karte im Spiel verraet: Massstab und
@@ -14146,7 +14470,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build fdb3b85a29</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c4d7129288</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
