@@ -6261,9 +6261,18 @@ function wacheTick(){
   wache.keinFix = false;
   if (res.fehler){
     wache.tr = null;
-    wache.meldung = res.fehler; wache.keinFix = true; radarSignal = 0;
+    /* Zwei sehr verschiedene Lagen, die vorher denselben Satz bekamen. Gab es
+       seit dem Start NIE eine Einpassung, ist der weitaus haeufigste Grund,
+       dass das falsche Fenster geteilt wurde. Riss sie ab, hilft Warten
+       wirklich. Fuenf Sekunden Schonfrist, damit eine ladende Karte nicht zu
+       Unrecht beschuldigt wird. */
+    wache.meldung = (!wache.jeGefixt && wache.laeufe > 25)
+      ? "No war map in this window — is the game window the one being shared?"
+      : res.fehler;
+    wache.keinFix = true; radarSignal = 0;
     wacheAnzeigen(); if (radarOffen) radarFrisch(); return;
   }
+  wache.jeGefixt = true;
   wache.tr = res.trQ; wache.feld = res.feld; wache.guete = res.guete;
   const anz = Object.keys(res.erg.besitz).length;
   /* Frueher standen hier vierzig Staedte als Untergrenze - das schloss jede
@@ -9764,7 +9773,34 @@ async function sbAnzeigen(datei){
     im.src = datei instanceof Blob ? URL.createObjectURL(datei) : datei;
   });
   const r = scoreboardLesen(bild);
-  if (r.fehler || !r.tabellen || !r.tabellen.length){ box.style.display = "none"; return; }
+  /* Sagen, WARUM nichts gelesen wurde. Vorher verschwand die Anzeige hier
+     stillschweigend, und der Nutzer wusste nicht, ob das Werkzeug kaputt ist,
+     ob er das falsche Fenster geteilt hat oder ob das Bild nichts hergab.
+
+     Der Leser liefert zwei unterscheidbare Faelle, gemessen an sechs
+     erfundenen Fehlfenstern: entweder ist gar nichts Scoreboard-foermiges im
+     Bild (r.fehler), oder die Form ist da, aber keine einzige Spielerzeile
+     laesst sich lesen (tabellen leer). Der zweite Fall ist der gefaehrliche -
+     da SIEHT es nach Scoreboard aus. */
+  if (r.fehler || !r.tabellen || !r.tabellen.length){
+    const formGefunden = !r.fehler;
+    box.style.display = "";
+    box.innerHTML = `
+      <div style="border:1px solid var(--line);border-left:3px solid var(--dim2);
+           border-radius:2px;padding:9px 11px;background:var(--panel2)">
+        <div style="font-family:var(--schmal);font-size:9.5px;letter-spacing:.09em;
+          color:var(--dim2);text-transform:uppercase">Nothing counted</div>
+        <div style="font-size:12px;color:var(--dim);margin-top:5px">${formGefunden
+          ? `Something scoreboard-shaped was found, but not a single player row could be
+             read. Most likely this is <b>not the game window</b> — or the scoreboard was
+             only partly visible.`
+          : `This is not the end-of-battle screen. Share the <b>game window</b> while the
+             scoreboard is up, and let it fill the window.`}</div>
+        <div class="note" style="margin-top:6px;font-size:11px">Nothing was written. A wrong
+          reading would be worse than none.</div>
+      </div>`;
+    return;
+  }
   SB_LETZTE = r;
   const zeile = t => {
     const f = t.fraktion != null ? FACTIONS[t.fraktion] : null;
@@ -13384,7 +13420,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c49fdf9062</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 702faa21f1</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
