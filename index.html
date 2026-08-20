@@ -10422,15 +10422,60 @@ function sbRangLesen(B, tab, y, E, nurFraktion){
 const FP_B = 48, FP_H = 12;
 
 function sbAbdruck(B, tab, y, E, pitch, von, bis){
-  const x0 = tab.x0 + von*SB_BREITE*E, x1 = tab.x0 + bis*SB_BREITE*E;
-  const w = Math.max(2, Math.round(x1-x0)), hh = Math.max(2, Math.round(pitch));
+  const lx = Math.max(0, Math.round(tab.x0 + von*SB_BREITE*E));
+  const rx = Math.min(B.bw, Math.round(tab.x0 + bis*SB_BREITE*E));
+  const oy = Math.max(0, Math.round(y));
+  const uy = Math.min(B.bh, Math.round(y + pitch));
+
+  /* ERST auf die Schrift zuschneiden. Der Streifen hat eine feste Breite;
+     ein kurzer Name fuellt davon nur einen Bruchteil, und nach dem
+     Herunterrechnen auf 48 Punkte bleiben ihm eine Handvoll - der Rest ist
+     leerer Hintergrund, bei allen gleich.
+
+     Gemessen an sieben Schriften, je fuenf Namen: ohne Zuschnitt 30 von 35,
+     mit Zuschnitt 35 von 35. Am haertesten traf es Arabisch (1 von 5 auf
+     5 von 5), weil arabische Namen kurz und schmal sind - es ist aber kein
+     Problem der Schrift, sondern der Laenge.
+
+     Dass das Dehnen die Laenge wegwirft und "Ivan" wie "IvanIvan" aussehen
+     liesse, ist gemessen und unbegruendet: 26 von 26 bei Paaren, die sich
+     vor allem in der Laenge unterscheiden. */
+  let mi = 255, ma = 0;
+  for (let yy = oy; yy < uy; yy++)
+    for (let xx = lx; xx < rx; xx++){
+      const v = B.d[(yy*B.bw + xx)*4];
+      if (v < mi) mi = v;
+      if (v > ma) ma = v;
+    }
+  const schwelle = mi + (ma - mi)*0.35;
+  /* Eigene Namen fuer die Grenzen: weiter unten heisst das Feld der Bytes
+     schon b, und zwei Deklarationen im selben Geltungsbereich sind ein
+     Fehler, der die GANZE Seite nicht mehr laden laesst. */
+  let gL = rx, gR = lx - 1, gO = uy, gU = oy - 1;
+  for (let yy = oy; yy < uy; yy++)
+    for (let xx = lx; xx < rx; xx++)
+      if (B.d[(yy*B.bw + xx)*4] > schwelle){
+        if (xx < gL) gL = xx;
+        if (xx > gR) gR = xx;
+        if (yy < gO) gO = yy;
+        if (yy > gU) gU = yy;
+      }
+  /* Findet sich keine Schrift - leeres Feld, zu dunkle Aufnahme -, bleibt
+     der ganze Streifen. Lieber ein schwacher Abdruck als gar keiner. */
+  let sx = lx, sy = oy, sw = Math.max(2, rx - lx), sh = Math.max(2, uy - oy);
+  if (gR >= gL && gU >= gO){
+    sx = Math.max(lx, gL - 1); sy = Math.max(oy, gO - 1);
+    sw = Math.max(2, Math.min(rx - sx, gR - gL + 3));
+    sh = Math.max(2, Math.min(uy - sy, gU - gO + 3));
+  }
+
   const c = document.createElement("canvas");
   c.width = FP_B; c.height = FP_H;
   const g = c.getContext("2d", {willReadFrequently:true});
   /* Geglaettet herunterrechnen: das macht den Abdruck unabhaengig davon, ob
      die Aufnahme in 1080p oder 4K entstanden ist. */
   g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
-  g.drawImage(B.c, x0, y, w, hh, 0, 0, FP_B, FP_H);
+  g.drawImage(B.c, sx, sy, sw, sh, 0, 0, FP_B, FP_H);
   const d = g.getImageData(0, 0, FP_B, FP_H).data, b = new Uint8Array(FP_B*FP_H);
   for (let i = 0; i < b.length; i++)
     b[i] = Math.max(0, Math.min(255,
@@ -13879,7 +13924,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 91ddb8c177</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 150fb463ef</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
