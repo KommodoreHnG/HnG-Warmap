@@ -499,6 +499,18 @@ body.meld-modus{cursor:help}
   color:#4d7a56;font-size:26px;line-height:1;cursor:pointer;padding:2px 8px}
 .rd-zu:hover{color:#8fe6a2}
 /* Das Pult: Metall, und nur die Regler, die wirklich etwas tun. */
+/* Der virtuelle Zoomregler: dieselbe Form wie der im Spiel, damit man ihn
+   danebenhalten und vergleichen kann. */
+.rd-zoom{margin:2px 0 5px;padding:0 2px}
+.rd-zoom .spur{position:relative;height:8px;border-radius:4px;
+  background:#141a14;border:1px solid #24331f;overflow:visible}
+.rd-zoom .griff{position:absolute;top:-3px;width:9px;height:12px;border-radius:2px;
+  background:#cfe6c8;box-shadow:0 0 4px rgba(0,0,0,.7);transform:translateX(-4px);
+  transition:left .12s linear}
+.rd-zoom .eich{position:absolute;top:9px;width:1px;height:4px;background:#4c6b46}
+.rd-zoom .beschr{display:flex;justify-content:space-between;font-size:9px;
+  color:#5f7a63;margin-top:5px;letter-spacing:.06em}
+.rd-zoom.kalt .griff{background:#4a5548}
 .rd-pult{width:330px;background:linear-gradient(180deg,#25231d,#171612);
   border-left:2px solid #0c0f0b;padding:16px 18px;overflow-y:auto;
   display:flex;flex-direction:column;gap:15px;
@@ -5871,6 +5883,28 @@ function radarFrisch(){
     zaehl.textContent = L.laeuft && wache.zaehl ? wache.zaehl.join(" · ") : "—";
     zaehl.closest(".z").hidden = !(L.laeuft && wache.zaehl);
   }
+  /* Der Regler wird nur verschoben, nicht neu gebaut. Die Eichmarken
+     aendern sich selten - deshalb nur, wenn sich ihre Zahl geaendert hat. */
+  const feld = el.querySelector("[data-zoomfeld]");
+  if (feld){
+    const da = L.laeuft && wache.zoom !== null && wache.zoom !== undefined;
+    feld.hidden = !da;
+    feld.classList.toggle("kalt", !da);
+    const griff = feld.querySelector("[data-zoomgriff]");
+    if (griff && da) griff.style.left = Math.round(wache.zoom*100) + "%";
+    const marken = feld.querySelector("[data-zoomeich]");
+    if (marken && marken.childElementCount !== zoomEich.length){
+      marken.innerHTML = zoomEich.map(p =>
+        `<i class="eich" style="left:${Math.round(p.r*100)}%"></i>`).join("");
+    }
+    const stand = feld.querySelector("[data-zoomstand]");
+    if (stand){
+      const sp = da ? spanneAusRegler(wache.zoom) : null;
+      stand.textContent = zoomEich.length < 2 ? "not calibrated yet"
+        : (sp ? `${zoomEich.length} points · expects ${Math.round(sp)} wide`
+              : `${zoomEich.length} points learned`);
+    }
+  }
   const zoomA = el.querySelector("[data-gzoom]");
   if (zoomA){
     const da = L.laeuft && wache.zoom !== null && wache.zoom !== undefined;
@@ -5943,6 +5977,20 @@ function radarPult(){
       <div class="z"${laeuft && wache.zoom != null ? "" : " hidden"}><span>GAME ZOOM</span>
         <b data-gzoom>${laeuft && wache.zoom != null
           ? Math.round(wache.zoom*100)+" %" : "—"}</b></div>
+      <!-- Derselbe Regler wie im Spiel, zum Danebenhalten. Die kleinen
+           Striche darunter sind die Eichpunkte: ohne mindestens zwei kann
+           aus der Reglerstellung kein Massstab werden. -->
+      <div class="rd-zoom${laeuft && wache.zoom != null ? "" : " kalt"}"
+           data-zoomfeld${laeuft && wache.zoom != null ? "" : " hidden"}>
+        <div class="spur">
+          <div class="griff" data-zoomgriff
+               style="left:${Math.round((laeuft && wache.zoom != null ? wache.zoom : 0)*100)}%"></div>
+          <span data-zoomeich></span>
+        </div>
+        <div class="beschr"><span>far out</span>
+          <span data-zoomstand>${zoomEich.length < 2 ? "not calibrated yet"
+            : `${zoomEich.length} points learned`}</span><span>close in</span></div>
+      </div>
       <div class="z" style="font-size:11px;color:#5f7a63;border-top:1px solid #1d2a1d;
         margin-top:4px;padding-top:4px"><span>fix ${(PEIL_TAKT/1000).toFixed(1)} s ·
         data ${laeuft ? wache.sek : ERNTE_MIN} s · nothing kept</span><b data-alter>${
@@ -6057,7 +6105,19 @@ function breiteGriff(){
 }
 
 /* ---- Der Schirm ---- */
+/* Gebuendeltes Malen. Der Takt fordert fuenfmal je Sekunde ein neues Bild
+   an, der Bildschirm zeigt aber hoechstens sechzigmal eines - und mehrere
+   Anforderungen innerhalb desselben Bildes sind verschenkte Arbeit.
+   requestAnimationFrame fasst sie zusammen; das Malen passiert dann dort,
+   wo der Browser ohnehin zeichnet, statt mitten im Rechnen.
+   Alle bisherigen Aufrufer bleiben unveraendert. */
+let malAngemeldet = false, radarGrund = null;
 function radarZeichnen(){
+  if (!radarOffen || malAngemeldet) return;
+  malAngemeldet = true;
+  requestAnimationFrame(() => { malAngemeldet = false; radarMalen(); });
+}
+function radarMalen(){
   if (!radarOffen) return;
   const cv = document.getElementById("rd-cv");
   if (!cv) return;
@@ -6068,12 +6128,24 @@ function radarZeichnen(){
   const g = cv.getContext("2d");
   g.setTransform(dp, 0, 0, dp, 0, 0);
   /* Der Grund wird selbst gemalt, nicht vom Rahmen durchgelassen: so sieht
-     ein herausgezogenes Bild genauso aus wie das Fenster. */
-  const grund = g.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.hypot(W,H)/2);
-  grund.addColorStop(0, "#0e1d12");
-  grund.addColorStop(0.72, "#070d08");
-  grund.addColorStop(1, "#04070a");
-  g.fillStyle = grund; g.fillRect(0, 0, W, H);
+     ein herausgezogenes Bild genauso aus wie das Fenster.
+     Einen radialen Farbverlauf zu rechnen ist teuer, und er aendert sich nur
+     bei Groessenaenderung. Also einmal auf eine Nebenflaeche malen und
+     danach nur noch kopieren. */
+  if (!radarGrund || radarGrund.width !== W*dp || radarGrund.height !== H*dp){
+    radarGrund = document.createElement("canvas");
+    radarGrund.width = W*dp; radarGrund.height = H*dp;
+    const gg = radarGrund.getContext("2d");
+    gg.setTransform(dp, 0, 0, dp, 0, 0);
+    const grund = gg.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.hypot(W,H)/2);
+    grund.addColorStop(0, "#0e1d12");
+    grund.addColorStop(0.72, "#070d08");
+    grund.addColorStop(1, "#04070a");
+    gg.fillStyle = grund; gg.fillRect(0, 0, W, H);
+  }
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+  g.drawImage(radarGrund, 0, 0);
+  g.restore();
 
   const netz = sektoren(), st = sweepStand();
   const rand = 46;
@@ -6360,6 +6432,17 @@ function wacheStop(vonAussen){
       + `towns were seen, ${geaendert} changed.`);
 }
 function wacheTick(){
+  /* Gemessen wird UM den Takt herum: er springt an neun Stellen zurueck,
+     ein Abschluss im Rumpf verfehlte die meisten Wege. Geglaettet, damit
+     die Zahl nicht flackert. */
+  const t0 = performance.now();
+  wacheTickIntern();
+  if (wache){
+    const d = performance.now() - t0;
+    wache.ms = wache.ms ? wache.ms*0.7 + d*0.3 : d;
+  }
+}
+function wacheTickIntern(){
   if (!wache) return;
   const nun = jetzt();
   wache.dran = nun;
@@ -6502,12 +6585,21 @@ function wacheTick(){
   wacheAnzeigen();
   if (radarOffen) radarFrisch();
 }
+let wacheStand = "";
 function wacheAnzeigen(){
   radarZeichnen();
   const el = document.getElementById("wache");
   if (!el) return;
-  if (!wache){ el.classList.remove("an"); el.innerHTML = ""; return; }
+  if (!wache){ el.classList.remove("an"); el.innerHTML = ""; wacheStand = ""; return; }
   el.classList.add("an");
+  /* Fuenfmal je Sekunde die ganze Leiste abreissen und neu bauen - samt drei
+     Zuhoerern - kostet mehr als das Rechnen selbst, und ihr Text aendert
+     sich fast nie. Also erst vergleichen. */
+  const kennung = [wache.meldung, wache.gelesen, wache.gesehen.size, wache.gesamt,
+                   wache.zuletzt, !!wache.wartet, Math.round(wache.ms||0),
+                   wache.verloren||0].join("|");
+  if (kennung === wacheStand) return;
+  wacheStand = kennung;
   el.innerHTML = `
     <span class="pkt"></span>
     <span class="txt">
@@ -6516,7 +6608,12 @@ function wacheAnzeigen(){
         ? esc(wache.meldung)
         : `${wache.gelesen} towns in view · <b style="color:var(--accent)">${
             wache.gesehen.size}</b> of ${MAP.n.length} seen${wache.zuletzt
-            ? ` · ${wache.gesamt} changed` : ""}`}</em>
+            ? ` · ${wache.gesamt} changed` : ""}`}${
+        /* Rechenzeit und Neueinrastungen: "hackelig" ist kein Befund, eine
+           Zahl schon. Reisst die Einpassung staendig ab, kostet ein Takt 80
+           statt 13 Millisekunden - dann liegt es daran und nicht am Malen. */
+        wache.ms ? `<span style="color:var(--dim2)"> · ${Math.round(wache.ms)} ms${
+          wache.verloren ? ` · ${wache.verloren}× relock` : ""}</span>` : ""}</em>
     </span>
     ${wache.wartet ? `<button class="btn" id="wa-doch" style="font-size:10.5px">Apply anyway</button>` : ""}
     <button class="btn" id="wa-scope" style="font-size:10.5px">Scope</button>
@@ -13881,7 +13978,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build cc317bc784</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bad0f568ae</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
