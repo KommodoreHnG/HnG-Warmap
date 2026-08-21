@@ -5777,11 +5777,28 @@ function sternLage(mk, punkte, opt){
     return sternFegen(m, I, liste, W, H, punkte, r, r*1.0001);
   }
   const rGanz = Math.min(60, Math.min(W,H)/7);
-  /* Der Zoomhinweis ORDNET die Suche, er begrenzt sie nicht mehr. Vorher war
-     er eine harte Grenze, und ein falscher Hinweis erzeugte eine falsche
-     Lage mit Zuversicht: am echten Bild (Wahrheit Aalen, 127 Einheiten) gab
-     der Hinweis 200 die Antwort "Donauwoerth, 183 Einheiten, 58 Prozent".
-     Jetzt kostet ein falscher Hinweis einen zweiten Durchgang, mehr nicht. */
+  /* Der Zoomhinweis ORDNET die Suche - so war es gedacht, und der zweite
+     Durchgang ueber den ganzen Bereich soll ihn entbehrlich machen.
+
+     NACHGEMESSEN AN EINEM WEITEN BILD (924 Einheiten Spanne) STIMMT DAS SO
+     NICHT:
+
+         Hinweis 924 oder 645   gefunden, Guete 99 %
+         Hinweis 250            NICHT gefunden
+         gar kein Hinweis       NICHT gefunden
+
+     Bei weiter Sicht traegt der zweite Durchgang also nicht. Vermutlich,
+     weil dort ueber tausend Scheibenkandidaten anfallen und nur die
+     staerksten 120 abstimmen duerfen - bei einem engen Band sind das die
+     richtigen, bei einem weiten nicht unbedingt.
+
+     Zwei Folgen: ein FALSCHER Hinweis ist schlimmer als keiner, und ohne
+     Hinweis faellt kartenAusBild auf die alte Suche zurueck - die rastet
+     zwar ein, liefert aber kein Sternbild und wird damit nie schreibreif.
+
+     Deshalb steht ueber der Eichung jetzt eine Plausibilitaetsgrenze
+     (EICH_MIN/EICH_MAX): ein Hinweis, der um mehr als die Fensterform vom
+     Gesetz abweicht, richtet mehr Schaden an als er nuetzt. */
   const baender = [];
   if (o.spanne > 0){
     const rSoll = SCHEIBE_EINH * (W/o.spanne) / 2;
@@ -7202,13 +7219,55 @@ const beamWort = () => {
 const EICH_STORE = "hng-warmap-zoomeich2";
 try { localStorage.removeItem("hng-warmap-zoomeich"); } catch(e){}
 let zoomEich = [];
-try { zoomEich = JSON.parse(localStorage.getItem(EICH_STORE) || "[]") || []; } catch(e){}
+/* Wie weit darf ein Eichpunkt vom Gesetz abweichen?
+
+   Das Gesetz ist an einem 16:9-Fenster gemessen. Was die Eichpunkte
+   nachholen sollen, ist allein der Unterschied im Seitenverhaeltnis: ein
+   21:9-Fenster zeigt rund ein Drittel mehr Karte, ein 4:3-Fenster ein
+   Fuenftel weniger. Ein Faktor ausserhalb dieser Spanne kann keine
+   Fensterform sein, sondern nur eine falsche Messung.
+
+   Das ist nicht theoretisch. An Ennos laufendem Pult stand bei
+   Reglerstellung 0,38 ein Hinweis von 250 Einheiten, waehrend die Karte
+   tatsaechlich 924 breit war - Faktor 0,39. Sein Bildschirmbild durch den
+   ausgelieferten Code geschickt:
+
+       Hinweis 924 oder 645  ->  eingerastet und schreibreif
+       Hinweis 250           ->  "no match"
+
+   Der Hinweis war also nicht bloss schief, er sperrte die Einrastung aus.
+   Die Punkte stammten aus der Zeit, als der gehaltene Massstab driftete;
+   weil sie in localStorage liegen, half die Reparatur am Massstab nicht
+   mehr - der Schaden lag schon in der Ablage. */
+const EICH_MIN = 0.6, EICH_MAX = 1.6;
+/* Das Gesetz steht weiter unten und ist dort eine const - beim Laden waere
+   es noch nicht da. Die beiden Zahlen hier zu wiederholen ist die kleinere
+   Suende, als die Reihenfolge des ganzen Blocks umzustellen; sie stehen
+   direkt nebeneinander, und ZOOM_A/ZOOM_K tragen den Vermerk. */
+const eichGesetz = r => 2806 * Math.exp(-3.8668 * r);
+const eichTaugt = p => {
+  if (!p || typeof p.r !== "number" || typeof p.s !== "number") return false;
+  if (!(p.s > 0) || p.r < 0 || p.r > 1) return false;
+  const f = p.s / eichGesetz(p.r);
+  return f >= EICH_MIN && f <= EICH_MAX;
+};
+try {
+  const roh = JSON.parse(localStorage.getItem(EICH_STORE) || "[]") || [];
+  zoomEich = roh.filter(eichTaugt);
+  /* Ausgemistetes gleich aus der Ablage nehmen, sonst traegt der Nutzer den
+     Fehler von gestern in jede neue Sitzung. */
+  if (zoomEich.length !== roh.length){
+    try { localStorage.setItem(EICH_STORE, JSON.stringify(zoomEich)); } catch(e){}
+  }
+} catch(e){ zoomEich = []; }
 function eichPunkt(regler, spanne){
   if (regler === null || !spanne) return;
   /* Nur wirklich verschiedene Stellungen merken - zwanzig Punkte aus
      derselben Zoomstufe helfen niemandem. */
   if (zoomEich.some(p => Math.abs(p.r - regler) < 0.06)) return;
-  zoomEich.push({r: regler, s: spanne});
+  const neu = {r: regler, s: spanne};
+  if (!eichTaugt(neu)) return;          /* zu weit weg vom Gesetz: das war eine Fehlmessung */
+  zoomEich.push(neu);
   zoomEich.sort((a,b)=>a.r-b.r);
   if (zoomEich.length > 8) zoomEich.splice(4, 1);
   try { localStorage.setItem(EICH_STORE, JSON.stringify(zoomEich)); } catch(e){}
@@ -7231,6 +7290,9 @@ function eichPunkt(regler, spanne){
    gleicher Reglerstellung mehr oder weniger Karte - diesen Unterschied
    holen die Eichpunkte nach. Sie tragen also nicht mehr die FORM der Kurve,
    sondern nur noch ihren Vorfaktor. */
+/* Diese beiden Zahlen stehen ein zweites Mal weiter oben in eichGesetz -
+   dort werden sie beim Laden gebraucht, bevor diese Zeile ausgefuehrt ist.
+   Wer sie hier aendert, muss sie dort mitaendern. */
 const ZOOM_A = 2806, ZOOM_K = -3.8668;
 const zoomGesetz = r => ZOOM_A * Math.exp(ZOOM_K * r);
 
@@ -16273,7 +16335,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f3e6424589</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0e5b720e7d</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
