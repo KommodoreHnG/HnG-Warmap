@@ -5455,6 +5455,77 @@ function feuerLesen(mk, punkte, tr){
   return brennt;
 }
 
+/* ---- Die Versorgungslinien ----
+   Zwischen zwei Staedten wird abgetastet, nicht durch sie hindurch: sonst
+   zaehlt man die Stadtfarbe mit und jede Linie gehoerte ihren Endpunkten.
+   Quer zur Linie wird gemittelt, damit ein Kratzer im Untergrund nichts
+   ausmacht.
+
+   Vier Ausgaenge: 0,1,2 fuer US, GE, SU - und 3 fuer "kein Fraktionsfarbton".
+   Das Letzte ist ein eigener Zustand, kein Lesefehler; wie er zu deuten ist,
+   entscheidet nicht das Bild.                                              */
+const LINIE_MIND = 22;        /* so viele Proben braucht eine Aussage */
+/* Ab welcher Scheibengroesse gibt es ueberhaupt Linien zu lesen? Gemessen an
+   einer Zoomleiter:
+
+       Scheibe  6 px   9 von 1708 Linien farbig   (1 %)
+       Scheibe  9 px   7 von 1432                 (0 %)
+       Scheibe 12 px 701 von 1111                (63 %)
+       Scheibe 21 px 295 von  529                (56 %)
+       Scheibe 86 px  13 von   32                (41 %)
+
+   Der Sprung zwischen 9 und 12 ist kein Lesefehler: weiter herausgezoomt
+   ZEICHNET DAS SPIEL keine Versorgungslinien mehr, nur noch Stadtpunkte.
+   Darunter zu lesen liefert nur Rauschen - und faelschlich Feuer auf Linien,
+   die es nicht gibt (58 Meldungen bei 7 Punkten Scheibe). */
+const LINIE_SICHER_PX = 12;
+function linienLesen(mk, punkte, tr){
+  const {m, W, H} = mk;
+  if (SCHEIBE_EINH*tr.s < LINIE_SICHER_PX) return {besitz:{}, kampf:{}, zuWeit:true};
+  const rS = Math.max(2, SCHEIBE_EINH*tr.s/2);
+  const besitz = {}, kampf = {};
+  const gesehen = new Set();
+  for (const [a, b] of (MAP.e||[])){
+    const k = Math.min(a,b)*10000 + Math.max(a,b);
+    if (gesehen.has(k)) continue;
+    gesehen.add(k);
+    const ax = punkte[a][0]*tr.s + tr.ox, ay = punkte[a][1]*tr.s + tr.oy;
+    const bx = punkte[b][0]*tr.s + tr.ox, by = punkte[b][1]*tr.s + tr.oy;
+    const L = Math.hypot(bx-ax, by-ay);
+    if (L < 3.2*rS) continue;                    /* zu kurz zwischen den Scheiben */
+    const qx = -(by-ay)/L, qy = (bx-ax)/L;       /* quer zur Linie */
+    const st = [0,0,0,0]; let n = 0, feuer = 0;
+    const rand = rS*1.45/L;
+    /* Wie weit quer? So breit wie die Linie, nicht breiter.
+       Fest auf zwei Punkte gestellt las der Leser bei weitem Zoom 99 Prozent
+       aller Linien als farblos - dort ist die Linie selbst nur ein bis zwei
+       Punkte breit, und der Rest war Hintergrund. Gemessen an einer
+       Zoomleiter: bei 9 Punkten Scheibe 13 von 1589 farbig, bei 12 Punkten
+       844 von 1189. Die Linienbreite waechst mit der Scheibe. */
+    const quer = Math.max(1, Math.round(rS*0.15));
+    for (let s = rand; s <= 1-rand; s += 1.2/L){
+      const x = ax + (bx-ax)*s, y = ay + (by-ay)*s;
+      for (let d = -quer; d <= quer; d++){
+        const X = Math.round(x + qx*d), Y = Math.round(y + qy*d);
+        if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
+        n++;
+        const v = m[Y*W + X];
+        if (v === 4) feuer++;
+        else if (v >= 1 && v <= 3) st[v-1]++;
+      }
+    }
+    if (n < LINIE_MIND) continue;
+    if (feuer > 0.10*n) kampf[k] = 1;
+    const gr = Math.max(st[0], st[1], st[2]);
+    const rest = st[0]+st[1]+st[2] - gr;
+    /* Eindeutig gehoert sie einer Fraktion, wenn die Farbe ein Viertel der
+       Strecke bedeckt und die anderen beiden zusammen nur die Haelfte davon.
+       Sonst ist sie farblos - und das ist eine Aussage, keine Luecke. */
+    besitz[k] = (gr > 0.22*n && gr > 2*rest) ? st.indexOf(gr) : 3;
+  }
+  return {besitz, kampf};
+}
+
 let shotState = null;
 document.getElementById("b-shot").addEventListener("click", ()=>{
   openDlg(`
@@ -5642,6 +5713,7 @@ function kartenAusBild(quelle, melde, opt){
      Katalogkanten zwischen ihnen. */
   const stg = tr.sternGuete || 0, stk = tr.sternKanten || 0;
   return {erg: farbenLesen(a.mk, punkte, tr), brennt: feuerLesen(a.mk, punkte, tr),
+          adern: linienLesen(a.mk, punkte, tr),
           tr, trQ: trZuQuelle(tr, a), punkte,
           mk:a.mk, feld:a.feld, W:a.W, H:a.H, tmp:a.tmp, bw:a.bw, bh:a.bh,
           guete:g.quote, sicher: g.quote >= PASS_GUT,
@@ -15137,7 +15209,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 2630e0c3c2</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 7d254b8c10</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
