@@ -2061,6 +2061,20 @@ function setFeindDepot(key, list){
    sieht das ebenso, deshalb muss die Seite es an einer Stelle wissen. */
 const AUTOR_TEIL = {depot: 1, units: 2, join: 2, post: 2, line: 2, spot: 2,
                     area: 2, est: 2, priv: 1, wish: 1, first: 2, sweep: 1};
+/* Was die Datenbank ohnehin abweisen wuerde, gehoert nicht in den Stapel.
+   Diese Liste bildet die Serverregeln fuer die Toepfe OHNE Verfasser im
+   Schluessel nach - nicht als Schutz, den leistet der Server, sondern damit
+   keine Portion an einer Zeile reisst, die von vornherein chancenlos ist.
+   Wer die Serverregeln aendert, muss hier nachziehen; falsch liegt man hier
+   immer nur auf der vorsichtigen Seite, denn was hier haengenbleibt, wird
+   beim naechsten echten Bearbeiten ohnehin neu eingetragen. */
+function darfIchSchieben(bucket, id){
+  if (bucket === "anon") return id === anonKennung();
+  if (bucket === "roster" || bucket === "edep") return darf("aufklaerung");
+  if (bucket === "ok") return darf("bestaetigen");
+  if (bucket === "meta") return istLeader() || istAdmin();
+  return true;
+}
 function autorVon(bucket, id){
   const n = AUTOR_TEIL[bucket];
   if (!n) return null;
@@ -3343,6 +3357,33 @@ function griffLoslassen(x, y){
 
 /* ---------------- state writes ---------------- */
 const dirty = new Set();
+/* Die Merkliste ueberlebt einen Neustart. Ohne das wusste die Seite nach dem
+   Neuladen nicht mehr, was noch nicht gesendet war, und schob beim naechsten
+   Verbinden sicherheitshalber ALLES hoch - gemessen 894 von 903 Zeilen.
+   Darunter fremde, die der Server abweist; reisst dadurch eine Portion,
+   folgen bis zu 500 einzelne Anfragen.
+   Die Liste haengt am Konto: ein zweites Konto im selben Browser darf die
+   offenen Aenderungen des ersten nicht erben. */
+const OFFEN_STORE = STORE + ":offen";
+const kontoMarke = () => S.konto ? `${S.konto.room}:${S.konto.player}` : "-";
+function offenSichern(){
+  try {
+    localStorage.setItem(OFFEN_STORE,
+      JSON.stringify({k: kontoMarke(), l: [...dirty]}));
+  } catch(e){}
+}
+/* Wahr, wenn eine gueltige Liste vorlag - dann darf die Rundum-Schleife beim
+   Verbinden entfallen. */
+let offenGeladen = false;
+function offenLaden(){
+  offenGeladen = false;
+  try {
+    const o = JSON.parse(localStorage.getItem(OFFEN_STORE) || "null");
+    if (!o || !Array.isArray(o.l) || o.k !== kontoMarke()) return;
+    for (const k of o.l) dirty.add(k);
+    offenGeladen = true;
+  } catch(e){}
+}
 function stamp(bucket, i, val, extra){
   S[bucket][i] = Object.assign({v:val, t:jetzt(), by:S.me}, extra||{});
   dirty.add(`${bucket}:${i}`);
@@ -3359,6 +3400,7 @@ function saveSofort(){
   try {
     const roh = JSON.stringify(S);
     localStorage.setItem(STORE, roh);
+    offenSichern();
     /* Fuenf Megabyte sind die uebliche Grenze des Browserspeichers. Einmal
        warnen, bevor sie erreicht ist - danach kaeme nur noch ein stiller
        Fehlschlag. */
@@ -16379,7 +16421,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 413aa6f534</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 9478e98683</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -16881,13 +16923,28 @@ async function syncStart(){
 
   /* Beim Verbinden alles Eigene einmal hochschieben - aber nur das Eigene.
      Fremde Zeilen liegen nach jedem Abgleich mit im Speicher; sie mitzusenden
-     hiess, dass die Datenbank sie abweist und der Stapel nie durchgeht. */
-  for (const b of BUCKETS)
-    for (const id of Object.keys(S[b])){
-      const autor = autorVon(b, id);
-      if (autor && autor !== S.me) continue;
-      dirty.add(`${b}:${id}`);
-    }
+     hiess, dass die Datenbank sie abweist und der Stapel nie durchgeht.
+
+     Das laeuft nur noch, wenn KEINE gespeicherte Merkliste vorlag: bei der
+     ersten Anmeldung, nach einem Kontowechsel oder wenn der Browserspeicher
+     geleert wurde. Im Regelfall weiss die Seite jetzt selbst, was offen ist,
+     und schiebt nicht mehr 894 Zeilen hoch, von denen 890 unveraendert sind.
+
+     Der Filter ist ausserdem schaerfer geworden. autorVon() kennt nur die
+     zwoelf Toepfe aus AUTOR_TEIL; bei allen anderen gab es gar keine
+     Pruefung, und fremde anon-, roster- und edep-Zeilen gingen mit hinaus.
+     Der Server weist sie ab - der Trigger mit "Diese Liste gehoert jemand
+     anderem", die Rechtefunktion mit fehlendem Recht -, und die gerissene
+     Portion zog das Einzelnachfassen nach sich. */
+  if (!offenGeladen){
+    for (const b of BUCKETS)
+      for (const id of Object.keys(S[b])){
+        const autor = autorVon(b, id);
+        if (autor && autor !== S.me) continue;
+        if (!darfIchSchieben(b, id)) continue;
+        dirty.add(`${b}:${id}`);
+      }
+  }
   /* Pfeile und Grabsteine tragen ihren Verfasser nicht im Schluessel,
      sondern in der Zeile - autorVon() oben laeuft bei ihnen ins Leere.
      Ohne diese Pruefung schiebt jeder Client alle FREMDEN Pfeile und
@@ -16896,7 +16953,11 @@ async function syncStart(){
   for (const a of S.arrows) if (a.by === S.me) dirty.add(`arrow:${a.id}`);
   for (const id of Object.keys(S.gone))
     if (S.gone[id] && S.gone[id].by === S.me) dirty.add(`gone:${id}`);
-  syncTimer = setInterval(async ()=>{ await syncPush(); await syncPull(); }, 3500);
+  /* Nach jedem Abgleich den Stand der Merkliste festhalten. Sonst stuende
+     nach einem Absturz wieder in der Liste, was laengst durch ist. */
+  syncTimer = setInterval(async ()=>{
+    await syncPush(); await syncPull(); offenSichern();
+  }, 3500);
   await syncPull(); await syncPush();
   toast(`Connected as ${ich.name || ich.player}`);
 }
@@ -17159,6 +17220,7 @@ async function mitgliederDialog(meldung){
      bringt den Stand des Absenders mit, aber niemals dessen Identitaet: sonst
      wuerden beim naechsten Verbinden dessen Teams auf den Leser umgebucht. */
   load();
+  offenLaden();
   const meineKennung = S.me;
   const m = location.hash.match(/#m=([A-Za-z0-9_-]+)/);
   if (m){
