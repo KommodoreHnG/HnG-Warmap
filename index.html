@@ -4766,12 +4766,37 @@ const PASS_GUT = 0.45, PASS_HALT = 0.30;
    Suche weg, weil der Versatz nicht mehr geraten werden muss.
    Der Massstabsbereich ist mit plusminus 38 Prozent bewusst weit: im Spiel
    zoomt man mit dem Mausrad, und ein Rastschritt macht rund 20 Prozent. */
-function spurTransform(mk, punkte, tr0, weit){
+/* sFest - der Massstab steht fest (der Zoomregler hat sich nicht bewegt).
+   Dann wird nur noch der Versatz gesucht: eine Unbekannte weniger, ruhiger,
+   schneller und treffsicherer. */
+function spurTransform(mk, punkte, tr0, weit, sFest){
   const {m, W, H} = mk;
   const dichte = mk.n/(W*H);
-  const nimm = n => punkte.length > n
-    ? punkte.filter((_,i)=> i % Math.ceil(punkte.length/n) === 0) : punkte;
+  /* Die Proben kommen aus der NAEHE der vermuteten Ansicht - und zwar alle,
+     wenn es wenige sind.
+
+     Jeden N-ten Punkt aus ganz Europa zu nehmen ist bei weiter Sicht richtig
+     und bei naher toedlich: von 130 gleichmaessig verteilten Proben liegen
+     dann eine Handvoll im Bild, und die Bedingung "mindestens zehn drin"
+     schlaegt nie an. Die Suche bleibt dann stehen, wo sie startet.
+
+     Gemessen an einer Schwenkfolge: die Verfolgung meldete dreimal
+     hintereinander 717/600, waehrend die Karte auf 737/598, 716/576 und
+     695/555 gewandert war - sechs von 37 Proben im Bild. Deshalb fiel sie
+     bei jedem Schwenkschritt aus und jedes Bild musste global neu einrasten. */
+  const nah = [];
+  {
+    const hb = (W/tr0.s)*0.95, hh = (H/tr0.s)*0.95;
+    const mx0 = (W/2 - tr0.ox)/tr0.s, my0 = (H/2 - tr0.oy)/tr0.s;
+    for (const p of punkte)
+      if (p[0] > mx0-hb && p[0] < mx0+hb && p[1] > my0-hh && p[1] < my0+hh) nah.push(p);
+  }
+  const quelle = nah.length >= 12 ? nah : punkte;
+  const nimm = n => quelle.length > n
+    ? quelle.filter((_,i)=> i % Math.ceil(quelle.length/n) === 0) : quelle;
   const grob = nimm(130), fein = nimm(430);
+  /* Die Untergrenze muss zur Probenmenge passen, sonst sperrt sie sich selbst. */
+  const mindDrin = Math.max(5, Math.min(10, Math.round(grob.length*0.35)));
   const nb = [];
   for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++) nb.push(dy*W + dx);
   /* Womit muss man vergleichen? Nicht mit der Dichte selbst - bei neun
@@ -4789,7 +4814,7 @@ function spurTransform(mk, punkte, tr0, weit){
     /* Der Deckungsanteil geht nur schwach ein (vierte Wurzel). Mit vollem
        Gewicht gewinnt immer die Lage, die am meisten Punkte ins Bild holt -
        also das Herauszoomen, egal ob es stimmt. */
-    return drin >= 10 ? [ (treffer/drin - qNull) * Math.pow(drin, 0.25), ox, oy ] : null;
+    return drin >= mindDrin ? [ (treffer/drin - qNull) * Math.pow(drin, 0.25), ox, oy ] : null;
   };
   const suche = (sMitte, weite, n, plan) => {
     let best = null;
@@ -4811,6 +4836,16 @@ function spurTransform(mk, punkte, tr0, weit){
     }
     return best;
   };
+  if (sFest > 0){
+    /* Mit festem Massstab ist eine Unbekannte weniger zu suchen - die
+       gesparte Rechenzeit geht in einen weiteren Griff. Gemessen an einer
+       Schwenkfolge: ein zuegiger Zug bewegt die Karte um rund 157 Punkte des
+       Arbeitsbildes, der bisherige Griff reichte 54 weit. Deshalb fiel die
+       Verfolgung bei fast jedem Schritt aus und jedes Bild musste global neu
+       einrasten - 260 Millisekunden statt 45. Jetzt reicht er 240 weit. */
+    return (b => b && {s: b[1], ox: b[2], oy: b[3]})(
+      suche(sFest, 0, 1, [[24, 10, grob], [8, 5, grob], [3, 4, fein], [1, 3, fein]]));
+  }
   /* Normal reicht plusminus 38 Prozent - ein Rastschritt am Mausrad macht
      rund zwanzig, und gemessen wird fuenfmal je Sekunde. Wer schnell dreht,
      springt weiter; dann kommt ein zweiter, weiter Versuch (siehe
@@ -5173,6 +5208,12 @@ function sternLage(mk, punkte, opt){
   const {m, W, H} = mk;
   const I = sternSummen(m, W, H);
   const liste = sternFarbliste(m, W, H, 2);
+  /* Steht der Massstab fest, ist auch der Radius bekannt - eine Stufe statt
+     vierzig. */
+  if (o.sFest > 0){
+    const r = Math.max(1.9, o.sFest*SCHEIBE_EINH/2);
+    return sternFegen(m, I, liste, W, H, punkte, r, r*1.0001);
+  }
   const rGanz = Math.min(60, Math.min(W,H)/7);
   /* Der Zoomhinweis ORDNET die Suche, er begrenzt sie nicht mehr. Vorher war
      er eine harte Grenze, und ein falscher Hinweis erzeugte eine falsche
@@ -5451,9 +5492,12 @@ function kartenAusBild(quelle, melde, opt){
        hineingezoomt ein, wo die alte Suche strukturell versagt. Findet sie
        nichts, laeuft alles wie bisher - deshalb steht sie davor und nicht
        an ihrer Stelle. */
+    /* Ein fester Massstab kommt in QUELLpunkten herein und muss in das
+       Arbeitsbild umgerechnet werden. */
+    const sFest = o.sFest > 0 ? o.sFest * a.k : 0;
     let tr = null;
     if (o.spur){
-    tr = spurTransform(a.mk, punkte, trAusQuelle(o.spur, a));
+    tr = spurTransform(a.mk, punkte, trAusQuelle(o.spur, a), false, sFest);
     /* Die Verfolgung erbt die Masse der Einrastung, von der sie abstammt -
        sonst waere nach dem ersten Bild nichts mehr schreibreif. */
     if (tr && o.spur.stern){
@@ -5468,7 +5512,8 @@ function kartenAusBild(quelle, melde, opt){
          bei 800 kippen zwei davon. Die alte Suche bleibt bei voller Breite -
          fuer sie ist gemessen, dass sie unter 1600 nicht mehr einrastet. */
       const aS = a.W > 1250 ? maskeAus(quelle, F, STERN_BREITE) : a;
-      const st = aS ? sternLage(aS.mk, punkte, {spanne: o.spanne}) : null;
+      const st = aS ? sternLage(aS.mk, punkte,
+                       {spanne: o.spanne, sFest: o.sFest > 0 ? o.sFest * aS.k : 0}) : null;
       if (st){
         const q = trZuQuelle({s: st.s, ox: st.ox, oy: st.oy}, aS);
         tr = trAusQuelle(q, a);
@@ -5490,7 +5535,7 @@ function kartenAusBild(quelle, melde, opt){
        als das enge Fenster. Ein weiter Versuch, bevor ganz neu eingerastet
        wird - der ist immer noch billiger als die globale Suche. */
     if (o.spur && g.quote < PASS_GUT){
-      const tr2 = spurTransform(a.mk, punkte, trAusQuelle(o.spur, a), true);
+      const tr2 = spurTransform(a.mk, punkte, trAusQuelle(o.spur, a), true, sFest);
       if (tr2 && lagePlausibel(a.mk, punkte, tr2, o.spanne || 0)){
         const g2 = passungGuete(a.mk, punkte, tr2);
         if (g2.quote > g.quote){ tr = tr2; g = g2; }
@@ -6931,7 +6976,8 @@ function radarMalen(){
   /* Der eigene Bildausschnitt auf dem Schirm. Ohne ihn sieht man nur, wo
      man HIN soll - nicht, wo man IST, und dann ist jede Ansage Ratespiel. */
   if (wacheLaeuft() && wache.peil){
-    const p = wache.peil, halbB = p.spanne/2, halbH = halbB*(H/W);
+    const p = wache.peil;
+    const halbB = (p.sichtB || p.spanne)/2, halbH = (p.sichtH || p.spanne*0.56)/2;
     const [ax,ay] = P(p.x-halbB, p.y-halbH), [bx,by] = P(p.x+halbB, p.y+halbH);
     g.save();
     g.strokeStyle = "rgba(150,255,190,.55)"; g.lineWidth = 2; g.setLineDash([9,6]);
@@ -7115,8 +7161,15 @@ function peilung(res){
     ? ausBild(res.bw/2, res.bh/2, res.trQ)
     : ausBild(res.W/2, res.H/2, res.tr);
   /* Die Spanne bleibt die Breite des KARTENFELDS - an ihr haengt das
-     Zoomgesetz, und sie ist eine innere Groesse, kein Ort. */
-  return {spanne: res.W / res.tr.s, x, y};
+     Zoomgesetz, und sie ist eine innere Groesse, kein Ort.
+     sichtB und sichtH sind dagegen, was der Spieler WIRKLICH sieht: der
+     ganze Bildschirm. Der Erkennungskasten zeigte bisher den Ausschnitt und
+     war damit um ein Drittel zu schmal - dasselbe Missverstaendnis wie bei
+     der Bildmitte. */
+  const spanne = res.W / res.tr.s;
+  const sichtB = (res.trQ && res.bw) ? res.bw / res.trQ.s : spanne;
+  const sichtH = (res.trQ && res.bh) ? res.bh / res.trQ.s : spanne*0.56;
+  return {spanne, sichtB, sichtH, x, y};
 }
 /* Der naechstgelegene Ort zur Bildmitte - so sagt das Geraet in Ortsnamen,
    wo man gerade steht, statt in Zahlen. */
@@ -7206,6 +7259,15 @@ function wacheTickIntern(){
      nichts mehr findet. */
   const zl = zoomLesen(wache.video);
   wache.zoom = zl ? zl.zoom : null;
+  /* Solange der Regler stillsteht, wird der Massstab GEHALTEN statt neu
+     geschaetzt. Gemessen an einundzwanzig Schwenkbildern bei konstantem
+     Regler: die Sternenkarte sagte 120.4, die Verfolgung 124.5 bis 127.1 -
+     und weil sie sich abwechselten, atmete der Erkennungskasten. */
+  let sFest = 0;
+  if (wache.halt && wache.zoom !== null && wache.halt.r !== null
+      && Math.abs(wache.halt.r - wache.zoom) < 0.012) sFest = wache.halt.s;
+  else if (wache.halt && wache.zoom === null && wache.halt.r === null)
+    sFest = wache.halt.s;   /* kein Regler ablesbar: dann haelt der letzte Wert */
 
   /* Erst mitfuehren - das ist dreimal schneller und funktioniert auch
      hineingezoomt, wo die globale Suche strukturell versagt. Nur wenn dabei
@@ -7213,14 +7275,14 @@ function wacheTickIntern(){
   let res = null;
   if (wache.tr)
     res = kartenAusBild(wache.video, null,
-                        {spur: wache.tr, feld: wache.feld, maxb: PEIL_BREITE});
+                        {spur: wache.tr, feld: wache.feld, maxb: PEIL_BREITE, sFest});
   /* Ist die Spur weg, erst die LETZTE gute Lage nochmal verfolgen. Vorher
      wurde sie bei jedem Fehlschlag geloescht, und ein Menue ueber der Karte
      reichte, um die Verfolgung endgueltig zu verlieren. Das kostet 13
      Millisekunden statt 80 und geht auch hineingezoomt. */
   if ((!res || res.fehler) && wache.trAlt && wache.trAlt !== wache.tr){
     const zurueck = kartenAusBild(wache.video, null,
-                        {spur: wache.trAlt, feld: wache.feldAlt, maxb: PEIL_BREITE});
+                        {spur: wache.trAlt, feld: wache.feldAlt, maxb: PEIL_BREITE, sFest});
     if (!zurueck.fehler) res = zurueck;
   }
   if (!res || res.fehler){
@@ -7234,7 +7296,7 @@ function wacheTickIntern(){
        nichts. */
     if (nun >= (wache.lockAb || 0)){
       const neu = kartenAusBild(wache.video, null,
-                      {maxb: LOCK_BREITE, spanne: spanneAusRegler(wache.zoom)});
+                      {maxb: LOCK_BREITE, spanne: spanneAusRegler(wache.zoom), sFest});
       if (neu.fehler){
         wache.lockWarte = Math.min(3000, (wache.lockWarte || 250) * 2);
         wache.lockAb = nun + wache.lockWarte;
@@ -7265,6 +7327,9 @@ function wacheTickIntern(){
   }
   wache.jeGefixt = true;
   wache.tr = res.trQ; wache.feld = res.feld; wache.guete = res.guete;
+  /* Den Massstab zu dieser Reglerstellung merken - er gilt, bis der Regler
+     sich bewegt. */
+  if (res.sicher) wache.halt = {r: wache.zoom, s: res.trQ.s};
   /* Die letzte GUTE Lage bleibt liegen, auch wenn die naechste danebengeht.
      Sie ist der billige Weg zurueck. */
   if (res.sicher){
@@ -14852,7 +14917,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build bcbe4cc85f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build e271c2b159</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
