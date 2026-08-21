@@ -4700,6 +4700,42 @@ function maskeBauen(imgd){
    nicht mehr: mit zwei oder drei faellt ein zu kleiner Massstab durch, weil
    im Liniengewirr dann fast alles trifft (gemessen - mit Radius 2 verliert
    der Verfolger die Spur, mit Radius 1 nicht ein einziges Mal). */
+/* Ist diese Lage ueberhaupt moeglich?
+
+   passungGuete allein genuegt nicht - sie BELOHNT sogar den schlimmsten
+   Fehler: wer den Massstab klein genug macht, presst alle 1438 Staedte ins
+   Bild, und in einer nahen Ansicht mit grossen Farbflaechen liegt dann jede
+   auf Farbe. Note 1,0 fuer eine Lage, die um ganz Europa danebenliegt. Und
+   weil die Verfolgung sie von Bild zu Bild weitertraegt, kommt das Geraet
+   aus diesem Zustand nie wieder heraus.
+
+   Genau das war im Realbetrieb zu sehen: Spiel zeigt Bayern in Nahaufnahme,
+   Radar meldet 1438 Staedte im Bild, alle sowjetisch, Standort
+   's-Hertogenbosch - der erste Katalogeintrag.
+
+   Zwei Pruefungen, die das unmoeglich machen. */
+function lagePlausibel(mk, punkte, tr, spanneSoll){
+  if (!tr || !(tr.s > 0)) return false;
+  const {W, H, n} = mk;
+  /* Geprueft wird an der FARBMENGE, nicht am Zoomregler. Der Regler waere
+     genauer, aber eine einzelne Fehlablesung wuerde dann die richtige Lage
+     sperren - im Realbetrieb gesehen: Regler las 0 Prozent, und damit war
+     jede Lage "unmoeglich". Ein Hinweis darf beschleunigen, nie sperren.
+
+     Auf jede Stadt im Bild muss ungefaehr eine Scheibe Farbe kommen. Die
+     Versorgungslinien treiben den Wert nach oben, deshalb eine weite
+     Toleranz - im gemeldeten Fall war es Faktor 15. */
+  let drin = 0;
+  for (const p of punkte){
+    const X = p[0]*tr.s + tr.ox, Y = p[1]*tr.s + tr.oy;
+    if (X >= 0 && Y >= 0 && X < W && Y < H) drin++;
+  }
+  if (drin >= 8 && n > 0){
+    const sAusFarbe = Math.sqrt(n/drin/Math.PI)/(SCHEIBE_EINH/2);
+    if (tr.s < sAusFarbe/3 || tr.s > sAusFarbe*3) return false;
+  }
+  return true;
+}
 function passungGuete(mk, punkte, tr){
   const {m, W, H} = mk;
   const nb = [];
@@ -5368,7 +5404,9 @@ function maskeAus(quelle, feld, maxb){
      Damit laesst sich eine gefundene Lage in Quellkoordinaten umrechnen -
      und die haengt dann nicht mehr an Arbeitsbreite und Ausschnitt. */
   const k = W/(bw*F.w);
-  return {mk, W, H, tmp, feld:F, k, tx:-bw*F.x*k, ty:-bh*F.y*k};
+  /* bw/bh: die Groesse des QUELLBILDES. Ohne sie kann die Peilung die Mitte
+     des Bildschirms nicht von der Mitte des Ausschnitts unterscheiden. */
+  return {mk, W, H, tmp, feld:F, k, tx:-bw*F.x*k, ty:-bh*F.y*k, bw, bh};
 }
 /* Eine Lage vom Arbeitsbild ins Quellbild und zurueck. Ohne das kann eine
    Einrastung bei 1600 nicht in einer Verfolgung bei 1100 weiterlaufen: der
@@ -5426,13 +5464,19 @@ function kartenAusBild(quelle, melde, opt){
       }
     }
     if (!tr){ letzterFehler = "no match — try the map zoomed further out"; continue; }
+    /* Eine unmoegliche Lage gilt als kein Treffer - sonst traegt die
+       Verfolgung sie ewig weiter. */
+    if (!lagePlausibel(a.mk, punkte, tr, o.spanne || 0)){
+      letzterFehler = "the fix did not add up — starting over";
+      continue;
+    }
     let g = passungGuete(a.mk, punkte, tr);
     /* Sitzt die mitgefuehrte Lage nicht, war der Sprung vermutlich groesser
        als das enge Fenster. Ein weiter Versuch, bevor ganz neu eingerastet
        wird - der ist immer noch billiger als die globale Suche. */
     if (o.spur && g.quote < PASS_GUT){
       const tr2 = spurTransform(a.mk, punkte, trAusQuelle(o.spur, a), true);
-      if (tr2){
+      if (tr2 && lagePlausibel(a.mk, punkte, tr2, o.spanne || 0)){
         const g2 = passungGuete(a.mk, punkte, tr2);
         if (g2.quote > g.quote){ tr = tr2; g = g2; }
       }
@@ -5448,7 +5492,7 @@ function kartenAusBild(quelle, melde, opt){
                   + `zoom out until more of the map shows`,
             W:a.W, H:a.H, tmp:a.tmp, punkte, guete:g.quote};
   return {erg: farbenLesen(a.mk, punkte, tr), tr, trQ: trZuQuelle(tr, a), punkte,
-          mk:a.mk, feld:a.feld, W:a.W, H:a.H, tmp:a.tmp,
+          mk:a.mk, feld:a.feld, W:a.W, H:a.H, tmp:a.tmp, bw:a.bw, bh:a.bh,
           guete:g.quote, sicher: g.quote >= PASS_GUT};
 }
 
@@ -6957,7 +7001,16 @@ const ausBild = (px, py, tr) => [ (px - tr.ox)/tr.s - (MAP.x0||0),
                                   (py - tr.oy)/tr.s - (MAP.y0||0) ];
 function peilung(res){
   if (!res || !res.tr || !res.W) return null;
-  const [x, y] = ausBild(res.W/2, res.H/2, res.tr);
+  /* Die Mitte des BILDSCHIRMS, nicht die des Ausschnitts. Der Erkenner
+     schneidet rechts dreissig Prozent weg (dort steht die Einheitenliste),
+     und die Mitte dieses Ausschnitts liegt bei 35 Prozent der Bildbreite.
+     Im Realbetrieb meldete das Geraet deshalb Dillingen, wo Donauwoerth in
+     der Mitte stand. */
+  const [x, y] = (res.trQ && res.bw)
+    ? ausBild(res.bw/2, res.bh/2, res.trQ)
+    : ausBild(res.W/2, res.H/2, res.tr);
+  /* Die Spanne bleibt die Breite des KARTENFELDS - an ihr haengt das
+     Zoomgesetz, und sie ist eine innere Groesse, kein Ort. */
   return {spanne: res.W / res.tr.s, x, y};
 }
 /* Der naechstgelegene Ort zur Bildmitte - so sagt das Geraet in Ortsnamen,
@@ -7119,7 +7172,13 @@ function wacheTickIntern(){
   /* Frueher standen hier vierzig Staedte als Untergrenze - das schloss jede
      hineingezoomte Ansicht aus, obwohl gerade die gewollt ist. Ob die Lage
      stimmt, sagt jetzt die Trefferquote, nicht die Menge. */
-  if (anz < 10){
+  /* Die Untergrenze stand bei zehn und war an Weitaufnahmen geeicht. Im
+     Realbetrieb blockierte sie genau die nahen Ansichten, um die es geht:
+     das Spiel zeigte Bayern mit rund fuenfzehn Staedten, acht davon wurden
+     gelesen - und das Geraet meldete "kein Fix". Ob die Lage stimmt, sagen
+     inzwischen die eineindeutige Zuordnung, das Kantenveto und die
+     Plausibilitaetspruefung; die Menge sagt es nicht. */
+  if (anz < 4){
     wache.meldung = `only ${anz} towns in view`;
     wache.keinFix = true; radarSignal = 0;
     wacheAnzeigen(); if (radarOffen) radarFrisch(); return;
@@ -14674,7 +14733,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 49fc1c6e58</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 7e22d0ae3f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
