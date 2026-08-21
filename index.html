@@ -1692,7 +1692,11 @@ const KONTO_PLATZ = (raum, spieler) => STORE + ":" + raum + ":" + spieler;
 const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot",
                  "line","post","area","para","roster","est","edep","anon","akt","btl",
                  "priv","todo","wish","ok","first","sweep"];
-const neu = () => Object.assign({me:"", name:"", arrows:[], gone:{}},
+/* Wann wurde diese Stadt zuletzt GESEHEN? Nicht zu verwechseln mit
+   S.owner[i].t - das ist "zuletzt geaendert", und eine Stadt, die seit einer
+   Woche sowjetisch ist, hat dort einen wochenalten Stempel, obwohl sie
+   gerade abgelesen wurde. Bleibt oertlich: nie in dirty, nie im Abgleich. */
+const neu = () => Object.assign({me:"", name:"", arrows:[], gone:{}, blick:{}},
                                 ...BUCKETS.map(b => ({[b]:{}})));
 let S = neu();
 /* Die Zeichenfraktion beginnt bei der Seite, die der Clan spielt. Fest auf
@@ -6139,7 +6143,7 @@ const RD_MARKEN = [
 ];
 const RD_WORTE = RD_MARKEN.map(m => Object.assign({
   suche:"SEARCH", freq:"INTERVAL", kraft:"POWER", ein:"ON", aus:"OFF",
-  ziel:"TRAINED ON", abdeckung:"COVERAGE", sektoren:"SECTORS SWEPT",
+  ziel:"TRAINED ON", abdeckung:"COVERAGE", sektoren:"TOWNS READ",
   sicht:"IN VIEW", ton:"SOUND",
 }, m));
 const rdWorte = () => RD_WORTE[clanFaktion()] || RD_WORTE[0];
@@ -6174,7 +6178,14 @@ try {
 const AT_NAH = 0.6;
 
 /* Wie nah man heran muss, als sichtbare Kartenbreite. Eng heisst nah. */
-const beamSpanne = () => { const n = sektoren(); return (1.7 + 1.1*radarBeam)*(n.x1-n.x0); };
+/* Wie weit soll die Ansicht sein? Ein Vielfaches der Kartenbreite - vorher
+   kam die Breite aus dem Sektorraster, was dasselbe war, nur umstaendlicher. */
+const KARTE_BREIT = () => { let a = Infinity, b = -Infinity;
+  for (const n of MAP.n){ if (n[1] < a) a = n[1]; if (n[1] > b) b = n[1]; }
+  return b - a || 1; };
+let karteBreitCache = null;
+const beamSpanne = () => (1.7 + 1.1*radarBeam)
+  * (karteBreitCache ||= KARTE_BREIT());
 /* Wie schnell der Scan laeuft, in Anteil je Sekunde.
    Die Markersuche kostet: sie will hineingezoomte Bilder und mehr Rechnung
    je Bild. Das steht so im Geraet - "dementsprechend geht aber der
@@ -6272,36 +6283,65 @@ function reglerFuerSpanne(spanne){
    Innerhalb des Sichtfelds dann nach Alter gewichtet: was am laengsten
    niemand gesehen hat, wird am haeufigsten gezogen. Ist nichts im Bild oder
    liegt keine Einpassung vor, gilt wieder die ganze Karte. */
-function sichtbareSektoren(){
+/* Welche Staedte liegen gerade im Bild? Ohne Peilung: alle. */
+function sichtbareOrte(){
   if (!wacheLaeuft() || !wache.peil) return null;
-  const netz = sektoren(), p = wache.peil;
-  const hb = p.spanne/2, hh = hb*0.56;
-  const drin = netz.folge.filter(s => {
-    const f = netz.felder[s];
-    return f.x1 > p.x-hb && f.x0 < p.x+hb && f.y1 > p.y-hh && f.y0 < p.y+hh;
-  });
-  return drin.length ? drin : null;
+  const p = wache.peil, hb = p.spanne/2, hh = hb*0.56, aus = [];
+  for (let i = 0; i < MAP.n.length; i++){
+    const n = MAP.n[i];
+    if (n[1] > p.x-hb && n[1] < p.x+hb && n[2] > p.y-hh && n[2] < p.y+hh) aus.push(i);
+  }
+  return aus.length ? aus : null;
 }
+const FRISCH_MS = 6*3600e3;
+const blickAlter = i => {
+  const t = S.blick && S.blick[i];
+  return t ? jetzt() - t : 30*24*3600e3;
+};
+/* Liegt diese Stadt an der Front? Also grenzt sie an eine Stadt, die einer
+   anderen Fraktion gehoert - oder an eine, von der wir es nicht wissen.
+   Ennos Punkt: "Ueberall dort wo sich die Fraktionen direkt gegenueber
+   stehen brauchen wir ja viel haeufiger Aufklaerung als anderswo." Genau
+   dort aendert sich die Karte, im Hinterland steht sie tagelang still. */
+let frontSatz = null, frontStand = 0;
+function anDerFront(i){
+  if (!frontSatz || jetzt() - frontStand > 60000){
+    const nb = new Map();
+    for (const [a,b] of (MAP.e||[])){
+      if (!nb.has(a)) nb.set(a, []);
+      if (!nb.has(b)) nb.set(b, []);
+      nb.get(a).push(b); nb.get(b).push(a);
+    }
+    frontSatz = new Set();
+    for (let k = 0; k < MAP.n.length; k++){
+      const o = S.owner[k] && S.owner[k].v;
+      for (const j of (nb.get(k)||[])){
+        const p = S.owner[j] && S.owner[j].v;
+        if (p !== o){ frontSatz.add(k); break; }
+      }
+    }
+    frontStand = jetzt();
+  }
+  return frontSatz.has(i);
+}
+/* Das naechste Ziel: eine Stadt im Bild, gewichtet nach Alter UND Lage an
+   der Front. Frueher war es ein Sektor und darin eine zufaellige Stadt; das
+   Raster hat dabei nichts beigetragen ausser sich selbst. */
 function zielZiehen(){
-  const netz = sektoren(), st = sweepStand(), nun = jetzt();
-  const felder = sichtbareSektoren() || netz.folge;
-  const wahl = [];
-  let summe = 0;
-  for (const s of felder){
-    const f = netz.felder[s], stand = st[f.k];
-    const alter = stand ? (nun - stand.t) : 30*24*3600e3;
-    const gewicht = Math.max(0.02, Math.min(1, alter / (12*3600e3)));
-    summe += gewicht; wahl.push({s, gewicht, summe});
+  const orte = sichtbareOrte() || Array.from(MAP.n.keys());
+  const wahl = []; let summe = 0;
+  for (const i of orte){
+    const alt = Math.max(0.02, Math.min(1, blickAlter(i) / (12*3600e3)));
+    /* Die Front viermal so oft - dort bewegt sich die Karte. */
+    const gewicht = alt * (anDerFront(i) ? 4 : 1);
+    summe += gewicht; wahl.push({i, summe});
   }
   let w = Math.random()*summe, treffer = wahl[wahl.length-1];
   for (const k of wahl) if (w <= k.summe){ treffer = k; break; }
-  const f = netz.felder[treffer.s];
-  radarZiel = f.orte.length ? f.orte[Math.floor(Math.random()*f.orte.length)] : null;
+  radarZiel = treffer ? treffer.i : null;
   radarScan = 0; radarSignal = 0;
   return radarZiel;
 }
-const zielSektor = () => radarZiel === null ? null
-  : sektoren().felder[sektoren().vonOrt[radarZiel]];
 
 /* Ein Ping, wenn ein Scan durch ist - und ein trockenes Rasten beim Kurbeln.
    Beides aus dem Rechner erzeugt, damit keine Klangdatei mitreisen muss. */
@@ -6352,7 +6392,6 @@ function radarWerte(){
 
 async function radarAuf(){
   if (radarOffen) return;
-  sektoren();
   radarOffen = true;
   document.getElementById("radar").classList.add("an");
   if (radarZiel === null) zielZiehen();
@@ -6371,19 +6410,16 @@ function radarZu(){
   if (radarBild){ cancelAnimationFrame(radarBild); radarBild = null; }
 }
 /* Ist der Scan voll, wird der Sektor und sein Umland gutgeschrieben. */
+/* Ist ein Scan durch, gelten die Staedte im Bild als frisch gesehen. Vorher
+   wurden Rasterfelder gutgeschrieben und der Schieber bestimmte, wieviele
+   Nachbarfelder dazukamen - eine Buchhaltung ueber gedachte Rechtecke. Jetzt
+   zaehlt, was wirklich im Bild war. */
 function scanGutschrift(){
-  const zs = zielSektor(), netz = sektoren();
-  /* Wieviel Umland dazugehoert, sagt der Schieber: eng gescannt nur der
-     Sektor selbst, weit gescannt auch die Nachbarn. */
-  const wieviele = beamFlaeche(), nah = [];
-  if (zs) for (const s of netz.folge){
-    const fe = netz.felder[s];
-    nah.push({k: fe.k, d: Math.hypot(fe.c-zs.c, fe.r-zs.r)});
-  }
-  nah.sort((a,b)=>a.d-b.d);
-  const gut = nah.slice(0, wieviele).map(x=>x.k);
-  if (sweepMerken(gut)) radarPing(true);
-  if (wache) wache.sektoren = gut;
+  const orte = sichtbareOrte() || [];
+  const nunS = jetzt();
+  S.blick ||= {};
+  for (const i of orte) S.blick[i] = nunS;
+  if (orte.length) radarPing(true);
   radarScan = 0;
   zielZiehen();
 }
@@ -6427,11 +6463,12 @@ function bildZuschnitt(){
    andere, und dann steht auf dem Schirm etwas anderes als im Balken - genau
    so entstand das "Locked on" bei acht Prozent. */
 function radarLage(){
-  const netz = sektoren(), st = sweepStand(), laeuft = wacheLaeuft();
-  const frisch = netz.folge.filter(s => {
-    const z = st[netz.felder[s].k];
-    return z && jetzt() - z.t < 2*3600e3;
-  }).length;
+  const laeuft = wacheLaeuft();
+  /* Abdeckung: wieviele der Staedte IM BILD frisch abgelesen sind. Ohne Bild
+     zaehlt die ganze Karte. */
+  const imBlick = sichtbareOrte() || Array.from(MAP.n.keys());
+  const frisch = imBlick.filter(i => blickAlter(i) < FRISCH_MS).length;
+  const ganz = imBlick.length;
   const zo = radarZiel !== null ? MAP.n[radarZiel] : null;
   let sagen = "", ohneFix = false;
   if (!laeuft) sagen = `Switch the set on and pick the game window.`;
@@ -6449,8 +6486,9 @@ function radarLage(){
     else if (p.spanne > soll) sagen = `Nearly there. <b>Zoom in one step.</b>`;
     else sagen = `<b style="color:#8fe6a2">Locked on. Hold it.</b>`;
   }
-  return {netz, laeuft, frisch, zo, sagen, ohneFix,
-          proz: Math.round(100*frisch/netz.folge.length),
+  return {laeuft, frisch, zo, sagen, ohneFix,
+          ganz,
+          proz: ganz ? Math.round(100*frisch/ganz) : 0,
           sig: Math.round(radarSignal*100), scan: Math.round(radarScan*100),
           nebenbei: laeuft && !ohneFix && wache.meldung ? wache.meldung : ""};
 }
@@ -6470,10 +6508,10 @@ function radarFrisch(){
   setz("[data-sig]", L.sig + " %");   breit("[data-sigbar]", L.sig, L.sig < 55);
   setz("[data-scan]", L.scan + " %"); breit("[data-scanbar]", L.scan);
   setz("[data-proz]", L.proz + " %");
-  setz("[data-frisch]", `${L.frisch} / ${L.netz.folge.length}`);
+  setz("[data-frisch]", `${L.frisch} / ${L.ganz}`);
   setz("[data-sicht]", L.laeuft ? String(wache.gelesen || 0) : "—");
   setz("[data-ziel]", L.zo ? L.zo[0] : "—");
-  setz("[data-zsek]", zielSektor() ? zielSektor().k : "");
+
   setz("[data-alter]", L.laeuft && wache.dran ? Math.round((jetzt()-wache.dran)/1000)+" s" : "—");
   const at = el.querySelector("[data-at]");
   if (at){ at.textContent = L.laeuft ? String(wache.atZahl||0) : "—";
@@ -6538,7 +6576,7 @@ function radarPult(){
   requestAnimationFrame(radarMassHalten);
   const W = rdWorte();
   const L = radarLage();
-  const {netz, laeuft, frisch, zo, sagen, ohneFix, proz, sig, scan} = L;
+  const {laeuft, frisch, ganz, zo, sagen, ohneFix, proz, sig, scan} = L;
 
   el.innerHTML = `
     <div class="rd-marke"><b>${esc(RD_MARKEN[clanFaktion()].marke)}</b>
@@ -6547,7 +6585,6 @@ function radarPult(){
     <div class="rd-ziel${ohneFix ? " kalt" : ""}">
       <div class="rd-lbl" style="text-align:left;margin-bottom:3px">${esc(rdS(W.ziel))}</div>
       <div class="s" data-ziel>${esc(zo ? zo[0] : "—")}</div>
-      <div class="o" data-zsek>${zielSektor() ? esc(zielSektor().k) : ""}</div>
       <div class="rd-kein"${ohneFix ? "" : " hidden"}>NO FIX</div>
       <div class="h" data-sagen>${sagen}</div>
       <div class="h" style="color:#e8a34a" data-neben${L.nebenbei ? "" : " hidden"}>${esc(L.nebenbei)}</div>
@@ -6572,7 +6609,7 @@ function radarPult(){
     <div class="rd-anz">
       <div class="z"><span>${esc(rdS(W.abdeckung))}</span><b data-proz>${proz} %</b></div>
       <div class="z"><span>${esc(rdS(W.sektoren))}</span>
-        <b data-frisch>${frisch} / ${netz.folge.length}</b></div>
+        <b data-frisch>${frisch} / ${ganz}</b></div>
       <div class="z"><span>${esc(rdS(W.sicht))}</span>
         <b data-sicht>${laeuft ? (wache.gelesen||0) : "—"}</b></div>
       <div class="z"${laeuft && wache.zaehl ? "" : " hidden"}><span>US · GE · SU</span>
@@ -6624,7 +6661,7 @@ function radarPult(){
   });
   el.querySelector("#rd-neu").addEventListener("click", ()=>{
     zielZiehen(); radarPult(); radarZeichnen();
-    if (!sichtbareSektoren()) toast("Nothing in view — picked from the whole map");
+    if (!sichtbareOrte()) toast("Nothing in view — picked from the whole map");
   });
   el.querySelector("#rd-doch")?.addEventListener("click", ()=>{
     if (!wache || !wache.wartet) return;
@@ -6785,67 +6822,50 @@ function radarMalen(){
   g.drawImage(radarGrund, 0, 0);
   g.restore();
 
-  const netz = sektoren(), st = sweepStand();
+  /* Die Karte selbst, in den Schirm eingepasst. */
+  let kx0 = Infinity, ky0 = Infinity, kx1 = -Infinity, ky1 = -Infinity;
+  for (const n of MAP.n){
+    if (n[1] < kx0) kx0 = n[1]; if (n[1] > kx1) kx1 = n[1];
+    if (n[2] < ky0) ky0 = n[2]; if (n[2] > ky1) ky1 = n[2];
+  }
   const rand = 46;
-  const sk = Math.min((W-2*rand)/(netz.x1-netz.x0), (H-2*rand)/(netz.y1-netz.y0));
-  const ox = (W - (netz.x1-netz.x0)*sk)/2 - netz.x0*sk;
-  const oy = (H - (netz.y1-netz.y0)*sk)/2 - netz.y0*sk;
+  const sk = Math.min((W-2*rand)/(kx1-kx0), (H-2*rand)/(ky1-ky0));
+  const ox = (W - (kx1-kx0)*sk)/2 - kx0*sk;
+  const oy = (H - (ky1-ky0)*sk)/2 - ky0*sk;
   const P = (x,y) => [x*sk+ox, y*sk+oy];
   const mx = W/2, my = H/2, rmax = Math.hypot(W, H)/2;
 
-  /* Liegt das echte Spielbild darunter, wird nichts nachgebaut - dann waere
-     die Nachbildung nur ein zweites, schlechteres Europa ueber dem echten.
-     Ohne Bild bleibt die Nachbildung als Notbehelf. */
-  const live = wacheLaeuft() && document.querySelector(".rd-schirm.live");
-  if (!live){
-    g.strokeStyle = "rgba(90,160,105,.13)"; g.lineWidth = 1;
-    for (let r = rmax/5; r < rmax; r += rmax/5){
-      g.beginPath(); g.arc(W/2, H/2, r, 0, 6.284); g.stroke();
-    }
-    for (const s of netz.folge){
-      const f = netz.felder[s];
-      const [x0,y0] = P(f.x0, f.y0), [x1,y1] = P(f.x1, f.y1);
-      const stand = st[f.k], stufe = sweepStufe(stand && stand.t);
-      g.fillStyle = stufe ? stufe.f : "#c8453a";
-      g.globalAlpha = stufe ? (stufe.k === "frisch" ? .17 : stufe.k === "warm" ? .11
-                              : stufe.k === "kuehl" ? .07 : .05) : .05;
-      g.fillRect(x0, y0, x1-x0, y1-y0);
-      g.globalAlpha = 1;
-      if (!stand){
-        g.strokeStyle = "rgba(200,69,58,.55)"; g.lineWidth = 1.4; g.setLineDash([5,4]);
-        g.strokeRect(x0+1, y0+1, x1-x0-2, y1-y0-2); g.setLineDash([]);
-      }
-      g.strokeStyle = "rgba(120,200,140,.16)"; g.lineWidth = 1;
-      g.strokeRect(x0, y0, x1-x0, y1-y0);
-      g.fillStyle = "rgba(150,230,175,.55)";
-      g.font = `11px ui-monospace,Consolas,monospace`;
-      g.textAlign = "left"; g.textBaseline = "top";
-      g.fillText(f.k, x0+4, y0+3);
-    }
-    g.strokeStyle = "rgba(90,190,120,.17)"; g.lineWidth = 1;
-    g.beginPath();
-    for (const [a,b] of MAP.e){
-      const A2 = MAP.n[a], B2 = MAP.n[b];
-      if (!A2 || !B2) continue;
-      const p = P(A2[1],A2[2]), q = P(B2[1],B2[2]);
-      g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]);
-    }
-    g.stroke();
-    for (let i = 0; i < MAP.n.length; i++){
-      const n = MAP.n[i], [x,y] = P(n[1], n[2]);
-      const o = S.owner[i] && S.owner[i].v;
-      const c = (o === undefined || o === null) ? "#5c7a64" : col(FACTIONS[o]);
-      const stand = st[netz.felder[netz.vonOrt[i]].k];
-      const alt2 = stand ? Math.min(1, (jetzt()-stand.t)/(6*3600e3)) : 1;
-      g.globalAlpha = 1 - 0.55*alt2;
-      g.fillStyle = c;
-      const r = isCap(i) ? 3.8 : isObj(i) ? 2.6 : 1.8;
-      if (isCap(i)){ g.shadowColor = c; g.shadowBlur = 9; }
-      g.beginPath(); g.arc(x, y, r, 0, 6.284); g.fill();
-      g.shadowBlur = 0;
-    }
-    g.globalAlpha = 1;
+  /* Die Karte wird IMMER gezeichnet. Vorher wurde sie bei laufender Wache
+     unterdrueckt, weil dort das echte Spielbild liegen sollte - das tut es
+     in der Praxis aber nicht sichtbar, und dann blieb ein leerer Schirm mit
+     einem blinkenden Punkt. Ohne Karte ist keine Ansage ueberpruefbar. */
+  g.strokeStyle = "rgba(90,160,105,.13)"; g.lineWidth = 1;
+  for (let r = rmax/5; r < rmax; r += rmax/5){
+    g.beginPath(); g.arc(W/2, H/2, r, 0, 6.284); g.stroke();
   }
+  g.strokeStyle = "rgba(90,190,120,.20)"; g.lineWidth = 1;
+  g.beginPath();
+  for (const [a,b] of MAP.e){
+    const A2 = MAP.n[a], B2 = MAP.n[b];
+    if (!A2 || !B2) continue;
+    const p = P(A2[1],A2[2]), q = P(B2[1],B2[2]);
+    g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]);
+  }
+  g.stroke();
+  /* Eine lange nicht gesehene Stadt verblasst - das ist die Abdeckung, ohne
+     dass es dafuer ein Raster braeuchte. */
+  for (let i = 0; i < MAP.n.length; i++){
+    const n = MAP.n[i], [x,y] = P(n[1], n[2]);
+    const o = S.owner[i] && S.owner[i].v;
+    const c = (o === undefined || o === null) ? "#5c7a64" : col(FACTIONS[o]);
+    g.globalAlpha = 1 - 0.6*Math.min(1, blickAlter(i)/(6*3600e3));
+    g.fillStyle = c;
+    const r = isCap(i) ? 3.8 : isObj(i) ? 2.6 : 1.8;
+    if (isCap(i)){ g.shadowColor = c; g.shadowBlur = 9; }
+    g.beginPath(); g.arc(x, y, r, 0, 6.284); g.fill();
+    g.shadowBlur = 0;
+  }
+  g.globalAlpha = 1;
 
   /* Der eigene Bildausschnitt auf dem Schirm. Ohne ihn sieht man nur, wo
      man HIN soll - nicht, wo man IST, und dann ist jede Ansage Ratespiel. */
@@ -7202,7 +7222,7 @@ function wacheTickIntern(){
   /* Nah genug heran? Dann schaltet sich die Markersuche von selbst ein.
      Nur einmal, nur ungefragt solange niemand den Knopf bedient hat. */
   if (!radarAThand && !radarAT && res.sicher && wache.peil){
-    const kb = sektoren().x1 - sektoren().x0;
+    const kb = (karteBreitCache ||= KARTE_BREIT());
     if (wache.peil.spanne < kb*AT_NAH){
       radarAT = true;
       toast("Close enough — tracking assault-team markers now. Switch it off in the set.");
@@ -7220,6 +7240,13 @@ function wacheTickIntern(){
         wache.atZahl = (wache.atZahl||0) + (n ? n.sicht + n.schaetz + n.blind : 0);
       }
     } catch(e){ wache.atGesehen = -1; }
+  }
+  /* Jede abgelesene Stadt bekommt ihren Blickstempel - unabhaengig davon,
+     ob sich etwas geaendert hat. Daraus kommen Abdeckung und Zielwahl. */
+  {
+    const nunB = jetzt();
+    S.blick ||= {};
+    for (const idx in res.erg.besitz) S.blick[idx] = nunB;
   }
   wache.zaehl = res.erg.zaehl.slice();
   /* Sobald zum ersten Mal bekannt ist, wo man steht: ein Ziel aus dem Bild
@@ -14733,7 +14760,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 7e22d0ae3f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 3ddef573c4</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
