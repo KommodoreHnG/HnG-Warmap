@@ -4957,6 +4957,23 @@ const SHOT_COL = [
   (r,g,b) => b > 95 && b-r > 45 && b-g > 60,     // GE    violet
   (r,g,b) => r > 70 && r-g > 55 && r-b > 55,     // USSR  red
 ];
+/* ---- WORAN ALLE FARBSCHWELLEN HIER GEEICHT SIND ----
+   Sie stammen aus Aufnahmen ueber CopyFromScreen. Enno faehrt mit HDR, und
+   damit liefern die Aufnahmewege verschiedene Werte - gemessen an derselben
+   Minikarte des Schlachtbildschirms:
+
+       auf dem Schirm            hell und bunt
+       CopyFromScreen-Datei      Helligkeit 73, Sattheit 7 - praktisch grau
+       getDisplayMedia           unbekannt, das bekommt nur das Werkzeug
+
+   Was das Werkzeug live sieht, ist also der dritte Fall, und der ist nicht
+   vermessen. Wo eine Zahl in diesem Block steht, gilt sie fuer den zweiten.
+
+   Gemessen ist immerhin, wie empfindlich die Schwellen sind: bei kuenstlicher
+   Aufhellung um 60 Prozent waechst die Maske um ein Viertel, die
+   FEUERflaeche aber auf das Vierfache. Deshalb steht weiter unten eine
+   Notbremse (FEUER_FLAECHE_MAX).                                         */
+
 /* Feuer - und es muss VOR den Fraktionsfarben geprueft werden.
    Gemessen: 98 bis 100 Prozent der Flammenpunkte bestehen den USSR-Test.
    Eine brennende deutsche Stadt bekommt also einen roten Fleck aufgemalt,
@@ -16112,7 +16129,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 3adb0c326c</span></p></div>
+         installation. <span style="color:var(--dim2)">· build e3a9ce3300</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
