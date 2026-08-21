@@ -528,7 +528,8 @@ body.meld-modus{cursor:help}
 .rd-teil{display:flex;flex-direction:column;align-items:center;gap:6px}
 .rd-lbl{font-size:11.5px;letter-spacing:.16em;color:#9c9280;text-transform:uppercase;
   text-align:center;line-height:1.3}
-.rd-lbl em{display:block;font-style:normal;font-size:8.5px;letter-spacing:.09em;color:#6b6455}
+.rd-lbl em{display:block;font-style:normal;font-size:11px;letter-spacing:.05em;
+  color:#8d8471;margin-top:3px;line-height:1.35}
 /* Kurbel und Drehschalter sind gezeichnet, nicht bebildert - so bleiben sie
    in jeder Groesse scharf. */
 .rd-schieber{cursor:ew-resize;touch-action:none;display:block}
@@ -5416,7 +5417,8 @@ function maskeAus(quelle, feld, maxb){
    Einrastung bei 1600 nicht in einer Verfolgung bei 1100 weiterlaufen: der
    Massstab unterscheidet sich dann um den Breitenfaktor und startet weit
    ausserhalb des Suchfensters. */
-const trZuQuelle = (tr, a) => ({s: tr.s/a.k, ox: (tr.ox-a.tx)/a.k, oy: (tr.oy-a.ty)/a.k});
+const trZuQuelle = (tr, a) => ({s: tr.s/a.k, ox: (tr.ox-a.tx)/a.k, oy: (tr.oy-a.ty)/a.k,
+  stern: tr.stern, sternGuete: tr.sternGuete, sternKanten: tr.sternKanten});
 const trAusQuelle = (q, a) => ({s: q.s*a.k, ox: q.ox*a.k + a.tx, oy: q.oy*a.k + a.ty});
 
 /* opt.spur  - die Lage aus dem vorigen Bild; dann wird mitgefuehrt statt neu
@@ -5450,7 +5452,15 @@ function kartenAusBild(quelle, melde, opt){
        nichts, laeuft alles wie bisher - deshalb steht sie davor und nicht
        an ihrer Stelle. */
     let tr = null;
-    if (o.spur) tr = spurTransform(a.mk, punkte, trAusQuelle(o.spur, a));
+    if (o.spur){
+    tr = spurTransform(a.mk, punkte, trAusQuelle(o.spur, a));
+    /* Die Verfolgung erbt die Masse der Einrastung, von der sie abstammt -
+       sonst waere nach dem ersten Bild nichts mehr schreibreif. */
+    if (tr && o.spur.stern){
+      tr.stern = true;
+      tr.sternGuete = o.spur.sternGuete; tr.sternKanten = o.spur.sternKanten;
+    }
+  }
     else {
       /* Die Sternenkarte arbeitet auf einem kleineren Bild. Gemessen an
          sechs Ansichten von weit bis nah ist sie bei 1100 Punkten genauso
@@ -5463,6 +5473,7 @@ function kartenAusBild(quelle, melde, opt){
         const q = trZuQuelle({s: st.s, ox: st.ox, oy: st.oy}, aS);
         tr = trAusQuelle(q, a);
         tr.guete = st.guete; tr.stern = true;
+        tr.sternGuete = st.guete; tr.sternKanten = st.kanten;
       } else {
         tr = findeTransform(a.mk, punkte, melde || (()=>{}), sSoll);
       }
@@ -5495,9 +5506,17 @@ function kartenAusBild(quelle, melde, opt){
     return {fehler: `no reliable fix (${Math.round(g.quote*100)} % of towns matched) — `
                   + `zoom out until more of the map shows`,
             W:a.W, H:a.H, tmp:a.tmp, punkte, guete:g.quote};
+  /* Zwei Stufen: SICHER genuegt zum Anzeigen, SCHREIBREIF zum Uebernehmen.
+     passungGuete allein reicht dafuer nicht - sie zaehlt nur, wie viele
+     Katalogstaedte auf Farbe liegen, und genau dieses Mass hat die
+     gequetschte Lage ueberleben lassen. Die Sternenkarte bringt zwei
+     ehrlichere mit: den Anteil eineindeutig zugeordneter Scheiben und die
+     Katalogkanten zwischen ihnen. */
+  const stg = tr.sternGuete || 0, stk = tr.sternKanten || 0;
   return {erg: farbenLesen(a.mk, punkte, tr), tr, trQ: trZuQuelle(tr, a), punkte,
           mk:a.mk, feld:a.feld, W:a.W, H:a.H, tmp:a.tmp, bw:a.bw, bh:a.bh,
-          guete:g.quote, sicher: g.quote >= PASS_GUT};
+          guete:g.quote, sicher: g.quote >= PASS_GUT,
+          schreibreif: g.quote >= PASS_GUT && !!tr.stern && stg >= 0.5 && stk >= 0.7};
 }
 
 /* Uebernehmen heisst: nur schreiben, was sich wirklich geaendert hat. Alle
@@ -6175,7 +6194,17 @@ try {
 } catch(e){}
 /* Ab welcher sichtbaren Kartenbreite lohnt die Markersuche. Weiter draussen
    sind die Kartenstapel wenige Bildpunkte gross und nicht zu lesen. */
-const AT_NAH = 0.6;
+/* Eine Kampfeinheitenkarte ist gemessen 1,3 Karteneinheiten breit - an drei
+   Bildern mit bekannter Lage 1,11 / 1,26 / 1,58. Der Sucher in atVonKarte
+   verlangt ueber acht Bildpunkte Breite, und unter vierzehn ist die Ziffer
+   darauf nicht mehr zu lesen.
+
+   Vorher stand hier AT_NAH = 0.6 der Kartenbreite, also 692 Karteneinheiten
+   Spanne. Dort ist eine Karte 1,5 Bildpunkte breit - das Geraet hat also
+   Stapel geschrieben, wo nichts zu sehen war. */
+const AT_KARTE_EINH = 1.3, AT_KARTE_PX = 14;
+const atLesbar = (spanne, breite) =>
+  spanne > 0 && (AT_KARTE_EINH * breite / spanne) >= AT_KARTE_PX;
 
 /* Wie nah man heran muss, als sichtbare Kartenbreite. Eng heisst nah. */
 /* Wie weit soll die Ansicht sein? Ein Vielfaches der Kartenbreite - vorher
@@ -6184,8 +6213,25 @@ const KARTE_BREIT = () => { let a = Infinity, b = -Infinity;
   for (const n of MAP.n){ if (n[1] < a) a = n[1]; if (n[1] > b) b = n[1]; }
   return b - a || 1; };
 let karteBreitCache = null;
-const beamSpanne = () => (1.7 + 1.1*radarBeam)
-  * (karteBreitCache ||= KARTE_BREIT());
+/* Die Erfassungsflaeche wird nicht mehr gestellt, sondern abgelesen: sie
+   folgt dem Zoom des Spiels. Vorher war sie ein Wunsch, gegen den die
+   tatsaechliche Ansicht gemessen wurde - und dann meldete das Geraet
+   "weiter herauszoomen", obwohl gerade das den Zweck zerstoert.
+
+   Die Spanne reicht von rund 60 Karteneinheiten (so nah wie das Spiel
+   laesst) bis rund 1300 (ganz heraus). Auf dem Regler liegt sie
+   logarithmisch, weil sie sich je Mausradrastung um ein Drittel aendert. */
+const BEAM_ENG = 60, BEAM_WEIT = 1300;
+function beamAusSpanne(spanne){
+  if (!(spanne > 0)) return radarBeam;
+  const f = (Math.log(spanne) - Math.log(BEAM_ENG))
+          / (Math.log(BEAM_WEIT) - Math.log(BEAM_ENG));
+  return Math.max(0, Math.min(1, f));
+}
+/* Wie breit ist die Erfassung gerade wirklich? */
+const beamSpanne = () => (wacheLaeuft() && wache.peil && wache.peil.spanne > 0)
+  ? wache.peil.spanne
+  : BEAM_ENG * Math.pow(BEAM_WEIT/BEAM_ENG, radarBeam);
 /* Wie schnell der Scan laeuft, in Anteil je Sekunde.
    Die Markersuche kostet: sie will hineingezoomte Bilder und mehr Rechnung
    je Bild. Das steht so im Geraet - "dementsprechend geht aber der
@@ -6193,9 +6239,15 @@ const beamSpanne = () => (1.7 + 1.1*radarBeam)
 const beamTempo  = () => (0.16 - 0.115*radarBeam) * (radarAT ? 0.55 : 1);
 /* Wieviele Sektoren ein fertiger Scan gutschreibt. */
 const beamFlaeche= () => Math.max(1, Math.round((1 + 3*radarBeam) * (radarAT ? 0.5 : 1)));
-const beamWort   = () => radarBeam < 0.25 ? "tight · fast · little ground"
-                       : radarBeam < 0.55 ? "narrow"
-                       : radarBeam < 0.8  ? "wide" : "widest · slow · much ground";
+const beamWort = () => {
+  const sp = beamSpanne();
+  const wie = sp < 110 ? "tight" : sp < 260 ? "narrow" : sp < 600 ? "wide" : "widest";
+  const ein = (wacheLaeuft() && wache.peil)
+    ? (atLesbar(sp, PEIL_BREITE) ? " · assault teams readable"
+                                : " · too wide for assault teams")
+    : "";
+  return `${wie} · ${Math.round(sp)} map units${ein}`;
+};
 
 /* ---- Der Regler im Spiel eicht sich selbst ----
    Er gibt einen Wert zwischen null und eins, dessen Bedeutung ich nicht
@@ -6386,8 +6438,13 @@ function radarDrehen(schritte){
 function radarWerte(){
   const el = document.getElementById("rd-pult");
   if (!el) return;
+  /* Der Regler wird nachgefuehrt, nicht gestellt: er zeigt, was gerade
+     wirklich erfasst wird. */
+  if (wacheLaeuft() && wache.peil && wache.peil.spanne > 0)
+    radarBeam = beamAusSpanne(wache.peil.spanne);
   const s = el.querySelector("[data-beam]");
   if (s) s.textContent = beamWort();
+  breiteZeichnen();
 }
 
 async function radarAuf(){
@@ -6725,6 +6782,9 @@ function breiteGriff(){
     const r = s.getBoundingClientRect();
     const f = (ev.clientX - r.left)/r.width;
     const neu = Math.max(0, Math.min(1, (f*300 - 18)/(282-18)));
+    /* Von Hand gestellt wird hier nichts mehr: der Regler zeigt die
+       Erfassung, und die kommt aus dem Zoom des Spiels. */
+    if (wacheLaeuft()) return;
     if (Math.abs(neu - radarBeam) < 0.004) return;
     /* Alle Achtel rastet es - eine stufenlose Einstellung, die niemand
        wiederfindet, ist keine Einstellung. */
@@ -6742,6 +6802,7 @@ function breiteGriff(){
   s.addEventListener("pointercancel", los);
   s.addEventListener("wheel", ev => {
     ev.preventDefault();
+    if (wacheLaeuft()) return;
     radarBeam = Math.max(0, Math.min(1, radarBeam - Math.sign(ev.deltaY)/8));
     radarKlack(); breiteZeichnen(); radarWerte(); radarZeichnen();
   }, {passive:false});
@@ -6929,23 +6990,47 @@ function radarMalen(){
     g.fillText(zn[0], zx + (zx > W-200 ? -22 : 22), zy - 16);
   }
 
-  /* Der Suchstrahl. Laeuft die Anlage, dreht er zuegig; steht sie, schleicht
-     er - man soll auf einen Blick sehen, ob etwas passiert. */
-  const grad = g.createConicGradient
-    ? g.createConicGradient(radarWinkel, mx, my)
-    : null;
-  if (grad){
-    grad.addColorStop(0, "rgba(130,240,160,.20)");
-    grad.addColorStop(0.06, "rgba(130,240,160,.05)");
-    grad.addColorStop(0.3, "rgba(130,240,160,0)");
-    grad.addColorStop(1, "rgba(130,240,160,0)");
-    g.fillStyle = grad;
-    g.beginPath(); g.moveTo(mx,my); g.arc(mx,my,rmax,0,6.284); g.fill();
+  /* Der Suchstrahl - in einem eigenen kleinen Schirm oben links.
+     Frueher strich er ueber die ganze Flaeche. Solange dort nichts lag, war
+     er das einzige, was sich bewegte; seit die Karte darauf liegt, kreist er
+     durch Feindesland und stiftet Verwirrung. Das Geraeusch des Geraets
+     bleibt, es steht nur nicht mehr im Weg. */
+  {
+    const kr = Math.max(46, Math.min(78, Math.min(W,H)*0.11));
+    const kx = 22 + kr, ky = 22 + kr;
+    g.save();
+    g.beginPath(); g.arc(kx, ky, kr, 0, 6.284); g.clip();
+    g.fillStyle = "rgba(6,14,8,.86)"; g.fillRect(kx-kr, ky-kr, 2*kr, 2*kr);
+    /* Ringe und Kreuz - das Innenleben eines Schirms. */
+    g.strokeStyle = "rgba(90,190,120,.22)"; g.lineWidth = 1;
+    for (let i = 1; i <= 3; i++){
+      g.beginPath(); g.arc(kx, ky, kr*i/3, 0, 6.284); g.stroke();
+    }
+    g.beginPath();
+    g.moveTo(kx-kr, ky); g.lineTo(kx+kr, ky);
+    g.moveTo(kx, ky-kr); g.lineTo(kx, ky+kr);
+    g.stroke();
+    const grad = g.createConicGradient
+      ? g.createConicGradient(radarWinkel, kx, ky) : null;
+    if (grad){
+      grad.addColorStop(0, "rgba(130,240,160,.34)");
+      grad.addColorStop(0.07, "rgba(130,240,160,.08)");
+      grad.addColorStop(0.32, "rgba(130,240,160,0)");
+      grad.addColorStop(1, "rgba(130,240,160,0)");
+      g.fillStyle = grad;
+      g.beginPath(); g.moveTo(kx,ky); g.arc(kx,ky,kr,0,6.284); g.fill();
+    }
+    g.strokeStyle = "rgba(150,255,180,.65)"; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(kx,ky);
+    g.lineTo(kx + Math.cos(radarWinkel)*kr, ky + Math.sin(radarWinkel)*kr);
+    g.stroke();
+    g.restore();
+    /* Der Rand des Geraets. */
+    g.strokeStyle = "rgba(120,200,140,.45)"; g.lineWidth = 2;
+    g.beginPath(); g.arc(kx, ky, kr, 0, 6.284); g.stroke();
+    g.strokeStyle = "rgba(120,200,140,.18)"; g.lineWidth = 1;
+    g.beginPath(); g.arc(kx, ky, kr+4, 0, 6.284); g.stroke();
   }
-  g.strokeStyle = "rgba(150,255,180,.5)"; g.lineWidth = 1.5;
-  g.beginPath(); g.moveTo(mx,my);
-  g.lineTo(mx + Math.cos(radarWinkel)*rmax, my + Math.sin(radarWinkel)*rmax);
-  g.stroke();
 
   /* Legende unten links - vier Stufen, mehr muss man nicht wissen. */
   g.font = `10px ui-monospace,Consolas,monospace`;
@@ -7221,11 +7306,16 @@ function wacheTickIntern(){
      schwerer - was unlesbar bleibt, wird als "2+" vermerkt statt verworfen. */
   /* Nah genug heran? Dann schaltet sich die Markersuche von selbst ein.
      Nur einmal, nur ungefragt solange niemand den Knopf bedient hat. */
-  if (!radarAThand && !radarAT && res.sicher && wache.peil){
-    const kb = (karteBreitCache ||= KARTE_BREIT());
-    if (wache.peil.spanne < kb*AT_NAH){
+  /* Marker nur, wenn sie ueberhaupt lesbar sind - und wieder aus, wenn man
+     herauszoomt. Vorher blieb es an, sobald es einmal an war. */
+  if (!radarAThand && wache.peil){
+    const lesbar = atLesbar(wache.peil.spanne, res.W);
+    if (lesbar && !radarAT && res.sicher){
       radarAT = true;
       toast("Close enough — tracking assault-team markers now. Switch it off in the set.");
+      if (radarOffen) radarPult();
+    } else if (!lesbar && radarAT){
+      radarAT = false;
       if (radarOffen) radarPult();
     }
   }
@@ -7248,6 +7338,8 @@ function wacheTickIntern(){
     S.blick ||= {};
     for (const idx in res.erg.besitz) S.blick[idx] = nunB;
   }
+  if (wache.peil && wache.peil.spanne > 0)
+    radarBeam = beamAusSpanne(wache.peil.spanne);
   wache.zaehl = res.erg.zaehl.slice();
   /* Sobald zum ersten Mal bekannt ist, wo man steht: ein Ziel aus dem Bild
      waehlen. Das beim Aufmachen blind gezogene lag irgendwo. */
@@ -7287,7 +7379,7 @@ function wacheTickIntern(){
      Aber nur am groben Raster: gepeilt wird jede anderthalb Sekunden,
      genommen wird alle zwoelf. Sonst raeumt man die Karte im Vorbeifahren
      leer, und das war ausdruecklich nicht gewollt. */
-  if (!res.sicher || nun - (wache.ernte || 0) < wache.sek*1000){
+  if (!res.schreibreif || nun - (wache.ernte || 0) < wache.sek*1000){
     wacheAnzeigen(); if (radarOffen) radarFrisch();
     return;
   }
@@ -14760,7 +14852,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 3ddef573c4</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bcbe4cc85f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
