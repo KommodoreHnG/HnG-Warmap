@@ -300,6 +300,17 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 .pick em{font-style:normal;font-size:9px;color:var(--dim2)}
 .mini{background:var(--panel2);border:1px solid var(--line);border-radius:2px;padding:1px 3px;
   font-size:10.5px;outline:0;color:var(--text)}
+/* Nachschub: drei Zustaende, drei Farben. Der Hebel ist der einzige, der
+   golden leuchtet - er ist eine Gelegenheit, keine Lagemeldung. */
+/* Die Spawnrichtung ist die schaerfste Auskunft der ganzen Karte: von dort
+   kommt der Gegner, und zwar jetzt. Deshalb steht sie oben und in Rot. */
+.vers-spawn{font-size:12.5px;line-height:1.5;margin-bottom:6px;padding:6px 8px;
+  border-left:2px solid #e06a4e;background:rgba(224,106,78,.08);color:#f0a08c}
+.vers-ok{font-size:12.5px;color:var(--dim);line-height:1.5}
+.vers-warn{font-size:12px;color:#e2ac48;margin-top:4px;line-height:1.45}
+.vers-weg{font-size:12.5px;color:#e06a4e;line-height:1.5;font-weight:600}
+.vers-hebel{font-size:12px;margin-top:6px;padding:6px 8px;line-height:1.45;
+  border-left:2px solid var(--accent);background:rgba(226,172,72,.07);color:var(--accent)}
 .para-row{display:flex;align-items:center;gap:8px}
 .para-lbl{font-size:9.5px;font-family:var(--schmal);text-transform:uppercase;letter-spacing:.09em;
   color:var(--dim2);width:66px;flex:0 0 auto}
@@ -562,6 +573,14 @@ body.meld-modus{cursor:help}
 .rd-bar i{display:block;height:100%;background:linear-gradient(90deg,#8a6a2a,#f0c169);
   transition:width .35s ease}
 /* Was die aktuelle Zoomstufe hergibt - drei Zeilen, je eine Faehigkeit. */
+/* Die Betriebsart: zwei Knoepfe, mehr braucht es nicht. */
+.rd-modus{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:9px}
+.rd-modus button{font:600 10px/1 var(--schmal);letter-spacing:.1em;padding:7px 0;
+  background:#0d160d;color:#5f7a63;border:1px solid #23331f;border-radius:2px;cursor:pointer}
+.rd-modus button.an{background:#16281a;color:#8fe6a2;border-color:#2f6b3c}
+.rd-soll{font-size:10.5px;line-height:1.5;color:#6e7d6a;margin-top:5px;min-height:16px}
+.rd-soll .ziel{color:#e2ac48;font-weight:600}
+.rd-soll .gut{color:#8fe6a2;font-weight:600}
 .rd-kann{margin-top:6px;font-size:10.5px;line-height:1.7;color:#7d7461;
   border-top:1px solid #2c3a2c;padding-top:6px}
 .rd-kann i{font-style:normal;display:inline-block;width:13px}
@@ -1699,7 +1718,7 @@ const KONTO_PLATZ = (raum, spieler) => STORE + ":" + raum + ":" + spieler;
 /* Every kind of timestamped entry. Arrows are a list, everything else a map. */
 const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot",
                  "line","post","area","para","roster","est","edep","anon","akt","btl",
-                 "priv","todo","wish","ok","first","sweep"];
+                 "priv","todo","wish","ok","first","sweep","vers"];
 /* Wann wurde diese Stadt zuletzt GESEHEN? Nicht zu verwechseln mit
    S.owner[i].t - das ist "zuletzt geaendert", und eine Stadt, die seit einer
    Woche sowjetisch ist, hat dort einen wochenalten Stempel, obwohl sie
@@ -1765,10 +1784,73 @@ function namHash(s){
   return h.toString(36).slice(0,5);
 }
 const spielerKey = name => `${namKey(name).slice(0,28) || "x"}-${namHash(name)}`;
+
+/* ---- Namen, die gleich AUSSEHEN ----
+   namKey faengt Muller/Müller. Es faengt nicht das kyrillische а in "Ivаn",
+   das vom lateinischen nicht zu unterscheiden ist, und nicht das grosse I
+   gegen das kleine L.
+
+   Hier zaehlt das mehr als anderswo: die Namen kommen aus einer
+   Schrifterkennung. Schwankt sie zwischen I, l und 1, liegt derselbe Spieler
+   unter drei Schluesseln - mit drei Fraktionen. In einem Kriegswerkzeug ist
+   das keine Unsauberkeit, sondern eine Falschmeldung.
+
+   Das Skelett bildet verwechselbare Zeichen auf einen Vertreter ab. Es dient
+   zum WARNEN, nicht zum Zusammenlegen: "Il" und "ll" koennen zwei Leute
+   sein, und wer sie still verschmilzt, macht aus einem Anzeigefehler einen
+   Datenverlust. */
+const HOMO = {
+  /* kyrillisch -> lateinisch */
+  "а":"a","е":"e","о":"o","р":"p","с":"c","у":"y","х":"x","ѕ":"s","і":"i",
+  "ј":"j","һ":"h","ԁ":"d","ԛ":"q","ԝ":"w","в":"b","к":"k","м":"m","н":"h",
+  "т":"t","ѐ":"e","ё":"e",
+  /* griechisch -> lateinisch */
+  "α":"a","β":"b","ε":"e","ι":"i","κ":"k","ν":"v","ο":"o","ρ":"p","τ":"t",
+  "υ":"u","χ":"x","ω":"w","γ":"y","η":"n","μ":"u","σ":"o","ϲ":"c",
+  /* und die drei, die in fast jeder Schrift gleich aussehen */
+  "l":"i","1":"i","0":"o"
+};
+const namSkelett = s => namKey(s).replace(/./gu, c => HOMO[c] || c);
+/* Wer sieht aus wie dieser Name, ist es aber nicht? */
+function namZwillinge(name){
+  const k = spielerKey(name), sk = namSkelett(name);
+  if (!sk) return [];
+  const raus = [];
+  for (const [key, e] of Object.entries(S.roster)){
+    if (key === k || !e || !e.v || !e.v.name) continue;
+    if (namSkelett(e.v.name) === sk) raus.push(e.v.name);
+  }
+  return raus;
+}
+/* Worin unterscheiden sie sich? Ohne diese Angabe steht der Nutzer vor zwei
+   Namen, die gleich aussehen, und soll entscheiden. */
+function namUnterschied(a, b){
+  const A = [...String(a)], B = [...String(b)];
+  const raus = [];
+  for (let i = 0; i < Math.max(A.length, B.length); i++){
+    if (A[i] === B[i]) continue;
+    const zeig = c => c === undefined ? "—"
+      : `${c} (U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4,"0")})`;
+    raus.push(`position ${i+1}: ${zeig(A[i])} vs ${zeig(B[i])}`);
+    if (raus.length >= 3) break;
+  }
+  return raus;
+}
 function merkeSpieler(name, f, clan, fp){
   name = String(name).trim();
   if (name.length < 2) return null;
   const k = spielerKey(name), alt = S.roster[k], av = alt && alt.v;
+  /* Ein NEUER Name, der wie ein bekannter aussieht, wird gemeldet - einmal,
+     und nicht bei jedem Nachtragen an einem laengst bekannten Spieler. */
+  if (!alt){
+    const zw = namZwillinge(name);
+    if (zw.length){
+      const u = namUnterschied(name, zw[0]);
+      toast(`"${name}" looks like "${zw[0]}" but is a different name`
+          + (u.length ? ` — ${u[0]}` : "")
+          + `. Both are kept; merge them by hand if they are the same player.`);
+    }
+  }
   /* undefined heisst "so lassen", null heisst ausdruecklich loeschen - sonst
      waere das "—" in der Fraktionsauswahl ein stiller Blindgaenger. */
   const neuF = f === undefined ? (av ? av.f : null) : f;
@@ -2516,14 +2598,28 @@ function draw(){
   }
 
   /* --- supply lines, coloured by who holds both ends (game style) --- */
-  const front = [];
+  const front = [], angriff = [], begegnung = [];
   ctx.lineCap = "round";
   for (const [a,b] of MAP.e){
     const oa = ownerOf(a), ob = ownerOf(b);
     const [x1,y1] = toScr(MAP.n[a][1], MAP.n[a][2]);
     const [x2,y2] = toScr(MAP.n[b][1], MAP.n[b][2]);
     if (x1 < -40 && x2 < -40 || y1 < -40 && y2 < -40) continue;
-    if (oa >= 0 && ob >= 0 && oa !== ob){ front.push([x1,y1,x2,y2]); continue; }
+    /* Begegnungskampf: zwei Kampfeinheiten sind unterwegs aufeinander-
+       getroffen. Das steht fuer sich und gilt auch zwischen zwei Staedten
+       derselben Seite - der Gegner kann dort durchgestossen sein. */
+    if (linienKampf(a, b)) begegnung.push([x1,y1,x2,y2]);
+    if (oa >= 0 && ob >= 0 && oa !== ob){
+      /* Laeuft hier ein Angriff? Dann traegt die Linie die Farbe des
+         Angreifers - Ennos Regel, an 45 Faellen zu 98 Prozent bestaetigt -
+         und eine Spitze, die zeigt, wohin er stoesst. */
+      const ang = angriffUeber(a, b);
+      if (ang != null){
+        const zumVerteidiger = (ang === oa) ? [x1,y1,x2,y2] : [x2,y2,x1,y1];
+        angriff.push([ang, ...zumVerteidiger]);
+      } else front.push([x1,y1,x2,y2]);
+      continue;
+    }
     if (oa >= 0 && oa === ob){ ctx.strokeStyle = col(FACTIONS[oa]); ctx.lineWidth = Math.max(1, 1.5*z); }
     else { ctx.strokeStyle = light() ? "rgba(70,82,98,.45)" : "rgba(150,168,190,.28)"; ctx.lineWidth = Math.max(.6,.9*z); }
     ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
@@ -2532,6 +2628,41 @@ function draw(){
     ctx.strokeStyle = "#8b95a5"; ctx.lineWidth = Math.max(1.4, 1.9*z);
     ctx.beginPath();
     for (const [x1,y1,x2,y2] of front){ ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); }
+    ctx.stroke();
+  }
+  /* Angriffsrichtungen ueber der ruhigen Front: die Farbe des Angreifers,
+     die Spitze zum Verteidiger. Wer eine belagerte Stadt anschaut, sieht so
+     ohne einen Klick, aus welcher Richtung gespawnt wird. */
+  for (const [f, ax, ay, bx, by] of angriff){
+    ctx.strokeStyle = col(FACTIONS[f]);
+    ctx.lineWidth = Math.max(1.8, 2.4*z);
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    const L = Math.hypot(bx-ax, by-ay);
+    if (L < 14) continue;
+    /* Die Spitze sitzt nicht am Ende, sondern zwei Drittel des Weges: am
+       Ende liegt die Stadtscheibe darueber und verdeckt sie. */
+    const ux = (bx-ax)/L, uy = (by-ay)/L;
+    const px = ax + ux*L*0.66, py = ay + uy*L*0.66;
+    const s = Math.max(4, Math.min(9, 3.5*z));
+    ctx.fillStyle = col(FACTIONS[f]);
+    ctx.beginPath();
+    ctx.moveTo(px + ux*s, py + uy*s);
+    ctx.lineTo(px - uy*s*0.62 - ux*s*0.35, py + ux*s*0.62 - uy*s*0.35);
+    ctx.lineTo(px + uy*s*0.62 - ux*s*0.35, py - ux*s*0.62 - uy*s*0.35);
+    ctx.closePath(); ctx.fill();
+  }
+  /* Begegnungskaempfe: ein Kreuz auf der Mitte der Linie. Dort entscheidet
+     sich, wer danach angreift und wer verteidigt. */
+  if (begegnung.length){
+    ctx.strokeStyle = "#ff8a5c";
+    ctx.lineWidth = Math.max(1.6, 2.1*z);
+    const s = Math.max(3.5, Math.min(8, 3*z));
+    ctx.beginPath();
+    for (const [x1,y1,x2,y2] of begegnung){
+      const mx = (x1+x2)/2, my = (y1+y2)/2;
+      ctx.moveTo(mx-s, my-s); ctx.lineTo(mx+s, my+s);
+      ctx.moveTo(mx+s, my-s); ctx.lineTo(mx-s, my+s);
+    }
     ctx.stroke();
   }
 
@@ -3325,6 +3456,99 @@ function setPara(town, f, plan){
   save();
 }
 const paraAt = i => (imKrieg(S.para[i]) && S.para[i].v) || null;
+
+/* ---------------- Angriffsrichtungen ----------------
+   Der Schluessel ist das Staedtepaar, klein zuerst - eine Linie hat keine
+   Richtung, nur zwei Enden. */
+const versSchl = (a, b) => `${Math.min(a,b)}-${Math.max(a,b)}`;
+/* Wer greift ueber diese Linie an? Zurueck kommt die Fraktion oder null. */
+function angriffUeber(a, b){
+  const e = S.vers[versSchl(a, b)];
+  return (imKrieg(e) && e.v && e.v.f != null) ? e.v.f : null;
+}
+/* Aus welchen Richtungen wird diese Stadt angegriffen? Genau Ennos Frage:
+   "Bei einer verteidigenden Stadt sind diese Linien die Spawnrichtung der
+   Angreifer." */
+function spawnRichtungen(i){
+  const raus = [];
+  for (const j of nachbarn(i)){
+    const f = angriffUeber(i, j);
+    if (f != null && f !== ownerOf(i)) raus.push({von: j, f});
+  }
+  return raus;
+}
+/* Kampf auf der Linie - Ennos Begegnungskampf: "Das kommt vor, wenn sich
+   Kampfeinheiten auf einer Linie begegnen." */
+const linienKampf = (a, b) => {
+  const e = S.vers[versSchl(a, b)];
+  return !!(imKrieg(e) && e.v && e.v.k);
+};
+function alleLinienKaempfe(){
+  const raus = [];
+  for (const k of Object.keys(S.vers)){
+    const e = S.vers[k];
+    if (!imKrieg(e) || !e.v || !e.v.k) continue;
+    const [a, b] = k.split("-").map(Number);
+    if (MAP.n[a] && MAP.n[b]) raus.push([a, b]);
+  }
+  return raus;
+}
+
+/* ---------------- Nachschub ----------------
+   Ennos Regel, woertlich: "Wichtig ist nur, dass eine angrenzende Stadt
+   vorliegt, die zur eigenen Fraktion gehoert und nicht im Gefecht ist."
+
+   Sie ist OERTLICH - kein Weg zur Hauptstadt, ein Blick auf die Nachbarn.
+   Genau so wird sie hier gerechnet.                                       */
+let nachbarFeld = null;
+function nachbarn(i){
+  if (!nachbarFeld){
+    nachbarFeld = MAP.n.map(() => []);
+    for (const [a, b] of (MAP.e || [])){
+      if (nachbarFeld[a] && nachbarFeld[b]){ nachbarFeld[a].push(b); nachbarFeld[b].push(a); }
+    }
+  }
+  return nachbarFeld[i] || [];
+}
+/* "Im Gefecht" heisst auch: da liegt ein Parablock. Der verwickelt die Stadt
+   formal in eine Schlacht - genau dafuer wird er gesetzt. Ein bloss GEPLANTER
+   zaehlt nicht; er steht noch nicht. */
+const verwickelt = i => fightAt(i) || !!(paraAt(i) && !paraAt(i).plan);
+/* Wer kann diese Stadt verstaerken? */
+function versorger(i){
+  const f = ownerOf(i);
+  if (f < 0) return [];
+  return nachbarn(i).filter(j => ownerOf(j) === f && !verwickelt(j));
+}
+/* Was schneidet ein Parablock auf dieser Stadt ab?
+   Nicht nur sie selbst: solange sie im Gefecht ist, faellt sie als Versorger
+   fuer JEDEN Nachbarn aus. Wer dadurch seinen letzten verliert, haengt in
+   der Luft. Ein Sprung, mehrere Staedte - Ennos Springerzug, vorher
+   ausgerechnet. */
+function paraHebel(j){
+  const f = ownerOf(j);
+  if (f < 0 || verwickelt(j)) return [];
+  const raus = [];
+  for (const i of nachbarn(j)){
+    if (ownerOf(i) !== f || verwickelt(i)) continue;
+    const v = versorger(i);
+    if (v.length === 1 && v[0] === j) raus.push(i);
+  }
+  return raus;
+}
+/* Die lohnendsten Ziele einer Fraktion - was ein Sprung jeweils kostet.
+   Gerechnet wird ueber die GEGNER: welche ihrer Staedte kann ich mit einem
+   Parablock von der Versorgung trennen. */
+function paraZiele(gegen){
+  const raus = [];
+  for (let j = 0; j < MAP.n.length; j++){
+    if (gegen != null && ownerOf(j) !== gegen) continue;
+    if (ownerOf(j) < 0 || verwickelt(j)) continue;
+    const w = paraHebel(j);
+    if (w.length) raus.push({town: j, schneidet: w});
+  }
+  return raus.sort((a, b) => b.schneidet.length - a.schneidet.length);
+}
 const allPara = () => Object.keys(S.para).filter(i => imKrieg(S.para[i]) && S.para[i].v)
   .map(i => ({town:+i, ...S.para[i].v, t:S.para[i].t, by:S.para[i].n || S.para[i].by}));
 function addPost(text, town, prio, req){
@@ -4283,6 +4507,30 @@ function side(){
           standText(`para:${i}`, pb, S.para[i] && (S.para[i].n || S.para[i].by))}</div>
         ${okKnopf(`para:${i}`, pb)}` : ""}
     </div>
+    ${ownerOf(i) >= 0 ? `<div class="sec">
+      <h3>Supply <span class="sub">reinforcements can only come from a
+        neighbour of the same side that is not fighting</span></h3>
+      ${(() => {
+        const sp = spawnRichtungen(i);
+        if (!sp.length) return "";
+        return `<div class="vers-spawn">⚔ Attackers spawn from
+          ${sp.map(q => `<b>${esc(MAP.n[q.von][0])}</b> (${FACTIONS[q.f].tag})`).join(" · ")}</div>`;
+      })()}
+      ${(() => {
+        const v = versorger(i), heb = paraHebel(i);
+        const nm = k => esc(MAP.n[k][0]);
+        return (v.length
+          ? `<div class="vers-ok">↔ ${v.length} route${v.length===1?"":"s"} in:
+              ${v.map(nm).join(" · ")}</div>`
+              + (v.length === 1
+                 ? `<div class="vers-warn">One route only — a single para-block on
+                    ${nm(v[0])} cuts this town off.</div>` : "")
+          : `<div class="vers-weg">⊘ Cut off — no neighbour of ${esc(factionOf(i).name)}
+              is free to reinforce.</div>`)
+          + (heb.length ? `<div class="vers-hebel">A para-block HERE would cut off
+              ${heb.length} town${heb.length===1?"":"s"}: ${heb.map(nm).join(" · ")}</div>` : "");
+      })()}
+    </div>` : ""}
     <div class="sec">
       <h3>Enemy sightings ${spo.length?`<span class="sub">${spo.reduce((s,g)=>s+g.list.reduce((t,u)=>t+u.n,0),0)} reported</span>`:""}</h3>
       ${spo.length ? spo.map(g=>`
@@ -5478,11 +5726,31 @@ const LINIE_MIND = 22;        /* so viele Proben braucht eine Aussage */
    ZEICHNET DAS SPIEL keine Versorgungslinien mehr, nur noch Stadtpunkte.
    Darunter zu lesen liefert nur Rauschen - und faelschlich Feuer auf Linien,
    die es nicht gibt (58 Meldungen bei 7 Punkten Scheibe). */
-const LINIE_SICHER_PX = 12;
+/* Ab welcher Scheibengroesse lohnt die Linienlesung?
+   Die Grenze stand bei zwoelf - gemessen an Aufnahmen, in denen das Spiel
+   keine Linien zeichnete. Im Live-Lauf zeichnet es sie bis hinunter zu fuenf
+   Punkten, und die Sperre traf ausgerechnet den besten Bereich: bei neun
+   Punkten Scheibe rastete jedes der siebenundvierzig Bilder ein, jedes war
+   schreibreif, und die Sternbilder sassen zu 99 Prozent. Darunter, bei fuenf
+   Punkten, bricht die Einrastung zusammen (1 von 30 schreibreif) - dort
+   endet es wirklich. */
+const LINIE_SICHER_PX = 9;
 function linienLesen(mk, punkte, tr){
   const {m, W, H} = mk;
   if (SCHEIBE_EINH*tr.s < LINIE_SICHER_PX) return {besitz:{}, kampf:{}, zuWeit:true};
   const rS = Math.max(2, SCHEIBE_EINH*tr.s/2);
+  /* Wie weit muss der Abtaster von den Scheiben wegbleiben? An 124 Bildern
+     mit vier Abstaenden gemessen:
+
+         Abstand   gelesen   gleiche Seite trifft   Feindlinien farbig
+         1,45      53 427           83 %                   43 %
+         2,40      39 277           85 %                   58 %
+
+     Zu wenig Abstand faerbt die Linie nicht falsch ein - er macht sie GRAU:
+     an beiden Enden wird je eine andere Fraktionsfarbe eingesammelt, keine
+     erreicht die Mehrheit. Und grau heisst nach Ennos Regel "ruhige Front".
+     Der Leser meldete also Ruhe, wo ein Angriff lief. */
+  const LINIE_RAND = 2.4;
   const besitz = {}, kampf = {};
   const gesehen = new Set();
   for (const [a, b] of (MAP.e||[])){
@@ -5492,17 +5760,24 @@ function linienLesen(mk, punkte, tr){
     const ax = punkte[a][0]*tr.s + tr.ox, ay = punkte[a][1]*tr.s + tr.oy;
     const bx = punkte[b][0]*tr.s + tr.ox, by = punkte[b][1]*tr.s + tr.oy;
     const L = Math.hypot(bx-ax, by-ay);
-    if (L < 3.2*rS) continue;                    /* zu kurz zwischen den Scheiben */
+    if (L < (2*LINIE_RAND + 1.2)*rS) continue;   /* zu kurz zwischen den Scheiben */
     const qx = -(by-ay)/L, qy = (bx-ax)/L;       /* quer zur Linie */
     const st = [0,0,0,0]; let n = 0, feuer = 0;
-    const rand = rS*1.45/L;
-    /* Wie weit quer? So breit wie die Linie, nicht breiter.
-       Fest auf zwei Punkte gestellt las der Leser bei weitem Zoom 99 Prozent
-       aller Linien als farblos - dort ist die Linie selbst nur ein bis zwei
-       Punkte breit, und der Rest war Hintergrund. Gemessen an einer
-       Zoomleiter: bei 9 Punkten Scheibe 13 von 1589 farbig, bei 12 Punkten
-       844 von 1189. Die Linienbreite waechst mit der Scheibe. */
-    const quer = Math.max(1, Math.round(rS*0.15));
+    const rand = rS*LINIE_RAND/L;
+    /* Wie weit quer? Das ist der Haupthebel des ganzen Lesers - mehr als
+       der Randabstand. An 178 Bildern gemessen, ueber alle Randwerte:
+
+           Querbreite   Linien gleicher Seite richtig gelesen
+              0,15               73 - 74 %
+              0,30               76 - 77 %
+              0,55               83 - 85 %
+
+       Der Grund ist einfach: bei rS*0.15 ist der Abtaster an einer Scheibe
+       von neun Punkten genau EINEN Punkt breit. Er trifft die Linie, oder
+       er trifft sie nicht. Fest auf zwei Punkte gestellt waere er dagegen
+       bei nahem Zoom viel zu schmal - die Breite muss mit der Scheibe
+       wachsen, nur eben schneller als bisher. */
+    const quer = Math.max(1, Math.round(rS*0.55));
     for (let s = rand; s <= 1-rand; s += 1.2/L){
       const x = ax + (bx-ax)*s, y = ay + (by-ay)*s;
       for (let d = -quer; d <= quer; d++){
@@ -6580,13 +6855,45 @@ function anDerFront(i){
 /* Das naechste Ziel: eine Stadt im Bild, gewichtet nach Alter UND Lage an
    der Front. Frueher war es ein Sektor und darin eine zufaellige Stadt; das
    Raster hat dabei nichts beigetragen ausser sich selbst. */
+/* ---- Zwei Betriebsarten ----
+   Gemessen am echten Leseblock ueber 237 Live-Aufnahmen einer Fahrt ueber
+   die Front, je Spannenband: eingerastet / schreibreif / Sternbildguete
+
+       0-150 Einh.   12/12  12/12   81 %
+     150-250         42/42  27/42   55 %
+     250-400         77/77  75/77   75 %
+     400-700         47/47  47/47   99 %      <- der beste Bereich
+     700-1400        30/30   1/30    6 %      <- unbrauchbar
+
+   Der beste Bereich ist nicht der naechste. Bei rund fuenfhundert Einheiten
+   rastet jedes Bild ein und jedes ist schreibreif. */
+const MODUS = {
+  breit: {name: "SWEEP",  spanne: 500,
+          was: "ownership and battles — the widest view that still locks on"},
+  nah:   {name: "UNITS",  spanne: 70,
+          was: "assault teams too — needs a close zoom"}
+};
+let radarModus = "breit";
+/* Wieviele Rasten am Mausrad fehlen noch? Das Spiel zoomt in festen
+   Schritten von 1,324 - gemessen an der Zoomleiter. Eine Anweisung in
+   Rasten kann man ausfuehren, "500 Karteneinheiten" nicht. */
+const ZOOM_RASTE = 1.324;
+function zoomRasten(ist, soll){
+  if (!(ist > 0) || !(soll > 0)) return null;
+  return Math.round(Math.log(ist/soll)/Math.log(ZOOM_RASTE));
+}
+
 function zielZiehen(){
   const orte = sichtbareOrte() || Array.from(MAP.n.keys());
   const wahl = []; let summe = 0;
+  /* In der Uebersicht zaehlt nur das Alter: zu Kriegsbeginn ist die ganze
+     Karte unbekannt, und wer dann schon an der Front klebt, faehrt sie ab
+     statt sie aufzunehmen. Erst in der Naharbeit bekommt die Front ihr
+     Vierfaches - dort geht es um Einheiten, und die stehen vorn. */
+  const frontGewicht = radarModus === "nah" ? 4 : 1;
   for (const i of orte){
     const alt = Math.max(0.02, Math.min(1, blickAlter(i) / (12*3600e3)));
-    /* Die Front viermal so oft - dort bewegt sich die Karte. */
-    const gewicht = alt * (anDerFront(i) ? 4 : 1);
+    const gewicht = alt * (anDerFront(i) ? frontGewicht : 1);
     summe += gewicht; wahl.push({i, summe});
   }
   let w = Math.random()*summe, treffer = wahl[wahl.length-1];
@@ -6812,6 +7119,20 @@ function radarFrisch(){
   {
     const g = el.querySelector("[data-gefechte]");
     if (g) g.textContent = L.laeuft && wache.gefechte != null ? String(wache.gefechte) : "—";
+    /* Wieviele Rasten fehlen zum Zielzoom? */
+    const so = el.querySelector("[data-soll]");
+    if (so){
+      const m = MODUS[radarModus];
+      const ist = L.laeuft && wache.peil ? wache.peil.spanne : 0;
+      const rast = zoomRasten(ist, m.spanne);
+      so.innerHTML = !ist
+        ? `<span class="ziel">${m.spanne} units</span> target — start the watch to compare`
+        : rast === 0
+          ? `<span class="gut">✓ at ${m.name} zoom</span> · ${Math.round(ist)} of ${m.spanne} units`
+          : `<span class="ziel">${rast > 0 ? rast : -rast} notch${Math.abs(rast)===1?"":"es"}
+             ${rast > 0 ? "closer in" : "further out"}</span> ·
+             now ${Math.round(ist)}, want ${m.spanne}`;
+    }
     const k = el.querySelector("[data-kann]");
     if (k){
       const tr = L.laeuft && wache.tr ? wache.tr : null;
@@ -6886,6 +7207,14 @@ function radarPult(){
         style="width:${scan}%;background:linear-gradient(90deg,#2c6b3a,#8fe6a2)"></i></div>
     </div>
 
+    <!-- Soll gegen Ist, wie Enno es wollte: die Betriebsart setzt den
+         Zielzoom, die Zeile darunter sagt, wieviele Rasten noch fehlen. -->
+    <div class="rd-modus">
+      ${Object.entries(MODUS).map(([k, m]) => `<button data-modus="${k}"
+        class="${radarModus===k?"an":""}" title="${esc(m.was)}">${m.name}</button>`).join("")}
+    </div>
+    <div class="rd-soll" data-soll>—</div>
+
     <div class="rd-teil">
       <svg class="rd-schieber" id="rd-schieber" viewBox="0 0 300 56" width="296" height="55"></svg>
       <div class="rd-lbl">${esc(rdS(W.suche))}<em data-beam>${esc(beamWort())}</em></div>
@@ -6955,6 +7284,13 @@ function radarPult(){
     zielZiehen(); radarPult(); radarZeichnen();
     if (!sichtbareOrte()) toast("Nothing in view — picked from the whole map");
   });
+  el.querySelectorAll("[data-modus]").forEach(b => b.addEventListener("click", ()=>{
+    radarModus = b.dataset.modus;
+    /* Die Betriebsart aendert, wonach gesucht wird - also ein neues Ziel.
+       Das alte gehoerte zur anderen Absicht: die Uebersicht will die
+       aeltesten Staedte, die Naharbeit die Front. */
+    zielZiehen(); radarPult(); radarZeichnen();
+  }));
   el.querySelector("#rd-doch")?.addEventListener("click", ()=>{
     if (!wache || !wache.wartet) return;
     wache.letzte = besitzUebernehmen(wache.wartet);
@@ -7641,6 +7977,43 @@ function wacheTickIntern(){
       if (brennt && !fightAt(i)) setFight(i, true);
       else if (!brennt && fightAt(i) && vollstaendig) setFight(i, false);
     }
+  }
+  /* ---- Angriffsrichtungen uebernehmen ----
+     Ennos Regel: "Die Farbe trifft immer auf den Angreifer zu, wenn eine der
+     beiden Staedte brennt." An 44 Bildern nachgemessen traf das 44 von 45
+     Mal - die einzige Regel im Bund, die praktisch nie danebenliegt.
+
+     Uebernommen wird deshalb NUR dieser Fall, und nur er: farbige Linie,
+     verschiedene Fraktionen, genau eine Seite brennt. Zwei unabhaengige
+     Beobachtungen tragen die Meldung, nicht eine.
+
+     Alles Uebrige ist ableitbar und braucht keinen Eintrag: gehoeren beide
+     Enden derselben Seite, folgt die Farbe; gehoeren sie verschiedenen und
+     brennt keine, ist die Linie grau - genau das ist eine ruhige Front. */
+  if (res.schreibreif && res.adern && !res.adern.zuWeit){
+    const bes = res.erg.besitz, br = res.brennt || {};
+    for (const schl in res.adern.besitz){
+      const f = res.adern.besitz[schl];
+      if (f === 3) continue;                       /* farblos sagt nichts aus */
+      const k = +schl, a = Math.floor(k/10000), b = k % 10000;
+      if (bes[a] == null || bes[b] == null) continue;
+      if (bes[a] === bes[b]) continue;             /* gleiche Seite: ableitbar */
+      const ba = !!br[a], bb = !!br[b];
+      if (ba === bb) continue;                     /* keine oder beide: nicht deutbar */
+      const angreifer = ba ? bes[b] : bes[a];      /* die nicht brennende Seite */
+      if (f !== angreifer) continue;               /* das Bild widerspricht der Regel */
+      const s = versSchl(a, b), alt = S.vers[s] && S.vers[s].v;
+      if (!alt || alt.f !== angreifer) stamp("vers", s, {f: angreifer});
+    }
+    /* Begegnungskaempfe. Sie stehen fuer sich - dort treffen sich zwei
+       Kampfeinheiten unterwegs, und wer gewinnt, greift danach an. */
+    for (const schl in (res.adern.kampf || {})){
+      const k = +schl, a = Math.floor(k/10000), b = k % 10000;
+      if (!MAP.n[a] || !MAP.n[b]) continue;
+      const s = versSchl(a, b), alt = (S.vers[s] && S.vers[s].v) || {};
+      if (!alt.k) stamp("vers", s, Object.assign({}, alt, {k: 1}));
+    }
+    save();
   }
   /* An brennenden Staedten wird ABGESTIMMT statt entschieden.
 
@@ -12412,7 +12785,7 @@ function zwVerdrahten(k){
     const konto = S.konto, ich = S.me, nm = S.name;
     S = Object.assign(neu(), {me: ich, name: nm, konto});
     dirty.clear();
-    lastSeen = "1970-01-01T00:00:00Z";
+    lastSeen = "1970-01-01T00:00:00Z"; seitSchluessel = "";
     try { localStorage.setItem(STORE, JSON.stringify(S)); } catch(e){}
     toast("Cleared — pulling everything back from the server.");
     /* Neu laden ist ehrlicher als nachzuzeichnen: so ist sicher nichts von
@@ -12986,7 +13359,7 @@ function torZeigen(meldung){
     const code = feld.value.trim();
     if (code.length < 6){ torZeigen("That code looks too short."); return; }
     CFG = {url: BUILTIN.url, key: BUILTIN.key, code};
-    lastSeen = "1970-01-01T00:00:00Z";
+    lastSeen = "1970-01-01T00:00:00Z"; seitSchluessel = "";
     document.getElementById("tor-go").disabled = true;
     document.getElementById("tor-go").textContent = "Checking …";
     try {
@@ -13211,7 +13584,7 @@ function passwortAbfragen(meldung){
     }
     if (!code){ passwortAbfragen("No code in that file."); return; }
     CFG = {url: BUILTIN.url, key: BUILTIN.key, code};
-    lastSeen = "1970-01-01T00:00:00Z";
+    lastSeen = "1970-01-01T00:00:00Z"; seitSchluessel = "";
     try {
       const r = await fetch(api("rpc/warmap_whoami"),
                             {method:"POST", headers: heads(), body:"{}"});
@@ -15209,7 +15582,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 7d254b8c10</span></p></div>
+         installation. <span style="color:var(--dim2)">· build aec837c399</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -15342,6 +15715,20 @@ function toast(t){
 const CFG_KEY = "hng-warmap-sync";
 const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publishable_GgJLQ_S3OFlgGpKsksM9mw_2HlqfCCN"};
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
+/* Der zweite Teil des Zeigers. Zeitstempel allein reichen nicht: der
+   Sendevorgang schickt alle offenen Aenderungen in EINEM Stapel, und
+   now() ist in Postgres fuer die ganze Transaktion konstant - also
+   traegt jede Zeile eines Stapels denselben Zeitstempel. An Ennos
+   Datenbank teilten sich 901 von 903 Zeilen einen einzigen.
+
+   Schneidet die Seite dann mitten durch die Gruppe, wandert lastSeen auf
+   diesen Zeitstempel und der naechste Aufruf fragt nach "groesser als" -
+   der Rest der Gruppe kommt nie mehr. Nachgespielt mit einer Seite von
+   500: 402 von 903 Zeilen wurden nie geholt, ohne jede Meldung.
+
+   Mit dem Schluessel im Zeiger ist die Reihenfolge streng, und ein
+   Schnitt mitten in einer Gruppe ist kein Problem mehr. */
+let seitSchluessel = "";
 try { CFG = JSON.parse(localStorage.getItem(CFG_KEY) || "null"); } catch(e){}
 const hatBuiltin = () => /^https:\/\/[\w-]+\.supabase\.co$/.test(BUILTIN.url);
 const basis = u => u.trim().replace(/\/+$/, "").replace(/\/rest\/v1$/, "");
@@ -15433,23 +15820,46 @@ function applyRemote(key, val){
   S[bucket][id] = val;
   return true;
 }
+const SEITE = 1000;   /* PostgREST deckelt serverseitig, ueblich bei 1000 */
 async function syncPull(){
   if (!CFG || pulling) return;
   pulling = true;
   try {
-    const url = api(`warmap?room=eq.${encodeURIComponent(CFG.room)}`
-      + `&updated_at=gt.${encodeURIComponent(lastSeen)}`
-      + `&select=key,value,updated_at&order=updated_at.asc&limit=4000`);
-    const r = await fetch(url, {headers: heads()});
-    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
-    const rows = await r.json();
-    let n = 0;
-    for (const row of rows){
-      if (applyRemote(row.key, row.value)) n++;
-      if (row.updated_at > lastSeen) lastSeen = row.updated_at;
-    }
+    let n = 0, rows = [], runden = 0;
+    /* Blaettern, bis eine Seite nicht mehr voll ist. Eine volle Seite heisst
+       "da ist mehr" - vorher wurde sie fuer das Ende gehalten. Die Schranke
+       ist nur ein Notausgang gegen eine Endlosschleife. */
+    do {
+      /* Hinter dem letzten PAAR weitermachen, nicht hinter dem letzten
+         Zeitstempel. Ohne Schluessel im Zeiger faellt der Rest einer Gruppe
+         mit gleichem Zeitstempel unter den Tisch. */
+      /* In Anfuehrungszeichen, und interne verdoppelt: innerhalb von or(...)
+         trennt PostgREST an Kommas und Klammern, und ein Schluessel wie
+         spot:412:Name traegt fremden Text - ein Komma im Spielernamen
+         zerlegte sonst die Bedingung. */
+      const zit = s => `"${String(s).replace(/"/g, '""')}"`;
+      const ab = seitSchluessel
+        ? `&or=(updated_at.gt.${encodeURIComponent(zit(lastSeen))},`
+          + `and(updated_at.eq.${encodeURIComponent(zit(lastSeen))},`
+          + `key.gt.${encodeURIComponent(zit(seitSchluessel))}))`
+        : `&updated_at=gte.${encodeURIComponent(lastSeen)}`;
+      const url = api(`warmap?room=eq.${encodeURIComponent(CFG.room)}` + ab
+        + `&select=key,value,updated_at&order=updated_at.asc,key.asc&limit=${SEITE}`);
+      const r = await fetch(url, {headers: heads()});
+      if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+      rows = await r.json();
+      for (const row of rows){
+        if (applyRemote(row.key, row.value)) n++;
+        lastSeen = row.updated_at; seitSchluessel = row.key;
+      }
+    } while (rows.length >= SEITE && ++runden < 40);
     if (n){ rebuildUnits(); save(); side(); tally(); draw(); kopfzeile(); boardZahl();
             kraftLeiste(); if (showDepot) depotZeichnen(); }
+    /* Die vierzig Runden sind nie erreicht worden, solange die Tabelle
+       kleiner als vierzigtausend Zeilen ist. Wenn doch, ist das keine
+       Kleinigkeit - dann bleibt beim naechsten Takt etwas liegen, und das
+       gehoert gesagt statt verschwiegen. */
+    if (runden >= 40) toast("Sync is far behind — still catching up.");
     /* Ein vorgestellter Zeitstempel ist kein Versehen. Einmal je Sitzung
        sagen, dass es vorgekommen ist - stillschweigend zurechtbiegen waere
        genau die Sorte Freundlichkeit, die einen Angriff verdeckt. */
@@ -15594,7 +16004,7 @@ async function syncStart(){
     /* Die Warteschlange gehoert dem alten Konto - sonst gingen dessen
        offene Aenderungen unter dem neuen Namen hinaus. */
     dirty.clear();
-    lastSeen = "1970-01-01T00:00:00Z";
+    lastSeen = "1970-01-01T00:00:00Z"; seitSchluessel = "";
     privVergessen();
     toast(zurueck ? "Switched account — your own map is back."
                   : "Switched account — starting clean. The other one is kept.");
@@ -15710,7 +16120,7 @@ document.getElementById("b-sync").addEventListener("click", ()=>{
     if (!/^(eyJ|sb_publishable_)/.test(key) || key.length < 30){
       toast("Use the publishable key (sb_publishable_…) or the legacy anon key (eyJ…)."); return;
     }
-    CFG = {url, key, code}; lastSeen = "1970-01-01T00:00:00Z";
+    CFG = {url, key, code}; lastSeen = "1970-01-01T00:00:00Z"; seitSchluessel = "";
     closeDlg();
     /* Hier ging es frueher ohne Umweg in den Abgleich - und damit an der
        Passwortvergabe vorbei. Der Code lag danach offen im Browser, obwohl
