@@ -4804,7 +4804,7 @@ function spurTransform(mk, punkte, tr0, weit){
    3,97 Karteneinheiten breit, bei jedem Zoom (neun Staedte, Streuung 1 %). */
 const SCHEIBE_EINH = 3.97;
 const STERN_KANTEN_MIN = 0.5;   /* Katalogkanten je zugeordneter Stadt */
-const STERN_ANTEIL_MIN = 0.25;  /* so viele gefundene Scheiben muessen sitzen */
+const STERN_ANTEIL_MIN = 0.30;  /* so viele gefundene Scheiben muessen sitzen */
 
 /* Ein Gitter ueber den Katalog. Ohne das kostet jede Zuordnung 1438
    Vergleiche je Gipfel, und sie laeuft neunhundertmal je Einrastung.
@@ -5041,6 +5041,90 @@ function sternKantenmass(paare){
   return k/st.length;
 }
 
+/* ---- Die Sternbilder: Abgangsrichtungen als Erkennungsmerkmal ----
+   Ring bei 1,1 Scheibendurchmessern, Toleranz 20 Grad - beides gemessen. */
+const STERN_RING = 1.10, STERN_WTOL = 20, STERN_SPARSAM = 60;
+
+/* Die Abgaenge jeder Katalogstadt, einmal gerechnet. */
+let STERN_RICHT = null;
+function sternRichtungen(punkte){
+  if (STERN_RICHT && STERN_RICHT.length === punkte.length) return STERN_RICHT;
+  const nb = new Map();
+  for (const [a,b] of (MAP.e||[])){
+    if (!nb.has(a)) nb.set(a, []);
+    if (!nb.has(b)) nb.set(b, []);
+    nb.get(a).push(b); nb.get(b).push(a);
+  }
+  STERN_RICHT = punkte.map((p,i) => {
+    const w = [];
+    for (const j of (nb.get(i)||[]))
+      w.push(((Math.atan2(punkte[j][1]-p[1], punkte[j][0]-p[0])*180/Math.PI)%360+360)%360);
+    return w;
+  });
+  return STERN_RICHT;
+}
+
+/* Welche Richtungen sind auf einem Ring um diese Scheibe farbig? */
+function sternAbgaenge(m, W, H, cx, cy, rad){
+  const N = 120, an = new Uint8Array(N);
+  let n1 = 0;
+  for (let k=0; k<N; k++){
+    const w = 2*Math.PI*k/N;
+    const x = Math.round(cx + rad*Math.cos(w)), y = Math.round(cy + rad*Math.sin(w));
+    if (x>=0 && y>=0 && x<W && y<H && m[y*W+x]){ an[k]=1; n1++; }
+  }
+  if (!n1 || n1 === N) return [];
+  let i = 0; while (an[i]) i++;
+  const aus = [];
+  let anfang = -1, z = 0;
+  for (let k=0; k<=N; k++){
+    const j = (i+k) % N;
+    if (k < N && an[j]){ if (anfang < 0) anfang = k; z++; }
+    else {
+      if (anfang >= 0 && z >= 2) aus.push((((i+anfang+z/2-0.5)%N)*360/N));
+      anfang = -1; z = 0;
+    }
+  }
+  return aus;
+}
+
+/* Wie viele Katalogabgaenge finden sich in den Bildrichtungen wieder? */
+function sternPasst(bildw, sollw){
+  let n = 0;
+  for (const w of sollw)
+    for (const v of bildw){
+      const d = Math.abs(w-v);
+      if (Math.min(d, 360-d) < STERN_WTOL){ n++; break; }
+    }
+  return n;
+}
+
+/* Lagevorschlaege aus den Sternbildern - nur Paare, deren Abgaenge
+   zusammenpassen, duerfen abstimmen. */
+function sternBilder(m, W, H, punkte, P, r, wieviele){
+  const richt = sternRichtungen(punkte);
+  const D = 2*r, topf = new Map();
+  for (let a=0; a<P.length; a++){
+    const bw = sternAbgaenge(m, W, H, P[a][0], P[a][1], D*STERN_RING);
+    if (bw.length < 2) continue;
+    for (let i=0; i<punkte.length; i++){
+      const sw = richt[i];
+      if (sw.length < 2) continue;
+      const n = sternPasst(bw, sw);
+      if (n < 2 || n < sw.length - 2) continue;
+      const s0 = D/SCHEIBE_EINH;
+      const dx = P[a][0]/s0 - punkte[i][0], dy = P[a][1]/s0 - punkte[i][1];
+      const k = Math.round(dx/3)*100000 + Math.round(dy/3);
+      const e = topf.get(k);
+      if (e){ e[0]++; e[1]+=dx; e[2]+=dy; } else topf.set(k, [1,dx,dy]);
+    }
+  }
+  const alle = [];
+  for (const e of topf.values()) if (e[0] >= 2) alle.push(e);
+  alle.sort((p,q)=>q[0]-p[0]);
+  return alle.slice(0, wieviele).map(e => [e[1]/e[0], e[2]/e[0], e[0]]);
+}
+
 /* opt.spanne - die zu erwartende Kartenbreite aus dem geeichten Zoomregler.
    Damit schrumpft der Radiusfaecher von vierzig Stufen auf eine Handvoll. */
 function sternLage(mk, punkte, opt){
@@ -5094,7 +5178,19 @@ function sternFegen(m, I, liste, W, H, punkte, rmin, rmax){
     if (P.length < 5 || P.length > 1500) continue;
     const PS = P.length > 120 ? P.slice(0, 120) : P;
     const s0 = 2*r/SCHEIBE_EINH, tol = Math.max(3, 0.5*r);
-    for (const [mx,my] of sternStimmen(PS, punkte, s0, 3.0, 4, W, H)){
+    /* Zwei Wege zum Vorschlag, und sie ergaenzen sich:
+         die MENGE     - jedes Paar stimmt ab. Traegt, solange viele Staedte
+                         im Bild sind; bei fuenf Staedten gehen fuenf
+                         richtige Stimmen gegen siebentausend zufaellige unter.
+         das STERNBILD - nur Paare, deren Abgangsrichtungen zusammenpassen.
+                         Traegt genau dort, wo die Menge versagt.
+       Das Sternbild kostet je Scheibe einen Ring und einen Vergleich gegen
+       den Katalog - bei wenigen Scheiben nichts, bei vierhundert zu viel.
+       Deshalb nur bis STERN_SPARSAM. */
+    const vorschlaege = sternStimmen(PS, punkte, s0, 3.0, 4, W, H);
+    if (P.length <= STERN_SPARSAM)
+      for (const v of sternBilder(m, W, H, punkte, PS, r, 4)) vorschlaege.push(v);
+    for (const [mx,my] of vorschlaege){
       let s=s0, ox=mx*s0, oy=my*s0;
       let paare = sternZuordnen(P, punkte, s, ox, oy, tol);
       for (let w=0; w<2; w++){
@@ -5107,7 +5203,11 @@ function sternFegen(m, I, liste, W, H, punkte, rmin, rmax){
       if (n < 5 || anteil < STERN_ANTEIL_MIN) continue;
       const km = sternKantenmass(paare);
       if (km < STERN_KANTEN_MIN) continue;      /* Veto der Versorgungslinien */
-      const wert = anteil*anteil*Math.sqrt(n)*km;
+      /* Der Anteil geht in DRITTER Potenz ein, nicht in zweiter. Gemessen an
+         einem Bild: eine Lage mit 31 Prozent und dreissig Treffern hat sonst
+         eine mit 67 Prozent und fuenfzehn geschlagen - und war falsch.
+         Viele schwache Treffer sind kein Ersatz fuer wenige gute. */
+      const wert = anteil*anteil*anteil*Math.sqrt(n)*km;
       if (!best || wert > best.wert)
         best = {wert, s, ox, oy, guete: anteil, treffer: n, ganz: P.length, kanten: km};
     }
@@ -14574,7 +14674,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 4f924f6c92</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 49fc1c6e58</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
