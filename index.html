@@ -3474,11 +3474,25 @@ const paraAt = i => (imKrieg(S.para[i]) && S.para[i].v) || null;
    Der Schluessel ist das Staedtepaar, klein zuerst - eine Linie hat keine
    Richtung, nur zwei Enden. */
 const versSchl = (a, b) => `${Math.min(a,b)}-${Math.max(a,b)}`;
-/* Wer greift ueber diese Linie an? Zurueck kommt die Fraktion oder null. */
+/* Wer greift ueber diese Linie an? Zurueck kommt die Fraktion oder null.
+   Das Feld heisst a und nicht f: f ist die abgelesene FARBE der Linie, a die
+   daraus gedeutete Richtung. Beides zu trennen kostet ein Zeichen und
+   erspart die Verwechslung von Beobachtung und Schluss. */
 function angriffUeber(a, b){
   const e = S.vers[versSchl(a, b)];
-  return (imKrieg(e) && e.v && e.v.f != null) ? e.v.f : null;
+  return (imKrieg(e) && e.v && e.v.a != null) ? e.v.a : null;
 }
+/* Wie alt ist die Auskunft zu dieser Linie? */
+function adernAlter(a, b){
+  const e = S.vers[versSchl(a, b)];
+  return (imKrieg(e) && e.t) ? jetzt() - e.t : null;
+}
+/* Ab wann ist eine Gefechtsmeldung mit Vorsicht zu geniessen? Enno: zwanzig
+   Minuten im Regelfall - "aber das gilt ab dem Punkt, an dem ein Kampf
+   tatsaechlich gestartet ist, und das kann deutlich laenger dauern". Deshalb
+   ist das hier keine Verfallsgrenze, sondern nur die Schwelle, ab der die
+   Anzeige das Alter dazusagt. */
+const ADERN_FRISCH = 20*60*1000;
 /* Aus welchen Richtungen wird diese Stadt angegriffen? Genau Ennos Frage:
    "Bei einer verteidigenden Stadt sind diese Linien die Spawnrichtung der
    Angreifer."
@@ -3488,15 +3502,18 @@ function angriffUeber(a, b){
    die Aussage nicht mehr - und eine Spawnrichtung, die nicht mehr stimmt,
    ist schlimmer als keine, weil jemand seine Verteidigung danach ausrichtet.
 
-   Deshalb wird hier gefragt, ob gerade gekaempft wird, und nicht bloss, ob
-   irgendwann einmal etwas eingetragen wurde. Das gilt auch fuer Eintraege,
-   die von jemand anderem kommen und die man selbst nie aufraeumen koennte. */
+   Angezeigt wird sie, solange an der Stadt gekaempft wird - denn nur dann
+   spawnt ueberhaupt jemand. Weggeworfen wird sie nie: ein Kampf kann laut
+   Spielmechanik sechs Stunden offenstehen, und das Radar sieht das Feuer aus
+   der Ferne oft nicht. Stattdessen kommt das ALTER mit, damit jeder selbst
+   entscheiden kann, wieviel er darauf gibt. */
 function spawnRichtungen(i){
   if (!fightAt(i)) return [];
   const raus = [];
   for (const j of nachbarn(i)){
     const f = angriffUeber(i, j);
-    if (f != null && f !== ownerOf(i)) raus.push({von: j, f});
+    if (f != null && f !== ownerOf(i))
+      raus.push({von: j, f, alter: adernAlter(i, j)});
   }
   return raus;
 }
@@ -4536,8 +4553,12 @@ function side(){
       ${(() => {
         const sp = spawnRichtungen(i);
         if (!sp.length) return "";
+        const alt = sp.reduce((m, q) => Math.max(m, q.alter || 0), 0);
         return `<div class="vers-spawn">⚔ Attackers spawn from
-          ${sp.map(q => `<b>${esc(MAP.n[q.von][0])}</b> (${FACTIONS[q.f].tag})`).join(" · ")}</div>`;
+          ${sp.map(q => `<b>${esc(MAP.n[q.von][0])}</b> (${FACTIONS[q.f].tag})`).join(" · ")}
+          ${alt > ADERN_FRISCH
+            ? `<em style="font-style:normal;opacity:.72">· read ${alterText(jetzt()-alt)}</em>`
+            : ""}</div>`;
       })()}
       ${(() => {
         const v = versorger(i), heb = paraHebel(i);
@@ -5153,6 +5174,21 @@ function spurTransform(mk, punkte, tr0, weit, sFest){
   if (!b) return null;
   const fein2 = suche(b[1], 0.05, 7, [[3,4,fein],[1,3,fein]]);
   const g = (fein2 && fein2[0] > b[0]) ? fein2 : b;
+  /* Hysterese: die BISHERIGE Lage mit demselben Mass bewerten und nur
+     wechseln, wenn die neue sie deutlich schlaegt.
+
+     Ohne das nimmt die Verfolgung jedes Optimum, auch wenn es nur um ein
+     Tausendstel besser ist - und bei rauschendem Bild wandert dieses Optimum
+     staendig. Das Feuer allein pulsiert mit 1,6 Sekunden Periode. Genau das
+     sieht der Nutzer als springendes Erfassungsfenster, obwohl der Lock
+     durchgehend haelt.
+
+     Ein Prozent Vorsprung ist die Schwelle: darunter ist der Unterschied
+     Rauschen, darueber Bewegung. Bei einer echten Fahrt liegt der Vorsprung
+     um Groessenordnungen hoeher, die Verfolgung wird dadurch nicht traege. */
+  const alt = wert(tr0.s, tr0.ox, tr0.oy, fein);
+  if (alt && g[0] <= alt[0]*1.01 && alt[0] > 0)
+    return {guete: alt[0], s: tr0.s, ox: tr0.ox, oy: tr0.oy, gehalten: true};
   return {guete:g[0], s:g[1], ox:g[2], oy:g[3]};
 }
 
@@ -5501,6 +5537,31 @@ function sternBilder(m, W, H, punkte, P, r, wieviele){
 
 /* opt.spanne - die zu erwartende Kartenbreite aus dem geeichten Zoomregler.
    Damit schrumpft der Radiusfaecher von vierzig Stufen auf eine Handvoll. */
+/* Wie gut sitzt eine BEKANNTE Lage? Dieselben zwei Masse wie bei der
+   Einrastung - der Anteil eineindeutig zugeordneter Scheiben und die
+   Katalogkanten zwischen ihnen -, nur ohne zu suchen.
+
+   Gebraucht wird das fuer die Verfolgung. Sie liefert eine Lage, aber keine
+   Guete, und ohne Guete war nie etwas schreibreif: an 237 Aufnahmen als
+   Fahrt gemessen rastete jedes Bild ein und KEINES war uebernahmereif.
+   Solange die Verfolgung greift - bei stehender Karte also durchgehend -
+   konnte das Werkzeug grundsaetzlich nichts uebernehmen.
+
+   Bei bekanntem Massstab ist das eine einzige Radiusstufe statt vierzig. */
+function sternGuetePruefen(mk, punkte, tr){
+  const {m, W, H} = mk;
+  const r = SCHEIBE_EINH*tr.s/2;
+  if (!(r >= 1.9)) return null;
+  const I = sternSummen(m, W, H);
+  const liste = sternFarbliste(m, W, H, 2);
+  const P = sternScheiben(m, I, W, H, r, 0.45, liste);
+  if (P.length < 5 || P.length > 1500) return null;
+  const paare = sternZuordnen(P, punkte, tr.s, tr.ox, tr.oy, Math.max(3, 0.5*r));
+  if (paare.length < 5) return {guete: paare.length/P.length, kanten: 0, treffer: paare.length};
+  return {guete: paare.length/P.length, kanten: sternKantenmass(paare),
+          treffer: paare.length, ganz: P.length};
+}
+
 function sternLage(mk, punkte, opt){
   const o = opt || {};
   const {m, W, H} = mk;
@@ -5885,6 +5946,47 @@ document.getElementById("b-shot").addEventListener("click", ()=>{
    die Kopfzeile weg, unten die Statusleiste. */
 const KARTEN_FELD = {x:0, y:0.06, w:0.70, h:0.84};
 
+/* Ist die Kriegskarte ueberhaupt offen? Ennos Vorschlag: oben in der Leiste
+   nachsehen, ob KRIEG angewaehlt ist. Der gewaehlte Reiter ist ein grosser
+   gesaettigt gelber Kasten an fester Stelle.
+
+   Gemessen an 237 Aufnahmen sitzt er in JEDEM Bild bei
+
+       x 0,180 bis 0,300 der Breite,  y 0,022 bis 0,028 der Hoehe
+
+   mit rund 8700 gelben Punkten. Der einzige andere Fleck, der in jedem Bild
+   vorkommt, ist die Goldanzeige oben rechts - 1458 Punkte bei x 0,94. Die
+   beiden sind nicht zu verwechseln.
+
+   Grosszuegig gefasst, weil Seitenverhaeltnis und Sprache den Reiter
+   verschieben koennen: gesucht wird im linken Drittel des obersten
+   Zwanzigstels, und es genuegt, dass dort genug Gelb liegt. */
+const KRIEG_FELD = {x0:0.10, x1:0.42, y0:0.005, y1:0.055};
+function kriegsreiterDa(quelle){
+  const bw = quelle.videoWidth || quelle.naturalWidth || quelle.width;
+  const bh = quelle.videoHeight || quelle.naturalHeight || quelle.height;
+  if (!bw || !bh) return false;
+  const F = KRIEG_FELD;
+  const W = Math.max(8, Math.round(bw*(F.x1-F.x0)/4));
+  const H = Math.max(4, Math.round(bh*(F.y1-F.y0)/4));
+  try {
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const cc = c.getContext("2d", {willReadFrequently:true});
+    cc.drawImage(quelle, bw*F.x0, bh*F.y0, bw*(F.x1-F.x0), bh*(F.y1-F.y0), 0, 0, W, H);
+    const d = cc.getImageData(0, 0, W, H).data;
+    let gelb = 0;
+    for (let p = 0; p < d.length; p += 4){
+      const r = d[p], g = d[p+1], b = d[p+2];
+      if (r > 150 && g > 130 && r-b > 70 && g-b > 55 && Math.abs(r-g) < 70) gelb++;
+    }
+    /* Der Reiter fuellt gut ein Zehntel des abgesuchten Feldes. Fuenf
+       Prozent sind reichlich Luft nach unten und immer noch weit ueber dem,
+       was zufaellig gelb ist. */
+    return gelb > W*H*0.05;
+  } catch(e){ return false; }
+}
+
 function maskeAus(quelle, feld, maxb){
   const bw = quelle.videoWidth || quelle.naturalWidth || quelle.width;
   const bh = quelle.videoHeight || quelle.naturalHeight || quelle.height;
@@ -5904,7 +6006,16 @@ function maskeAus(quelle, feld, maxb){
   const k = W/(bw*F.w);
   /* bw/bh: die Groesse des QUELLBILDES. Ohne sie kann die Peilung die Mitte
      des Bildschirms nicht von der Mitte des Ausschnitts unterscheiden. */
-  return {mk, W, H, tmp, feld:F, k, tx:-bw*F.x*k, ty:-bh*F.y*k, bw, bh};
+  /* Der Schwerpunkt aller Farbpunkte im Arbeitsbild. Steht die Karte, steht
+     er - unabhaengig davon, was die Lokalisierung gerade meint. Genau das
+     braucht der Scanbalken: er soll die RUHE DES BILDES messen, nicht die
+     Ruhe einer Schaetzung, die auch bei stehender Karte zittert. */
+  let sx = 0, sy = 0, sn = 0;
+  for (let q = 0; q < W*H; q++) if (mk.m[q] >= 1 && mk.m[q] <= 3){
+    sx += q % W; sy += (q/W)|0; sn++;
+  }
+  const schwer = sn ? {x: sx/sn, y: sy/sn, n: sn} : null;
+  return {mk, W, H, tmp, feld:F, k, tx:-bw*F.x*k, ty:-bh*F.y*k, bw, bh, schwer};
 }
 /* Eine Lage vom Arbeitsbild ins Quellbild und zurueck. Ohne das kann eine
    Einrastung bei 1600 nicht in einer Verfolgung bei 1100 weiterlaufen: der
@@ -5950,6 +6061,12 @@ function kartenAusBild(quelle, melde, opt){
     let tr = null;
     if (o.spur){
     tr = spurTransform(a.mk, punkte, trAusQuelle(o.spur, a), false, sFest);
+    /* Die Verfolgung liefert eine Lage, aber keine Sternbildguete - und ohne
+       die war nie etwas schreibreif. Also nachrechnen. */
+    if (tr){
+      const gp = sternGuetePruefen(a.mk, punkte, tr);
+      if (gp){ tr.stern = true; tr.sternGuete = gp.guete; tr.sternKanten = gp.kanten; }
+    }
     /* Die Verfolgung erbt die Masse der Einrastung, von der sie abstammt -
        sonst waere nach dem ersten Bild nichts mehr schreibreif. */
     if (tr && o.spur.stern){
@@ -5988,6 +6105,10 @@ function kartenAusBild(quelle, melde, opt){
        wird - der ist immer noch billiger als die globale Suche. */
     if (o.spur && g.quote < PASS_GUT){
       const tr2 = spurTransform(a.mk, punkte, trAusQuelle(o.spur, a), true, sFest);
+      if (tr2){
+        const gp2 = sternGuetePruefen(a.mk, punkte, tr2);
+        if (gp2){ tr2.stern = true; tr2.sternGuete = gp2.guete; tr2.sternKanten = gp2.kanten; }
+      }
       if (tr2 && lagePlausibel(a.mk, punkte, tr2, o.spanne || 0)){
         const g2 = passungGuete(a.mk, punkte, tr2);
         if (g2.quote > g.quote){ tr = tr2; g = g2; }
@@ -6012,6 +6133,7 @@ function kartenAusBild(quelle, melde, opt){
   const stg = tr.sternGuete || 0, stk = tr.sternKanten || 0;
   return {erg: farbenLesen(a.mk, punkte, tr), brennt: feuerLesen(a.mk, punkte, tr),
           adern: linienLesen(a.mk, punkte, tr),
+          schwer: a.schwer,
           tr, trQ: trZuQuelle(tr, a), punkte,
           mk:a.mk, feld:a.feld, W:a.W, H:a.H, tmp:a.tmp, bw:a.bw, bh:a.bh,
           guete:g.quote, sicher: g.quote >= PASS_GUT,
@@ -7835,16 +7957,46 @@ function wacheTickIntern(){
      zuegigen Zug sind das im Arbeitsbild ueber hundert Punkte Unterschied,
      und genau daran ist die Verfolgung frueher gescheitert. */
   let spurStart = wache.tr;
-  if (wache.tr && wache.bahn && wache.bahn.length >= 2){
-    const a = wache.bahn[wache.bahn.length-2], b = wache.bahn[wache.bahn.length-1];
-    const dt = b.t - a.t;
-    if (dt > 40 && dt < 1500){
-      const vt = Math.min(1500, nun - b.t);
-      /* Die Vorhersage ist ein Angebot, keine Behauptung: sie verschiebt nur
-         den Startpunkt der Suche. Findet die Suche etwas anderes, gilt das. */
+  /* Die Vorhersage: aus den letzten Lagen wird eine Geschwindigkeit, und die
+     Suche startet dort, wo die Karte sein wird. Sie ist ein Angebot, keine
+     Behauptung - findet die Suche etwas anderes, gilt das.
+
+     Sie hatte aber drei Fehler, und zusammen schleuderten sie das
+     Erfassungsfenster quer ueber Europa. Das Radar peilt alle 200 ms; die
+     Vorhersage rechnete auf bis zu 1500 ms voraus. Das ist der Faktor
+     siebeneinhalb auf JEDE gemessene Verschiebung, auch auf reines Zittern.
+     Ein Fehltreffer von hundert Bildpunkten wurde so zu siebenhundertfuenfzig
+     - mehr als die halbe Arbeitsbildbreite.
+
+     Und es wurde schlimmer, je schlechter es lief: die vorausgerechnete Zeit
+     ist der Abstand zur letzten erfolgreichen Lesung. Faellt eine aus,
+     waechst sie, waehrend der Messabstand klein bleibt. Genau dann, wenn die
+     Verfolgung Hilfe braucht, warf die Vorhersage sie am weitesten weg. */
+  if (wache.tr && wache.bahn && wache.bahn.length >= 3){
+    const bahn = wache.bahn;
+    const a = bahn[bahn.length-3], b = bahn[bahn.length-2], c = bahn[bahn.length-1];
+    const dt = c.t - b.t;
+    /* Zeigen die beiden letzten Schritte in dieselbe Richtung? Sonst ist es
+       Zittern und keine Fahrt - und Zittern hochzurechnen macht es nur
+       groesser. */
+    const v1x = (b.ox - a.ox)/Math.max(1, b.t - a.t), v1y = (b.oy - a.oy)/Math.max(1, b.t - a.t);
+    const v2x = (c.ox - b.ox)/Math.max(1, dt),        v2y = (c.oy - b.oy)/Math.max(1, dt);
+    const l1 = Math.hypot(v1x, v1y), l2 = Math.hypot(v2x, v2y);
+    const gleichlaeufig = l1 > 1e-4 && l2 > 1e-4
+      && (v1x*v2x + v1y*v2y)/(l1*l2) > 0.5;      /* hoechstens 60 Grad Knick */
+    if (dt > 40 && dt < 1500 && gleichlaeufig){
+      /* Nicht weiter vorausrechnen, als der Messabstand hergibt. */
+      const vt = Math.min(dt*1.5, Math.max(0, nun - c.t));
+      let dx = v2x*vt, dy = v2y*vt;
+      /* Und gedeckelt: hoechstens ein Achtel der Arbeitsbildbreite. Wer sich
+         schneller bewegt, ist ohnehin nicht zu verfolgen - dann ist
+         Neueinrasten richtig. */
+      const grenze = PEIL_BREITE/8;
+      const l = Math.hypot(dx, dy);
+      if (l > grenze){ dx = dx/l*grenze; dy = dy/l*grenze; }
       spurStart = {s: wache.tr.s,
-                   ox: wache.tr.ox + (b.ox - a.ox)/dt*vt,
-                   oy: wache.tr.oy + (b.oy - a.oy)/dt*vt,
+                   ox: wache.tr.ox + dx,
+                   oy: wache.tr.oy + dy,
                    stern: wache.tr.stern,
                    sternGuete: wache.tr.sternGuete, sternKanten: wache.tr.sternKanten};
     }
@@ -7895,20 +8047,45 @@ function wacheTickIntern(){
        dass das falsche Fenster geteilt wurde. Riss sie ab, hilft Warten
        wirklich. Fuenf Sekunden Schonfrist, damit eine ladende Karte nicht zu
        Unrecht beschuldigt wird. */
-    wache.meldung = (!wache.jeGefixt && wache.laeufe > 25)
+    /* Zwei Zeugen dafuer, dass die Kriegskarte sehr wohl da ist: der
+       Zoomregler des Spiels, der ohnehin gelesen wird, und der gewaehlte
+       KRIEG-Reiter oben in der Leiste. Sagt einer von beiden aus, ist die
+       Frage "teilst du das richtige Fenster?" falsch - und ein Werkzeug, das
+       dem Nutzer einen Fehler unterstellt, den er nicht gemacht hat, kostet
+       mehr Vertrauen als es an Auskunft gibt. */
+    const sichtbar = wache.zoom != null
+      || (wache.video && kriegsreiterDa(wache.video));
+    wache.meldung = (!wache.jeGefixt && wache.laeufe > 25 && !sichtbar)
       ? "No war map in this window — is the game window the one being shared?"
-      : res.fehler;
+      : (!wache.jeGefixt && wache.laeufe > 25)
+        ? "War map is there, but I cannot place it yet — try zooming out a little."
+        : res.fehler;
     wache.keinFix = true; radarSignal = 0;
     wacheAnzeigen(); if (radarOffen) radarFrisch(); return;
   }
   wache.jeGefixt = true;
   wache.tr = res.trQ; wache.feld = res.feld; wache.guete = res.guete;
   /* Den Massstab zu dieser Reglerstellung merken - er gilt, bis der Regler
-     sich bewegt. */
-  if (res.sicher) wache.halt = {r: wache.zoom, s: res.trQ.s};
-  /* Die Bahn fuer die Vorhersage. Nur zwei Punkte - mehr glaettet nur und
-     macht die Vorhersage traege. */
-  wache.bahn = (wache.bahn || []).concat([{t: nun, ox: res.trQ.ox, oy: res.trQ.oy}]).slice(-2);
+     sich bewegt. Und genau das stand hier zwar als Kommentar, aber nicht als
+     Code: gesetzt wurde er bei JEDER sicheren Lesung, also auch dann, wenn
+     der Regler unveraendert war.
+
+     Damit fuetterte sich das Rauschen selbst - die Verfolgung findet einen
+     leicht anderen Massstab, er wird als "fest" gemerkt, beim naechsten Bild
+     ist der feste Wert schon verschoben. Der Massstab hielt nicht, er
+     driftete: 44 von 237 Bildern mit Spruengen ohne Zoomvorgang, bis zu 58
+     Prozent. */
+  if (res.sicher){
+    const reglerAnders = !wache.halt
+      || (wache.halt.r === null) !== (wache.zoom === null)
+      || (wache.zoom !== null && wache.halt.r !== null
+          && Math.abs(wache.halt.r - wache.zoom) >= 0.012);
+    if (reglerAnders) wache.halt = {r: wache.zoom, s: res.trQ.s};
+  }
+  /* Die Bahn fuer die Vorhersage. DREI Punkte, nicht zwei: aus zweien laesst
+     sich nicht unterscheiden, ob die Karte faehrt oder die Schaetzung
+     zittert. Erst der dritte zeigt, ob die Richtung haelt. */
+  wache.bahn = (wache.bahn || []).concat([{t: nun, ox: res.trQ.ox, oy: res.trQ.oy}]).slice(-3);
   /* Die letzte GUTE Lage bleibt liegen, auch wenn die naechste danebengeht.
      Sie ist der billige Weg zurueck. */
   if (res.sicher){
@@ -8001,63 +8178,55 @@ function wacheTickIntern(){
       else if (!brennt && fightAt(i) && vollstaendig) setFight(i, false);
     }
   }
-  /* ---- Angriffsrichtungen uebernehmen ----
-     Ennos Regel: "Die Farbe trifft immer auf den Angreifer zu, wenn eine der
-     beiden Staedte brennt." An 44 Bildern nachgemessen traf das 44 von 45
-     Mal - die einzige Regel im Bund, die praktisch nie danebenliegt.
+  /* ---- Die Versorgungslinien uebernehmen ----
+     Gespeichert wird JEDE gelesene Linie, nicht nur die auffaellige. Ennos
+     Entscheidung, und sie ist richtiger als meine: eine Ableitung aus dem
+     Besitz stimmt nur, solange der Besitz stimmt. Eine gelesene Linie ist
+     eine BEOBACHTUNG - sie kann dem abgeleiteten Bild widersprechen, und
+     dann ist genau der Widerspruch die Nachricht.
 
-     Uebernommen wird deshalb NUR dieser Fall, und nur er: farbige Linie,
-     verschiedene Fraktionen, genau eine Seite brennt. Zwei unabhaengige
-     Beobachtungen tragen die Meldung, nicht eine.
+     Der Eimer bleibt trotzdem beschraenkt: es gibt 2661 Kanten, jede hat
+     genau einen Schluessel, und eine erneute Lesung ueberschreibt.
 
-     Alles Uebrige ist ableitbar und braucht keinen Eintrag: gehoeren beide
-     Enden derselben Seite, folgt die Farbe; gehoeren sie verschiedenen und
-     brennt keine, ist die Linie grau - genau das ist eine ruhige Front. */
+     NICHTS wird automatisch entfernt. Enno hat zweimal davor gewarnt, und
+     die Spielmechanik gibt ihm recht: der Battle Director greift zehn
+     Minuten nach Kampferstellung ein, der Auto-Resolver aber erst nach SECHS
+     STUNDEN UND FUENF MINUTEN. Ein Kampf kann einen halben Tag offenstehen.
+     Wer ihn beim ersten Vorbeischauen ohne sichtbares Feuer wegraeumt,
+     loescht laufende Gefechte - besonders aus der Ferne, wo das Feuer
+     ohnehin oft uebersehen wird. Stattdessen altert die Meldung sichtbar,
+     wie alles andere auf dieser Karte auch. */
   if (res.schreibreif && res.adern && !res.adern.zuWeit){
     const bes = res.erg.besitz, br = res.brennt || {};
+    const kampf = res.adern.kampf || {};
     for (const schl in res.adern.besitz){
       const f = res.adern.besitz[schl];
-      if (f === 3) continue;                       /* farblos sagt nichts aus */
-      const k = +schl, a = Math.floor(k/10000), b = k % 10000;
-      if (bes[a] == null || bes[b] == null) continue;
-      if (bes[a] === bes[b]) continue;             /* gleiche Seite: ableitbar */
-      const ba = !!br[a], bb = !!br[b];
-      if (ba === bb) continue;                     /* keine oder beide: nicht deutbar */
-      const angreifer = ba ? bes[b] : bes[a];      /* die nicht brennende Seite */
-      if (f !== angreifer) continue;               /* das Bild widerspricht der Regel */
-      const s = versSchl(a, b), alt = S.vers[s] && S.vers[s].v;
-      if (!alt || alt.f !== angreifer) stamp("vers", s, {f: angreifer});
-    }
-    /* Und wieder wegnehmen, wo nichts mehr brennt. Ohne das waechst der
-       Eimer mit Angriffen, die laengst vorbei sind - jeder davon eine
-       Spawnrichtung, die jemand fuer bare Muenze nimmt. */
-    for (const schl in res.adern.besitz){
-      const k = +schl, a = Math.floor(k/10000), b = k % 10000;
-      const e = S.vers[versSchl(a, b)];
-      if (!e || !imKrieg(e) || !e.v || e.v.f == null) continue;
-      if (br[a] || br[b]) continue;                /* laeuft noch */
-      if (bes[a] == null || bes[b] == null) continue;   /* nicht gesehen */
-      const rest = e.v.k ? {k: 1} : null;          /* ein Linienkampf bleibt */
-      stamp("vers", versSchl(a, b), rest);
-    }
-    /* Begegnungskaempfe. Sie stehen fuer sich - dort treffen sich zwei
-       Kampfeinheiten unterwegs, und wer gewinnt, greift danach an. */
-    for (const schl in (res.adern.kampf || {})){
       const k = +schl, a = Math.floor(k/10000), b = k % 10000;
       if (!MAP.n[a] || !MAP.n[b]) continue;
-      const s = versSchl(a, b), alt = (S.vers[s] && S.vers[s].v) || {};
-      if (!alt.k) stamp("vers", s, Object.assign({}, alt, {k: 1}));
-    }
-    /* Ein Begegnungskampf endet, wenn eine Seite gewonnen hat. Wo die Linie
-       gelesen wurde und kein Feuer mehr darauf liegt, ist er vorbei. */
-    for (const schl in res.adern.besitz){
-      const k = +schl;
-      if (res.adern.kampf && res.adern.kampf[k]) continue;
-      const a = Math.floor(k/10000), b = k % 10000;
-      const s = versSchl(a, b), e = S.vers[s];
-      if (!e || !imKrieg(e) || !e.v || !e.v.k) continue;
-      const rest = e.v.f != null ? {f: e.v.f} : null;
-      stamp("vers", s, rest);
+      const neu = {f};
+      if (kampf[k]) neu.k = 1;
+      /* Wer greift an? Nur dort ablesbar, wo die Linie farbig ist, die Enden
+         verschiedenen Seiten gehoeren und genau eine brennt - Ennos Regel,
+         an 1155 Faellen ohne Ausnahme bestaetigt. Sonst bleibt das Feld leer;
+         eine Farbe allein ist noch keine Richtung. */
+      if (f !== 3 && bes[a] != null && bes[b] != null && bes[a] !== bes[b]){
+        const ba = !!br[a], bb = !!br[b];
+        if (ba !== bb){
+          const angreifer = ba ? bes[b] : bes[a];
+          if (f === angreifer) neu.a = angreifer;
+        }
+      }
+      const alt = S.vers[versSchl(a, b)];
+      const av = imKrieg(alt) ? alt.v : null;
+      /* Nur schreiben, was sich geaendert hat - 2661 Linien im Minutentakt
+         durch die Leitung zu schicken waere die sicherste Art, den Abgleich
+         lahmzulegen. */
+      if (av && av.f === neu.f && (av.k||0) === (neu.k||0) && av.a === neu.a) continue;
+      /* Eine einmal abgelesene Angriffsrichtung bleibt stehen, auch wenn
+         diese Lesung sie nicht bestaetigen kann - genau das ist der Fall,
+         den Enno meint. Sie altert, sie verschwindet nicht. */
+      if (neu.a === undefined && av && av.a !== undefined) neu.a = av.a;
+      stamp("vers", versSchl(a, b), neu);
     }
     save();
   }
@@ -8143,11 +8312,26 @@ function wacheTickIntern(){
 
      Der Scanbalken misst deshalb die RUHE. Bewegt sich der Ausschnitt um
      mehr als ein Zwanzigstel seiner Breite, faengt er von vorn an. */
-  if (wache.peil){
+  /* Die Ruhe wird am BILD gemessen, nicht an der gemeldeten Lage. Gemessen
+     an 237 Aufnahmen wanderte die Lage zwischen zwei Bildern bei einem
+     Viertel aller Paare um mehr als fuenf Prozent der Spanne - auch bei
+     stehender Karte, denn was dort wandert, ist die Schaetzung.
+
+     Der Schwerpunkt aller Farbpunkte im Arbeitsbild kennt dieses Problem
+     nicht: er haengt allein am Bildinhalt. Zwei Bildpunkte Wanderung sind
+     das Rauschen des pulsierenden Feuers; darueber hat sich wirklich etwas
+     bewegt. */
+  if (res.schwer){
     const r = wache.ruhe;
-    const weg = r ? Math.hypot(wache.peil.x - r.x, wache.peil.y - r.y) : Infinity;
-    if (!r || weg > wache.peil.spanne*0.05)
-      wache.ruhe = {x: wache.peil.x, y: wache.peil.y, seit: nun};
+    const weg = (r && r.bx != null)
+      ? Math.hypot(res.schwer.x - r.bx, res.schwer.y - r.by) : Infinity;
+    /* Auch ein starker Wechsel der Punktzahl heisst Bewegung - beim Zoomen
+       wandert der Schwerpunkt kaum, die Menge sichtbarer Karte aber sehr. */
+    const menge = (r && r.bn) ? Math.abs(res.schwer.n - r.bn)/r.bn : 1;
+    if (!r || weg > 2.5 || menge > 0.06)
+      wache.ruhe = {bx: res.schwer.x, by: res.schwer.y, bn: res.schwer.n, seit: nun};
+  } else if (!wache.ruhe){
+    wache.ruhe = {seit: nun};
   }
   const steht = wache.ruhe ? (nun - wache.ruhe.seit) : 0;
   radarScan = Math.max(0, Math.min(1, steht/(wache.sek*1000)));
@@ -15698,7 +15882,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 63e8a9ffda</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 2068cba92c</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
