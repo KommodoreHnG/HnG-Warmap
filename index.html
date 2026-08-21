@@ -2599,6 +2599,16 @@ function draw(){
 
   /* --- supply lines, coloured by who holds both ends (game style) --- */
   const front = [], angriff = [], begegnung = [];
+  /* Einmal je Bild nachschlagen statt 2661 Mal zweimal. Der Zeichner fragte
+     fuer jede Kante nach Angriff und nach Linienkampf, und jede Frage baute
+     sich ihren Schluessel als Zeichenkette - 5322 Bauten je Neuzeichnen,
+     auch wenn im ganzen Eimer drei Eintraege stehen. Steht nichts drin,
+     kostet es jetzt gar nichts. */
+  const adern = new Map();
+  for (const [k, e] of Object.entries(S.vers)){
+    if (!imKrieg(e) || !e.v) continue;
+    if (e.v.f != null || e.v.k) adern.set(k, e.v);
+  }
   ctx.lineCap = "round";
   for (const [a,b] of MAP.e){
     const oa = ownerOf(a), ob = ownerOf(b);
@@ -2608,12 +2618,15 @@ function draw(){
     /* Begegnungskampf: zwei Kampfeinheiten sind unterwegs aufeinander-
        getroffen. Das steht fuer sich und gilt auch zwischen zwei Staedten
        derselben Seite - der Gegner kann dort durchgestossen sein. */
-    if (linienKampf(a, b)) begegnung.push([x1,y1,x2,y2]);
+    const ader = adern.size ? adern.get(versSchl(a, b)) : null;
+    if (ader && ader.k) begegnung.push([x1,y1,x2,y2]);
     if (oa >= 0 && ob >= 0 && oa !== ob){
       /* Laeuft hier ein Angriff? Dann traegt die Linie die Farbe des
          Angreifers - Ennos Regel, an 45 Faellen zu 98 Prozent bestaetigt -
          und eine Spitze, die zeigt, wohin er stoesst. */
-      const ang = angriffUeber(a, b);
+      /* Eine Angriffsrichtung gilt nur, solange gekaempft wird - dieselbe
+         Bedingung wie im Seitenfenster, und aus demselben Grund. */
+      const ang = (ader && ader.f != null && (fightAt(a) || fightAt(b))) ? ader.f : null;
       if (ang != null){
         const zumVerteidiger = (ang === oa) ? [x1,y1,x2,y2] : [x2,y2,x1,y1];
         angriff.push([ang, ...zumVerteidiger]);
@@ -3468,8 +3481,18 @@ function angriffUeber(a, b){
 }
 /* Aus welchen Richtungen wird diese Stadt angegriffen? Genau Ennos Frage:
    "Bei einer verteidigenden Stadt sind diese Linien die Spawnrichtung der
-   Angreifer." */
+   Angreifer."
+
+   Der zweite Halbsatz seiner Regel ist eine Bedingung: die Farbe zeigt den
+   Angreifer, WENN eine der beiden Staedte brennt. Hoert das Feuer auf, gilt
+   die Aussage nicht mehr - und eine Spawnrichtung, die nicht mehr stimmt,
+   ist schlimmer als keine, weil jemand seine Verteidigung danach ausrichtet.
+
+   Deshalb wird hier gefragt, ob gerade gekaempft wird, und nicht bloss, ob
+   irgendwann einmal etwas eingetragen wurde. Das gilt auch fuer Eintraege,
+   die von jemand anderem kommen und die man selbst nie aufraeumen koennte. */
 function spawnRichtungen(i){
+  if (!fightAt(i)) return [];
   const raus = [];
   for (const j of nachbarn(i)){
     const f = angriffUeber(i, j);
@@ -8005,6 +8028,18 @@ function wacheTickIntern(){
       const s = versSchl(a, b), alt = S.vers[s] && S.vers[s].v;
       if (!alt || alt.f !== angreifer) stamp("vers", s, {f: angreifer});
     }
+    /* Und wieder wegnehmen, wo nichts mehr brennt. Ohne das waechst der
+       Eimer mit Angriffen, die laengst vorbei sind - jeder davon eine
+       Spawnrichtung, die jemand fuer bare Muenze nimmt. */
+    for (const schl in res.adern.besitz){
+      const k = +schl, a = Math.floor(k/10000), b = k % 10000;
+      const e = S.vers[versSchl(a, b)];
+      if (!e || !imKrieg(e) || !e.v || e.v.f == null) continue;
+      if (br[a] || br[b]) continue;                /* laeuft noch */
+      if (bes[a] == null || bes[b] == null) continue;   /* nicht gesehen */
+      const rest = e.v.k ? {k: 1} : null;          /* ein Linienkampf bleibt */
+      stamp("vers", versSchl(a, b), rest);
+    }
     /* Begegnungskaempfe. Sie stehen fuer sich - dort treffen sich zwei
        Kampfeinheiten unterwegs, und wer gewinnt, greift danach an. */
     for (const schl in (res.adern.kampf || {})){
@@ -8012,6 +8047,17 @@ function wacheTickIntern(){
       if (!MAP.n[a] || !MAP.n[b]) continue;
       const s = versSchl(a, b), alt = (S.vers[s] && S.vers[s].v) || {};
       if (!alt.k) stamp("vers", s, Object.assign({}, alt, {k: 1}));
+    }
+    /* Ein Begegnungskampf endet, wenn eine Seite gewonnen hat. Wo die Linie
+       gelesen wurde und kein Feuer mehr darauf liegt, ist er vorbei. */
+    for (const schl in res.adern.besitz){
+      const k = +schl;
+      if (res.adern.kampf && res.adern.kampf[k]) continue;
+      const a = Math.floor(k/10000), b = k % 10000;
+      const s = versSchl(a, b), e = S.vers[s];
+      if (!e || !imKrieg(e) || !e.v || !e.v.k) continue;
+      const rest = e.v.f != null ? {f: e.v.f} : null;
+      stamp("vers", s, rest);
     }
     save();
   }
@@ -8544,6 +8590,22 @@ function tafelZeichnen(){
 
 function intelDialog(tab, seite){
   const nurSeite = (seite === 0 || seite === 1 || seite === 2) ? seite : null;
+  /* Die Nachschublage. Einmal ueber die Karte, beide Tabellen daraus.
+     Gerechnet wird nur, was besetzt ist - eine offene Stadt hat keinen
+     Nachschub und braucht keinen. */
+  const nsAb = [], nsHebel = [];
+  let nsBesetzt = 0;
+  for (let i = 0; i < MAP.n.length; i++){
+    const f = ownerOf(i);
+    if (f < 0) continue;
+    nsBesetzt++;
+    if (nurSeite !== null && f !== nurSeite) continue;
+    if (!verwickelt(i) && versorger(i).length === 0) nsAb.push({i, f});
+    const heb = paraHebel(i);
+    if (heb.length) nsHebel.push({i, f, heb});
+  }
+  nsHebel.sort((a, b) => b.heb.length - a.heb.length);
+  const nsName = k => esc(MAP.n[k][0]);
   const c = light() ? "#1a2029" : "#e9e2d5";
   const proSpieler = new Map();
   for (const k of Object.keys(S.spot)){
@@ -8596,12 +8658,66 @@ function intelDialog(tab, seite){
     <div class="tabs">
       <button data-tab="clans"   aria-pressed="true">Clans</button>
       <button data-tab="players" aria-pressed="false">Players</button>
+      <button data-tab="supply"  aria-pressed="false">Supply</button>
       <button data-tab="gaps"    aria-pressed="false">Gaps</button>
       <button data-tab="when"    aria-pressed="false">When</button>
       <button data-tab="spots"   aria-pressed="false">Sightings</button>
       <button data-tab="scout"   aria-pressed="false">Scouts</button>
     </div>
     <div class="dlg-b">
+      <div class="tabp" data-tab="supply">
+        <p style="font-size:12.5px;color:var(--dim);line-height:1.5;margin:0 0 12px">
+          A town can only be reinforced from a neighbour of the same side that is
+          <b>not fighting</b>. Everything here follows from that one rule — and from the
+          map underneath: <b>${nsBesetzt}</b> of ${MAP.n.length} towns have a known owner.
+          ${nsBesetzt < MAP.n.length*0.5
+            ? `<span style="color:var(--accent)">Read more of the map and these lists get
+               sharper.</span>` : ""}</p>
+
+        <h4 style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+          color:var(--dim2);margin:0 0 7px">Cut off — nobody can reinforce them</h4>
+        ${nsAb.length ? `<div class="tw"><table>
+          <thead><tr><th>Town</th><th>Side</th><th>Neighbours</th><th>Why</th></tr></thead>
+          <tbody>${nsAb.slice(0, 40).map(z => {
+            const nb = nachbarn(z.i);
+            const eigene = nb.filter(j => ownerOf(j) === z.f);
+            /* Ein zweites style-Attribut an derselben Zeile wird stillschweigend
+               verworfen - der Farbstreifen der Fraktion fehlte dadurch. */
+            return `<tr data-go="${z.i}" class="fac-row"
+              style="cursor:pointer;--f:${col(FACTIONS[z.f])}">
+              <td><b>${nsName(z.i)}</b></td>
+              <td>${FACTIONS[z.f].tag}</td>
+              <td>${nb.length}</td>
+              <td style="text-align:left;color:var(--dim)">${
+                eigene.length === 0 ? "no neighbour on its own side"
+                : eigene.length === 1 ? "its only own neighbour is fighting"
+                : `all ${eigene.length} own neighbours are fighting`}</td>
+            </tr>`;
+          }).join("")}</tbody></table></div>
+          ${nsAb.length > 40 ? `<p style="font-size:11.5px;color:var(--dim2);margin:7px 0 0">
+            ${nsAb.length - 40} more not listed.</p>` : ""}`
+          : `<p style="font-size:12.5px;color:var(--dim2);margin:0 0 18px">
+             Nobody is cut off — every occupied town has a free neighbour.</p>`}
+
+        <h4 style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+          color:var(--dim2);margin:22px 0 7px">Para-block leverage — one jump, several towns</h4>
+        <p style="font-size:12px;color:var(--dim2);line-height:1.5;margin:0 0 9px">
+          A para-block puts a town into a battle, so it stops being a supply source for
+          all of its neighbours. These are the towns where that costs the most.</p>
+        ${nsHebel.length ? `<div class="tw"><table>
+          <thead><tr><th>Block here</th><th>Side</th><th>Cuts off</th><th>Which towns</th></tr></thead>
+          <tbody>${nsHebel.slice(0, 40).map(z => `<tr data-go="${z.i}" style="cursor:pointer">
+            <td><b>${nsName(z.i)}</b></td>
+            <td>${FACTIONS[z.f].tag}</td>
+            <td><b style="color:var(--accent)">${z.heb.length}</b></td>
+            <td style="text-align:left;max-width:300px;white-space:normal;color:var(--dim)">${
+              z.heb.slice(0, 6).map(nsName).join(" · ")}${z.heb.length > 6 ? " …" : ""}</td>
+          </tr>`).join("")}</tbody></table></div>
+          ${nsHebel.length > 40 ? `<p style="font-size:11.5px;color:var(--dim2);margin:7px 0 0">
+            ${nsHebel.length - 40} more not listed.</p>` : ""}`
+          : `<p style="font-size:12.5px;color:var(--dim2);margin:0">
+             No single block would cut anything off right now.</p>`}
+      </div>
       <div class="tabp on" data-tab="clans">
         ${clans.length ? `<div class="tw"><table>
           <thead><tr><th>Clan</th><th>Fights for</th><th>Players</th><th>Known teams</th>
@@ -15582,7 +15698,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build aec837c399</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 63e8a9ffda</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
