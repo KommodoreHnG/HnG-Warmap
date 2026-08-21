@@ -4984,7 +4984,29 @@ function maskeBauen(imgd){
     for (let f=0; f<3; f++) if (SHOT_COL[f](r,g,b)){ m[q] = f+1; n++; break; }
   }
   /* n bleibt die Zahl der FRAKTIONSpunkte - an ihr haengen Dichte und
-     Plausibilitaetspruefung, und die duerfen vom Feuer nicht wandern. */
+     Plausibilitaetspruefung, und die duerfen vom Feuer nicht wandern.
+
+     ZUM FEUER, und warum es hier TROTZDEM mitzaehlt. Enno hat zu Recht
+     eingewandt, dass Kaempfe die Einpassung nicht tragen duerfen: in einer
+     nahen Ansicht mit vielen Braenden sind 30 Prozent aller Maskenpunkte
+     Feuer, und das Feuer aendert sich zwischen zwei Aufnahmen derselben
+     Stelle um 42 Prozent.
+
+     Es ganz herauszunehmen wurde versucht und wieder verworfen. An einer
+     Standphase gemessen stieg die Guete zwar von 84 auf 91 Prozent - im
+     Verfolgungstest wurde es aber teils schlechter (ein Bild von 0,99 auf
+     2,39 Einheiten Wanderung), und die weiteste Ansicht rastete gar nicht
+     mehr ein.
+
+     Der Grund: eine brennende Stadt WECHSELT mit dem Puls zwischen
+     Fraktionsfarbe und Feuerklasse. Sie wegzulassen macht sie nicht stabil,
+     sondern laesst sie je nach Pulsphase teilweise verschwinden - dasselbe
+     Problem, nur anders herum.
+
+     Der richtige Weg ist nicht, das Unstete wegzunehmen, sondern das Stete
+     hinzuzunehmen: das LINIENNETZ. Gemessen sieht die Maske davon nur 54
+     Prozent der Katalogkanten; ein Kantendetektor kaeme auf 71. Das steht
+     als naechstes an. */
   return {m, W, H, n, nf};
 }
 /* Die globale Suche taugt fuer WEITAUFNAHMEN, und nur fuer die. Warum, ist
@@ -5174,18 +5196,33 @@ function spurTransform(mk, punkte, tr0, weit, sFest){
   if (!b) return null;
   const fein2 = suche(b[1], 0.05, 7, [[3,4,fein],[1,3,fein]]);
   const g = (fein2 && fein2[0] > b[0]) ? fein2 : b;
-  /* Hysterese: die BISHERIGE Lage mit demselben Mass bewerten und nur
-     wechseln, wenn die neue sie deutlich schlaegt.
+  /* Hysterese: die BISHERIGE Lage mitbewerten und nur wechseln, wenn die
+     neue sie deutlich schlaegt. Ohne das nimmt die Verfolgung jedes Optimum,
+     auch wenn es nur um ein Tausendstel besser ist - und bei rauschendem
+     Bild wandert dieses Optimum staendig.
 
-     Ohne das nimmt die Verfolgung jedes Optimum, auch wenn es nur um ein
-     Tausendstel besser ist - und bei rauschendem Bild wandert dieses Optimum
-     staendig. Das Feuer allein pulsiert mit 1,6 Sekunden Periode. Genau das
-     sieht der Nutzer als springendes Erfassungsfenster, obwohl der Lock
-     durchgehend haelt.
+     Entschieden wird mit dem LINIENNETZ, nicht mit der Punktdeckung. Ennos
+     Vorgabe, und sie hat einen handfesten Grund: die Punktdeckung zaehlt,
+     wieviele Katalogstaedte auf Farbe liegen - und Feuer IST Farbe. In einer
+     nahen Ansicht mit vielen Braenden sind 30 Prozent aller Maskenpunkte
+     Feuer, das sich zwischen zwei Aufnahmen um 42 Prozent aendert. Das Mass,
+     das entscheiden soll, zitterte also selbst.
 
-     Ein Prozent Vorsprung ist die Schwelle: darunter ist der Unterschied
-     Rauschen, darueber Bewegung. Bei einer echten Fahrt liegt der Vorsprung
-     um Groessenordnungen hoeher, die Verfolgung wird dadurch nicht traege. */
+     Linien pulsieren nicht. Zwei Lagen im selben Bild zu vergleichen macht
+     ausserdem die Skala unwichtig - es braucht keine Schwelle, die je nach
+     Zoom anders liegen muesste. */
+  const neu = {s:g[1], ox:g[2], oy:g[3]};
+  const nAlt = netzMass(mk, punkte, tr0), nNeu = netzMass(mk, punkte, neu);
+  if (nAlt !== null && nNeu !== null){
+    /* Fuenf Prozentpunkte Vorsprung, sonst bleibt es beim Alten. Gemessen
+       liegt der Abstand zwischen richtiger und um eine halbe Scheibe
+       verschobener Lage bei dreissig Punkten - fuenf sind Rauschen. */
+    if (nNeu <= nAlt + 0.05)
+      return {guete: g[0], s: tr0.s, ox: tr0.ox, oy: tr0.oy, gehalten: true, netz: nAlt};
+    return {guete:g[0], s:g[1], ox:g[2], oy:g[3], netz: nNeu};
+  }
+  /* Kein Netzmass zu bekommen - zu wenige Kanten im Bild. Dann wie bisher
+     ueber die Punktdeckung. */
   const alt = wert(tr0.s, tr0.ox, tr0.oy, fein);
   if (alt && g[0] <= alt[0]*1.01 && alt[0] > 0)
     return {guete: alt[0], s: tr0.s, ox: tr0.ox, oy: tr0.oy, gehalten: true};
@@ -5451,6 +5488,81 @@ function sternKantenmass(paare){
   return k/st.length;
 }
 
+/* ---- Das Liniennetz: liegt zwischen zwei Staedten auch wirklich eine? ----
+
+   Ennos Vorgabe: "Lediglich die Geometrie der Polygone und die Nodes duerfen
+   hier tragen." sternKantenmass daneben zaehlt nur KATALOGkanten zwischen
+   zugeordneten Staedten und schaut nie ins Bild - eine Lage, die zufaellig
+   auf eine dicht vernetzte Gegend faellt, besteht das.
+
+   Dieses Mass fragt das Bild. Gemessen an vierzehn Aufnahmen, richtige Lage
+   gegen absichtlich verschobene:
+
+       Scheibe   richtig   1/2 Scheibe daneben   1 Scheibe   4 Scheiben
+        47 px      47 %          22 %              16 %         11 %
+        21 px      70 %          32 %              24 %         21 %
+         9 px      88 %          57 %              38 %         35 %
+         5 px      25 %          26 %              28 %         23 %   versagt
+
+   Zwei- bis vierfache Trennung, am schaerfsten bei neun Bildpunkten Scheibe.
+   Und anders als die Punktdeckung zittert es nicht mit dem Feuer: Linien
+   pulsieren nicht.
+
+   Hoechstens 240 Kanten, gleichmaessig verteilt - alle 2661 waeren zu teuer
+   fuer fuenf Messungen je Sekunde, und die Quote aendert sich nicht. */
+const NETZ_MAX = 240;
+function netzMass(mk, punkte, tr){
+  const {m, W, H} = mk;
+  const kanten = MAP.e || [];
+  if (!kanten.length) return null;
+  const rS = Math.max(2, SCHEIBE_EINH*tr.s/2);
+  /* Erst sichten, dann ausduennen - und nicht umgekehrt. Vorher wurde jede
+     zwoelfte der 2661 Katalogkanten genommen und danach geprueft, ob sie im
+     Bild liegt. Die meisten liegen es nicht:
+
+         Bild   Scheibe   Kanten im Bild   nach der Stichprobe
+         f020    20,7 px        78                 3    -> zu wenige, null
+         g006    20,7 px       187                10
+         f060    15,8 px       340                28
+
+     Unter acht geprueften gibt die Funktion null zurueck, und dann faellt
+     die Schreibreife auf die alten Masse zurueck, die bei der Verfolgung
+     nicht taugen. */
+  const sicht = [];
+  for (let i = 0; i < kanten.length; i++){
+    const a = kanten[i][0], b = kanten[i][1];
+    if (!punkte[a] || !punkte[b]) continue;
+    const ax = punkte[a][0]*tr.s + tr.ox, ay = punkte[a][1]*tr.s + tr.oy;
+    const bx = punkte[b][0]*tr.s + tr.ox, by = punkte[b][1]*tr.s + tr.oy;
+    if (Math.hypot(bx-ax, by-ay) < 4*rS) continue;   /* zu kurz zwischen den Scheiben */
+    if (Math.min(ax,bx) < 4 || Math.min(ay,by) < 4
+        || Math.max(ax,bx) > W-4 || Math.max(ay,by) > H-4) continue;
+    sicht.push([ax, ay, bx, by]);
+  }
+  if (sicht.length < 8) return null;
+  const schritt = Math.max(1, Math.ceil(sicht.length/NETZ_MAX));
+  let geprueft = 0, getroffen = 0;
+  for (let i = 0; i < sicht.length; i += schritt){
+    const ax = sicht[i][0], ay = sicht[i][1], bx = sicht[i][2], by = sicht[i][3];
+    let tref = 0;
+    for (const s of [0.38, 0.5, 0.62]){
+      const x = Math.round(ax + (bx-ax)*s), y = Math.round(ay + (by-ay)*s);
+      let da = false;
+      for (let dy = -2; dy <= 2 && !da; dy++){
+        for (let dx = -2; dx <= 2; dx++){
+          const X = x+dx, Y = y+dy;
+          if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
+          if (m[Y*W+X]){ da = true; break; }
+        }
+      }
+      if (da) tref++;
+    }
+    geprueft++;
+    if (tref >= 2) getroffen++;                   /* zwei von drei Proben */
+  }
+  return geprueft >= 8 ? getroffen/geprueft : null;
+}
+
 /* ---- Die Sternbilder: Abgangsrichtungen als Erkennungsmerkmal ----
    Ring bei 1,1 Scheibendurchmessern, Toleranz 20 Grad - beides gemessen. */
 const STERN_RING = 1.10, STERN_WTOL = 20, STERN_SPARSAM = 60;
@@ -5557,9 +5669,28 @@ function sternGuetePruefen(mk, punkte, tr){
   const P = sternScheiben(m, I, W, H, r, 0.45, liste);
   if (P.length < 5 || P.length > 1500) return null;
   const paare = sternZuordnen(P, punkte, tr.s, tr.ox, tr.oy, Math.max(3, 0.5*r));
-  if (paare.length < 5) return {guete: paare.length/P.length, kanten: 0, treffer: paare.length};
-  return {guete: paare.length/P.length, kanten: sternKantenmass(paare),
-          treffer: paare.length, ganz: P.length};
+  /* Der Nenner sind die Staedte, die im Bild sein MUESSTEN - nicht die
+     gefundenen Scheibenkandidaten.
+
+     Vorher stand hier paare.length/P.length, und das ergab an 237 Aufnahmen
+     einen Mittelwert von 0,03: bei weiter Sicht zaehlt die Scheibensuche
+     auch Linienstuecke und Kreuzungen mit, tausend Kandidaten fuer hundert
+     Staedte. Die Bedingung sternGuete >= 0,5 scheiterte dadurch in JEDEM
+     der 237 Bilder, und die Verfolgung konnte nie etwas uebernehmen -
+     genau der Fehler, den diese Funktion beheben sollte.
+
+     Bei der Einrastung faellt dieselbe Formel nicht auf, weil dort ueber
+     vierzig Radien gesucht und der beste genommen wird. */
+  let erwartet = 0;
+  const rand = 2*r;
+  for (const p of punkte){
+    const x = p[0]*tr.s + tr.ox, y = p[1]*tr.s + tr.oy;
+    if (x > rand && y > rand && x < W-rand && y < H-rand) erwartet++;
+  }
+  if (erwartet < 4) return null;
+  const guete = Math.min(1, paare.length/erwartet);
+  return {guete, kanten: paare.length >= 5 ? sternKantenmass(paare) : 0,
+          treffer: paare.length, erwartet, ganz: P.length};
 }
 
 function sternLage(mk, punkte, opt){
@@ -5767,9 +5898,30 @@ const FEUER_ANTEIL = 0.03;
    Asymmetrie: melden darf man aus jeder Entfernung, LOESCHEN nur aus der
    Naehe. */
 const FEUER_SICHER_PX = 28;
+/* Und eine Obergrenze. Die Feuerschwellen sind absolut gebaut - wird das
+   Bild heller, wachsen alle Differenzen mit, und es besteht mehr. Gemessen
+   an vier Aufnahmen, kuenstlich aufgehellt:
+
+       Faktor 1,00   Feuerflaeche 100 %
+       Faktor 1,35                196 %
+       Faktor 1,60                408 %
+
+   Das ist keine graue Theorie: Enno faehrt mit HDR, und der Strom, den das
+   Werkzeug bekommt, durchlaeuft eine andere Tonwertkurve als meine
+   Messbilder.
+
+   An zwanzig echten Aufnahmen liegt die Feuerflaeche zwischen 0,1 und 2,3
+   Prozent des Kartenfeldes; fuenf Prozent hat keine erreicht. Darueber ist
+   es kein Feuer, sondern ein Bild, das anders ankommt als erwartet. Dann
+   lieber keine Gefechtsmeldung als eine falsche - denn falsches Feuer faerbt
+   auch Staedte um und erzeugt Angriffsrichtungen. */
+const FEUER_FLAECHE_MAX = 0.05;
 const feuerVollstaendig = tr => tr && SCHEIBE_EINH*tr.s >= FEUER_SICHER_PX;
 function feuerLesen(mk, punkte, tr){
   const {m, W, H} = mk;
+  /* Zu viel Feuer im ganzen Bild heisst: das Bild kommt anders an als
+     erwartet, nicht dass Europa brennt. */
+  if (mk.nf > FEUER_FLAECHE_MAX*W*H) return {zuHell: true};
   const rS = Math.max(2, SCHEIBE_EINH*tr.s/2);        /* Scheibenradius */
   const R = Math.max(3, Math.round(rS*1.25));
   const noetig = Math.max(4, Math.round(FEUER_ANTEIL*Math.PI*rS*rS));
@@ -6062,16 +6214,22 @@ function kartenAusBild(quelle, melde, opt){
     if (o.spur){
     tr = spurTransform(a.mk, punkte, trAusQuelle(o.spur, a), false, sFest);
     /* Die Verfolgung liefert eine Lage, aber keine Sternbildguete - und ohne
-       die war nie etwas schreibreif. Also nachrechnen. */
+       die war nie etwas schreibreif. Also nachrechnen.
+
+       WICHTIG ist die Reihenfolge, und sie war falsch: der Erbblock darunter
+       lief NACH dieser Rechnung und warf sie weg. Gemessen liegt die frisch
+       gerechnete Guete bei 0,64 bis 0,88 - angekommen ist ein Mittelwert von
+       0,03, und die Bedingung sternGuete >= 0,5 scheiterte in 237 von 237
+       Bildern. Eine geerbte Guete ist ohnehin eine Aussage ueber ein anderes
+       Bild; geerbt wird deshalb nur noch, was sich nicht rechnen liess. */
     if (tr){
       const gp = sternGuetePruefen(a.mk, punkte, tr);
-      if (gp){ tr.stern = true; tr.sternGuete = gp.guete; tr.sternKanten = gp.kanten; }
-    }
-    /* Die Verfolgung erbt die Masse der Einrastung, von der sie abstammt -
-       sonst waere nach dem ersten Bild nichts mehr schreibreif. */
-    if (tr && o.spur.stern){
-      tr.stern = true;
-      tr.sternGuete = o.spur.sternGuete; tr.sternKanten = o.spur.sternKanten;
+      if (gp){
+        tr.stern = true; tr.sternGuete = gp.guete; tr.sternKanten = gp.kanten;
+      } else if (o.spur.stern){
+        tr.stern = true;
+        tr.sternGuete = o.spur.sternGuete; tr.sternKanten = o.spur.sternKanten;
+      }
     }
   }
     else {
@@ -6131,13 +6289,42 @@ function kartenAusBild(quelle, melde, opt){
      ehrlichere mit: den Anteil eineindeutig zugeordneter Scheiben und die
      Katalogkanten zwischen ihnen. */
   const stg = tr.sternGuete || 0, stk = tr.sternKanten || 0;
+  /* Die Notbremse am Liniennetz. Keine feste Guetegrenze - die richtige
+     Quote faellt von 88 auf 34 Prozent, wenn man hineinzoomt, und eine feste
+     Grenze wuerde entweder nahe Ansichten aussperren oder weite durchlassen.
+     Zwanzig Prozent aber sind in keinem gemessenen Fall von einer richtigen
+     Lage unterschritten worden. */
+  const netz = netzMass(a.mk, punkte, tr);
+  /* Zwei Wege zur Schreibreife, je nachdem, woher die Lage kommt.
+
+     EINRASTUNG: die alten Bedingungen. Sie sind daran geeicht und haben die
+     gequetschte Lage abgefangen, die passungGuete allein durchgelassen
+     haette.
+
+     VERFOLGUNG: das Liniennetz. Die alten Masse sind hier nicht sinnvoll zu
+     bilden - gemessen an 237 Aufnahmen liegt sternKanten bei 0,05, weil die
+     Zuordnung aus einem einzigen Radius stammt statt aus dem besten von
+     vierzig. Das Netzmass dagegen liegt bei 0,50 und trennt zwei- bis
+     vierfach zwischen richtiger und um eine Scheibe verschobener Lage.
+
+     Es ist ausserdem das, was Enno verlangt hat: "Lediglich die Geometrie
+     der Polygone und die Nodes duerfen hier tragen." */
+  const ausVerfolgung = !!(o.spur && tr.gehalten !== undefined || o.spur);
   return {erg: farbenLesen(a.mk, punkte, tr), brennt: feuerLesen(a.mk, punkte, tr),
           adern: linienLesen(a.mk, punkte, tr),
           schwer: a.schwer,
           tr, trQ: trZuQuelle(tr, a), punkte,
           mk:a.mk, feld:a.feld, W:a.W, H:a.H, tmp:a.tmp, bw:a.bw, bh:a.bh,
           guete:g.quote, sicher: g.quote >= PASS_GUT,
-          schreibreif: g.quote >= PASS_GUT && !!tr.stern && stg >= 0.5 && stk >= 0.7};
+          netz,
+          schreibreif: ausVerfolgung
+            /* Verfolgung: Geometrie entscheidet. Das Netzmass muss da sein
+               und sitzen, die Zuordnung muss die Haelfte der erwarteten
+               Staedte finden. */
+            ? (g.quote >= PASS_GUT && netz !== null && netz >= 0.45 && stg >= 0.35)
+            /* Einrastung: wie bisher. */
+            : (g.quote >= PASS_GUT && !!tr.stern && stg >= 0.5 && stk >= 0.7
+               && (netz === null || netz >= 0.20))};
 }
 
 /* Uebernehmen heisst: nur schreiben, was sich wirklich geaendert hat. Alle
@@ -7015,8 +7202,26 @@ function anDerFront(i){
 const MODUS = {
   breit: {name: "SWEEP",  spanne: 500,
           was: "ownership and battles — the widest view that still locks on"},
-  nah:   {name: "UNITS",  spanne: 70,
+  /* Warum 85 und nicht 70: die Kampfeinheiten-Karte ist gemessen 1,3
+     Karteneinheiten breit und braucht vierzehn Bildpunkte, um lesbar zu
+     sein. Bei 1100 Punkten Arbeitsbreite ist damit bis 102 Einheiten Spanne
+     Schluss - 70 faehrt also viel naeher heran als noetig, und je naeher,
+     desto weniger Karte je Bild. Die Flaeche waechst im Quadrat: von 70 auf
+     85 ist das anderthalbmal soviel Karte in derselben Zeit, bei immer noch
+     siebzehn Prozent Abstand zur Grenze. Weiter hinauf waere gierig - die
+     102 sind eine Grenze, kein Arbeitspunkt.
+     In der Sprache des Spiels: Zoomregler auf rund 90 Prozent. */
+  nah:   {name: "UNITS",  spanne: 85,
           was: "assault teams too — needs a close zoom"}
+};
+/* Ennos Referenz: "Ich kann nicht sagen wie viel das ist, da brauche ich
+   eine fuer mich nachvollziehbare Referenz." Karteneinheiten sind keine -
+   der Zoomregler des Spiels ist eine, und das Werkzeug liest ihn ohnehin.
+   Die Probe an seinem laufenden Bild: 222 Einheiten, Pult zeigte 65 Prozent,
+   die Formel sagt 66. */
+const reglerFuerZiel = spanne => {
+  const r = reglerFuerSpanne(spanne);
+  return r !== null && r >= 0 && r <= 1 ? Math.round(100*r) : null;
 };
 let radarModus = "breit";
 /* Wieviele Rasten am Mausrad fehlen noch? Das Spiel zoomt in festen
@@ -7270,13 +7475,18 @@ function radarFrisch(){
       const m = MODUS[radarModus];
       const ist = L.laeuft && wache.peil ? wache.peil.spanne : 0;
       const rast = zoomRasten(ist, m.spanne);
+      /* Der Sollwert in der Sprache des Spiels: die Reglerstellung. Sie steht
+         links oben im Spiel und daneben im Pult - beides ohne Umrechnen
+         vergleichbar. */
+      const zr = reglerFuerZiel(m.spanne);
+      const ziel = zr !== null ? `game slider ≈ ${zr} %` : `${m.spanne} units`;
       so.innerHTML = !ist
-        ? `<span class="ziel">${m.spanne} units</span> target — start the watch to compare`
+        ? `<span class="ziel">${ziel}</span> — start the watch to compare`
         : rast === 0
-          ? `<span class="gut">✓ at ${m.name} zoom</span> · ${Math.round(ist)} of ${m.spanne} units`
+          ? `<span class="gut">✓ at ${m.name} zoom</span> · ${ziel}`
           : `<span class="ziel">${rast > 0 ? rast : -rast} notch${Math.abs(rast)===1?"":"es"}
-             ${rast > 0 ? "closer in" : "further out"}</span> ·
-             now ${Math.round(ist)}, want ${m.spanne}`;
+             ${rast > 0 ? "closer in" : "further out"}</span> — ${ziel}${
+               wache.zoom != null ? `, you are at ${Math.round(100*wache.zoom)} %` : ""}`;
     }
     const k = el.querySelector("[data-kann]");
     if (k){
@@ -8163,7 +8373,15 @@ function wacheTickIntern(){
      0,35 Sekunden schwankte es um den Faktor 2,8, und ein einzelnes Bild
      kann es im Tal erwischen. Deshalb ein Gedaechtnis: einmal gesehen gilt
      zwanzig Sekunden, und erst danach gilt eine Stadt wieder als ruhig. */
-  if (res.schreibreif && res.brennt){
+  /* Einmal sagen, wenn die Gefechtserkennung ausgesetzt hat - stillschweigen
+     hiesse, dem Nutzer eine Karte ohne Gefechte als vollstaendig zu
+     verkaufen. */
+  if (res.brennt && res.brennt.zuHell && !wache.hellGesagt){
+    wache.hellGesagt = true;
+    toast("Picture comes in brighter than expected — battle detection is paused. "
+        + "If you run HDR, try turning it off for the game window.");
+  }
+  if (res.schreibreif && res.brennt && !res.brennt.zuHell){
     const nunF = jetzt();
     wache.feuer ||= new Map();
     for (const idx in res.brennt) wache.feuer.set(+idx, nunF);
@@ -15882,7 +16100,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 2068cba92c</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c13d2e7901</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
