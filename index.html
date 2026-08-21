@@ -7475,6 +7475,41 @@ function wacheTickIntern(){
       if (brennt !== fightAt(i)) setFight(i, brennt);
     }
   }
+  /* An brennenden Staedten wird ABGESTIMMT statt entschieden.
+
+     Ennos Beobachtung: "Am Minimum der Pulsation sehe ich die Farbe aber
+     noch sehr gut, sie ist nur eben eingefaerbt durch den Kreis." Genau so
+     ist es - gemessen an vierzehn Aufnahmen im 0,4-Sekunden-Takt schwankt
+     die Helligkeit eines Herdes zwischen 340 und 577, Periode 1,6 Sekunden.
+     Im Tal liegen 373 Fraktionspunkte gegen 3 Feuerpunkte, im Berg
+     umgekehrt.
+
+     Meist liest der Besitzleser deshalb richtig - aber nicht immer: ueber
+     acht Bilder las er Mannheim sechsmal sowjetisch und einmal deutsch,
+     Bingen am Rhein sechsmal sowjetisch und einmal deutsch. Ein einzelnes
+     Bild aus dem Berg wuerde also einen Fehler in die Karte schreiben.
+
+     Deshalb: eine brennende Stadt wird nur uebernommen, wenn die letzten
+     Lesungen sich einig sind. */
+  {
+    wache.stimmen ||= new Map();
+    const nunS = jetzt();
+    for (const idx in res.erg.besitz){
+      const i = +idx;
+      if (!fightAt(i)){ wache.stimmen.delete(i); continue; }
+      const e = wache.stimmen.get(i) || [];
+      e.push({t: nunS, v: res.erg.besitz[idx]});
+      while (e.length && nunS - e[0].t > 8000) e.shift();
+      if (e.length > 9) e.shift();
+      wache.stimmen.set(i, e);
+      /* Uneinig? Dann diese Stadt in dieser Runde nicht schreiben. */
+      const zaehl = {};
+      for (const s of e) zaehl[s.v] = (zaehl[s.v]||0) + 1;
+      const beste = Object.entries(zaehl).sort((a,b)=>b[1]-a[1])[0];
+      if (e.length < 3 || beste[1] < e.length*0.7) delete res.erg.besitz[idx];
+      else res.erg.besitz[idx] = +beste[0];
+    }
+  }
   if (wache.peil && wache.peil.spanne > 0)
     radarBeam = beamAusSpanne(wache.peil.spanne);
   wache.zaehl = res.erg.zaehl.slice();
@@ -14989,7 +15024,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build cc19d42eea</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b6a9d2f791</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
