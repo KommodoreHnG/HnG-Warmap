@@ -561,6 +561,13 @@ body.meld-modus{cursor:help}
 .rd-bar{height:9px;background:#2a2419;border-radius:2px;margin-top:6px;overflow:hidden}
 .rd-bar i{display:block;height:100%;background:linear-gradient(90deg,#8a6a2a,#f0c169);
   transition:width .35s ease}
+/* Was die aktuelle Zoomstufe hergibt - drei Zeilen, je eine Faehigkeit. */
+.rd-kann{margin-top:6px;font-size:10.5px;line-height:1.7;color:#7d7461;
+  border-top:1px solid #2c3a2c;padding-top:6px}
+.rd-kann i{font-style:normal;display:inline-block;width:13px}
+.rd-kann .ja{color:#8fe6a2}
+.rd-kann .halb{color:#e2ac48}
+.rd-kann .nein{color:#a2705f}
 .rd-fuss{margin-top:auto;font-size:9.5px;color:#5e594c;line-height:1.5;
   font-family:var(--schrift)}
 @media (max-width: 900px){
@@ -5410,6 +5417,25 @@ function farbenLesen(mk, punkte, tr){
    Drei Prozent liegen zwischen beiden Feldern, mit doppeltem Abstand nach
    oben wie nach unten. */
 const FEUER_ANTEIL = 0.03;
+/* Ab welcher Scheibengroesse heisst "kein Feuer gefunden" auch "es brennt
+   nicht"? Gemessen an einer Zoomleiter, jede Stufe gegen die engere Ansicht
+   derselben Stadt:
+
+       Scheibe  faelschlich brennend   uebersehen
+         6 px            0                 98
+         9 px            5                 45
+        16 px            5                  4
+        21 px            9                  3
+        28 px            0                  2
+        37 px            0                  1
+        65 px            0                  0
+
+   Fehlalarme gibt es also praktisch nirgends - ein gefundenes Feuer brennt
+   auch wirklich. Uebersehen wird dagegen aus der Ferne viel. Daraus die
+   Asymmetrie: melden darf man aus jeder Entfernung, LOESCHEN nur aus der
+   Naehe. */
+const FEUER_SICHER_PX = 28;
+const feuerVollstaendig = tr => tr && SCHEIBE_EINH*tr.s >= FEUER_SICHER_PX;
 function feuerLesen(mk, punkte, tr){
   const {m, W, H} = mk;
   const rS = Math.max(2, SCHEIBE_EINH*tr.s/2);        /* Scheibenradius */
@@ -6704,6 +6730,30 @@ function radarFrisch(){
         : (zoomEich.length ? `${zoomEich.length} points learned` : "using the standard curve");
     }
   }
+  /* Gefechte und was der Zoom hergibt */
+  {
+    const g = el.querySelector("[data-gefechte]");
+    if (g) g.textContent = L.laeuft && wache.gefechte != null ? String(wache.gefechte) : "—";
+    const k = el.querySelector("[data-kann]");
+    if (k){
+      const tr = L.laeuft && wache.tr ? wache.tr : null;
+      const sp = L.laeuft && wache.peil ? wache.peil.spanne : 0;
+      const scheibe = tr ? SCHEIBE_EINH*tr.s : 0;
+      const zeile = (an, was, warum) =>
+        `<div><i class="${an}">${an==="ja"?"✓":an==="halb"?"~":"·"}</i>${was}`
+        + (warum ? ` <span style="opacity:.7">${warum}</span>` : "") + `</div>`;
+      if (!tr) k.innerHTML = zeile("nein", "nothing yet", "no fix");
+      else k.innerHTML =
+        zeile("ja", "towns", "")
+        + (scheibe >= FEUER_SICHER_PX
+            ? zeile("ja", "battles", "")
+            : zeile("halb", "battles", "only new ones — too far to clear"))
+        + (atLesbar(sp, PEIL_BREITE)
+            ? zeile("ja", "assault teams", "")
+            : zeile("nein", "assault teams", "zoom in to about "
+                    + Math.round(AT_KARTE_EINH*PEIL_BREITE/AT_KARTE_PX) + " units"));
+    }
+  }
   const zoomA = el.querySelector("[data-gzoom]");
   if (zoomA){
     const da = L.laeuft && wache.zoom !== null && wache.zoom !== undefined;
@@ -6770,6 +6820,10 @@ function radarPult(){
       <div class="z"><span>${esc(rdS(W.abdeckung))}</span><b data-proz>${proz} %</b></div>
       <div class="z"><span>${esc(rdS(W.sektoren))}</span>
         <b data-frisch>${frisch} / ${ganz}</b></div>
+      <div class="z"><span>BATTLES</span><b data-gefechte>—</b></div>
+      <!-- Was gibt die aktuelle Zoomstufe her? Das steht hier, statt dass
+           das Geraet es stillschweigend tut. -->
+      <div class="rd-kann" data-kann>—</div>
       <div class="z"><span>${esc(rdS(W.sicht))}</span>
         <b data-sicht>${laeuft ? (wache.gelesen||0) : "—"}</b></div>
       <div class="z"${laeuft && wache.zaehl ? "" : " hidden"}><span>US · GE · SU</span>
@@ -7469,10 +7523,15 @@ function wacheTickIntern(){
     const nunF = jetzt();
     wache.feuer ||= new Map();
     for (const idx in res.brennt) wache.feuer.set(+idx, nunF);
+    /* Melden aus jeder Entfernung, loeschen nur aus der Naehe: aus der Ferne
+       heisst "kein Feuer gefunden" nicht "es brennt nicht" - bei 1141
+       Einheiten Spanne wurden achtundneunzig Braende uebersehen. */
+    const vollstaendig = feuerVollstaendig(res.tr);
     for (const idx in res.erg.besitz){
       const i = +idx, zuletzt = wache.feuer.get(i) || 0;
       const brennt = nunF - zuletzt < 20000;
-      if (brennt !== fightAt(i)) setFight(i, brennt);
+      if (brennt && !fightAt(i)) setFight(i, true);
+      else if (!brennt && fightAt(i) && vollstaendig) setFight(i, false);
     }
   }
   /* An brennenden Staedten wird ABGESTIMMT statt entschieden.
@@ -7512,6 +7571,7 @@ function wacheTickIntern(){
   }
   if (wache.peil && wache.peil.spanne > 0)
     radarBeam = beamAusSpanne(wache.peil.spanne);
+  wache.gefechte = res.brennt ? Object.keys(res.brennt).length : 0;
   wache.zaehl = res.erg.zaehl.slice();
   /* Sobald zum ersten Mal bekannt ist, wo man steht: ein Ziel aus dem Bild
      waehlen. Das beim Aufmachen blind gezogene lag irgendwo. */
@@ -15024,7 +15084,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b6a9d2f791</span></p></div>
+         installation. <span style="color:var(--dim2)">· build fa95687a28</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>

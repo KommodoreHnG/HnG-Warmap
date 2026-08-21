@@ -1,7 +1,7 @@
 lagekarte.html
-  Bau       b6a9d2f791
-  SHA-256   cde9b745cfb2f2955bbcd026537073fc732d7814ba5b51e59a2a765482efd933
-  Groesse   1387961 Bytes
+  Bau       fa95687a28
+  SHA-256   c3f035ce54a8755191cd7b6a2bf07a3d4e3741379936943c2a4c55199fcda3e8
+  Groesse   1391003 Bytes
 
 Selbst nachbauen:  python karte_bauen.py
 Nachrechnen:       certutil -hashfile lagekarte.html SHA256
