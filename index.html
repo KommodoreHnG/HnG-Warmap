@@ -2601,7 +2601,14 @@ function fit(){
 const toScr = (x,y) => [x*view.z+view.x, y*view.z+view.y];
 const toMap = (x,y) => [(x-view.x)/view.z, (y-view.y)/view.z];
 const light = () => document.documentElement.getAttribute("data-theme") === "light";
-const col = f => light() ? f.light : f.color;
+/* Eine unbekannte Fraktion darf das Zeichnen nicht abbrechen. Sechsundzwanzig
+   Stellen rufen col(FACTIONS[...]), und eine einzige Zeile mit unsinniger
+   Fraktionsangabe reichte, um draw() zu werfen - und damit den ganzen
+   Seitenaufbau. Neutrales Grau statt einer erfundenen Fraktionsfarbe: so
+   sieht man, dass etwas nicht stimmt, statt einer falschen Zugehoerigkeit zu
+   glauben. */
+const FAK_UNBEKANNT = {color:"#8a8a8a", light:"#9a9a9a", tag:"?", name:"unknown"};
+const col = f => { const g = f || FAK_UNBEKANNT; return light() ? g.light : g.color; };
 
 function draw(){
   const w = cv.width, h = cv.height;
@@ -3356,6 +3363,11 @@ function griffLoslassen(x, y){
 }
 
 /* ---------------- state writes ---------------- */
+/* Diese drei Namen sind in JavaScript keine gewoehnlichen Eigenschaften.
+   Wer sie als Kennung unterschiebt, veraendert den Bauplan des Objekts
+   statt seinen Inhalt - und was so entsteht, taucht in keiner Auflistung
+   und keiner Sicherungsdatei auf. */
+const GIFTIGE_KENNUNG = new Set(["__proto__", "constructor", "prototype"]);
 const dirty = new Set();
 /* Die Merkliste ueberlebt einen Neustart. Ohne das wusste die Seite nach dem
    Neuladen nicht mehr, was noch nicht gesendet war, und schob beim naechsten
@@ -16421,7 +16433,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 9478e98683</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 87815dcde4</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -16653,12 +16665,31 @@ function applyRemote(key, val){
   const bucket = key.slice(0, p), id = key.slice(p+1);
   /* Eigene, noch nicht abgeschickte Aenderung schlaegt alles. */
   if (dirty.has(key)) return false;
+  /* Eine Kennung wird hier zum Eigenschaftsnamen. Drei davon sind in
+     JavaScript keine gewoehnlichen Namen, sondern greifen in den Bauplan des
+     Objekts ein: wer "__proto__" schreibt, schiebt einen Prototyp unter.
+     Danach liefert S.owner[5] einen Eintrag, den Object.keys nicht kennt und
+     JSON.stringify nicht mitschreibt - er steht auf der Karte, aber in
+     keiner Datei, und keine Aufraeumfunktion findet ihn. */
+  if (GIFTIGE_KENNUNG.has(id)) return false;
   if (bucket === "gone"){ S.gone[id] = val; return true; }
   if (bucket === "arrow"){
-    const k = S.arrows.findIndex(a => a.id === id);
+    const k = S.arrows.findIndex(a => a && a.id === id);
     if (val.v === null){ if (k >= 0) S.arrows.splice(k,1); return k >= 0; }
-    if (k < 0){ S.arrows.push(val.v); return true; }
-    S.arrows[k] = val.v; return true;
+    /* Nur ein richtiger Pfeil darf in die Liste. Frueher ging hier alles
+       hinein; war es kein Objekt, wurde daraus beim Speichern null, und der
+       naechste Seitenaufbau brach daran ab - fuer jeden im Clan, bei jedem
+       Start aufs Neue. Die Kennung aus dem Schluessel gilt, damit ein Pfeil
+       nicht unter falschem Namen unauffindbar wird. */
+    if (!val.v || typeof val.v !== "object" || Array.isArray(val.v)) return false;
+    /* Start, Ziel und Fraktion muessen brauchbar sein. Ein Pfeil ohne
+       Fraktion liess col() auf undefined zugreifen und brach das Zeichnen ab
+       - fuer jeden im Clan, bei jedem Start aufs Neue. */
+    if (!Number.isFinite(+val.v.from) || !Number.isFinite(+val.v.to)) return false;
+    if (!FACTIONS[val.v.f]) return false;
+    const pfeil = Object.assign({}, val.v, {id});
+    if (k < 0){ S.arrows.push(pfeil); return true; }
+    S.arrows[k] = pfeil; return true;
   }
   /* Every bucket, taken from the one list — a hand-kept copy here silently
      dropped areas, para-blocks, the enemy register and strength notes. */
@@ -16771,13 +16802,32 @@ async function syncPushInner(){
     const jetztWert = wertVon(bucket, id);
     if (!jetztWert || (jetztWert.t || 0) === t) dirty.delete(k);
   };
+  /* Zwei sehr verschiedene Fehlschlaege sahen frueher gleich aus: "die
+     Datenbank will diese Zeile nicht" und "es kam ueberhaupt keine Antwort".
+     Nur der erste rechtfertigt es, die Zeile aus der Warteschlange zu
+     werfen. Beim zweiten waere die Arbeit einer ganzen Sitzung verloren,
+     bloss weil das WLAN kurz weg war. */
   const senden = async teil => {
-    const r = await fetch(api("warmap"), {
-      method: "POST",
-      headers: heads({"Prefer": "resolution=merge-duplicates,return=minimal"}),
-      body: JSON.stringify(teil)
-    });
-    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+    let r;
+    try {
+      r = await fetch(api("warmap"), {
+        method: "POST",
+        headers: heads({"Prefer": "resolution=merge-duplicates,return=minimal"}),
+        body: JSON.stringify(teil)
+      });
+    } catch(e){
+      const f = new Error("keine Verbindung");
+      f.leitung = true;
+      throw f;
+    }
+    if (!r.ok){
+      const f = new Error(`${r.status} ${await r.text()}`);
+      f.status = r.status;
+      /* 500 und aufwaerts ist ein Problem des Servers, kein Urteil ueber die
+         Zeile. Auch 429 - zu viele Anfragen - heisst "spaeter nochmal". */
+      f.leitung = r.status >= 500 || r.status === 429;
+      throw f;
+    }
   };
   /* In Portionen, nicht alles auf einmal. Jede fuer sich abgehakt: reisst
      die dritte, sind die ersten beiden trotzdem durch. */
@@ -16801,12 +16851,24 @@ async function syncPushInner(){
        alles andere blockieren zu lassen: einzeln nachfassen. */
     /* Nur die Zeilen nachfassen, die noch in der Warteschlange stehen -
        abgehakte Portionen sind durch und muessen nicht noch einmal. */
-    let weg = 0, durch = 0;
+    let weg = 0, durch = 0, leitungWeg = false;
     const abgelehnt = [];
     for (let i = 0; i < rows.length; i++){
       if (!dirty.has(merk[i][0])) continue;
       try { await senden([rows[i]]); abhaken(i); durch++; }
-      catch(e2){ dirty.delete(merk[i][0]); weg++; abgelehnt.push(merk[i][1]); }
+      catch(e2){
+        /* Kam gar keine Antwort, liegt es nicht an dieser Zeile. Sie bleibt
+           in der Warteschlange, und der naechste Takt versucht es erneut.
+           Weitermachen waere sinnlos: die Leitung ist fuer alle dieselbe. */
+        if (e2 && e2.leitung){ leitungWeg = true; break; }
+        dirty.delete(merk[i][0]); weg++; abgelehnt.push(merk[i][1]);
+      }
+    }
+    if (leitungWeg){
+      syncMark("offline", "err");
+      toast("No connection — your changes are still queued and will go out "
+          + "when the connection is back.");
+      return;
     }
     if (weg){
       syncMark(`${weg} refused`, "err");
@@ -16911,7 +16973,7 @@ async function syncStart(){
     }
     for (const b of BUCKETS)                     // Verfasservermerk mitziehen
       for (const e of Object.values(S[b])) if (e && e.by === alt) e.by = neuId;
-    for (const a of S.arrows) if (a.by === alt) a.by = neuId;
+    for (const a of S.arrows) if (a && a.by === alt) a.by = neuId;
     for (const id of Object.keys(S.gone))
       if (S.gone[id] && S.gone[id].by === alt) S.gone[id].by = neuId;
     S.me = neuId;
@@ -16950,7 +17012,7 @@ async function syncStart(){
      Ohne diese Pruefung schiebt jeder Client alle FREMDEN Pfeile und
      Grabsteine erneut hoch. Seit die Datenbank einen Pfeil seinem Zeichner
      zuordnet, gaebe das bei jedem Verbinden eine Reihe Ablehnungen. */
-  for (const a of S.arrows) if (a.by === S.me) dirty.add(`arrow:${a.id}`);
+  for (const a of S.arrows) if (a && a.by === S.me) dirty.add(`arrow:${a.id}`);
   for (const id of Object.keys(S.gone))
     if (S.gone[id] && S.gone[id].by === S.me) dirty.add(`gone:${id}`);
   /* Nach jedem Abgleich den Stand der Merkliste festhalten. Sonst stuende
@@ -17215,7 +17277,13 @@ async function mitgliederDialog(meldung){
 }
 
 /* ---------------- start ---------------- */
+/* Der ganze Aufbau liegt in einem Fang. Ohne ihn genuegte ein einziger
+   kaputter Datensatz vom Server, um die Seite gar nicht erst entstehen zu
+   lassen: keine Karte, kein Menue, keine Meldung, nur weiss. Und weil der
+   Abgleich beim Start immer von vorn liest, kam derselbe Datensatz nach
+   jedem Neuladen wieder. Jetzt sieht der Nutzer wenigstens, was los ist. */
 (async function(){
+ try {
   /* Zuerst der eigene Stand - allein wegen der Kennung. Ein geteilter Link
      bringt den Stand des Absenders mit, aber niemals dessen Identitaet: sonst
      wuerden beim naechsten Verbinden dessen Teams auf den Leser umgebucht. */
@@ -17230,6 +17298,10 @@ async function mitgliederDialog(meldung){
   for (const b of BUCKETS) S[b] ||= {};
   S.arrows ||= []; S.gone ||= {};
   if (!S.me) S.me = Math.random().toString(36).slice(2,8);
+  /* Was kein Pfeil ist, fliegt hier heraus, statt den Aufbau zu sprengen.
+     Frueher warf diese Schleife auf einem null-Eintrag, und weil der ganze
+     Aufbau eine ungesicherte Sofortfunktion war, blieb die Seite weiss. */
+  S.arrows = S.arrows.filter(a => a && typeof a === "object");
   for (const a of S.arrows){
     if (!a.id) a.id = Math.random().toString(36).slice(2,10);
     delete a._pfad;         // Altlast aus fruehen Staenden, siehe pfadVon
@@ -17276,6 +17348,27 @@ async function mitgliederDialog(meldung){
     /* Zuletzt, damit die Karte dahinter schon steht. */
     if (!beigetreten()) setTimeout(beitrittDialog, 400);
   }
+ } catch(e){
+  /* Hierher kommt nur, was den Aufbau wirklich abbricht. Die Meldung muss
+     ohne die Oberflaeche auskommen - die gibt es an dieser Stelle ja nicht. */
+  try { console.error("Aufbau abgebrochen:", e); } catch(_){}
+  const d = document.createElement("div");
+  d.style.cssText = "position:fixed;inset:0;z-index:99999;background:#1a1a1a;"
+    + "color:#eee;font:15px/1.6 system-ui,sans-serif;padding:40px;overflow:auto";
+  d.innerHTML = "<h2 style='margin:0 0 12px'>The map could not start</h2>"
+    + "<p>Something in the stored data broke the startup. Your data is still "
+    + "on the server; this browser just cannot read it.</p>"
+    + "<p><button id='e-neu' style='padding:8px 16px;font:inherit'>Reload</button> "
+    + "<button id='e-leer' style='padding:8px 16px;font:inherit'>Clear this browser and reload</button></p>"
+    + "<pre style='color:#e09;white-space:pre-wrap;font-size:12px'></pre>";
+  d.querySelector("pre").textContent = String((e && e.stack) || e);
+  document.body.appendChild(d);
+  d.querySelector("#e-neu").onclick = () => location.reload();
+  d.querySelector("#e-leer").onclick = () => {
+    try { localStorage.removeItem(STORE); localStorage.removeItem(OFFEN_STORE); } catch(_){}
+    location.reload();
+  };
+ }
 })();
 window.addEventListener("resize", resize);
 new MutationObserver(()=>{ draw(); side(); tally(); if (showKey) drawKey(); if (showDepot) depotZeichnen(); })
