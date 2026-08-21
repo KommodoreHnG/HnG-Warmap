@@ -5490,6 +5490,18 @@ function sternKantenmass(paare){
 
 /* ---- Das Liniennetz: liegt zwischen zwei Staedten auch wirklich eine? ----
 
+   NACHTRAG, Regressionspruefung an den aelteren Sammlungen - denn an einem
+   Tag mit sieben Aenderungen am Kern ist die Frage nicht, ob das Neue geht,
+   sondern ob das Alte noch geht:
+
+       Radar2  (dunkler Kartenstil, Einzelbilder)
+           40 von 45 eingerastet, 34 schreibreif, Guete 71 %, Sternbild 77 %
+       Schwenk (durchgehende Fahrt, der Verfolgungsfall)
+           72 von 72 eingerastet, 0 Abrisse, 0 Spruenge, 0 Massstabsspruenge
+           5 schreibreif - richtig so, eine Fahrt ohne Pausen soll wenig
+           uebernehmen
+
+
    Ennos Vorgabe: "Lediglich die Geometrie der Polygone und die Nodes duerfen
    hier tragen." sternKantenmass daneben zaehlt nur KATALOGkanten zwischen
    zugeordneten Staedten und schaut nie ins Bild - eine Lage, die zufaellig
@@ -16100,7 +16112,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c13d2e7901</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 3adb0c326c</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
