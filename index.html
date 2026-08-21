@@ -6823,6 +6823,18 @@ function atSeite(g, x0, y0, w, h, eigen){
   }
   if (n < 8) return null;
   const r=sr/n, gg=sg/n, b=sb/n;
+  /* Feuer zuerst ausschliessen - genau wie beim Besitzleser, und aus
+     demselben Grund. Die gemessenen Flammenfarben bestehen den UdSSR-Test
+     muehelos:
+
+         Feuer niedrig   186/ 80/36     186 > 80+60 und 186 > 36+60
+         Feuer mittel    176/ 76/40     ebenso
+
+     Der Trenner ist g-b: Feuer ist orange und hat deutlich mehr Gruen als
+     Blau, Sowjetrot ist gesaettigt und hat beides gleich wenig (gemessen
+     177/8/0). Ohne diese Zeile erzeugt jeder brennende Ort eine
+     sowjetische Kampfeinheit. */
+  if (r > 110 && r-b > 55 && gg-b > 25 && gg < r) return null;
   if (gg > r+40 && gg > b+40) return 0;            // gruen  = US
   if (b  > r+40 && b  > gg+40) return 1;           // violett = GE
   if (r  > gg+60 && r > b+60)  return 2;           // rot     = UdSSR
@@ -6934,9 +6946,14 @@ function atVonKarte(quelle, klein, tr, feld){
                         d[((ky+((nh/2)|0))*aw + kx + ((nw/2)|0))*4+1],
                         d[((ky+((nh/2)|0))*aw + kx + ((nw/2)|0))*4+2], AT_FUELL_EIGEN, 40);
     const seite = atSeite(g, kx, ky, nw, nh, eigen);
-    /* Wo steht das auf der Karte? Ueber die Lage aus der Einpassung. */
+    /* Wo steht das auf der Karte? Ueber die Lage aus der Einpassung.
+       MIT Abstandsdeckel: eine Marke gehoert zu der Stadt, ueber der sie
+       sitzt. Ohne den Deckel bekam die naechstgelegene Stadt sie zugewiesen,
+       egal wie weit weg - und eine faelschlich im Meer gefundene Marke
+       landete bei irgendeiner Kuestenstadt. */
     const [mx, my] = ausBild(k.x0 + k.w/2, k.y0 + k.h, tr);   // Fusspunkt
-    const ort = ortBei(mx, my);
+    const ort = ortBei(mx, my, AT_ORT_ABSTAND);
+    if (ort < 0) continue;                 /* zu weit von jeder Stadt: keine Marke */
     const bal = atBalken(grau, aw, ah, kx, ky, nw, nh);
     if (!bal){ marker.push({ort, seite, eigen, art:"einzeln"}); continue; }
     const z = atZiffer(hell, aw, kx, nw, bal.y0, bal.y1);
@@ -8274,14 +8291,24 @@ function peilung(res){
 }
 /* Der naechstgelegene Ort zur Bildmitte - so sagt das Geraet in Ortsnamen,
    wo man gerade steht, statt in Zahlen. */
-function ortBei(x, y){
+/* Die naechste Stadt zu einem Punkt. OHNE Deckel gibt es immer eine, auch
+   dreihundert Karteneinheiten weit weg - fuer die Ansage "du bist ueber X"
+   ist das richtig, fuer die Zuordnung einer gefundenen Kampfeinheit nicht.
+   Eine Marke, die faelschlich im Meer gefunden wird, landete sonst bei
+   irgendeiner Kuestenstadt und stuende danach im Bericht des Clans.
+
+   Acht Karteneinheiten sind zwei Scheibendurchmesser: die Marke sitzt ueber
+   ihrer Stadt, nicht in der naechsten Provinz. */
+function ortBei(x, y, maxAbstand){
   let best = -1, bd = Infinity;
   for (let i = 0; i < MAP.n.length; i++){
     const d = (MAP.n[i][1]-x)**2 + (MAP.n[i][2]-y)**2;
     if (d < bd){ bd = d; best = i; }
   }
+  if (maxAbstand && bd > maxAbstand*maxAbstand) return -1;
   return best;
 }
+const AT_ORT_ABSTAND = 8;
 const HIMMEL = (dx, dy) => {
   const w = Math.atan2(dy, dx) * 180/Math.PI;
   const r = ["east","south-east","south","south-west","west","north-west","north","north-east"];
@@ -16352,7 +16379,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build cd5e9efd2b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 413aa6f534</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
