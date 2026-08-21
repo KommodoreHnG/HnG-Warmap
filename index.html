@@ -6613,17 +6613,18 @@ let radarBildZeit = 0;
 function radarSchleife(){
   if (!radarOffen) return;
   const nun = jetzt();
-  /* Der Fortschritt laeuft im BILDtakt, nicht im Messtakt. Vorher sprang er
-     einmal je Messung um einen Klotz - man sah nicht, dass sich etwas tut,
-     und genau darum ging es. Gemessen wird weiter alle 1,5 s; zwischendrin
-     laeuft der Balken mit der zuletzt gemessenen Signalstaerke weiter. */
-  const dt = Math.min(0.25, (nun - (radarBildZeit || nun))/1000);
+  /* Der Balken misst die RUHE: wie lange steht der Ausschnitt schon still?
+     Erst wenn er voll ist, wird uebernommen - Ennos Vorgabe, und sie ist
+     begruendet: das Feuer pulsiert mit 1,6 Sekunden Periode, und an
+     brennenden Staedten wird ueber acht Sekunden abgestimmt. Im
+     Vorbeifahren erfasst man die halbe Wahrheit.
+
+     Gesetzt wird er im Messtakt (wacheTickIntern); hier laeuft er nur im
+     Bildtakt weiter, damit man sieht, dass sich etwas tut. */
   radarBildZeit = nun;
-  if (wacheLaeuft()){
+  if (wacheLaeuft() && wache.ruhe){
     const vorher = radarScan;
-    if (radarSignal >= 0.55) radarScan = Math.min(1, radarScan + beamTempo()*dt*radarSignal);
-    else radarScan = Math.max(0, radarScan - 0.02*dt);
-    if (radarScan >= 1) scanGutschrift();
+    radarScan = Math.max(0, Math.min(1, (nun - wache.ruhe.seit)/(wache.sek*1000)));
     if (Math.round(vorher*100) !== Math.round(radarScan*100)) radarFrisch();
   }
   radarWinkel += wacheLaeuft() ? 0.011 : 0.0035;   // steht die Anlage, dreht sie langsam leer
@@ -6685,6 +6686,11 @@ function radarLage(){
 function radarFrisch(){
   const el = document.getElementById("rd-pult");
   if (!el || !radarOffen) return;
+  /* Den Erfassungsregler mitfuehren. Ohne diese Zeile wurde er nur beim
+     Ziehen von Hand aufgefrischt - an Ennos laufendem Pult stand deshalb
+     seit dem Oeffnen der Rueckfallwert 279, waehrend die Einrastung 158
+     sagte. */
+  radarWerte();
   const L = radarLage();
   const setz = (wahl, wert) => { const k = el.querySelector(wahl); if (k) k.textContent = wert; };
   const breit = (wahl, p, schwach) => {
@@ -7380,14 +7386,41 @@ function wacheTickIntern(){
       && Math.abs(wache.halt.r - wache.zoom) < 0.012) sFest = wache.halt.s;
   else if (wache.halt && wache.zoom === null && wache.halt.r === null)
     sFest = wache.halt.s;   /* kein Regler ablesbar: dann haelt der letzte Wert */
+  else if (wache.zoom !== null){
+    /* Noch nichts gehalten, aber der Regler ist lesbar: dann kommt der
+       Massstab von dort. Er ist auf ein Prozent genau (an Ennos laufendem
+       Bild: Gesetz 160, Einrastung 158), eine Schaetzung ist es nicht. */
+    const sp = spanneAusRegler(wache.zoom);
+    const bw = wache.video && (wache.video.videoWidth || wache.video.width);
+    if (sp > 0 && bw) sFest = (bw*KARTEN_FELD.w) / sp;
+  }
 
   /* Erst mitfuehren - das ist dreimal schneller und funktioniert auch
      hineingezoomt, wo die globale Suche strukturell versagt. Nur wenn dabei
      nichts Brauchbares herauskommt, wird neu eingerastet. */
   let res = null;
+  /* Die Verfolgung startet dort, wo die Karte SEIN WIRD, nicht wo sie war.
+     Aus den letzten beiden Lagen wird eine Geschwindigkeit; bei einem
+     zuegigen Zug sind das im Arbeitsbild ueber hundert Punkte Unterschied,
+     und genau daran ist die Verfolgung frueher gescheitert. */
+  let spurStart = wache.tr;
+  if (wache.tr && wache.bahn && wache.bahn.length >= 2){
+    const a = wache.bahn[wache.bahn.length-2], b = wache.bahn[wache.bahn.length-1];
+    const dt = b.t - a.t;
+    if (dt > 40 && dt < 1500){
+      const vt = Math.min(1500, nun - b.t);
+      /* Die Vorhersage ist ein Angebot, keine Behauptung: sie verschiebt nur
+         den Startpunkt der Suche. Findet die Suche etwas anderes, gilt das. */
+      spurStart = {s: wache.tr.s,
+                   ox: wache.tr.ox + (b.ox - a.ox)/dt*vt,
+                   oy: wache.tr.oy + (b.oy - a.oy)/dt*vt,
+                   stern: wache.tr.stern,
+                   sternGuete: wache.tr.sternGuete, sternKanten: wache.tr.sternKanten};
+    }
+  }
   if (wache.tr)
     res = kartenAusBild(wache.video, null,
-                        {spur: wache.tr, feld: wache.feld, maxb: PEIL_BREITE, sFest});
+                        {spur: spurStart, feld: wache.feld, maxb: PEIL_BREITE, sFest});
   /* Ist die Spur weg, erst die LETZTE gute Lage nochmal verfolgen. Vorher
      wurde sie bei jedem Fehlschlag geloescht, und ein Menue ueber der Karte
      reichte, um die Verfolgung endgueltig zu verlieren. Das kostet 13
@@ -7442,6 +7475,9 @@ function wacheTickIntern(){
   /* Den Massstab zu dieser Reglerstellung merken - er gilt, bis der Regler
      sich bewegt. */
   if (res.sicher) wache.halt = {r: wache.zoom, s: res.trQ.s};
+  /* Die Bahn fuer die Vorhersage. Nur zwei Punkte - mehr glaettet nur und
+     macht die Vorhersage traege. */
+  wache.bahn = (wache.bahn || []).concat([{t: nun, ox: res.trQ.ox, oy: res.trQ.oy}]).slice(-2);
   /* Die letzte GUTE Lage bleibt liegen, auch wenn die naechste danebengeht.
      Sie ist der billige Weg zurueck. */
   if (res.sicher){
@@ -7607,15 +7643,32 @@ function wacheTickIntern(){
     const lageGut = d <= nah ? 1 : Math.max(0, 1 - (d-nah)/(weit-nah));
     radarSignal = zoomGut * lageGut;
   }
-  /* ---- Besitz uebernehmen, mit denselben Bremsen wie immer ----
-     Aber nur am groben Raster: gepeilt wird jede anderthalb Sekunden,
-     genommen wird alle zwoelf. Sonst raeumt man die Karte im Vorbeifahren
-     leer, und das war ausdruecklich nicht gewollt. */
-  if (!res.schreibreif || nun - (wache.ernte || 0) < wache.sek*1000){
+  /* ---- Erst stehenbleiben, dann uebernehmen ----
+     Ennos Vorgabe: nicht im Vorbeifahren erfassen, sondern erst wenn der
+     Scanbalken durch ist. Das ist keine Ordnungsliebe: das Feuer pulsiert
+     mit 1,6 Sekunden Periode, und an brennenden Staedten wird ueber acht
+     Sekunden abgestimmt. Wer im Vorbeifahren erfasst, nimmt die halbe
+     Wahrheit mit.
+
+     Der Scanbalken misst deshalb die RUHE. Bewegt sich der Ausschnitt um
+     mehr als ein Zwanzigstel seiner Breite, faengt er von vorn an. */
+  if (wache.peil){
+    const r = wache.ruhe;
+    const weg = r ? Math.hypot(wache.peil.x - r.x, wache.peil.y - r.y) : Infinity;
+    if (!r || weg > wache.peil.spanne*0.05)
+      wache.ruhe = {x: wache.peil.x, y: wache.peil.y, seit: nun};
+  }
+  const steht = wache.ruhe ? (nun - wache.ruhe.seit) : 0;
+  radarScan = Math.max(0, Math.min(1, steht/(wache.sek*1000)));
+  if (!res.schreibreif || steht < wache.sek*1000
+      || nun - (wache.ernte || 0) < wache.sek*1000){
     wacheAnzeigen(); if (radarOffen) radarFrisch();
     return;
   }
   wache.ernte = nun;
+  /* Uebernommen heisst gesehen - die Staedte im Bild bekommen ihren Stempel
+     und das naechste Ziel wird gezogen. */
+  scanGutschrift();
   const waeren = besitzWaeren(res.erg.besitz);
   const zweifel = lesungFragwuerdig(res.erg);
   if (zweifel || waeren > WACHE_BREMSE){
@@ -15084,7 +15137,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build fa95687a28</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 2630e0c3c2</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
