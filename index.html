@@ -4658,15 +4658,35 @@ const SHOT_COL = [
   (r,g,b) => b > 95 && b-r > 45 && b-g > 60,     // GE    violet
   (r,g,b) => r > 70 && r-g > 55 && r-b > 55,     // USSR  red
 ];
+/* Feuer - und es muss VOR den Fraktionsfarben geprueft werden.
+   Gemessen: 98 bis 100 Prozent der Flammenpunkte bestehen den USSR-Test.
+   Eine brennende deutsche Stadt bekommt also einen roten Fleck aufgemalt,
+   den der Besitzleser als sowjetisch mitzaehlt - eine stille Verfaelschung
+   genau dort, wo gerade gekaempft wird.
+
+   Der Trenner ist g-b: Feuer ist orange (Feuer 39 bis 137, Sowjetrot 0 bis
+   10). Die Schwelle bei 25 liegt zwischen beiden Feldern.
+
+   Die Grenze deckt alle vier Detailstufen ab:
+       keine     RGB bis 255/228/69   g-b 112..137
+       niedrig   RGB     186/ 80/36   g-b Median 40
+       mittel    RGB     176/ 76/40   g-b Median 39
+       hoch      wie mittel, feiner gezeichnet                              */
+const FEUER_COL = (r,g,b) => r > 110 && r-b > 55 && g-b > 25 && g < r;
 function maskeBauen(imgd){
   const {data, width:W, height:H} = imgd;
   const m = new Uint8Array(W*H);
   let n = 0;
+  let nf = 0;
   for (let p=0, q=0; q<W*H; p+=4, q++){
     const r = data[p], g = data[p+1], b = data[p+2];
+    /* Feuer zuerst - sonst zaehlt es als Sowjetrot. */
+    if (FEUER_COL(r,g,b)){ m[q] = 4; nf++; continue; }
     for (let f=0; f<3; f++) if (SHOT_COL[f](r,g,b)){ m[q] = f+1; n++; break; }
   }
-  return {m, W, H, n};
+  /* n bleibt die Zahl der FRAKTIONSpunkte - an ihr haengen Dichte und
+     Plausibilitaetspruefung, und die duerfen vom Feuer nicht wandern. */
+  return {m, W, H, n, nf};
 }
 /* Die globale Suche taugt fuer WEITAUFNAHMEN, und nur fuer die. Warum, ist
    gemessen und nicht geraten - der Pruefstand baut Bilder mit BEKANNTER Lage,
@@ -5362,7 +5382,8 @@ function farbenLesen(mk, punkte, tr){
     if (cx < R || cy < R || cx >= W-R || cy >= H-R){ aussen++; return; }
     const st = [0,0,0];
     for (let y=cy-R; y<=cy+R; y++) for (let x=cx-R; x<=cx+R; x++){
-      const v = m[y*W + x]; if (v) st[v-1]++;
+      const v = m[y*W + x];
+      if (v >= 1 && v <= 3) st[v-1]++;      /* 4 ist Feuer und stimmt nicht mit */
     }
     const beste = st.indexOf(Math.max(...st));
     const rest = st.reduce((a,b)=>a+b,0) - st[beste];
@@ -5370,6 +5391,42 @@ function farbenLesen(mk, punkte, tr){
     besitz[idx] = beste; zaehl[beste]++;
   });
   return {besitz, unklar, aussen, zaehl};
+}
+
+/* Welche Staedte brennen? Gezaehlt wird nur, was bei einer STADT liegt -
+   sonst faengt man die gelben Sterne im Kriegsbanner (im Versuch zwei von
+   sieben Herden).
+
+   Die Schwelle steht als Anteil der Scheibenflaeche, nicht als feste
+   Punktzahl: eine Scheibe ist bei nahem Zoom sechzig Punkte breit und bei
+   weitem fuenf, und das Feuer waechst mit.                                */
+/* Gemessen an drei Bildern mit bekannten Braenden, als Anteil der
+   Scheibenflaeche:
+
+       Stufe keine     brennend 82 % und 73 %   ruhig 1 % und 0 %
+       Stufe mittel    brennend  6 % und  6 %   ruhig 1 % und 0 %
+       Stufe hoch      brennend  7/6/6/6 %      ruhig 1 % und 0 %
+
+   Drei Prozent liegen zwischen beiden Feldern, mit doppeltem Abstand nach
+   oben wie nach unten. */
+const FEUER_ANTEIL = 0.03;
+function feuerLesen(mk, punkte, tr){
+  const {m, W, H} = mk;
+  const rS = Math.max(2, SCHEIBE_EINH*tr.s/2);        /* Scheibenradius */
+  const R = Math.max(3, Math.round(rS*1.25));
+  const noetig = Math.max(4, Math.round(FEUER_ANTEIL*Math.PI*rS*rS));
+  const brennt = {};
+  punkte.forEach((p, idx) => {
+    const cx = Math.round(p[0]*tr.s + tr.ox), cy = Math.round(p[1]*tr.s + tr.oy);
+    if (cx < R || cy < R || cx >= W-R || cy >= H-R) return;
+    let n = 0;
+    for (let y=cy-R; y<=cy+R; y++){
+      const z = y*W;
+      for (let x=cx-R; x<=cx+R; x++) if (m[z+x] === 4) n++;
+    }
+    if (n >= noetig) brennt[idx] = n;
+  });
+  return brennt;
 }
 
 let shotState = null;
@@ -5558,7 +5615,8 @@ function kartenAusBild(quelle, melde, opt){
      ehrlichere mit: den Anteil eineindeutig zugeordneter Scheiben und die
      Katalogkanten zwischen ihnen. */
   const stg = tr.sternGuete || 0, stk = tr.sternKanten || 0;
-  return {erg: farbenLesen(a.mk, punkte, tr), tr, trQ: trZuQuelle(tr, a), punkte,
+  return {erg: farbenLesen(a.mk, punkte, tr), brennt: feuerLesen(a.mk, punkte, tr),
+          tr, trQ: trZuQuelle(tr, a), punkte,
           mk:a.mk, feld:a.feld, W:a.W, H:a.H, tmp:a.tmp, bw:a.bw, bh:a.bh,
           guete:g.quote, sicher: g.quote >= PASS_GUT,
           schreibreif: g.quote >= PASS_GUT && !!tr.stern && stg >= 0.5 && stk >= 0.7};
@@ -7402,6 +7460,20 @@ function wacheTickIntern(){
     const nunB = jetzt();
     S.blick ||= {};
     for (const idx in res.erg.besitz) S.blick[idx] = nunB;
+  }
+  /* Brennt es? Das Feuer PULSIERT - ueber siebzehn Aufnahmen im Abstand von
+     0,35 Sekunden schwankte es um den Faktor 2,8, und ein einzelnes Bild
+     kann es im Tal erwischen. Deshalb ein Gedaechtnis: einmal gesehen gilt
+     zwanzig Sekunden, und erst danach gilt eine Stadt wieder als ruhig. */
+  if (res.schreibreif && res.brennt){
+    const nunF = jetzt();
+    wache.feuer ||= new Map();
+    for (const idx in res.brennt) wache.feuer.set(+idx, nunF);
+    for (const idx in res.erg.besitz){
+      const i = +idx, zuletzt = wache.feuer.get(i) || 0;
+      const brennt = nunF - zuletzt < 20000;
+      if (brennt !== fightAt(i)) setFight(i, brennt);
+    }
   }
   if (wache.peil && wache.peil.spanne > 0)
     radarBeam = beamAusSpanne(wache.peil.spanne);
@@ -14917,7 +14989,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build e271c2b159</span></p></div>
+         installation. <span style="color:var(--dim2)">· build cc19d42eea</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
