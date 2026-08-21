@@ -7398,16 +7398,23 @@ function anDerFront(i){
 const MODUS = {
   breit: {name: "SWEEP",  spanne: 500,
           was: "ownership and battles — the widest view that still locks on"},
-  /* Warum 85 und nicht 70: die Kampfeinheiten-Karte ist gemessen 1,3
+  /* Warum 70 und nicht mehr: die Kampfeinheiten-Karte ist gemessen 1,3
      Karteneinheiten breit und braucht vierzehn Bildpunkte, um lesbar zu
-     sein. Bei 1100 Punkten Arbeitsbreite ist damit bis 102 Einheiten Spanne
-     Schluss - 70 faehrt also viel naeher heran als noetig, und je naeher,
-     desto weniger Karte je Bild. Die Flaeche waechst im Quadrat: von 70 auf
-     85 ist das anderthalbmal soviel Karte in derselben Zeit, bei immer noch
-     siebzehn Prozent Abstand zur Grenze. Weiter hinauf waere gierig - die
-     102 sind eine Grenze, kein Arbeitspunkt.
-     In der Sprache des Spiels: Zoomregler auf rund 90 Prozent. */
-  nah:   {name: "UNITS",  spanne: 85,
+     sein. Entscheidend ist dabei die ARBEITSBREITE der Peilung, und die
+     ist 800, nicht 1100:
+
+         Arbeitsbreite    AT lesbar bis
+             800            74 Einheiten
+            1100           102
+            1600           149
+
+     Hier stand zwischenzeitlich 85, gerechnet mit 1100 - bei 800 waere eine
+     AT-Karte dann nur 12,2 Punkte breit gewesen, unter der Grenze. 70 ergibt
+     14,9 und laesst etwas Luft.
+
+     Mehr Karte je Bild ginge nur ueber ein groesseres Arbeitsbild fuer die
+     AT-Suche; das waere ein eigener Bau und kostet Rechenzeit im Takt. */
+  nah:   {name: "UNITS",  spanne: 70,
           was: "assault teams too — needs a close zoom"}
 };
 /* Ennos Referenz: "Ich kann nicht sagen wie viel das ist, da brauche ich
@@ -8553,10 +8560,20 @@ function wacheTickIntern(){
   /* Marker nur, wenn sie ueberhaupt lesbar sind - und wieder aus, wenn man
      herauszoomt. Vorher blieb es an, sobald es einmal an war. */
   if (!radarAThand && wache.peil){
-    const lesbar = atLesbar(wache.peil.spanne, res.W);
+    /* Dieselbe Breite wie die Anzeige. Vorher fragte die Anzeige mit
+       PEIL_BREITE und die Entscheidung mit res.W - das faellt kleiner aus,
+       wenn das Quellbild schmal ist, und dann sagte die eine "lesbar" und
+       die andere "zu weit". Weil an der Entscheidung ein Toast haengt, kam
+       der bei jedem Takt neu. */
+    const lesbar = atLesbar(wache.peil.spanne, PEIL_BREITE);
     if (lesbar && !radarAT && res.sicher){
       radarAT = true;
-      toast("Close enough — tracking assault-team markers now. Switch it off in the set.");
+      /* Einmal je Sitzung. Eine Meldung, die man dreissigmal wegklickt,
+         liest beim einunddreissigsten Mal niemand mehr. */
+      if (!wache.atGesagt){
+        wache.atGesagt = true;
+        toast("Close enough — tracking assault-team markers now. Switch it off in the set.");
+      }
       if (radarOffen) radarPult();
     } else if (!lesbar && radarAT){
       radarAT = false;
@@ -16335,7 +16352,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0e5b720e7d</span></p></div>
+         installation. <span style="color:var(--dim2)">· build cd5e9efd2b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -16468,6 +16485,13 @@ function toast(t){
 const CFG_KEY = "hng-warmap-sync";
 const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publishable_GgJLQ_S3OFlgGpKsksM9mw_2HlqfCCN"};
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
+/* Fuer das Holen gab es einen Riegel, fuer das Senden nicht - obwohl der
+   Takt stur alle dreieinhalb Sekunden feuert und nicht auf die vorige Runde
+   wartet. Dauert ein Sendevorgang laenger, laeuft der naechste parallel auf
+   derselben dirty-Menge. Und das ist der Regelfall, sobald ein Stapel
+   scheitert: dann fasst die Schleife jede Zeile einzeln nach, bei einem
+   Vollimport bis zu 4099 Anfragen hintereinander. */
+let pushing = false;
 /* Der zweite Teil des Zeigers. Zeitstempel allein reichen nicht: der
    Sendevorgang schickt alle offenen Aenderungen in EINEM Stapel, und
    now() ist in Postgres fuer die ganze Transaktion konstant - also
@@ -16635,8 +16659,19 @@ function wertVon(bucket, id){
   }
   return S[bucket] && S[bucket][id];
 }
+/* Wieviele Zeilen gehen in einer Anfrage hinaus? Alle auf einmal waeren bei
+   einem Vollimport 378 KB - kein Limit gerissen, aber fragil: ein Timeout
+   oder ein Netzwackler, und der ganze Stapel faellt in die
+   Einzelnachfass-Schleife. Portionen kosten neun Anfragen statt einer, und
+   wenn eine scheitert, betrifft das Nachfassen fuenfhundert Zeilen statt
+   viertausend. */
+const PUSH_PORTION = 500;
 async function syncPush(){
-  if (!CFG || !dirty.size) return;
+  if (!CFG || !dirty.size || pushing) return;
+  pushing = true;
+  try { await syncPushInner(); } finally { pushing = false; }
+}
+async function syncPushInner(){
   const rows = [], merk = [];
   for (const k of [...dirty]){
     const p = k.indexOf(":");
@@ -16675,18 +16710,32 @@ async function syncPush(){
     });
     if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
   };
+  /* In Portionen, nicht alles auf einmal. Jede fuer sich abgehakt: reisst
+     die dritte, sind die ersten beiden trotzdem durch. */
+  const teile = [];
+  for (let i = 0; i < rows.length; i += PUSH_PORTION)
+    teile.push([i, rows.slice(i, i + PUSH_PORTION)]);
+  let gescheitert = null;
   try {
-    await senden(rows);
-    rows.forEach((_, i) => abhaken(i));
+    for (const [ab, teil] of teile){
+      await senden(teil);
+      teil.forEach((_, j) => abhaken(ab + j));
+    }
     syncMark("Live", "ok");
   } catch(e){
+    gescheitert = e;
+  }
+  if (gescheitert){
     /* Der Stapel ist gescheitert. Das kann die Leitung sein - dann bleibt
        alles in der Warteschlange und der naechste Versuch holt es nach - oder
        eine einzelne Zeile, die die Datenbank nicht will. Um die eine nicht
        alles andere blockieren zu lassen: einzeln nachfassen. */
+    /* Nur die Zeilen nachfassen, die noch in der Warteschlange stehen -
+       abgehakte Portionen sind durch und muessen nicht noch einmal. */
     let weg = 0, durch = 0;
     const abgelehnt = [];
     for (let i = 0; i < rows.length; i++){
+      if (!dirty.has(merk[i][0])) continue;
       try { await senden([rows[i]]); abhaken(i); durch++; }
       catch(e2){ dirty.delete(merk[i][0]); weg++; abgelehnt.push(merk[i][1]); }
     }
