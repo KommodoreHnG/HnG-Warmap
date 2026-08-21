@@ -4966,20 +4966,37 @@ const SHOT_COL = [
   (r,g,b) => r > 70 && r-g > 55 && r-b > 55,     // USSR  red
 ];
 /* ---- WORAN ALLE FARBSCHWELLEN HIER GEEICHT SIND ----
-   Sie stammen aus Aufnahmen ueber CopyFromScreen. Enno faehrt mit HDR, und
-   damit liefern die Aufnahmewege verschiedene Werte - gemessen an derselben
-   Minikarte des Schlachtbildschirms:
+   Sie stammen aus Aufnahmen ueber CopyFromScreen, und diese Aufnahmen sind
+   NACHGEPRUEFT GUELTIG - was zwischenzeitlich bezweifelt wurde.
 
-       auf dem Schirm            hell und bunt
-       CopyFromScreen-Datei      Helligkeit 73, Sattheit 7 - praktisch grau
-       getDisplayMedia           unbekannt, das bekommt nur das Werkzeug
+   Der Zweifel hatte einen guten Grund: Enno faehrt mit Windows-HDR, der
+   SDR-Weisspunkt seines Hauptmonitors steht auf 6,0, und eine Uebergabe aus
+   einem Nachbarprojekt haelt fest, dass GDI/BitBlt dabei "deutlich zu dunkel
+   und tonal verbogen" liefert (dort gemessen: Mittelwert 35,8 statt 91,0).
+   CopyFromScreen IST GDI.
 
-   Was das Werkzeug live sieht, ist also der dritte Fall, und der ist nicht
-   vermessen. Wo eine Zahl in diesem Block steht, gilt sie fuer den zweiten.
+   Nachgemessen an demselben sichtbaren Spielfenster, GDI gegen Windows
+   Graphics Capture - den Weg, der laut jener Uebergabe als einziger stimmt:
 
-   Gemessen ist immerhin, wie empfindlich die Schwellen sind: bei kuenstlicher
-   Aufhellung um 60 Prozent waechst die Maske um ein Viertel, die
-   FEUERflaeche aber auf das Vierfache. Deshalb steht weiter unten eine
+       Pixel exakt gleich        100,00 %
+       Kennlinie 32/64/96/114/128/160/192/224
+                                 in beiden Wegen identisch
+
+   Es gibt hier also nichts zu korrigieren. Der Unterschied aus der Uebergabe
+   betrifft einen anderen GDI-Weg oder einen Prozess ohne DPI-Bewusstsein;
+   dauerlauf.ps1 setzt PER_MONITOR_AWARE_V2, bevor es irgendetwas anfasst.
+
+   Was WIRKLICH abweicht, sind die Bildschirmfotos des Computernutzungs-
+   Dienstes: die kommen aufgehellt an. Wer eine Farbe an so einem Foto
+   abliest und hier eintraegt, eicht auf das falsche Bild.
+
+   Offen bleibt getDisplayMedia - der Strom, den das Werkzeug live bekommt.
+   Dafuer steht die Bilddiagnose im Radarpult; sie beantwortet die Frage beim
+   naechsten Lauf.
+
+   Gemessen ist ausserdem, wie empfindlich die Schwellen ueberhaupt sind: bei
+   kuenstlicher Aufhellung um 60 Prozent waechst die Maske um ein Viertel,
+   die FEUERflaeche aber auf das Vierfache. Deshalb steht weiter unten eine
    Notbremse (FEUER_BEI_STADT_MIN).                                        */
 
 /* Feuer - und es muss VOR den Fraktionsfarben geprueft werden.
@@ -8523,11 +8540,31 @@ function wacheTickIntern(){
        heisst "kein Feuer gefunden" nicht "es brennt nicht" - bei 1141
        Einheiten Spanne wurden achtundneunzig Braende uebersehen. */
     const vollstaendig = feuerVollstaendig(res.tr);
-    for (const idx in res.erg.besitz){
+    /* ALLE Staedte, an denen Feuer gefunden wurde - nicht nur die, deren
+       Besitz lesbar war.
+
+       Vorher lief diese Schleife allein ueber res.erg.besitz, und das sind
+       die Staedte mit erkennbarer FRAKTIONSFARBE. Eine brennende Stadt hat
+       oft keine mehr: das Feuer liegt darueber, und bei Flammenstufe "keine"
+       verschwindet sie ganz. Genau die Staedte, um die es geht, fielen also
+       aus der Schleife.
+
+       Gemessen an sechzehn Aufnahmen ueber alle Zoomstufen: von 186
+       gefundenen Braenden erreichten 108 den Merker, 78 nicht - 42 Prozent.
+       Bei 9,1 Punkten Scheibe ging die Haelfte verloren, bei 5,3 Punkten
+       alles (27 von 27). */
+    const zuPruefen = new Set(Object.keys(res.erg.besitz));
+    for (const idx in res.brennt) zuPruefen.add(idx);
+    for (const idx of zuPruefen){
       const i = +idx, zuletzt = wache.feuer.get(i) || 0;
       const brennt = nunF - zuletzt < 20000;
       if (brennt && !fightAt(i)) setFight(i, true);
-      else if (!brennt && fightAt(i) && vollstaendig) setFight(i, false);
+      /* Geloescht wird weiterhin nur, wo der Besitz gelesen wurde: eine
+         Ansicht, in der die Stadt gar nicht erkennbar war, darf ihr
+         laufendes Gefecht nicht wegraeumen. Dieselbe Asymmetrie wie beim
+         Feuer selbst, und aus demselben Grund. */
+      else if (!brennt && fightAt(i) && vollstaendig
+               && res.erg.besitz[idx] != null) setFight(i, false);
     }
   }
   /* ---- Die Versorgungslinien uebernehmen ----
@@ -16236,7 +16273,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5ce1bd7291</span></p></div>
+         installation. <span style="color:var(--dim2)">· build f3e6424589</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
