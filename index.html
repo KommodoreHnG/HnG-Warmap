@@ -5048,22 +5048,50 @@ function sternLage(mk, punkte, opt){
   const {m, W, H} = mk;
   const I = sternSummen(m, W, H);
   const liste = sternFarbliste(m, W, H, 2);
-  let rmin = 2.5, rmax = Math.min(60, Math.min(W,H)/7);
+  const rGanz = Math.min(60, Math.min(W,H)/7);
+  /* Der Zoomhinweis ORDNET die Suche, er begrenzt sie nicht mehr. Vorher war
+     er eine harte Grenze, und ein falscher Hinweis erzeugte eine falsche
+     Lage mit Zuversicht: am echten Bild (Wahrheit Aalen, 127 Einheiten) gab
+     der Hinweis 200 die Antwort "Donauwoerth, 183 Einheiten, 58 Prozent".
+     Jetzt kostet ein falscher Hinweis einen zweiten Durchgang, mehr nicht. */
+  const baender = [];
   if (o.spanne > 0){
     const rSoll = SCHEIBE_EINH * (W/o.spanne) / 2;
-    rmin = Math.max(2.0, rSoll*0.72);
-    rmax = Math.max(rmin*1.1, Math.min(Math.min(W,H)/7, rSoll*1.40));
+    const lo = Math.max(1.9, rSoll*0.72);
+    const hi = Math.max(lo*1.1, Math.min(rGanz, rSoll*1.40));
+    if (hi > lo) baender.push([lo, hi]);
   }
-  if (rmax <= rmin) return null;
+  baender.push([1.9, rGanz]);
+  let best = null;
+  for (const [rmin, rmax] of baender){
+    if (rmax <= rmin) continue;
+    const b = sternFegen(m, I, liste, W, H, punkte, rmin, rmax);
+    if (b && (!best || b.wert > best.wert)) best = b;
+    /* Nur abbrechen, wenn das enge Band etwas UEBERZEUGENDES gefunden hat.
+       Sonst wird auch der ganze Bereich abgefahren und das Bessere gewaehlt.
+       Grund: ein knapp bestandener Treffer im engen Band hat sonst die
+       Antwort geaendert und nicht nur die Zeit - an einem Bild gemessen
+       "Buchen, 139 Einheiten" statt "Kastellaun, 96". Ein Hinweis darf
+       beschleunigen, nie entscheiden. */
+    if (best && best.guete >= 0.55 && best.kanten >= 0.8) break;
+  }
+  return best;
+}
+function sternFegen(m, I, liste, W, H, punkte, rmin, rmax){
   const stufen = Math.max(4, Math.min(40, Math.ceil(Math.log(rmax/rmin)/Math.log(1.085))));
   let best = null;
   for (let k=0; k<stufen; k++){
     const r = rmin*Math.pow(rmax/rmin, stufen===1 ? 0 : k/(stufen-1));
     const P = sternScheiben(m, I, W, H, r, 0.45, liste);
-    /* Ueber 250 Gipfeln ist es die Broesel-Gegend: zerfallene
-       Versorgungslinien, nie eine Lage. Und zum Abstimmen reichen die
-       staerksten 120 - mehr kippt keine Mehrheit. */
-    if (P.length < 5 || P.length > 250) continue;
+    /* Die Obergrenze stand einmal bei 250 - an Nahaufnahmen geeicht, und
+       damit falsch. Ganz herausgezoomt zeichnet das Spiel ALLE Staedte als
+       kleine Punkte: an Ennos Bild gemessen 1218 Marken. Die Stufe wurde
+       dadurch uebersprungen, und genau die weiteste Ansicht rastete nie ein.
+       Der Katalog hat 1438 Staedte, mehr Gipfel als das koennen keine sein.
+       Gegen zerbroeselte Linien schuetzen jetzt die eineindeutige Zuordnung
+       und das Kantenveto, nicht mehr eine Stueckzahl.
+       Zum Abstimmen reichen die staerksten 120 - mehr kippt keine Mehrheit. */
+    if (P.length < 5 || P.length > 1500) continue;
     const PS = P.length > 120 ? P.slice(0, 120) : P;
     const s0 = 2*r/SCHEIBE_EINH, tol = Math.max(3, 0.5*r);
     for (const [mx,my] of sternStimmen(PS, punkte, s0, 3.0, 4, W, H)){
@@ -5858,40 +5886,75 @@ function zoomLesen(quelle){
   const g = c.getContext("2d", {willReadFrequently:true});
   g.drawImage(quelle, 0, 0, Math.round(bw*0.34), Math.round(bh*0.30), 0, 0, W, H);
   const d = g.getImageData(0, 0, W, H).data;
-  const mind = Math.round(W * ZOOM_MINDLAUF);
+  /* Erst die Dunkelheit einmal ausrechnen - sie wird zeilenweise mehrfach
+     gebraucht. */
+  const dunkel = new Uint8Array(W*H);
+  for (let q = 0; q < W*H; q++){
+    const p = q*4;
+    if (d[p] < 48 && d[p+1] < 48 && d[p+2] < 48) dunkel[q] = 1;
+  }
 
+  /* Die Zeilenwahl beschreibt, was ein Schieberegler IST. Vorher wurde die
+     Zeile mit den MEISTEN dunklen Punkten genommen - und das ist bei nahem
+     Zoom die Menueleiste, nicht der Regler (gemessen 302 gegen 266).
+
+       durchgehend  nach dem Schliessen der Griffluecke praktisch massiv
+       duenn        fuenf Zeilen darueber und darunter steht nichts davon
+                    (Regler 0.00, alles andere 0.09 bis 0.50)
+       lang         mindestens ein Drittel des Suchfelds
+
+     Und der Griff wird als LUECKE GESCHLOSSEN, bevor die Balkenenden
+     gemessen werden. Sonst verschwindet er, sobald er nah am Anschlag steht
+     und sein Reststueck zu kurz wird - das war der haeufigste Ausfall. */
+  const LUECKE_MAX = Math.max(8, Math.round(W*0.046));   /* so breit ist ein Griff */
   let best = null;
-  for (let y = 0; y < H; y++){
-    const laeufe = [];
-    let lauf = 0, start = 0, dunkelGes = 0;
-    for (let x = 0; x <= W; x++){
-      const p = (y*W + x) * 4;
-      const dunkel = x < W && d[p] < 48 && d[p+1] < 48 && d[p+2] < 48;
-      if (dunkel){ if (!lauf) start = x; lauf++; }
-      else {
-        if (lauf >= mind){ laeufe.push([start, x-1]); dunkelGes += lauf; }
-        lauf = 0;
+  const zeile = new Uint8Array(W);
+  for (let y = 6; y < H-6; y++){
+    zeile.set(dunkel.subarray(y*W, y*W + W));
+    /* Luecken bis Griffbreite zumachen und dabei die groesste merken. */
+    let griff = null, groesste = 0, vor = -1;
+    for (let x = 0; x < W; x++){
+      if (!zeile[x]) continue;
+      if (vor >= 0){
+        const w = x - vor - 1;
+        if (w > 0 && w <= LUECKE_MAX){
+          for (let q = vor+1; q < x; q++) zeile[q] = 1;
+          if (w > groesste){ groesste = w; griff = (vor + x)/2; }
+        }
       }
+      vor = x;
     }
-    /* Genau zwei Stuecke: links und rechts vom Griff. Ein Balken ohne Griff
-       (ganz aussen) gibt eines - dann steht der Zoom am Anschlag. */
-    if (!laeufe.length || laeufe.length > 3) continue;
-    if (!best || dunkelGes > best.dunkelGes) best = {y, laeufe, dunkelGes};
+    /* Laengster durchgehender Lauf */
+    let bx0 = -1, bl = 0, s = -1;
+    for (let x = 0; x <= W; x++){
+      if (x < W && zeile[x]){ if (s < 0) s = x; }
+      else if (s >= 0){ if (x-s > bl){ bl = x-s; bx0 = s; } s = -1; }
+    }
+    if (bl < W*0.35) continue;
+    const bx1 = bx0 + bl - 1;
+    let voll = 0;
+    for (let x = bx0; x <= bx1; x++) if (zeile[x]) voll++;
+    if (voll/bl < 0.97) continue;
+    /* Duenn? */
+    let ob = 0, un = 0;
+    for (let x = bx0; x <= bx1; x++){
+      ob += dunkel[(y-5)*W + x]; un += dunkel[(y+5)*W + x];
+    }
+    if (Math.min(ob, un)/bl > 0.05) continue;
+    if (!best || bl > best.bl) best = {y, bx0, bx1, bl, griff};
   }
   if (!best) return null;
-  const x0 = best.laeufe[0][0], x1 = best.laeufe[best.laeufe.length-1][1];
-  const laenge = x1 - x0;
-  if (laenge < W*0.35) return null;
+  const x0 = best.bx0, x1 = best.bx1, laenge = x1 - x0;
 
-  /* Zwei Wege zum selben Wert: die Luecke im Balken, und der weisse Griff
-     darin. Stimmen sie nicht ueberein, war es nicht der Regler. */
-  let ausLuecke = null;
-  if (best.laeufe.length >= 2)
-    ausLuecke = ((best.laeufe[0][1] + best.laeufe[1][0]) / 2 - x0) / laenge;
+  /* Zwei Wege zum selben Wert: die geschlossene Luecke, und der weisse Griff.
+     Stimmen sie nicht ueberein, war es nicht der Regler. */
+  const ausLuecke = best.griff !== null ? (best.griff - x0)/laenge : null;
   let ausGriff = null, hoechste = 0;
   {
     const y0 = Math.max(0, best.y-16), y1 = Math.min(H-1, best.y+16);
-    for (let x = x0; x <= x1; x++){
+    /* Etwas ueber die Balkenenden hinaus: am Anschlag steht der Griff
+       teilweise davor oder dahinter. */
+    for (let x = Math.max(0, x0-12); x <= Math.min(W-1, x1+12); x++){
       let n = 0;
       for (let y = y0; y <= y1; y++){
         const p = (y*W + x)*4;
@@ -5984,7 +6047,11 @@ const beamWort   = () => radarBeam < 0.25 ? "tight · fast · little ground"
    kenne - nicht einmal, ob gross nah oder weit heisst. Bei jeder
    vollstaendigen Lesung faellt aber ein Paar an: Reglerwert und tatsaechlich
    sichtbare Kartenbreite. Aus zweien davon laesst sich rechnen statt raten. */
-const EICH_STORE = "hng-warmap-zoomeich";
+/* Neuer Platz: der alte Tisch ist mit Werten aus UNGEPRUEFTEN Einpassungen
+   gefuellt und als Ganzes unbrauchbar. Ihn zu sieben waere Rateraterei -
+   ein frischer Anfang ist ehrlicher. */
+const EICH_STORE = "hng-warmap-zoomeich2";
+try { localStorage.removeItem("hng-warmap-zoomeich"); } catch(e){}
 let zoomEich = [];
 try { zoomEich = JSON.parse(localStorage.getItem(EICH_STORE) || "[]") || []; } catch(e){}
 function eichPunkt(regler, spanne){
@@ -5997,31 +6064,59 @@ function eichPunkt(regler, spanne){
   if (zoomEich.length > 8) zoomEich.splice(4, 1);
   try { localStorage.setItem(EICH_STORE, JSON.stringify(zoomEich)); } catch(e){}
 }
-/* Aus einer Reglerstellung die zu erwartende Kartenbreite - linear zwischen
-   den beiden naechstgelegenen Eichpunkten. Ohne genug Eichung: nichts, und
-   dann zaehlt allein die gemessene Spanne aus der Einpassung. */
+/* Das Zoomgesetz des Spiels, an einer abgefahrenen Zoomleiter gemessen -
+   acht Stufen, groesste Abweichung 0,9 Prozent, mittlere 0,3:
+
+       Spanne = 2806 * e^(-3.8668 * Reglerstellung)
+
+   Je Mausradrastung (0.0725 Reglerweite) aendert sich die Spanne um den
+   Faktor 1,324.
+
+   Das ist eine Eigenschaft des SPIELS, nicht des Nutzers. Es gilt damit vom
+   ersten Bild an. Vorher lieferte diese Funktion nichts, solange nicht zwei
+   Eichpunkte gelernt waren - und die entstanden nur aus geglueckten
+   Einrastungen, also genau aus dem, wobei der Hinweis haette helfen sollen.
+   Henne und Ei.
+
+   Gemessen auf einem 16:9-Fenster. Ein anderes Seitenverhaeltnis zeigt bei
+   gleicher Reglerstellung mehr oder weniger Karte - diesen Unterschied
+   holen die Eichpunkte nach. Sie tragen also nicht mehr die FORM der Kurve,
+   sondern nur noch ihren Vorfaktor. */
+const ZOOM_A = 2806, ZOOM_K = -3.8668;
+const zoomGesetz = r => ZOOM_A * Math.exp(ZOOM_K * r);
+
 function spanneAusRegler(regler){
-  if (regler === null || zoomEich.length < 2) return null;
+  if (regler === null || regler === undefined) return null;
+  const grund = zoomGesetz(regler);
+  if (!zoomEich.length) return grund;
+  /* Jeder Eichpunkt sagt, um welchen Faktor dieses Fenster vom Muster
+     abweicht. Zwischen den Punkten wird dieser FAKTOR interpoliert, nicht
+     die Spanne - er aendert sich langsam, sie um ein Drittel je Rastung.
+     Die alte lineare Interpolation der Spanne selbst war genau deshalb
+     falsch, und ein grob falscher Hinweis hat frueher die Einrastung
+     zerstoert. */
+  const fak = p => p.s / zoomGesetz(p.r);
+  if (zoomEich.length === 1) return grund * fak(zoomEich[0]);
   let a = zoomEich[0], b = zoomEich[zoomEich.length-1];
   for (let i = 0; i < zoomEich.length-1; i++)
     if (regler >= zoomEich[i].r && regler <= zoomEich[i+1].r){ a = zoomEich[i]; b = zoomEich[i+1]; }
-  if (Math.abs(b.r - a.r) < 1e-6) return a.s;
+  if (Math.abs(b.r - a.r) < 1e-6) return grund * fak(a);
   const f = (regler - a.r) / (b.r - a.r);
-  return a.s + f*(b.s - a.s);
+  return grund * (fak(a) + f*(fak(b) - fak(a)));
 }
 /* Welche Reglerstellung zur geforderten Spanne gehoert - fuer die Ansage
-   "weiter heran" oder "weiter heraus". */
+   "weiter heran" oder "weiter heraus". Umkehrung des Gesetzes, danach zwei
+   Nachbesserungen mit dem Eichfaktor; der aendert sich langsam, das
+   genuegt. */
 function reglerFuerSpanne(spanne){
-  if (zoomEich.length < 2) return null;
-  const erste = zoomEich[0], letzte = zoomEich[zoomEich.length-1];
-  const rein = letzte.s < erste.s;               // gross = nah?
-  let a = erste, b = letzte;
-  for (let i = 0; i < zoomEich.length-1; i++){
-    const lo = Math.min(zoomEich[i].s, zoomEich[i+1].s), hi = Math.max(zoomEich[i].s, zoomEich[i+1].s);
-    if (spanne >= lo && spanne <= hi){ a = zoomEich[i]; b = zoomEich[i+1]; }
+  if (!(spanne > 0)) return null;
+  let r = (Math.log(spanne) - Math.log(ZOOM_A)) / ZOOM_K;
+  for (let i = 0; i < 2; i++){
+    const s = spanneAusRegler(Math.max(0, Math.min(1, r)));
+    if (!s) break;
+    r += (Math.log(spanne) - Math.log(s)) / ZOOM_K;
   }
-  if (Math.abs(b.s - a.s) < 1e-6) return a.r;
-  return Math.max(0, Math.min(1, a.r + (spanne - a.s)/(b.s - a.s)*(b.r - a.r)));
+  return Math.max(0, Math.min(1, r));
 }
 
 /* ---- Wohin als naechstes ----
@@ -6261,9 +6356,10 @@ function radarFrisch(){
     const stand = feld.querySelector("[data-zoomstand]");
     if (stand){
       const sp = da ? spanneAusRegler(wache.zoom) : null;
-      stand.textContent = zoomEich.length < 2 ? "not calibrated yet"
-        : (sp ? `${zoomEich.length} points · expects ${Math.round(sp)} wide`
-              : `${zoomEich.length} points learned`);
+      stand.textContent = sp
+        ? `${zoomEich.length ? zoomEich.length + " points · " : "standard curve · "}`
+          + `expects ${Math.round(sp)} wide`
+        : (zoomEich.length ? `${zoomEich.length} points learned` : "using the standard curve");
     }
   }
   const zoomA = el.querySelector("[data-gzoom]");
@@ -6353,8 +6449,9 @@ function radarPult(){
           <span data-zoomeich></span>
         </div>
         <div class="beschr"><span>far out</span>
-          <span data-zoomstand>${zoomEich.length < 2 ? "not calibrated yet"
-            : `${zoomEich.length} points learned`}</span><span>close in</span></div>
+          <span data-zoomstand>${zoomEich.length
+            ? `${zoomEich.length} points learned`
+            : "using the standard curve"}</span><span>close in</span></div>
       </div>
       <div class="z" style="font-size:11px;color:#5f7a63;border-top:1px solid #1d2a1d;
         margin-top:4px;padding-top:4px"><span>fix ${(PEIL_TAKT/1000).toFixed(1)} s ·
@@ -6971,7 +7068,14 @@ function wacheTickIntern(){
   if (!wache.zielGesetzt){ wache.zielGesetzt = true; zielZiehen(); }
   /* Reglerstellung und tatsaechlich sichtbare Breite gehoeren zusammen -
      daraus eicht sich die Zoomvorgabe von selbst. */
-  if (wache.peil) eichPunkt(wache.zoom, wache.peil.spanne);
+  /* Geeicht wird NUR aus einer Einrastung, die die Sternenkarte geliefert
+     hat und die als sicher gilt. Vorher lernte der Tisch aus jeder
+     Einpassung - auch aus duennen und aus falschen. Eine falsche schrieb
+     eine falsche Spanne hinein, der Tisch gab danach falsche Hinweise, und
+     die erzeugten wieder falsche Lagen. Und weil er in localStorage liegt,
+     blieb der Fehler ueber Sitzungen hinweg liegen. */
+  if (wache.peil && res.sicher && res.tr && res.tr.stern)
+    eichPunkt(wache.zoom, wache.peil.spanne);
 
   /* ---- Signalstaerke: Lage und Zoom gegen den Sollwert ---- */
   radarSignal = 0;
@@ -14470,7 +14574,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c4d7129288</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 4f924f6c92</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
