@@ -581,6 +581,14 @@ body.meld-modus{cursor:help}
 .rd-soll{font-size:10.5px;line-height:1.5;color:#6e7d6a;margin-top:5px;min-height:16px}
 .rd-soll .ziel{color:#e2ac48;font-weight:600}
 .rd-soll .gut{color:#8fe6a2;font-weight:600}
+/* Wenn das Bild anders ankommt als erwartet. Steht nur da, wenn es auffaellt -
+   eine Zeile, die immer leuchtet, wird nach drei Tagen nicht mehr gelesen. */
+.rd-bild{margin-top:6px;font-size:10.5px;line-height:1.55;color:#e2ac48;
+  border-top:1px solid #3a3320;padding-top:6px}
+.rd-bild b{display:block;font-weight:600;margin-bottom:3px}
+.rd-bild span{display:block;color:#8a7f60;font-size:10px;
+  font-variant-numeric:tabular-nums}
+.rd-bild em{font-style:normal;color:#6b6350}
 .rd-kann{margin-top:6px;font-size:10.5px;line-height:1.7;color:#7d7461;
   border-top:1px solid #2c3a2c;padding-top:6px}
 .rd-kann i{font-style:normal;display:inline-block;width:13px}
@@ -4972,7 +4980,7 @@ const SHOT_COL = [
    Gemessen ist immerhin, wie empfindlich die Schwellen sind: bei kuenstlicher
    Aufhellung um 60 Prozent waechst die Maske um ein Viertel, die
    FEUERflaeche aber auf das Vierfache. Deshalb steht weiter unten eine
-   Notbremse (FEUER_FLAECHE_MAX).                                         */
+   Notbremse (FEUER_BEI_STADT_MIN).                                        */
 
 /* Feuer - und es muss VOR den Fraktionsfarben geprueft werden.
    Gemessen: 98 bis 100 Prozent der Flammenpunkte bestehen den USSR-Test.
@@ -4994,12 +5002,30 @@ function maskeBauen(imgd){
   const m = new Uint8Array(W*H);
   let n = 0;
   let nf = 0;
+  /* Nebenbei vier Zahlen ueber das Bild selbst - sie kosten nichts, weil
+     dieser Durchlauf ohnehin stattfindet, und sie sind die einzige
+     Moeglichkeit herauszufinden, was der Live-Strom wirklich liefert.
+     Ein Histogramm statt einer Summe, damit der Median herauskommt: bei
+     Helligkeit ist der Mittelwert nutzlos, ein heller Dialog ueber der Karte
+     zieht ihn weg. */
+  const hHell = new Int32Array(256), hSatt = new Int32Array(256);
   for (let p=0, q=0; q<W*H; p+=4, q++){
     const r = data[p], g = data[p+1], b = data[p+2];
+    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+    const mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+    hHell[mx]++; hSatt[mx-mn]++;
     /* Feuer zuerst - sonst zaehlt es als Sowjetrot. */
     if (FEUER_COL(r,g,b)){ m[q] = 4; nf++; continue; }
     for (let f=0; f<3; f++) if (SHOT_COL[f](r,g,b)){ m[q] = f+1; n++; break; }
   }
+  const mitte = hist => {
+    const halb = (W*H)/2;
+    let s = 0;
+    for (let i = 0; i < 256; i++){ s += hist[i]; if (s >= halb) return i; }
+    return 0;
+  };
+  const bildwerte = {hell: mitte(hHell), satt: mitte(hSatt),
+                     farbe: n/(W*H), feuer: nf/(W*H)};
   /* n bleibt die Zahl der FRAKTIONSpunkte - an ihr haengen Dichte und
      Plausibilitaetspruefung, und die duerfen vom Feuer nicht wandern.
 
@@ -5024,7 +5050,7 @@ function maskeBauen(imgd){
      hinzuzunehmen: das LINIENNETZ. Gemessen sieht die Maske davon nur 54
      Prozent der Katalogkanten; ein Kantendetektor kaeme auf 71. Das steht
      als naechstes an. */
-  return {m, W, H, n, nf};
+  return {m, W, H, n, nf, bildwerte};
 }
 /* Die globale Suche taugt fuer WEITAUFNAHMEN, und nur fuer die. Warum, ist
    gemessen und nicht geraten - der Pruefstand baut Bilder mit BEKANNTER Lage,
@@ -5927,30 +5953,91 @@ const FEUER_ANTEIL = 0.03;
    Asymmetrie: melden darf man aus jeder Entfernung, LOESCHEN nur aus der
    Naehe. */
 const FEUER_SICHER_PX = 28;
-/* Und eine Obergrenze. Die Feuerschwellen sind absolut gebaut - wird das
-   Bild heller, wachsen alle Differenzen mit, und es besteht mehr. Gemessen
-   an vier Aufnahmen, kuenstlich aufgehellt:
+/* Und eine Notbremse. Die Feuerschwellen sind absolut gebaut - wird das Bild
+   heller, wachsen alle Differenzen mit, und es besteht mehr. Gemessen an vier
+   Aufnahmen, kuenstlich aufgehellt:
 
        Faktor 1,00   Feuerflaeche 100 %
        Faktor 1,35                196 %
        Faktor 1,60                408 %
 
    Das ist keine graue Theorie: Enno faehrt mit HDR, und der Strom, den das
-   Werkzeug bekommt, durchlaeuft eine andere Tonwertkurve als meine
-   Messbilder.
+   Werkzeug bekommt, durchlaeuft eine andere Tonwertkurve als die Messbilder.
 
-   An zwanzig echten Aufnahmen liegt die Feuerflaeche zwischen 0,1 und 2,3
-   Prozent des Kartenfeldes; fuenf Prozent hat keine erreicht. Darueber ist
-   es kein Feuer, sondern ein Bild, das anders ankommt als erwartet. Dann
-   lieber keine Gefechtsmeldung als eine falsche - denn falsches Feuer faerbt
-   auch Staedte um und erzeugt Angriffsrichtungen. */
-const FEUER_FLAECHE_MAX = 0.05;
+   ERST STAND HIER EINE FLAECHENGRENZE VON FUENF PROZENT, und sie war falsch.
+   Begruendet war sie mit zwanzig Frontaufnahmen (0,1 bis 2,3 Prozent) - die
+   zeigen aber alle die Flammenstufe HOCH. Bei der Stufe "keine" wird die
+   ganze Stadtscheibe zu einem Leuchten:
+
+       Flammenstufe   Feuerflaeche   je Brand   fuenf Prozent reissen ab
+       keine              3,07 %      0,77 %      7 brennenden Staedten
+       niedrig            0,18 %      0,03 %    199
+       mittel             0,18 %      0,03 %    197
+
+   Ennos Pult zeigte am selben Nachmittag dreizehn Gefechte. Die Bremse haette
+   also genau dann abgeschaltet, wofuer sie da ist.
+
+   DIE FLAECHE IST DAS FALSCHE MASS. Erkennen soll die Bremse ein Bild, das
+   heller ankommt und in dem deshalb Hintergrund als Feuer durchgeht. Das
+   Kennzeichen dafuer ist nicht die Menge, sondern der ORT: echtes Feuer liegt
+   bei Staedten, fehlgedeuteter Hintergrund liegt ueberall. Gemessen wird
+   daher, welcher Anteil des Feuers in Stadtnaehe faellt - und der haengt
+   nicht an der Flammenstufe. */
+const FEUER_BEI_STADT_MIN = 0.35;
 const feuerVollstaendig = tr => tr && SCHEIBE_EINH*tr.s >= FEUER_SICHER_PX;
+
+/* Kommt das Bild so an, wie die Schwellen es erwarten?
+
+   Die Spannen stammen aus den Messbildern - zwanzig Aufnahmen ueber alle
+   Zoomstufen, per CopyFromScreen entstanden:
+
+       Helligkeit (Median)     74 bis 108
+       Sattheit (Median)        5 bis  12
+       Fraktionsfarbe           3 bis  13 Prozent
+       Feuer                  0,1 bis 3,1 Prozent (oben bei Flammenstufe
+                              "keine", wo die ganze Scheibe leuchtet)
+
+   Was das Werkzeug live bekommt, ist ein anderer Aufnahmeweg und nicht
+   vermessen. Deshalb sagt es sich hier selbst - in Worten, denn "Bild kommt
+   heller an als erwartet" hilft weiter, "Helligkeit 141" nicht. */
+function bildUrteil(w){
+  if (!w) return null;
+  if (w.hell > 150) return {art: "hell",
+    text: "Picture comes in much brighter than the thresholds expect — "
+        + "colours may be misread. If you run HDR, try turning it off for the game."};
+  if (w.hell < 45) return {art: "dunkel",
+    text: "Picture comes in very dark — towns may be missed."};
+  /* Keine feste Flaechengrenze: bei Flammenstufe "keine" leuchtet die ganze
+     Stadtscheibe, und vier Braende ergeben schon 3,07 Prozent. Ob das Feuer
+     echt ist, entscheidet sein ORT - das prueft feuerLesen. Hier steht nur
+     ein Wert, den keine Flammenstufe je erreicht hat. */
+  if (w.feuer > 0.12) return {art: "feuer",
+    text: "Far too much of the picture reads as fire — check the colour settings."};
+  if (w.farbe < 0.01) return {art: "leer",
+    text: "Almost no faction colour in the picture — is the war map showing?"};
+  return null;
+}
 function feuerLesen(mk, punkte, tr){
   const {m, W, H} = mk;
-  /* Zu viel Feuer im ganzen Bild heisst: das Bild kommt anders an als
-     erwartet, nicht dass Europa brennt. */
-  if (mk.nf > FEUER_FLAECHE_MAX*W*H) return {zuHell: true};
+  /* Liegt das Feuer bei den Staedten? Wenn nicht, ist es keins. */
+  if (mk.nf > 0.004*W*H){          /* darunter lohnt die Pruefung nicht */
+    const rP = Math.max(3, Math.round(SCHEIBE_EINH*tr.s*0.9));
+    let beiStadt = 0;
+    for (const p of punkte){
+      const cx = Math.round(p[0]*tr.s + tr.ox), cy = Math.round(p[1]*tr.s + tr.oy);
+      if (cx < -rP || cy < -rP || cx > W+rP || cy > H+rP) continue;
+      const x0 = Math.max(0, cx-rP), x1 = Math.min(W-1, cx+rP);
+      const y0 = Math.max(0, cy-rP), y1 = Math.min(H-1, cy+rP);
+      for (let y = y0; y <= y1; y++){
+        const z = y*W;
+        for (let x = x0; x <= x1; x++) if (m[z+x] === 4) beiStadt++;
+      }
+    }
+    /* Doppelt gezaehlt wird, wo sich zwei Stadtumkreise ueberlappen - das
+       macht den Anteil zu gross, nie zu klein, und wirkt damit auf der
+       sicheren Seite. */
+    if (beiStadt < FEUER_BEI_STADT_MIN*mk.nf) return {zuHell: true};
+  }
   const rS = Math.max(2, SCHEIBE_EINH*tr.s/2);        /* Scheibenradius */
   const R = Math.max(3, Math.round(rS*1.25));
   const noetig = Math.max(4, Math.round(FEUER_ANTEIL*Math.PI*rS*rS));
@@ -6196,7 +6283,8 @@ function maskeAus(quelle, feld, maxb){
     sx += q % W; sy += (q/W)|0; sn++;
   }
   const schwer = sn ? {x: sx/sn, y: sy/sn, n: sn} : null;
-  return {mk, W, H, tmp, feld:F, k, tx:-bw*F.x*k, ty:-bh*F.y*k, bw, bh, schwer};
+  return {mk, W, H, tmp, feld:F, k, tx:-bw*F.x*k, ty:-bh*F.y*k, bw, bh, schwer,
+          bildwerte: mk.bildwerte};
 }
 /* Eine Lage vom Arbeitsbild ins Quellbild und zurueck. Ohne das kann eine
    Einrastung bei 1600 nicht in einer Verfolgung bei 1100 weiterlaufen: der
@@ -6341,7 +6429,7 @@ function kartenAusBild(quelle, melde, opt){
   const ausVerfolgung = !!(o.spur && tr.gehalten !== undefined || o.spur);
   return {erg: farbenLesen(a.mk, punkte, tr), brennt: feuerLesen(a.mk, punkte, tr),
           adern: linienLesen(a.mk, punkte, tr),
-          schwer: a.schwer,
+          schwer: a.schwer, bildwerte: a.bildwerte,
           tr, trQ: trZuQuelle(tr, a), punkte,
           mk:a.mk, feld:a.feld, W:a.W, H:a.H, tmp:a.tmp, bw:a.bw, bh:a.bh,
           guete:g.quote, sicher: g.quote >= PASS_GUT,
@@ -7517,6 +7605,21 @@ function radarFrisch(){
              ${rast > 0 ? "closer in" : "further out"}</span> — ${ziel}${
                wache.zoom != null ? `, you are at ${Math.round(100*wache.zoom)} %` : ""}`;
     }
+    /* Kommt das Bild so an, wie die Schwellen es erwarten? */
+    {
+      const bd = el.querySelector("[data-bild]");
+      if (bd){
+        const w = L.laeuft ? wache.bildwerte : null;
+        const u = bildUrteil(w);
+        if (u){
+          bd.hidden = false;
+          bd.innerHTML = `<b>${esc(u.text)}</b>`
+            + `<span>brightness ${w.hell} · saturation ${w.satt} · `
+            + `colour ${(100*w.farbe).toFixed(1)} % · fire ${(100*w.feuer).toFixed(1)} %`
+            + ` <em>(measured: 74–108 · 5–12 · 3–13 % · up to 3.1 %)</em></span>`;
+        } else bd.hidden = true;
+      }
+    }
     const k = el.querySelector("[data-kann]");
     if (k){
       const tr = L.laeuft && wache.tr ? wache.tr : null;
@@ -7615,6 +7718,8 @@ function radarPult(){
       <!-- Was gibt die aktuelle Zoomstufe her? Das steht hier, statt dass
            das Geraet es stillschweigend tut. -->
       <div class="rd-kann" data-kann>—</div>
+      <!-- Was kommt an? Nur wenn es auffaellt - sonst schweigt die Zeile. -->
+      <div class="rd-bild" data-bild hidden></div>
       <div class="z"><span>${esc(rdS(W.sicht))}</span>
         <b data-sicht>${laeuft ? (wache.gelesen||0) : "—"}</b></div>
       <div class="z"${laeuft && wache.zaehl ? "" : " hidden"}><span>US · GE · SU</span>
@@ -8514,7 +8619,9 @@ function wacheTickIntern(){
   }
   if (wache.peil && wache.peil.spanne > 0)
     radarBeam = beamAusSpanne(wache.peil.spanne);
-  wache.gefechte = res.brennt ? Object.keys(res.brennt).length : 0;
+  wache.bildwerte = res.bildwerte || null;
+  wache.gefechte = res.brennt && !res.brennt.zuHell
+    ? Object.keys(res.brennt).length : 0;
   wache.zaehl = res.erg.zaehl.slice();
   /* Sobald zum ersten Mal bekannt ist, wo man steht: ein Ziel aus dem Bild
      waehlen. Das beim Aufmachen blind gezogene lag irgendwo. */
@@ -16129,7 +16236,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build e3a9ce3300</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 5ce1bd7291</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
