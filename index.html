@@ -1735,7 +1735,7 @@ const KONTO_PLATZ = (raum, spieler) => STORE + ":" + raum + ":" + spieler;
 /* Every kind of timestamped entry. Arrows are a list, everything else a map. */
 const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot",
                  "line","post","area","para","roster","est","edep","anon","akt","btl",
-                 "priv","todo","wish","ok","first","sweep","vers"];
+                 "priv","todo","wish","ok","first","sweep","vers","clan"];
 /* Wann wurde diese Stadt zuletzt GESEHEN? Nicht zu verwechseln mit
    S.owner[i].t - das ist "zuletzt geaendert", und eine Stadt, die seit einer
    Woche sowjetisch ist, hat dort einen wochenalten Stempel, obwohl sie
@@ -1941,10 +1941,81 @@ function clanFarbe(tag){
 }
 const clanEtikett = tag => tag
   ? `<span class="cbadge" style="--c:${clanFarbe(tag)}">${esc(tag)}</span>` : "";
-const clanVon = name => {
+/* ---- Clans -----------------------------------------------------------
+   Ein Clan ist ein eigenes Ding, kein abgeleitetes Merkmal: es gibt ihn im
+   Spiel gar nicht, er entsteht ausserhalb, und die Kuerzel vergeben wir
+   selbst. Deshalb wird er ANGELEGT und die Zugehoerigkeit ZUGETEILT.
+
+   Der Schluessel ist eine sinnlose Kennung, kein Kuerzel. Der Schluessel ist
+   die Adresse der Zeile und darf sich nie aendern - das Kuerzel aber SOLL
+   sich aendern duerfen, denn oft weiss man zuerst nur, dass fuenf Leute
+   zusammengehoeren, und erst spaeter, wie ihr Clan heisst. Stuende das
+   Kuerzel im Schluessel, waere jedes Umbenennen eine neue Zeile und jede
+   Zuordnung dahin.
+
+   Das Vorzeichen "c-" ist kein Schmuck: im Spielerfeld stand frueher
+   Freitext und steht kuenftig eine Kennung. Ohne Vorzeichen liesse sich
+   "redonion" nicht von einer Kennung unterscheiden. */
+const clanKennung = () => "c-" + Math.random().toString(36).slice(2, 10);
+const istKennung  = s => /^c-[a-z0-9]{4,12}$/.test(String(s || ""));
+
+/* Alle angelegten Clans, Kennung -> Angaben. */
+function clans(){
+  const aus = new Map();
+  for (const id in S.clan){
+    const v = S.clan[id] && S.clan[id].v;
+    if (v) aus.set(id, v);
+  }
+  return aus;
+}
+const clanDaten = id => (S.clan[id] && S.clan[id].v) || null;
+
+/* Wie ein Clan heisst - Kuerzel bevorzugt, sonst Name, sonst ein
+   erkennbarer Platzhalter. Ein Clan ohne beides ist genau Ennos Fall
+   "die fuenf gehoeren zusammen, den Namen wissen wir noch nicht". */
+function clanTitel(id){
+  const v = clanDaten(id);
+  if (!v) return "";
+  return v.tag || v.name || ("unknown " + String(id).slice(2, 6));
+}
+
+/* Anlegen. Gibt die Kennung zurueck, unter der zugeteilt wird. */
+function clanAnlegen(felder){
+  const id = clanKennung();
+  stamp("clan", id, Object.assign(
+    {tag: "", name: "", f: null, eigen: 0, vorl: 1}, felder || {}));
+  save();
+  return id;
+}
+/* Aendern - Kuerzel, Name, Seite. Die Kennung bleibt, also bleiben alle
+   Zuteilungen. Sobald ein Kuerzel oder Name dasteht, ist es kein
+   Platzhalter mehr. */
+function clanSetzen(id, felder){
+  const v = clanDaten(id);
+  if (!v) return false;
+  const neu = Object.assign({}, v, felder);
+  neu.vorl = (neu.tag || neu.name) ? 0 : 1;
+  stamp("clan", id, neu);
+  save();
+  return true;
+}
+
+/* Die Zugehoerigkeit eines Spielers als Kennung. Steht dort noch Alttext
+   aus der Zeit vor dieser Umstellung, wird beim Lesen einmalig ein Clan
+   daraus - so geht nichts verloren, und niemand muss etwas nachtragen. */
+function clanIdVon(name){
   const e = S.roster[spielerKey(name)];
-  return e && e.v && e.v.clan ? e.v.clan : "";
-};
+  const w = (e && e.v && e.v.clan) || "";
+  if (!w) return "";
+  if (istKennung(w)) return S.clan[w] ? w : "";
+  /* Alttext: einen passenden Clan suchen, sonst anlegen. */
+  for (const [id, v] of clans())
+    if ((v.tag || "").toLowerCase() === w.toLowerCase()
+     || (v.name || "").toLowerCase() === w.toLowerCase()) return id;
+  return clanAnlegen({tag: w.length <= 8 ? w : "", name: w.length > 8 ? w : ""});
+}
+/* Wie der Clan eines Spielers heisst - fuer Anzeigen. */
+const clanVon = name => clanTitel(clanIdVon(name));
 /* Der Name, wie er ueberall in der Oberflaeche stehen soll: eigener Text,
    dahinter das Clankuerzel als Etikett.
 
@@ -3810,7 +3881,10 @@ function startStaedte(){
 }
 const setStartStaedte = o => setMeta("start", o);
 
-const KRIEG_BLEIBT = ["depot", "roster", "edep", "meta"];
+/* "clan" gehoert hierher: ein neuer Krieg aendert die Lage, nicht die
+   Frage, wer mit wem spielt. Ohne den Eintrag waeren beim Kriegswechsel
+   alle Zuteilungen weg. */
+const KRIEG_BLEIBT = ["depot", "roster", "edep", "meta", "clan"];
 function neuerKrieg(){
   /* Ein neuer Krieg legt alles still, was geschrieben wurde. Das ist der
      folgenschwerste Knopf im Werkzeug - und er gehoert dem VERWALTER, nicht
@@ -16494,7 +16568,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c17c968550</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 6469d03722</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
