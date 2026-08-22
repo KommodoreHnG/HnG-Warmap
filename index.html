@@ -1907,6 +1907,14 @@ function clanListe(){
 }
 /* A tag people put in their own name — "[SRB]CrazySerb", "ROS | Peter".
    The full string stays the name; this is only the derived grouping. */
+/* Ein Kuerzel aus einem Namen holen. DERZEIT UNGENUTZT und mit Absicht:
+   Clans gibt es im Spiel nicht, sie entstehen ausserhalb, und die Kuerzel
+   vergibt die eigene Fraktion. Was jemand selbst in seinen Namen schreibt,
+   ist sein Behelf und keine Zugehoerigkeit - deshalb wird sie nirgends mehr
+   stillschweigend abgeleitet.
+   Die Funktion bleibt als Baustein fuer einen VORSCHLAG stehen, den jemand
+   bestaetigen muesste. Das ist etwas anderes als eine Vorbelegung, die man
+   uebersieht. */
 function tagAus(name){
   const s = String(name).trim();
   let m = s.match(/^[\[\(\{<]([^\]\)\}>]{1,12})[\]\)\}>]/);
@@ -1938,13 +1946,18 @@ const clanVon = name => {
   return e && e.v && e.v.clan ? e.v.clan : "";
 };
 /* Der Name, wie er ueberall in der Oberflaeche stehen soll: eigener Text,
-   dahinter das Clankuerzel als Etikett. Erst der eingetragene Clan aus dem
-   Verzeichnis, ersatzweise das Kuerzel, das der Spieler selbst im Namen
-   fuehrt. Gibt fertiges HTML zurueck - der Name ist darin schon entschaerft. */
+   dahinter das Clankuerzel als Etikett.
+
+   NUR die zugeteilte Zugehoerigkeit zaehlt. Was jemand selbst in seinen
+   Namen schreibt, ist ein Behelf des Einzelnen und sagt nichts darueber,
+   wem er angehoert - Clans gibt es im Spiel gar nicht, sie entstehen
+   ausserhalb. Ein Etikett erscheint also erst, wenn jemand die
+   Zugehoerigkeit eingetragen hat.
+
+   Gibt fertiges HTML zurueck - der Name ist darin schon entschaerft. */
 const nameMitClan = name => {
   const n = String(name || "");
-  const c = clanVon(n) || tagAus(n);
-  return esc(n) + clanEtikett(c);
+  return esc(n) + clanEtikett(clanVon(n));
 };
 /* Which clans are behind the sightings at a town */
 function clansAt(i){
@@ -9731,8 +9744,11 @@ function intelDialog(tab, seite){
 function massenDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Add many players</h2>
-      <p>One per line. A clan tag in brackets or after a slash is picked up automatically —
-         <code>[ROS] Peter</code>, <code>Peter /ROS</code>.</p></div>
+      <p>One per line, exactly as the game shows them. Anything in the name
+         stays part of the name — clans do not exist in-game, so a tag someone
+         carries around is their own habit, not a membership.</p>
+      <p>Use the clan field below to assign all of them at once, or leave it
+         empty and assign them later.</p></div>
     <div class="dlg-b">
       <textarea id="bulk-txt" style="min-height:150px"
         placeholder="[ROS] Peter&#10;Peter123&#10;/!(§Peter"></textarea>
@@ -9758,7 +9774,11 @@ function massenDialog(){
       if (z.length < 2) continue;
       // Der Tag gehoert zum Namen — im Spiel gibt es keine Clans, die Leute
       // nennen sich selbst so. Der Tag wird nur zusaetzlich abgeleitet.
-      if (merkeSpieler(z, fv === "" ? undefined : +fv, cAll || tagAus(z))) n++;
+      /* Frueher stand hier "cAll || tagAus(z)" - ohne Angabe wurde der Clan
+         aus dem Namen geraten. Eine falsche Vorbelegung, die jemand
+         uebersieht, sieht danach aus wie eine echte Aufklaerung. Ohne Angabe
+         bleibt der Clan jetzt leer. */
+      if (merkeSpieler(z, fv === "" ? undefined : +fv, cAll)) n++;
     }
     closeDlg(); toast(`${n} player${n===1?"":"s"} recorded`);
     neuAuf("players");
@@ -12077,8 +12097,12 @@ async function ocrLesen(datei, quelle){
 
   const liste = document.getElementById("ocr-list");
   liste.innerHTML = kand.map(z => {
-    // Clan-Tag in eckigen Klammern abtrennen: "[SRB]CrazySerb"
-    const clan = tagAus(z), nm = z;
+    /* Der Clan wird NICHT aus dem Namen geraten. Was jemand selbst in
+       seinen Namen schreibt ("[SRB]CrazySerb"), ist ein Behelf des
+       Einzelnen - Clans gibt es im Spiel nicht, sie entstehen ausserhalb,
+       und die Kuerzel vergibt die eigene Fraktion. Wer hier einen Clan
+       eintraegt, teilt ihn zu; geraten wird nichts. */
+    const clan = "", nm = z;
     const bekannt = spielerListe().find(p => namKey(p.name) === namKey(nm));
     return `<label class="zeile" style="display:flex;align-items:center;gap:6px">
       <input type="checkbox" ${bekannt?"":"checked"}>
@@ -16470,7 +16494,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5d769b870a</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c17c968550</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
