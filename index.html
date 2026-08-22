@@ -5925,6 +5925,11 @@ function sternKantenmass(paare){
    Hoechstens 240 Kanten, gleichmaessig verteilt - alle 2661 waeren zu teuer
    fuer fuenf Messungen je Sekunde, und die Quote aendert sich nicht. */
 const NETZ_MAX = 240;
+/* Wie gut muss das Liniennetz sitzen, damit es OHNE Sternbild traegt?
+   Gemessen: kein bestaetigtes Bild liegt unter 0,429, der Verfolgungsweg
+   begnuegt sich mit 0,45 - dort stuetzt aber die Zuordnung mit. Steht das
+   Netz allein, gilt 0,55. */
+const NETZ_ALLEIN = 0.55;
 function netzMass(mk, punkte, tr){
   const {m, W, H} = mk;
   const kanten = MAP.e || [];
@@ -6793,6 +6798,8 @@ function kartenAusBild(quelle, melde, opt){
   const grundNichtReif = (verfolgt) => {
     if (g.quote < PASS_GUT)
       return `fit is loose (${Math.round(g.quote*100)} % of towns matched)`;
+    /* Der dritte Weg kann jederzeit greifen - dann fehlt gar nichts. */
+    if (netz !== null && netz >= NETZ_ALLEIN) return "";
     if (verfolgt){
       if (netz === null) return "not enough map lines to check the fit";
       if (netz < 0.45)   return `lines do not line up (${Math.round(netz*100)} %)`;
@@ -6839,9 +6846,26 @@ function kartenAusBild(quelle, melde, opt){
                und sitzen, die Zuordnung muss die Haelfte der erwarteten
                Staedte finden. */
             ? (g.quote >= PASS_GUT && netz !== null && netz >= 0.45 && stg >= 0.35)
-            /* Einrastung: wie bisher. */
-            : (g.quote >= PASS_GUT && !!tr.stern && stg >= 0.5 && stk >= 0.7
-               && (netz === null || netz >= 0.20))};
+            /* Einrastung: wie bisher - ODER das Liniennetz allein.
+
+               Gemessen an 237 Frontaufnahmen: von 208 georteten Bildern
+               waren 162 reif und 46 blockiert, diese 46 AUSSCHLIESSLICH am
+               Sternbild (27x fehlt, 19x zu schwach, alle anderen Gruende
+               null). Sie sind nicht falsch geortet, nur weiter
+               herausgezoomt - bei 13,7 statt 20,8 Bildpunkten Stadtgroesse
+               bricht die Sternbilderkennung zusammen.
+
+               Dass ihre Lagen stimmen, spricht dreierlei: alle 46 haben ein
+               brauchbares Liniennetz; ihre Lagen wandern ueber die Bildreihe
+               ohne einen einzigen unplausiblen Sprung; und kein einziges der
+               162 bestaetigten Bilder liegt unter einem Netzmass von 0,429.
+
+               Die Schwelle ist mit 0,55 strenger als die 0,45 des
+               Verfolgungswegs - dort traegt zusaetzlich die Zuordnung, hier
+               steht das Netz allein. */
+            : ((g.quote >= PASS_GUT && !!tr.stern && stg >= 0.5 && stk >= 0.7
+                && (netz === null || netz >= 0.20))
+               || (g.quote >= PASS_GUT && netz !== null && netz >= NETZ_ALLEIN))};
 }
 
 /* Uebernehmen heisst: nur schreiben, was sich wirklich geaendert hat. Alle
@@ -16913,7 +16937,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c0f8adbdfe</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 13f7d26be0</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
