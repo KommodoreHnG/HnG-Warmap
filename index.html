@@ -1733,9 +1733,73 @@ const STORE = "hng-warmap-v3";
    aus der Sitzung davor. */
 const KONTO_PLATZ = (raum, spieler) => STORE + ":" + raum + ":" + spieler;
 /* Every kind of timestamped entry. Arrows are a list, everything else a map. */
-const BUCKETS = ["owner","units","depot","notes","fight","join","meta","star","spot",
-                 "line","post","area","para","roster","est","edep","anon","akt","btl",
-                 "priv","todo","wish","ok","first","sweep","vers","clan"];
+/* ---- Die Topftafel ---------------------------------------------------
+   Alles, was ueber einen Datentopf zu wissen ist, an EINER Stelle. Frueher
+   standen dieselben Angaben an vier Orten verteilt - BUCKETS, AUTOR_TEIL,
+   darfIchSchieben und KRIEG_BLEIBT -, und keiner erinnerte an die anderen.
+   Wer eine vergass, verlor Zeilen still: applyRemote wirft unbekannte
+   Toepfe wortwoertlich weg, ohne Meldung, und der eigene Bildschirm sieht
+   dabei richtig aus.
+
+   Beim Clan-Umbau ist mir genau das passiert - zwei Listen gepflegt, die
+   dritte vergessen; gefunden hat es erst die Gegenpruefung.
+
+   Die Spalten:
+     wer     Welcher Teil des Schluessels traegt den Verfasser? 0 = keiner.
+             Toepfe ohne Verfasser gehoeren allen; dort entscheidet ein
+             Recht, wer schreiben darf.
+     recht   Welches Recht der Server verlangt. "" = jeder im Raum darf.
+             Diese Spalte bildet die Serverregel NACH, sie ersetzt sie
+             nicht - der Schutz liegt in der Datenbank. Sie sorgt nur
+             dafuer, dass nichts in den Stapel geraet, was ohnehin
+             abgewiesen wuerde.
+     krieg   Ueberlebt der Inhalt einen neuen Krieg?
+             Faustregel: was die LAGE beschreibt, faellt weg; was die
+             Leute beschreibt, bleibt.
+
+   Wer dem Werkzeug einen neuen Topf gibt, traegt ihn HIER ein - und in die
+   Serverregel warmap_may_write. Zwei Orte statt fuenf. */
+const TOPFTAFEL = {
+  /* --- Die gemeinsame Lage: gehoert allen, faellt mit dem Krieg --- */
+  owner:  {wer:0, recht:"aufklaerung", krieg:0},   // wem eine Stadt gehoert
+  fight:  {wer:0, recht:"aufklaerung", krieg:0},   // hier wird gekaempft
+  vers:   {wer:0, recht:"aufklaerung", krieg:0},   // Nachschublinien
+  star:   {wer:0, recht:"aufklaerung", krieg:0},   // Zielmarkierung
+  notes:  {wer:0, recht:"aufklaerung", krieg:0},   // Freitext an einer Stadt
+  btl:    {wer:0, recht:"aufklaerung", krieg:0},   // Vorrat aus der Schlachtanalyse
+
+  /* --- Eigenes: der Verfasser steht im Schluessel --- */
+  depot:  {wer:1, recht:"", krieg:1},              // eigene Einheiten und Arsenal
+  priv:   {wer:1, recht:"", krieg:0},              // verschluesselte Notiz
+  wish:   {wer:1, recht:"", krieg:0},              // Verstaerkungswunsch
+  sweep:  {wer:1, recht:"", krieg:0},              // welcher Sektor abgesucht wurde
+  units:  {wer:2, recht:"", krieg:0},              // eigene Einheiten am Ort
+  join:   {wer:2, recht:"", krieg:0},              // Zusage an einem Pfeil
+  post:   {wer:2, recht:"", krieg:0},              // Brettbeitrag
+  line:   {wer:2, recht:"", krieg:0},              // Verteidigungslinie
+  area:   {wer:2, recht:"", krieg:0},              // Vieleckzone
+
+  /* --- Aufklaerung mit Verfasser im Schluessel --- */
+  spot:   {wer:2, recht:"aufklaerung", krieg:0},   // Feindsichtung
+  est:    {wer:2, recht:"aufklaerung", krieg:0},   // Staerkeschaetzung
+  first:  {wer:2, recht:"aufklaerung", krieg:0},   // Erstfund-Gutschrift
+
+  /* --- Wissen ueber Leute und Clans: ueberlebt den Krieg --- */
+  roster: {wer:0, recht:"aufklaerung", krieg:1},   // Spielerverzeichnis
+  edep:   {wer:0, recht:"aufklaerung", krieg:1},   // deren Einheiten
+  clan:   {wer:0, recht:"aufklaerung", krieg:1},   // die Clans selbst
+
+  /* --- Sonderfaelle --- */
+  meta:   {wer:0, recht:"meta",  krieg:1},         // Kriegs- und Clanschalter
+  ok:     {wer:0, recht:"bestaetigen", krieg:0},   // macht aus Vorschlag Befehl
+  anon:   {wer:0, recht:"anon",  krieg:0},         // anonyme Soldatenliste
+  para:   {wer:0, recht:"",      krieg:0},         // Parablock, Eigentum in der Zeile
+  akt:    {wer:0, recht:"",      krieg:0},         // Anwesenheitsmeldung
+  todo:   {wer:0, recht:"",      krieg:0},         // Meldung ans Werkzeug
+};
+/* Die vier alten Listen entstehen jetzt aus der Tafel. Sie bleiben, weil
+   sie an dreizehn Stellen gelesen werden - nur gepflegt wird oben. */
+const BUCKETS = Object.keys(TOPFTAFEL);
 /* Wann wurde diese Stadt zuletzt GESEHEN? Nicht zu verwechseln mit
    S.owner[i].t - das ist "zuletzt geaendert", und eine Stadt, die seit einer
    Woche sowjetisch ist, hat dort einen wochenalten Stempel, obwohl sie
@@ -2343,8 +2407,9 @@ function setFeindDepot(key, list){
 /* Welche Toepfe ihren Verfasser im Schluessel tragen, und als wievieltes
    Teil. Genau diese Zeilen darf nur ihr Verfasser schreiben - die Datenbank
    sieht das ebenso, deshalb muss die Seite es an einer Stelle wissen. */
-const AUTOR_TEIL = {depot: 1, units: 2, join: 2, post: 2, line: 2, spot: 2,
-                    area: 2, est: 2, priv: 1, wish: 1, first: 2, sweep: 1};
+/* Aus der Topftafel abgeleitet - siehe dort. */
+const AUTOR_TEIL = Object.fromEntries(
+  Object.entries(TOPFTAFEL).filter(([, v]) => v.wer > 0).map(([k, v]) => [k, v.wer]));
 /* Was die Datenbank ohnehin abweisen wuerde, gehoert nicht in den Stapel.
    Diese Liste bildet die Serverregeln fuer die Toepfe OHNE Verfasser im
    Schluessel nach - nicht als Schutz, den leistet der Server, sondern damit
@@ -2353,12 +2418,11 @@ const AUTOR_TEIL = {depot: 1, units: 2, join: 2, post: 2, line: 2, spot: 2,
    immer nur auf der vorsichtigen Seite, denn was hier haengenbleibt, wird
    beim naechsten echten Bearbeiten ohnehin neu eingetragen. */
 function darfIchSchieben(bucket, id){
-  if (bucket === "anon") return id === anonKennung();
-  if (bucket === "roster" || bucket === "edep" || bucket === "clan")
-    return darf("aufklaerung");
-  if (bucket === "ok") return darf("bestaetigen");
-  if (bucket === "meta") return istLeader() || istAdmin();
-  return true;
+  const v = TOPFTAFEL[bucket];
+  if (!v) return false;                 // unbekannt: der Server nimmt es ohnehin nicht
+  if (v.recht === "anon") return id === anonKennung();
+  if (v.recht === "meta") return istLeader() || istAdmin();
+  return v.recht ? darf(v.recht) : true;
 }
 function autorVon(bucket, id){
   const n = AUTOR_TEIL[bucket];
@@ -4048,7 +4112,9 @@ const setStartStaedte = o => setMeta("start", o);
 /* "clan" gehoert hierher: ein neuer Krieg aendert die Lage, nicht die
    Frage, wer mit wem spielt. Ohne den Eintrag waeren beim Kriegswechsel
    alle Zuteilungen weg. */
-const KRIEG_BLEIBT = ["depot", "roster", "edep", "meta", "clan"];
+/* Aus der Topftafel abgeleitet - siehe dort. */
+const KRIEG_BLEIBT = Object.entries(TOPFTAFEL)
+  .filter(([, v]) => v.krieg).map(([k]) => k);
 function neuerKrieg(){
   /* Ein neuer Krieg legt alles still, was geschrieben wurde. Das ist der
      folgenschwerste Knopf im Werkzeug - und er gehoert dem VERWALTER, nicht
@@ -16937,7 +17003,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 13f7d26be0</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 796ce7ccb1</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
