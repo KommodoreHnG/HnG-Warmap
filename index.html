@@ -6788,6 +6788,24 @@ function kartenAusBild(quelle, melde, opt){
      Zwanzig Prozent aber sind in keinem gemessenen Fall von einer richtigen
      Lage unterschritten worden. */
   const netz = netzMass(a.mk, punkte, tr);
+  /* Warum reicht es nicht? Ohne diese Angabe zeigt das Pult einen vollen
+     Balken und schweigt - der Nutzer sieht nur, DASS nichts passiert. */
+  const grundNichtReif = (verfolgt) => {
+    if (g.quote < PASS_GUT)
+      return `fit is loose (${Math.round(g.quote*100)} % of towns matched)`;
+    if (verfolgt){
+      if (netz === null) return "not enough map lines to check the fit";
+      if (netz < 0.45)   return `lines do not line up (${Math.round(netz*100)} %)`;
+      if (stg < 0.35)    return `too few towns found (${Math.round(stg*100)} %)`;
+    } else {
+      if (!tr.stern)     return "no star pattern - zoom out a little";
+      if (stg < 0.5)     return `too few towns found (${Math.round(stg*100)} %)`;
+      if (stk < 0.7)     return `star pattern is off (${Math.round(stk*100)} %)`;
+      if (netz !== null && netz < 0.20)
+        return `lines do not line up (${Math.round(netz*100)} %)`;
+    }
+    return "";
+  };
   /* Zwei Wege zur Schreibreife, je nachdem, woher die Lage kommt.
 
      EINRASTUNG: die alten Bedingungen. Sie sind daran geeicht und haben die
@@ -6802,7 +6820,12 @@ function kartenAusBild(quelle, melde, opt){
 
      Es ist ausserdem das, was Enno verlangt hat: "Lediglich die Geometrie
      der Polygone und die Nodes duerfen hier tragen." */
-  const ausVerfolgung = !!(o.spur && tr.gehalten !== undefined || o.spur);
+  /* Hier stand "o.spur && tr.gehalten !== undefined || o.spur". Wegen der
+     Vorrangregeln (und vor oder) ist das dasselbe wie "o.spur" - die
+     Pruefung auf tr.gehalten hatte nie eine Wirkung. Sie las sich, als
+     gaebe es einen Unterschied zwischen "verfolgt" und "verfolgt und
+     gehalten"; den gab es nie. */
+  const ausVerfolgung = !!o.spur;
   return {erg: farbenLesen(a.mk, punkte, tr), brennt: feuerLesen(a.mk, punkte, tr),
           adern: linienLesen(a.mk, punkte, tr),
           schwer: a.schwer, bildwerte: a.bildwerte,
@@ -6810,6 +6833,7 @@ function kartenAusBild(quelle, melde, opt){
           mk:a.mk, feld:a.feld, W:a.W, H:a.H, tmp:a.tmp, bw:a.bw, bh:a.bh,
           guete:g.quote, sicher: g.quote >= PASS_GUT,
           netz,
+          warumNicht: grundNichtReif(ausVerfolgung),
           schreibreif: ausVerfolgung
             /* Verfolgung: Geometrie entscheidet. Das Netzmass muss da sein
                und sitzen, die Zuordnung muss die Haelfte der erwarteten
@@ -9176,9 +9200,28 @@ function wacheTickIntern(){
   radarScan = Math.max(0, Math.min(1, steht/(wache.sek*1000)));
   if (!res.schreibreif || steht < wache.sek*1000
       || nun - (wache.ernte || 0) < wache.sek*1000){
+    /* Steht das Bild lange genug still und es passiert trotzdem nichts,
+       liegt es an der Ortung. Frueher schwieg das Pult dazu, und der
+       Balken stand stumm auf 100 Prozent - er verspricht einen Abschluss,
+       den es nicht gibt. */
+    if (steht >= wache.sek*1000 && !res.schreibreif){
+      wache.stockt = res.warumNicht || "position not certain enough";
+      /* Und die Nadel bleibt nicht ewig auf derselben Stadt haengen: nach
+         der doppelten Wartezeit wird weitergezogen. Die Stadt bekommt dabei
+         KEINEN Stempel - sie kommt also wieder an die Reihe, wenn die Lage
+         besser steht. */
+      if (steht >= wache.sek*2000){
+        wache.ruhe = {seit: nun};
+        radarScan = 0;
+        zielZiehen();
+      }
+    } else if (wache.stockt){
+      wache.stockt = "";
+    }
     wacheAnzeigen(); if (radarOffen) radarFrisch();
     return;
   }
+  wache.stockt = "";
   wache.ernte = nun;
   /* Uebernommen heisst gesehen - die Staedte im Bild bekommen ihren Stempel
      und das naechste Ziel wird gezogen. */
@@ -9211,7 +9254,7 @@ function wacheAnzeigen(){
      sich fast nie. Also erst vergleichen. */
   const kennung = [wache.meldung, wache.gelesen, wache.gesehen.size, wache.gesamt,
                    wache.zuletzt, !!wache.wartet, Math.round(wache.ms||0),
-                   wache.verloren||0].join("|");
+                   wache.verloren||0, wache.stockt||""].join("|");
   if (kennung === wacheStand) return;
   wacheStand = kennung;
   el.innerHTML = `
@@ -9220,6 +9263,10 @@ function wacheAnzeigen(){
       <b>Watching the war map</b>
       <em>${wache.meldung
         ? esc(wache.meldung)
+        : wache.stockt
+        /* Der Balken ist voll, uebernommen wird trotzdem nicht - hier steht,
+           woran es liegt. */
+        ? `<span style="color:var(--warn,#d9aa5c)">holding: ${esc(wache.stockt)}</span>`
         : `${wache.gelesen} towns in view · <b style="color:var(--accent)">${
             wache.gesehen.size}</b> of ${MAP.n.length} seen${wache.zuletzt
             ? ` · ${wache.gesamt} changed` : ""}`}${
@@ -16866,7 +16913,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 4bf0c6b228</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c0f8adbdfe</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
