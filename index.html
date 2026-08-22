@@ -2530,7 +2530,17 @@ function setClanBefehl(txt){
    sonst koennte den ersten Leiter niemand ernennen. */
 const istAdmin  = () => !CFG || !!CFG.admin;
 const leaderId  = () => (S.meta.leader && S.meta.leader.v) || null;
+/* Wer fuehrt, sagt der SERVER - er traegt die Stellung an der Person.
+   Frueher stand sie als Datenzeile in der Karte, und wenn dort nichts
+   stand, galt der Verwalter als Anfuehrer. Damit fuehrte der Betreiber
+   stillschweigend jeden Clan, obwohl er clanintern gerade nichts zu sagen
+   haben soll.
+
+   Der Rueckfall auf die alte Datenzeile bleibt stehen, solange nicht jede
+   Stelle umgestellt ist - er greift nur, wenn der Server (noch) keine
+   Stellung nennt. */
 const istLeader = () => !CFG ? true
+  : CFG.rolle ? CFG.rolle === "leiter"
   : (leaderId() ? (CFG.player || S.me) === leaderId() : !!CFG.admin);
 function setLeader(player){ stamp("meta", "leader", player || null); save(); kopfzeile(); }
 
@@ -17003,7 +17013,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 796ce7ccb1</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 9070b06bfc</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -17481,6 +17491,10 @@ async function syncStart(){
   }
   CFG.room = ich.room; CFG.admin = !!ich.is_admin; CFG.name = ich.name;
   CFG.player = ich.player;
+  /* Die Stellung in diesem Raum: leiter, mitglied oder frei. Kommt seit der
+     Wanderung whoami_nennt_die_rolle mit; aeltere Server liefern sie nicht,
+     dann bleibt sie leer und der alte Weg greift. */
+  CFG.rolle = ich.rolle || "";
   mitgliederKnopf();
   cfgSpeichern();
 
