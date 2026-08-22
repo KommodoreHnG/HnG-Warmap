@@ -1984,14 +1984,44 @@ const clanKennung = () => "c-" + Math.random().toString(36).slice(2, 10);
 const istKennung  = s => /^c-[a-z0-9]{4,12}$/.test(String(s || ""));
 
 /* Alle angelegten Clans, Kennung -> Angaben. */
+/* Ein zusammengefuehrter Clan traegt den Vermerk weg: "c-yyy". Diese
+   Funktion folgt der Spur bis zum bleibenden Clan.
+
+   Ketten entstehen, wenn zwei Leute unabhaengig voneinander zusammenfuehren
+   (A auf B, spaeter B auf C). Und ein Kreis entsteht, wenn zwei es
+   gleichzeitig in verschiedene Richtungen tun. Beides darf nicht in eine
+   Endlosschleife laufen und muss auf JEDEM Rechner dasselbe ergeben - sonst
+   sieht jeder etwas anderes. Deshalb: hoechstens acht Schritte, und im Kreis
+   gewinnt die kleinste Kennung. */
+function clanAufgeloest(id){
+  const gesehen = [];
+  let cur = id;
+  for (let i = 0; i < 8; i++){
+    if (gesehen.indexOf(cur) >= 0) return gesehen.slice().sort()[0];
+    gesehen.push(cur);
+    const v = clanDaten(cur);
+    if (!v || !v.weg || !clanDaten(v.weg)) return cur;
+    cur = v.weg;
+  }
+  return gesehen.slice().sort()[0];
+}
+/* Die Clans, die es fuer den Nutzer gibt. Aufgeloeste fallen heraus - sie
+   sind nicht geloescht, nur aufgegangen.
+   Die Bedingung lautet bewusst "zeigt woanders hin" und nicht "hat einen
+   Zeiger": im Kreisfall zeigt der Gewinner auf sich selbst und bleibt
+   dadurch als einziger stehen. */
 function clans(){
   const aus = new Map();
   for (const id in S.clan){
     const v = S.clan[id] && S.clan[id].v;
-    if (v) aus.set(id, v);
+    if (!v) continue;
+    if (clanAufgeloest(id) !== id) continue;
+    aus.set(id, v);
   }
   return aus;
 }
+/* Liest direkt, ohne Aufloesung - sonst waere der Zeiger selbst nicht
+   lesbar. */
 const clanDaten = id => (S.clan[id] && S.clan[id].v) || null;
 
 /* Wie ein Clan heisst - Kuerzel bevorzugt, sonst Name, sonst ein
@@ -2074,8 +2104,52 @@ function clanIdVon(name){
   const e = S.roster[spielerKey(name)];
   const w = (e && e.v && e.v.clan) || "";
   if (!w || !istKennung(w)) return "";
-  return S.clan[w] ? w : "";
+  /* Auf den WERT pruefen, nicht auf das Huellobjekt: eine geleerte Zeile
+     bestuende die alte Pruefung und lieferte eine tote Kennung zurueck -
+     der Spieler waere danach aus jeder Clanliste verschwunden, ohne
+     Meldung. */
+  const v = clanDaten(w);
+  return v ? clanAufgeloest(w) : "";
 }
+/* Zwei Clans werden einer. Gibt die Zahl der umgetragenen Mitglieder
+   zurueck, oder -1, wenn es gar nicht geht.
+
+   Reihenfolge mit Absicht: erst die Mitglieder, dann der Zeiger. Bricht es
+   mittendrin ab - Fenster zu, Netz weg -, stehen einfach wieder zwei Clans
+   da wie vorher, nur mit ein paar schon umgetragenen Leuten. Man drueckt
+   noch einmal, und der zweite Durchlauf kostet nichts: unveraenderte Zeilen
+   erkennt der Server und stempelt sie nicht neu. */
+function clanFusion(vonId, nachId){
+  const ziel = clanAufgeloest(nachId);
+  const quelle = clanAufgeloest(vonId);
+  if (!quelle || !ziel || quelle === ziel) return -1;
+  const a = clanDaten(quelle), b = clanDaten(ziel);
+  if (!a || !b) return -1;
+
+  /* Der bleibende Clan behaelt alles, was er hat - leere Felder fuellt der
+     aufgeloeste auf. Der unterlegene Text ist nicht verloren: er steht
+     weiter in der aufgeloesten Zeile und in der Pruefspur. */
+  const erg = {};
+  if (!b.tag  && a.tag)  erg.tag  = a.tag;
+  if (!b.name && a.name) erg.name = a.name;
+  if (b.f == null && a.f != null) erg.f = a.f;
+  if (!b.eigen && a.eigen) erg.eigen = 1;
+  if (Object.keys(erg).length) clanSetzen(ziel, erg);
+
+  let n = 0;
+  for (const k in S.roster){
+    const e = S.roster[k];
+    if (!e || !e.v || e.v.clan !== quelle) continue;
+    stamp("roster", k, Object.assign({}, e.v, {clan: ziel}));
+    n++;
+  }
+  /* Erst jetzt der Zeiger: er ist das Sicherheitsnetz fuer Nachzuegler,
+     nicht das Fundament. Die Wahrheit steht beim Spieler. */
+  stamp("clan", quelle, Object.assign({}, a, {weg: ziel}));
+  save();
+  return n;
+}
+
 /* Einmal beim Start: Spielerzeilen, die noch einen Clan-FREITEXT tragen,
    auf eine Kennung umstellen. Danach haengt die Zuteilung an der Adresse
    und nicht mehr am Namen - und ein Umbenennen kann sie nicht mehr
@@ -9684,7 +9758,10 @@ function intelDialog(tab, seite){
             <td style="text-align:left">${clanEtikett(cl.id)}
               ${cl.name && cl.tag ? `<small style="color:var(--dim2)">${esc(cl.name)}</small>` : ""}
               <button class="btn" data-clanname="${esc(cl.id)}"
-                style="padding:0 6px;font-size:10px;margin-left:4px">${cl.vorl ? "Name it" : "Rename"}</button></td>
+                style="padding:0 6px;font-size:10px;margin-left:4px">${cl.vorl ? "Name it" : "Rename"}</button>
+              ${clans.length > 1 ? `<button class="btn" data-clanfusion="${esc(cl.id)}"
+                style="padding:0 6px;font-size:10px;margin-left:2px"
+                title="This clan turned out to be the same as another one">Same as …</button>` : ""}</td>
             <td style="text-align:left"><select data-clanseite="${esc(cl.id)}" class="mini"
                 title="The side of the clan itself. Does not touch its members.">
               <option value="">—</option>
@@ -9947,6 +10024,36 @@ function intelDialog(tab, seite){
       for (const p of mit) merkeSpieler(p.name, v.f, id);
       neuAuf("clans");
       toast(`${clanTitel(id)}: ${mit.length} moved to ${FACTIONS[v.f].tag}`);
+    });
+  });
+
+  /* Zwei Clans sind einer. Der angeklickte geht auf, das gewaehlte Ziel
+     bleibt - deshalb steht auf dem Knopf "Same as", nicht "Merge": es sagt,
+     in welche Richtung es geht. */
+  document.querySelectorAll("[data-clanfusion]").forEach(b => {
+    b.addEventListener("click", ()=>{
+      const von = b.dataset.clanfusion;
+      const andere = [...clans().keys()].filter(k => k !== von);
+      if (!andere.length) return;
+      const wahl = prompt(
+        `"${clanTitel(von)}" is the same clan as which one?\n\n`
+        + andere.map((k, i) => `${i+1}. ${clanTitel(k)}`
+            + ` (${clanListe().find(c=>c.id===k).spieler.length} players)`).join("\n")
+        + `\n\nEnter a number:`);
+      if (wahl === null) return;
+      const nr = parseInt(wahl, 10);
+      if (!(nr >= 1 && nr <= andere.length)){ toast("Not a valid number"); return; }
+      const nach = andere[nr-1];
+      const wieviele = clanListe().find(c => c.id === von).spieler.length;
+      if (!confirm(
+        `Merge "${clanTitel(von)}" into "${clanTitel(nach)}"?\n\n`
+        + `${wieviele} player${wieviele===1?"":"s"} will move over. `
+        + `"${clanTitel(von)}" disappears from the list but is not deleted — `
+        + `its name stays readable and the move is recorded.`)) return;
+      const n = clanFusion(von, nach);
+      if (n < 0){ toast("That did not work"); return; }
+      neuAuf("clans"); draw();
+      toast(`${n} player${n===1?"":"s"} moved to ${clanTitel(nach)}`);
     });
   });
 
@@ -16759,7 +16866,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b5ebe7bbe4</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 4bf0c6b228</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
