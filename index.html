@@ -2000,6 +2000,32 @@ function clanSetzen(id, felder){
   return true;
 }
 
+/* Ein Auswahlfeld ueber alle bekannten Clans, dazu die beiden Wege, einen
+   neuen anzulegen. Der zweite ist Ennos eigentlicher Fall: man sieht, dass
+   Leute zusammengehoeren, lange bevor man weiss, wie ihr Clan heisst. */
+function clanWahlFeld(id, gewaehlt){
+  const liste = [...clans().entries()]
+    .sort((a, b) => clanTitel(a[0]).localeCompare(clanTitel(b[0])));
+  return `<select id="${id}">
+    <option value="">no clan</option>
+    ${liste.map(([k]) => `<option value="${esc(k)}"${k===gewaehlt?" selected":""}>`
+      + `${esc(clanTitel(k))}${clanDaten(k).vorl ? " — name not known" : ""}</option>`).join("")}
+    <option value="+">— new clan…</option>
+    <option value="?">— new, name not known yet</option>
+  </select>`;
+}
+/* Was das Auswahlfeld ausgesucht hat, in eine Kennung uebersetzen - und
+   dabei anlegen, was angelegt werden muss. Gibt "" fuer "kein Clan". */
+function clanAusWahl(wahl, text){
+  if (wahl === "?") return clanAnlegen({});
+  if (wahl === "+"){
+    const s = String(text || "").trim();
+    if (!s) return clanAnlegen({});          // nichts eingetippt: Platzhalter
+    return clanAnlegen(s.length <= 8 ? {tag: s} : {name: s});
+  }
+  return wahl || "";
+}
+
 /* Die Zugehoerigkeit eines Spielers als Kennung. Steht dort noch Alttext
    aus der Zeit vor dieser Umstellung, wird beim Lesen einmalig ein Clan
    daraus - so geht nichts verloren, und niemand muss etwas nachtragen. */
@@ -12047,11 +12073,14 @@ function ocrDialog(){
       <div id="ocr-out" style="display:none;flex-direction:column;gap:6px">
         <div id="ocr-stadt-box"></div>
         <div style="font-size:11.5px;color:var(--dim);border-top:1px solid var(--line);padding-top:8px">
-          Tick what is a player name, fix typos and clan tags, then add.
-          OCR gets decorated names wrong more often than not.</div>
+          Tick what is a player name and fix typos, then pick a clan for all
+          of them at once. Reading decorated names goes wrong more often than
+          not — the name stays exactly as you leave it here.</div>
         <div id="ocr-list" style="max-height:34vh;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
         <div class="row" style="align-items:center">
-          <input type="text" id="ocr-clan" placeholder="clan for all ticked" style="flex:1">
+          ${clanWahlFeld("ocr-clan", "")}
+          <input type="text" id="ocr-clanneu" placeholder="tag or full name"
+                 style="flex:1;display:none">
           <select id="ocr-fac" style="width:120px"><option value="">faction?</option>
             ${FACTIONS.map(f=>`<option value="${f.id}">${f.name}</option>`).join("")}</select>
         </div>
@@ -12064,17 +12093,33 @@ function ocrDialog(){
   document.getElementById("d-close").addEventListener("click", ()=>{ closeDlg();
     neuAuf("players"); });
   bildQuelle("ocr-file", ocrLesen);
+  /* Das Namensfeld erscheint nur, wenn ein neuer Clan angelegt werden soll -
+     und nur beim benannten. "name not known yet" braucht keine Eingabe, das
+     ist ja gerade der Punkt. */
+  const clanWahl = document.getElementById("ocr-clan");
+  const clanNeu  = document.getElementById("ocr-clanneu");
+  clanWahl.addEventListener("change", ()=>{
+    clanNeu.style.display = clanWahl.value === "+" ? "" : "none";
+    if (clanWahl.value === "+") clanNeu.focus();
+  });
   document.getElementById("ocr-go").addEventListener("click", ()=>{
-    const clanAlle = document.getElementById("ocr-clan").value.trim();
+    /* Einmal aufloesen, nicht je Zeile - sonst entstuende fuer jeden
+       Angehaekelten ein eigener neuer Clan statt eines gemeinsamen. Genau
+       das ist Ennos Fall: die fuenf gehoeren ZU EINEM. */
+    const clanId = clanAusWahl(document.getElementById("ocr-clan").value,
+                               document.getElementById("ocr-clanneu").value);
     const fv = document.getElementById("ocr-fac").value;
     let n = 0;
     document.querySelectorAll("#ocr-list .zeile").forEach(z => {
       if (!z.querySelector("input[type=checkbox]").checked) return;
-      const felder = z.querySelectorAll("input[type=text]");
-      const nm = felder[0].value.trim();
-      const clan = (felder[1] && felder[1].value.trim()) || clanAlle;
-      if (merkeSpieler(nm, fv === "" ? undefined : +fv, clan)) n++;
+      const nm = z.querySelector("input[type=text]").value.trim();
+      if (merkeSpieler(nm, fv === "" ? undefined : +fv, clanId)) n++;
     });
+    /* Die Seite, die oben gewaehlt wurde, gilt auch fuer den Clan - sonst
+       stuende sie an jedem Mitglied, aber nicht an dem Ding, zu dem sie
+       gehoert. */
+    if (clanId && fv !== "" && clanDaten(clanId) && clanDaten(clanId).f == null)
+      clanSetzen(clanId, {f: +fv});
     // Stadt und Staerke uebernehmen
     let stadtTxt = "";
     const ort = stadtAus("ocr-stadt");
@@ -12171,19 +12216,16 @@ async function ocrLesen(datei, quelle){
 
   const liste = document.getElementById("ocr-list");
   liste.innerHTML = kand.map(z => {
-    /* Der Clan wird NICHT aus dem Namen geraten. Was jemand selbst in
-       seinen Namen schreibt ("[SRB]CrazySerb"), ist ein Behelf des
-       Einzelnen - Clans gibt es im Spiel nicht, sie entstehen ausserhalb,
-       und die Kuerzel vergibt die eigene Fraktion. Wer hier einen Clan
-       eintraegt, teilt ihn zu; geraten wird nichts. */
-    const clan = "", nm = z;
+    /* Der Name bleibt, wie er dasteht - alles darin gehoert zum Namen.
+       Der Clan wird nicht je Zeile eingetippt, sondern unten fuer alle
+       Angehaekelten auf einmal gewaehlt. */
+    const nm = z;
     const bekannt = spielerListe().find(p => namKey(p.name) === namKey(nm));
     return `<label class="zeile" style="display:flex;align-items:center;gap:6px">
       <input type="checkbox" ${bekannt?"":"checked"}>
       <input type="text" value="${esc(nm)}" style="flex:1;background:var(--panel2);
         border:1px solid var(--line);border-radius:2px;padding:3px 6px;outline:0;font-size:12px">
-      <input type="text" value="${esc(clan)}" placeholder="clan" style="width:78px;background:var(--panel2);
-        border:1px solid var(--line);border-radius:2px;padding:3px 6px;outline:0;font-size:11px">
+
       ${bekannt?`<span style="font-size:10px;color:var(--dim2)">known</span>`:""}
     </label>`;
   }).join("");
@@ -16568,7 +16610,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 6469d03722</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 3ad84860d3</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
