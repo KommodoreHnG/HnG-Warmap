@@ -1892,18 +1892,26 @@ function merkeSpieler(name, f, clan, fp){
 /* Clans are not a separate table — they are whatever players are tagged with.
    Grouping them is how you see that a sighting is an organised operation
    rather than a handful of randoms. */
+/* Die angelegten Clans mit ihren Mitgliedern. Frueher entstand diese Liste
+   aus dem Freitext der Spieler: jede Schreibweise war ein eigener Clan, und
+   ein Clan ohne Mitglieder existierte gar nicht - man konnte also keinen
+   anlegen, bevor man jemanden zuteilt. Jetzt fuehrt die Liste die
+   angelegten Clans, und die Mitglieder kommen dazu. */
 function clanListe(){
   const m = new Map();
+  for (const [id, v] of clans())
+    m.set(id, {id, tag: v.tag || "", name: v.name || "", f: v.f,
+               eigen: !!v.eigen, vorl: !!v.vorl,
+               titel: clanTitel(id), spieler: [], teams: 0});
   for (const p of spielerListe()){
-    const c = (p.clan || "").trim();
-    if (!c) continue;
-    const d = m.get(c.toLowerCase()) || {name:c, spieler:[], teams:0, f:new Map()};
+    const id = clanIdVon(p.name);
+    const d = id && m.get(id);
+    if (!d) continue;
     d.spieler.push(p);
     d.teams += feindDepot(p.key).length;
-    if (p.f != null) d.f.set(p.f, (d.f.get(p.f)||0) + 1);
-    m.set(c.toLowerCase(), d);
   }
-  return [...m.values()].sort((a,b)=> b.spieler.length - a.spieler.length);
+  return [...m.values()].sort((a, b) =>
+    b.spieler.length - a.spieler.length || a.titel.localeCompare(b.titel));
 }
 /* A tag people put in their own name — "[SRB]CrazySerb", "ROS | Peter".
    The full string stays the name; this is only the derived grouping. */
@@ -1934,13 +1942,29 @@ function tagAus(name){
 /* Aus dem Kuerzel eine Farbe. Immer dieselbe fuer dasselbe Kuerzel, und
    ueber den Farbkreis verteilt, damit benachbarte Clans sich unterscheiden.
    Helligkeit je nach Hintergrund, sonst verschwindet das Etikett. */
-function clanFarbe(tag){
+/* Die Farbe kommt aus der KENNUNG, nicht aus dem Kuerzel. Sonst wechselte
+   eine Gruppe beim Umbenennen ihre Farbe - ausgerechnet dann, wenn man sie
+   wiedererkennen will. Die Kennung aendert sich nie, die Farbe also auch
+   nicht. */
+function clanFarbe(id){
+  const s = String(id || "");
   let n = 0;
-  for (let i = 0; i < tag.length; i++) n = (n * 31 + tag.charCodeAt(i)) % 360;
+  for (let i = 0; i < s.length; i++) n = (n * 31 + s.charCodeAt(i)) % 360;
   return `hsl(${n} 52% ${light() ? 34 : 70}%)`;
 }
-const clanEtikett = tag => tag
-  ? `<span class="cbadge" style="--c:${clanFarbe(tag)}">${esc(tag)}</span>` : "";
+/* Das Faehnchen zu einer Kennung. Ein unbenannter Clan bekommt ein
+   Fragezeichen und zwei feste Zeichen aus seiner Kennung - ehrlich (wir
+   wissen, dass sie zusammengehoeren, nicht wie sie heissen) und stabil,
+   anders als eine Durchnummerierung, die springt, sobald irgendwo ein Clan
+   dazukommt. */
+function clanEtikett(id){
+  if (!id) return "";
+  const v = clanDaten(id);
+  if (!v) return "";
+  const text = v.tag || v.name || ("?" + String(id).slice(-2));
+  return `<span class="cbadge" style="--c:${clanFarbe(id)}"`
+       + `${v.vorl ? ' title="name not known yet"' : ""}>${esc(text)}</span>`;
+}
 /* ---- Clans -----------------------------------------------------------
    Ein Clan ist ein eigenes Ding, kein abgeleitetes Merkmal: es gibt ihn im
    Spiel gar nicht, er entsteht ausserhalb, und die Kuerzel vergeben wir
@@ -1980,10 +2004,19 @@ function clanTitel(id){
 }
 
 /* Anlegen. Gibt die Kennung zurueck, unter der zugeteilt wird. */
+/* Ein Clan ist ein Platzhalter, solange er weder Kuerzel noch Namen hat.
+   Diese Rechnung stand frueher nur in clanSetzen; clanAnlegen liess den
+   Vorgabewert vorl:1 stehen, weil Object.assign ihn nicht ueberschreibt -
+   ein MIT Namen angelegter Clan galt damit als unbenannt. Zwei Stellen, die
+   dasselbe wissen mussten, sind eine geworden. */
+function clanSatz(felder){
+  const v = Object.assign({tag: "", name: "", f: null, eigen: 0}, felder || {});
+  v.vorl = (v.tag || v.name) ? 0 : 1;
+  return v;
+}
 function clanAnlegen(felder){
   const id = clanKennung();
-  stamp("clan", id, Object.assign(
-    {tag: "", name: "", f: null, eigen: 0, vorl: 1}, felder || {}));
+  stamp("clan", id, clanSatz(felder));
   save();
   return id;
 }
@@ -1993,9 +2026,7 @@ function clanAnlegen(felder){
 function clanSetzen(id, felder){
   const v = clanDaten(id);
   if (!v) return false;
-  const neu = Object.assign({}, v, felder);
-  neu.vorl = (neu.tag || neu.name) ? 0 : 1;
-  stamp("clan", id, neu);
+  stamp("clan", id, clanSatz(Object.assign({}, v, felder)));
   save();
   return true;
 }
@@ -2029,19 +2060,51 @@ function clanAusWahl(wahl, text){
 /* Die Zugehoerigkeit eines Spielers als Kennung. Steht dort noch Alttext
    aus der Zeit vor dieser Umstellung, wird beim Lesen einmalig ein Clan
    daraus - so geht nichts verloren, und niemand muss etwas nachtragen. */
+/* NUR LESEN. Diese Funktion legt nichts an und veraendert nichts - sie
+   wird beim Zeichnen und in jeder Liste gerufen.
+
+   Sie tat frueher beides, und daran zerbrach der Bau: sie loeste Freitext
+   auf und legte dabei einen Clan an, schrieb die Kennung aber NICHT in die
+   Spielerzeile zurueck. Dort stand weiter "ROS". Nach einem Umbenennen fand
+   sie keinen Clan dieses Namens mehr - und legte einen neuen an. Aus einem
+   Clan mit fuenf Leuten wurden zwei: der umbenannte, leer, und ein frisch
+   erfundener mit allen fuenf. Das Umwandeln geschieht deshalb jetzt einmal
+   beim Start, siehe clanAlttextWandeln. */
 function clanIdVon(name){
   const e = S.roster[spielerKey(name)];
   const w = (e && e.v && e.v.clan) || "";
-  if (!w) return "";
-  if (istKennung(w)) return S.clan[w] ? w : "";
-  /* Alttext: einen passenden Clan suchen, sonst anlegen. */
-  for (const [id, v] of clans())
-    if ((v.tag || "").toLowerCase() === w.toLowerCase()
-     || (v.name || "").toLowerCase() === w.toLowerCase()) return id;
-  return clanAnlegen({tag: w.length <= 8 ? w : "", name: w.length > 8 ? w : ""});
+  if (!w || !istKennung(w)) return "";
+  return S.clan[w] ? w : "";
+}
+/* Einmal beim Start: Spielerzeilen, die noch einen Clan-FREITEXT tragen,
+   auf eine Kennung umstellen. Danach haengt die Zuteilung an der Adresse
+   und nicht mehr am Namen - und ein Umbenennen kann sie nicht mehr
+   zerreissen.
+
+   Laeuft nur mit Aufklaerungsrecht: sonst entstuenden Zeilen, die der
+   Server abweist, und der Sendestapel risse bei jedem Verbinden. */
+function clanAlttextWandeln(){
+  if (!darf("aufklaerung")) return 0;
+  let n = 0;
+  for (const k in S.roster){
+    const e = S.roster[k];
+    const w = (e && e.v && e.v.clan) || "";
+    if (!w || istKennung(w)) continue;
+    let ziel = "";
+    for (const [id, v] of clans())
+      if ((v.tag || "").toLowerCase() === w.toLowerCase()
+       || (v.name || "").toLowerCase() === w.toLowerCase()){ ziel = id; break; }
+    if (!ziel) ziel = clanAnlegen(w.length <= 8 ? {tag: w} : {name: w});
+    stamp("roster", k, Object.assign({}, e.v, {clan: ziel}));
+    n++;
+  }
+  if (n) save();
+  return n;
 }
 /* Wie der Clan eines Spielers heisst - fuer Anzeigen. */
 const clanVon = name => clanTitel(clanIdVon(name));
+/* Fuer Anzeigen, die das Faehnchen wollen: die Kennung. */
+const clanEtikettVon = name => clanEtikett(clanIdVon(name));
 /* Der Name, wie er ueberall in der Oberflaeche stehen soll: eigener Text,
    dahinter das Clankuerzel als Etikett.
 
@@ -2054,7 +2117,7 @@ const clanVon = name => clanTitel(clanIdVon(name));
    Gibt fertiges HTML zurueck - der Name ist darin schon entschaerft. */
 const nameMitClan = name => {
   const n = String(name || "");
-  return esc(n) + clanEtikett(clanVon(n));
+  return esc(n) + clanEtikettVon(n);
 };
 /* Which clans are behind the sightings at a town */
 function clansAt(i){
@@ -2217,7 +2280,8 @@ const AUTOR_TEIL = {depot: 1, units: 2, join: 2, post: 2, line: 2, spot: 2,
    beim naechsten echten Bearbeiten ohnehin neu eingetragen. */
 function darfIchSchieben(bucket, id){
   if (bucket === "anon") return id === anonKennung();
-  if (bucket === "roster" || bucket === "edep") return darf("aufklaerung");
+  if (bucket === "roster" || bucket === "edep" || bucket === "clan")
+    return darf("aufklaerung");
   if (bucket === "ok") return darf("bestaetigen");
   if (bucket === "meta") return istLeader() || istAdmin();
   return true;
@@ -9519,8 +9583,10 @@ function intelDialog(tab, seite){
   /* Clans are not a table in the game — they are what players call
      themselves. Grouped here they turn a handful of sightings into
      "an organised operation", which is the whole point of the window. */
+  /* Die Seite steht AM CLAN. Frueher wurde sie aus der Mehrheit seiner
+     Spieler geraten - eine Automatik, die zwei falsch erfasste Mitglieder
+     genuegen liessen, um einen ganzen Clan der falschen Seite zuzuschlagen. */
   const clans = clanListe().map(cl => {
-    const top = [...cl.f.entries()].sort((a,b)=>b[1]-a[1])[0];
     const kompo = new Map();
     let t = 0, gesehen = 0;
     for (const p of cl.spieler){
@@ -9529,8 +9595,8 @@ function intelDialog(tab, seite){
       const s = proSpieler.get(p.key);
       if (s){ gesehen += s.teams; t = Math.max(t, s.t || 0); }
     }
-    return {...cl, top: top ? top[0] : null, kompo, t, gesehen};
-  }).filter(cl => nurSeite === null || cl.top === nurSeite)
+    return {...cl, kompo, t, gesehen};
+  }).filter(cl => nurSeite === null || cl.f === nurSeite)
     .sort((a,b)=> b.spieler.length - a.spieler.length || b.teams - a.teams);
 
   openDlg(`
@@ -9604,16 +9670,31 @@ function intelDialog(tab, seite){
              No single block would cut anything off right now.</p>`}
       </div>
       <div class="tabp on" data-tab="clans">
+        <div class="row" style="margin-bottom:8px">
+          <button class="btn" id="cl-neu" style="flex:1">+ New clan …</button>
+          <button class="btn" id="cl-neu-unbek" style="flex:1"
+                  title="For a group you have seen together but cannot name yet">
+            + They belong together (no name yet)</button>
+        </div>
         ${clans.length ? `<div class="tw"><table>
-          <thead><tr><th>Clan</th><th>Fights for</th><th>Players</th><th>Known teams</th>
+          <thead><tr><th>Clan</th><th>Side</th><th>Ours?</th><th>Players</th><th>Known teams</th>
             <th>Seen</th><th colspan="2">What they field</th><th>Last</th></tr></thead>
           <tbody>${clans.map(cl=>`<tr class="fac-row"
-              style="--f:${cl.top!=null?col(FACTIONS[cl.top]):"var(--dim2)"}">
-            <td><b style="color:var(--accent)">${esc(cl.name)}</b></td>
-            <td style="text-align:left"><select data-clanfac="${esc(cl.name)}" class="mini">
-              <option value="">${cl.top!=null?FACTIONS[cl.top].tag:"—"}</option>
-              ${FACTIONS.map(f=>`<option value="${f.id}">→ ${f.tag}</option>`).join("")}
-            </select></td>
+              style="--f:${cl.f!=null?col(FACTIONS[cl.f]):"var(--dim2)"}">
+            <td style="text-align:left">${clanEtikett(cl.id)}
+              ${cl.name && cl.tag ? `<small style="color:var(--dim2)">${esc(cl.name)}</small>` : ""}
+              <button class="btn" data-clanname="${esc(cl.id)}"
+                style="padding:0 6px;font-size:10px;margin-left:4px">${cl.vorl ? "Name it" : "Rename"}</button></td>
+            <td style="text-align:left"><select data-clanseite="${esc(cl.id)}" class="mini"
+                title="The side of the clan itself. Does not touch its members.">
+              <option value="">—</option>
+              ${FACTIONS.map(f=>`<option value="${f.id}"${cl.f===f.id?" selected":""}>${f.tag}</option>`).join("")}
+            </select>${cl.spieler.length && cl.f != null ? `
+              <button class="btn" data-clanmit="${esc(cl.id)}"
+                style="padding:0 6px;font-size:10px;margin-left:3px"
+                title="Also move every recorded member to this side">→ ${cl.spieler.length}</button>` : ""}</td>
+            <td><label class="toggle" style="justify-content:center"><input type="checkbox"
+                data-claneigen="${esc(cl.id)}"${cl.eigen?" checked":""}><span></span></label></td>
             <td>${cl.spieler.length}</td>
             <td>${cl.teams||"—"}</td>
             <td>${cl.gesehen||"—"}</td>
@@ -9623,10 +9704,10 @@ function intelDialog(tab, seite){
                    ${symbolSVG(k, c, 20, 14)}<small>${v}</small></span>`).join("") || "—"}</td>
             <td style="color:var(--dim2)">${cl.t?alterText(cl.t):"—"}</td>
           </tr>`).join("")}</tbody></table></div>`
-          : `<div class="empty">No clans yet. Put a tag in a player's <b>clan</b> field on the
-             Players tab and they group up here.</div>`}
-        <div class="note">A clan's side follows the majority of its players. Setting one here
-          moves <b>every recorded member</b>.</div>
+          : `<div class="empty">No clans yet. Create one above, or tick players on a battle
+             screenshot and group them.</div>`}
+        <div class="note">A clan's side is set here, not guessed from its players. The
+          <b>→ n</b> button next to it also moves every recorded member — that one asks first.</div>
       </div>
 
       <div class="tabp" data-tab="players">
@@ -9648,8 +9729,8 @@ function intelDialog(tab, seite){
           <tbody>${liste.map(([key,d])=>`<tr>
             <td><a href="#" data-oeffne="${esc(key)}" style="color:var(--accent)">${esc(d.name)}</a>${
               uebergelaufen(key) ? ` <em style="color:var(--accent);font-size:10px">ours</em>` : ""}</td>
-            <td><input class="mini" data-clan="${esc(key)}" value="${esc((S.roster[key]&&S.roster[key].v&&S.roster[key].v.clan)||"")}"
-                  placeholder="—" style="width:88px"></td>
+            <td style="text-align:left">${clanWahlFeld("cw-" + key, clanIdVon(d.name))
+                .replace("<select", `<select class="mini" data-clanwahl="${esc(d.name)}"`)}</td>
             <td><select data-fac="${esc(key)}" class="mini">
               <option value="">—</option>
               ${FACTIONS.map(f=>`<option value="${f.id}"${d.f===f.id?" selected":""}>${f.tag}</option>`).join("")}
@@ -9809,26 +9890,94 @@ function intelDialog(tab, seite){
       const l = ereignisse(); l.splice(+b.dataset.erm, 1); setEreignisse(l); neuAuf("when");
     }));
   }
-  document.querySelectorAll("[data-clanfac]").forEach(sel => {
-    sel.addEventListener("change", ()=>{
-      const f = sel.value === "" ? null : +sel.value;
-      if (f === null) return;
-      const name = sel.dataset.clanfac;
-      const mit = spielerListe().filter(p => (p.clan||"").trim().toLowerCase() === name.trim().toLowerCase());
-      if (!mit.length) return;
-      if (!confirm(`Move all ${mit.length} recorded member${mit.length===1?"":"s"} of `
-                 + `${name} to ${FACTIONS[f].name}?`)){ neuAuf("clans"); return; }
-      for (const p of mit) merkeSpieler(p.name, f, p.clan);
+  /* Einen Clan anlegen - benannt oder ausdruecklich ohne Namen. */
+  const knNeu = document.getElementById("cl-neu");
+  if (knNeu) knNeu.addEventListener("click", ()=>{
+    const s = prompt("Tag or full name of the clan:");
+    if (s === null) return;
+    const txt = s.trim();
+    clanAnlegen(txt ? (txt.length <= 8 ? {tag: txt} : {name: txt}) : {});
+    neuAuf("clans");
+    toast(txt ? `${txt} created` : "Unnamed clan created");
+  });
+  const knUnbek = document.getElementById("cl-neu-unbek");
+  if (knUnbek) knUnbek.addEventListener("click", ()=>{
+    const id = clanAnlegen({});
+    neuAuf("clans");
+    toast(`${clanTitel(id)} created — name it once you know it`);
+  });
+
+  /* Benennen. Es wird GENAU EINE Zeile geschrieben: die des Clans. Keine
+     einzige Zuteilung wird angefasst - sie zeigen alle auf die Kennung und
+     wissen vom Umbenennen nichts. Genau daran scheiterte der alte Aufbau. */
+  document.querySelectorAll("[data-clanname]").forEach(b => {
+    b.addEventListener("click", ()=>{
+      const id = b.dataset.clanname, v = clanDaten(id);
+      if (!v) return;
+      const s = prompt("Tag or full name:", v.tag || v.name || "");
+      if (s === null) return;
+      const txt = s.trim();
+      clanSetzen(id, txt.length <= 8 ? {tag: txt, name: v.name}
+                                     : {tag: v.tag, name: txt});
       neuAuf("clans");
-      toast(`${name}: ${mit.length} moved to ${FACTIONS[f].tag}`);
+      toast(txt ? `Now called ${txt}` : "Name cleared");
     });
   });
-  document.querySelectorAll("[data-clan]").forEach(inp => {
-    inp.addEventListener("click", ev => ev.stopPropagation());
-    inp.addEventListener("change", ()=>{
-      const d = proSpieler.get(inp.dataset.clan);
-      merkeSpieler(d.name, undefined, inp.value.trim());
-      draw(); toast(inp.value.trim() ? `${d.name} → ${inp.value.trim()}` : "Clan cleared");
+
+  /* Die Seite DES CLANS. Eine Zeile, keine Rueckfrage - es aendert sich
+     nichts an den Mitgliedern. */
+  document.querySelectorAll("[data-clanseite]").forEach(sel => {
+    sel.addEventListener("change", ()=>{
+      clanSetzen(sel.dataset.clanseite, {f: sel.value === "" ? null : +sel.value});
+      neuAuf("clans");
+    });
+  });
+
+  /* Die Mitglieder umstellen. Das ist die folgenschwere Aktion: N Zeilen.
+     Deshalb ein eigener Knopf und eine Rueckfrage mit Anzahl. */
+  document.querySelectorAll("[data-clanmit]").forEach(b => {
+    b.addEventListener("click", ()=>{
+      const id = b.dataset.clanmit, v = clanDaten(id);
+      if (!v || v.f == null) return;
+      const mit = spielerListe().filter(p => clanIdVon(p.name) === id);
+      if (!mit.length) return;
+      if (!confirm(`Also move all ${mit.length} recorded member`
+                 + `${mit.length===1?"":"s"} of ${clanTitel(id)} to `
+                 + `${FACTIONS[v.f].name}?`)) return;
+      for (const p of mit) merkeSpieler(p.name, v.f, id);
+      neuAuf("clans");
+      toast(`${clanTitel(id)}: ${mit.length} moved to ${FACTIONS[v.f].tag}`);
+    });
+  });
+
+  /* Eigen oder gegnerisch. Steht am Clan, nicht am Spieler - sonst muesste
+     man es fuenfmal eintragen und koennte sich fuenfmal widersprechen. */
+  document.querySelectorAll("[data-claneigen]").forEach(cb => {
+    cb.addEventListener("change", ()=>{
+      clanSetzen(cb.dataset.claneigen, {eigen: cb.checked ? 1 : 0});
+      neuAuf("clans");
+    });
+  });
+  /* Frueher stand hier ein Freitextfeld, das den ROHEN Feldinhalt zeigte -
+     nach der Umstellung also die nackte Kennung "c-4cmldaw8". Das sah nach
+     kaputten Daten aus, und wer es daraufhin leerte, loeschte die Zuteilung
+     wirklich. Jetzt waehlt man aus den angelegten Clans. */
+  document.querySelectorAll("[data-clanwahl]").forEach(sel => {
+    sel.addEventListener("click", ev => ev.stopPropagation());
+    sel.addEventListener("change", ()=>{
+      const nm = sel.dataset.clanwahl;
+      /* Bei "+" braeuchte es ein Namensfeld, das hier keinen Platz hat -
+         also gleich fragen. Abbruch laesst alles, wie es war. */
+      let wahl = sel.value, txt = "";
+      if (wahl === "+"){
+        const s = prompt("Tag or full name of the new clan:");
+        if (s === null){ neuAuf("players"); return; }
+        txt = s.trim();
+      }
+      const id = clanAusWahl(wahl, txt);
+      merkeSpieler(nm, undefined, id);
+      draw(); neuAuf("players");
+      toast(id ? `${nm} → ${clanTitel(id)}` : "Clan cleared");
     });
   });
   document.querySelectorAll("[data-oeffne]").forEach(el => el.addEventListener("click", ev=>{
@@ -16610,7 +16759,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 3ad84860d3</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b5ebe7bbe4</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -17475,6 +17624,11 @@ async function mitgliederDialog(meldung){
   for (const b of BUCKETS) S[b] ||= {};
   S.arrows ||= []; S.gone ||= {};
   if (!S.me) S.me = Math.random().toString(36).slice(2,8);
+  /* Clan-Freitexte aus der Zeit vor der Umstellung einmalig auf Kennungen
+     bringen. Muss VOR dem ersten Zeichnen laufen: danach ist clanIdVon eine
+     reine Lesefunktion, die nichts mehr anlegt - und genau das war der
+     Fehler, an dem das Umbenennen einen Clan spalten konnte. */
+  try { clanAlttextWandeln(); } catch(e){}
   /* Was kein Pfeil ist, fliegt hier heraus, statt den Aufbau zu sprengen.
      Frueher warf diese Schleife auf einem null-Eintrag, und weil der ganze
      Aufbau eine ungesicherte Sofortfunktion war, blieb die Seite weiss. */
