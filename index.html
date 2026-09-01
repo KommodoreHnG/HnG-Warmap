@@ -9176,6 +9176,38 @@ document.getElementById("b-shot").addEventListener("click", ()=>{
   document.getElementById("wa-radar").addEventListener("click", ()=>{ closeDlg(); radarAuf(); });
   document.getElementById("shot-take").addEventListener("click", ()=>{
     if (!shotState) return;
+    /* THE TWO CHECKS THE LIVE WATCH ALREADY MAKES. Without them one click
+       on a wrong picture repaints every town, and the rows go out to the
+       whole clan.
+
+       The watch runs by itself, many times a minute; asking each round
+       would make it useless, so it applies and says so loudly. A dropped
+       picture is the opposite: one deliberate click on an image a person
+       chose. There the question is cheap and the damage without it is
+       large.
+
+       besitzWaeren counts real flips only - on an empty map every first
+       entry would otherwise trip the limit. */
+    /* Three reasons to ask, in the order in which they matter.
+
+       FIRST the fix quality. The live watch refuses outright unless the
+       reading is solid enough to write; a dropped picture only had the
+       entry threshold to clear, and a wrong fix can clear it. This is
+       also the only one of the three that catches a picture from a
+       different war: town positions do not move between wars, so such a
+       shot lines up perfectly, shows all three sides, and changes nothing
+       that was already set - the other two checks stay silent.
+
+       grundNichtReif has already put the reason into plain words, so the
+       question can say what is wrong instead of just that something is. */
+    const zweifel = lesungFragwuerdig(shotState);
+    const umgefaerbt = besitzWaeren(shotState.besitz, true);
+    const grund = shotState.schreibreif === false
+                ? (shotState.warumNicht || "the fix is not solid enough")
+                : zweifel ? zweifel
+                : (umgefaerbt > WACHE_BREMSE
+                    ? `${umgefaerbt} towns would change side at once` : null);
+    if (grund && !confirm(`${grund}.\n\nApply anyway?`)) return;
     const n = besitzUebernehmen(shotState.besitz);
     closeDlg();
     toast(n ? `${n} towns updated — the radar room can put them back` : "Nothing changed");
@@ -9860,13 +9892,23 @@ async function screenshotLesen(datei){
   const res = kartenAusBild(bild, p => setz(`Matching … ${Math.round(p*100)} %`));
   URL.revokeObjectURL(bild.src);
   if (res.fehler){ setz(`<b>${esc(res.fehler)}</b>`); return; }
+  /* THE CONFIDENCE VERDICTS COME ALONG. kartenAusBild has already worked
+     them out for this very picture; taking only erg threw them away, and
+     the button was left with nothing but the entry threshold - which a
+     wrong fix can clear, as measured elsewhere in this file. */
   const {erg, tr, punkte, W, H, tmp} = res;
   const n = Object.keys(erg.besitz).length;
   const ms = Math.round(performance.now()-t0);
 
+  /* Two different numbers, and only one of them says whether to trust the
+     reading. The share read tells how much of the map was covered; the fix
+     quality tells whether it was the right map at all. Only the second was
+     missing here. */
+  const guete = Math.round(100*(res.guete || 0));
   setz(`<b>${n} of ${punkte.length} towns read</b> (${Math.round(100*n/punkte.length)} %) in ${ms} ms —
      US ${erg.zaehl[0]}, GE ${erg.zaehl[1]}, USSR ${erg.zaehl[2]}.
      ${erg.aussen} outside the shot, ${erg.unklar} unclear.
+     Fix quality ${guete} %${res.schreibreif ? "" : ` — ${esc(res.warumNicht || "not solid enough to write")}`}.
      <b>${besitzWaeren(erg.besitz)}</b> towns would change.`);
 
   // Kontrollbild
@@ -9883,7 +9925,11 @@ async function screenshotLesen(datei){
     else { sc.strokeStyle = "#ffe14d"; sc.lineWidth = 1; }
     sc.stroke();
   });
-  shotState = erg;
+  /* The reading plus the verdicts about it. Spread rather than nested, so
+     everything that already reads shotState.besitz or .zaehl keeps
+     working - lesungFragwuerdig among them. */
+  shotState = {...erg, guete: res.guete, sicher: res.sicher,
+               schreibreif: res.schreibreif, warumNicht: res.warumNicht};
   document.getElementById("shot-take").disabled = n === 0;
 }
 
@@ -13636,9 +13682,13 @@ async function radarAuf(){
     radarPult();
     return;
   }
-  /* Wer den Radarraum aufmacht, will messen - also gleich nach dem Fenster
-     fragen, statt ihn erst einen Knopf suchen zu lassen. */
-  if (!wacheLaeuft()){
+  /* Opening the room means wanting to measure - so ask for the window
+     right away instead of hiding it behind a button.
+     But not without the intel right: the picker would open, the person
+     would choose a window, and only then would the refusal arrive. The
+     room itself stays open either way; it is also the second screen, and
+     the panel already carries the reason. */
+  if (!wacheLaeuft() && darf("aufklaerung")){
     await wacheStart(2);
     radarPult();
   }
@@ -14411,6 +14461,17 @@ function radarPult(){
       return;
     }
     if (wacheLaeuft()){ wacheStop(false); radarPult(); return; }
+    /* Say it before the window picker opens, not after. Following another
+       device stays possible without the right - only this device's own
+       watch needs it. */
+    if (!darf("aufklaerung")){
+      const g = fernGeber();
+      if (g.length){
+        radarFern = g[0].id; radarPult(); radarZeichnen();
+        toast("Following " + g[0].name + ".");
+      } else toast(rechtSatz("aufklaerung"));
+      return;
+    }
     if (!kannTeilen()){
       const g = fernGeber();
       if (g.length){
@@ -15275,6 +15336,16 @@ function wacheLaeuft(){ return !!wache; }
 const kannTeilen = () => !!(navigator.mediaDevices
                             && navigator.mediaDevices.getDisplayMedia);
 async function wacheStart(sek){
+  /* WITHOUT THE INTEL RIGHT THE WATCH DOES NOT START. It would read on
+     happily and write into the local store, but the server refuses every
+     owner, fight and supply row - so nothing reaches the clan while the
+     screen keeps reporting full success.
+     Worse, the built-in repeat guard never engages: it asks whether a
+     town is already marked, nothing ever gets marked, so every single
+     round tries again from scratch.
+     Checked here rather than in the two callers, because a second place
+     is a second place to forget. Watching stays open - see radarAuf. */
+  if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return false; }
   if (!kannTeilen()){
     toast("This browser cannot share a window."); return false;
   }
@@ -26629,7 +26700,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build ed8303f9ab</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bda6d3e90b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -26764,7 +26835,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "ed8303f9ab";
+const BAU = "bda6d3e90b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
