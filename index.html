@@ -9208,7 +9208,27 @@ async function unitsRahmen(quelle){
   const quer = Math.abs(bm.width/bm.height - 16/9) > 0.02;
   const gross = {w: bm.width, h: bm.height};
   if (bm.close) bm.close();
-  return {c, d: g.getImageData(0, 0, UNITS_W, UNITS_H).data, quer, gross};
+  const id = g.getImageData(0, 0, UNITS_W, UNITS_H), d = id.data;
+  /* SELF-HEALING OF DARK CAPTURES, the way the radar does it. A window
+     shared under Windows HDR arrives up to four times darker than the
+     screen (measured there: median 29 against 128). The colour rules then
+     match nothing - no holder, no side - and the letters lose their
+     contrast. Median of the brightest channel over every seventh pixel;
+     below 55 a linear gain towards 74, in linear light so that hue and
+     channel differences stay put. */
+  const h = new Uint32Array(256);
+  let n = 0;
+  for (let p = 0; p < d.length; p += 28){ h[Math.max(d[p], d[p+1], d[p+2])]++; n++; }
+  let hell = 0, sum = 0;
+  for (let v = 0; v < 256; v++){ sum += h[v]; if (sum >= n/2){ hell = v; break; } }
+  let gain = 1;
+  if (hell < 55){
+    gain = Math.min(24, srgbLin(74) / Math.max(srgbLin(4), srgbLin(hell)));
+    const lut = boostLut(gain);
+    for (let p = 0; p < d.length; p += 4){ d[p] = lut[d[p]]; d[p+1] = lut[d[p+1]]; d[p+2] = lut[d[p+2]]; }
+    g.putImageData(id, 0, 0);
+  }
+  return {c, d, quer, gross, hell, gain};
 }
 const unitsMax = (d,p) => Math.max(d[p], d[p+1], d[p+2]);
 const unitsMin = (d,p) => Math.min(d[p], d[p+1], d[p+2]);
@@ -9455,8 +9475,8 @@ async function unitsStaerke(c, d, oben, melde){
    null, never guessed. */
 async function unitsLesen(quelle, melde){
   const sag = melde || (()=>{});
-  const {c, d, quer, gross} = await unitsRahmen(quelle);
-  const R = {gross, quer, karten: [], stadt: null, seite: null, roll: null, form: null, einheit: null};
+  const {c, d, quer, gross, hell, gain} = await unitsRahmen(quelle);
+  const R = {gross, quer, hell, gain, karten: [], stadt: null, seite: null, roll: null, form: null, einheit: null};
   /* THE BATTLE WINDOW FIRST. A line's bar can come without town name and
      disc; the window opened by clicking the battle itself names both in
      its heading - "EINNEHMEN & HALTEN BEI SUHL - C", or just the town. Its
@@ -9524,18 +9544,31 @@ async function unitsLesen(quelle, melde){
   if (kasten){
     const Z = UNITS_ZEILEN[kasten.form], B = UNITS_KASTEN.x1-UNITS_KASTEN.x0, o = kasten.oben;
     sag("Reading the unit …");
-    const name = await unitsText(c, UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h);
-    const bes  = await unitsText(c, UNITS_KASTEN.x0, o+Z.besitzer.dy, B, Z.besitzer.h);
+    /* both preparations, the more confident one counts: the tool's
+       local-contrast path reads the PNGs well, the plain threshold held up
+       better on a dark, blurred capture */
+    const besser = async (x, y, w, hh) => {
+      const a = await unitsText(c, x, y, w, hh);
+      const b = await unitsText(c, x, y, w, hh, null, "schlicht");
+      return b.zuv > a.zuv + 5 ? b : a;
+    };
+    const name = await besser(UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h);
+    const bes  = await besser(UNITS_KASTEN.x0, o+Z.besitzer.dy, B, Z.besitzer.h);
     let bes2 = null;
     if (Z.besitzer2) bes2 = await unitsText(c, UNITS_KASTEN.x0, o+Z.besitzer2.dy, B, Z.besitzer2.h);
     const hp = await unitsStaerke(c, d, o);
     /* "GE-008 - AT008 - KATSARIDAS": the tag is what stands before the first
        dash, the rest is the name */
-    const t = name.text.split(AT_TRENNER);
+    /* The separator is " - " with spaces; a dark or blurred capture turns
+       it into "=" or "==" without spaces. Back to the dash first. A hyphen
+       without spaces stays - it belongs to the tag (USSR-004). */
+    const roh = name.text.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ")
+                         .replace(/^[^\p{L}\p{N}]+/u, "");
+    const t = roh.split(AT_TRENNER);
     const bm = /^\s*BESITZER\s*[:;.]?\s*(.*)$/i.exec((bes.text || "") + (bes2 && bes2.text ? " " + bes2.text : ""));
     R.einheit = {
       tag: t.length > 1 ? t[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "",
-      name: (t.length > 1 ? t.slice(1).join(" - ") : name.text).trim(),
+      name: (t.length > 1 ? t.slice(1).join(" - ") : roh).trim(),
       nameZuv: name.zuv,
       besitzer: bm ? bm[1].trim() : null, besitzerRoh: bes.text, besitzerZuv: bes.zuv,
       hp, form: R.form
@@ -9557,17 +9590,36 @@ function unitsEsc(t){ return esc(t == null ? "" : String(t)); }
    (another player took it over). Same tag AND same owner means the same
    unit clicked twice. */
 function unitsNeu(e){
-  return !unitsListe.some(u => u.tag === e.tag && u.name === e.name && u.besitzer === e.besitzer);
+  const k = x => namKey((x.tag || "") + " " + (x.name || ""));
+  const ke = k(e);
+  return !unitsListe.some(u => {
+    if (u.tag === e.tag && u.name === e.name && u.besitzer === e.besitzer) return true;
+    /* the same unit read twice with a slip in the letters: same owner and
+       strength, and tag plus name within a quarter of the letters */
+    if (namKey(u.besitzer || "") !== namKey(e.besitzer || "")) return false;
+    if (JSON.stringify(u.hp || []) !== JSON.stringify(e.hp || [])) return false;
+    const ku = k(u);
+    return levenshtein(ku, ke) <= Math.max(2, Math.round(0.25*Math.max(ku.length, ke.length)));
+  });
 }
 /* Own units are told three ways, any one is enough: the owner is the member
    name, the card is yellow, or the head box is the taller form - the game
    shows morale and the visibility toggle only for units of one's own. */
+/* When the holder is unknown, the cards say what side the units are - but
+   only when every coloured card agrees, and never from yellow (own) cards.
+   On an attack line the cards are the attackers, so this is right there
+   even when a holder is known and differs. */
+function unitsReihenSeite(R){
+  const s = new Set((R.karten || []).map(k => k.seite).filter(x => x === "US" || x === "GE" || x === "SU"));
+  return s.size === 1 ? ["US","GE","SU"].indexOf([...s][0]) : null;
+}
 function unitsZeileAus(R){
   const e = R.einheit; if (!e) return null;
   /* no town of its own: the last battle window said where we are */
   const merk = (!R.stadt && unitsOrtMerk) ? unitsOrtMerk : null;
   return {tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp,
-          seite: R.seite, linie: R.linie || (merk ? merk.linie : null), stadt: R.stadt ? R.stadt.i : (merk ? merk.stadt : null),
+          seite: unitsReihenSeite(R) !== null ? unitsReihenSeite(R) : R.seite,
+          linie: R.linie || (merk ? merk.linie : null), stadt: R.stadt ? R.stadt.i : (merk ? merk.stadt : null),
           nameZuv: e.nameZuv, besitzerZuv: e.besitzerZuv,
           eigen: !!(S.name && e.besitzer && namKey(e.besitzer) === namKey(S.name)) || e.form === "erweitert"};
 }
@@ -9578,6 +9630,10 @@ function unitsZeichnen(){
   let k = "";
   if (R){
     if (R.quer) k += `<div class="note">This picture is not 16:9 (${R.gross.w}×${R.gross.h}); the bar has only been measured on 16:9 screens.</div>`;
+    /* what the capture delivers - the one number that explains a bad read */
+    k += `<div class="dim" style="font-size:12px">Frame ${R.gross.w}×${R.gross.h}, brightness ${R.hell}${
+          R.gain > 1 ? ` — dark capture, brightened ×${R.gain.toFixed(1)}` : ""}${
+          R.gross.w < 3000 ? " — shared below 4K, letters get harder to read" : ""}</div>`;
     if (R.dialog){
       const zielD = (R.linie && R.stadt) ? linieZiel(R.stadt.i, R.linie) : null;
       k += R.stadt ? `<div>Battle window: <b>${unitsEsc(MAP.n[R.stadt.i][0])}</b>${R.linie ? ` · attack line ${R.linie}${zielD !== null ? " → " + unitsEsc(MAP.n[zielD][0]) : ""}` : ""} — units read next are placed there.</div>`
@@ -9710,10 +9766,6 @@ document.getElementById("b-units").addEventListener("click", ()=>{
         <button class="btn primary" id="units-live" style="width:100%;justify-content:center">Capture the game …</button>
         <div class="note">The game must run <b>borderless or windowed</b>. Your own units (yellow cards) are shown but not kept.</div>
       </div>
-      <details style="margin-top:12px">
-        <summary style="cursor:pointer;font-size:12px;color:var(--dim)">One picture instead …</summary>
-        <div style="margin-top:9px">${bildQuelleHTML("units-file")}</div>
-      </details>
       <div id="units-status" style="margin-top:10px;color:var(--dim)">Waiting for a picture …</div>
       <div id="units-kopf" style="margin-top:8px"></div>
       <div class="row" style="margin-top:8px;align-items:center">
@@ -27313,7 +27365,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 1b5d795c10</span></p></div>
+         installation. <span style="color:var(--dim2)">· build f8b90a09f3</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -27448,7 +27500,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "1b5d795c10";
+const BAU = "f8b90a09f3";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
