@@ -9279,13 +9279,21 @@ function unitsRing(d, x0, x1, fy){
 }
 /* The coloured disc with the town's symbol, left of the name. */
 function unitsNode(d, yReihe){
-  const px = []; let n = 0;
+  const px = []; let n = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
   for (let y=yReihe-40; y<yReihe+90; y++) for (let x=1050; x<1150; x++){
     const p = (y*UNITS_W + x)*4;
-    if (unitsMax(d,p) - unitsMin(d,p) > 70){ px.push([d[p], d[p+1], d[p+2]]); n++; }
+    if (unitsMax(d,p) - unitsMin(d,p) > 70){
+      px.push([d[p], d[p+1], d[p+2]]); n++;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
   }
   const u = unitsUrteil(px);
-  return {klasse: n > 200 ? u.klasse : "-", n};
+  /* The disc is compact: about 60 px across, over 1500 saturated points
+     inside a box of at most 80 x 80. Map red or green showing through at
+     the same place is neither (6207 points spread over the whole window
+     in one picture without a bar). */
+  const kompakt = n >= 1500 && (x1-x0) < 80 && (y1-y0) < 80;
+  return {klasse: n > 200 ? u.klasse : "-", n, kompakt};
 }
 /* The white thumb in the scroll track, and the track's left end. Track
    width and thumb width give the share of units on screen. */
@@ -9446,12 +9454,20 @@ async function unitsLesen(quelle, melde){
     });
     const fy = R.karten.length ? k.fy : reihe.y - 5;      /* rim top, 1830 in the usual bar */
     R.node = unitsNode(d, fy + 5);
-    /* a bar is open when cards or the town disc are there - the raster alone
-       also fires on the row of total diamonds further down */
-    R.leiste = R.karten.length > 0 || R.node.klasse !== "-";
+    /* A bar is open when the card runs stand in the 105 grid (at least one
+       neighbouring pair), or when the town disc is compact. The raster
+       alone also fires on the row of total diamonds further down, and any
+       coloured run or any red at the disc's place also comes from the map:
+       a single attacking unit at a burning town gave three runs 117 and
+       65 px apart and 6207 red points where the disc would be. */
+    let paare = 0;
+    for (let i=0; i+1<k.rahmen.length; i++) if (Math.abs((k.rahmen[i+1][0] - k.rahmen[i][0]) - UNITS_RASTER) <= 3) paare++;
+    R.leiste = paare >= 1 || R.node.kompakt;
     R.seite = ["US","GE","SU"].indexOf(R.node.klasse);
     if (R.seite < 0) R.seite = null;
     R.roll = unitsRoll(d);
+    /* no bar, no cards, no holder - what was found there came from the map */
+    if (!R.leiste){ R.karten = []; R.seite = null; R.roll = null; }
     if (R.leiste){
       /* the name field ends at the track's left end - a card mid-blink is
          not found, and the field must not swallow the pale cards */
@@ -27248,7 +27264,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 494ac2d602</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 885e153969</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -27383,7 +27399,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "494ac2d602";
+const BAU = "885e153969";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
