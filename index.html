@@ -1335,7 +1335,8 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-board" title="Clan board — notes, requests, sightings">Board<span class="marke" hidden></span></button>
       <button class="btn" id="b-view">View</button>
       <button class="btn" id="b-shot" hidden>Read screenshot</button>
-      <button class="btn" id="b-war">War</button>
+      <button class="btn" id="b-war">War settings …</button>
+      <button class="btn danger" id="b-reset" style="display:none">Start a new war …</button>
       <div id="menubar"></div>
       <button class="btn" id="b-burger" aria-label="Menu" aria-expanded="false">☰</button>
       <button class="btn" id="b-sync"><span class="dot"></span><span class="txt">Sync off</span></button>
@@ -4690,6 +4691,22 @@ const PFEIL_FARBEN = [
   {k:"pink",   name:"pink",   d:"#ff6fb5", l:"#b0136a"},
 ];
 const pfeilFarbe = k => { const p = PFEIL_FARBEN.find(x => x.k === k && x.d); return p ? (light() ? p.l : p.d) : ""; };
+/* A unit sign on an arrow: the SVG from symbolSVG, loaded once per sign and
+   colour as an image. Until it has loaded the arrow draws without it and
+   asks for a redraw when it is there. */
+const PFEIL_BILDER = new Map();
+function pfeilSymbolBild(k, farbe){
+  if (!AT[k]) return null;
+  const key = k + "|" + farbe;
+  let b = PFEIL_BILDER.get(key);
+  if (b) return b.complete && b.naturalWidth ? b : null;
+  b = new Image();
+  const svg = symbolSVG(k, farbe, 48, 32).replace(/<svg /, '<svg xmlns="http://www.w3.org/2000/svg" ');
+  b.onload = () => requestAnimationFrame(draw);
+  b.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  PFEIL_BILDER.set(key, b);
+  return null;
+}
 function pfeilForm(x1,y1,cx,cy,x2,y2,breite){
   const B  = t => [ (1-t)*(1-t)*x1 + 2*(1-t)*t*cx + t*t*x2,
                     (1-t)*(1-t)*y1 + 2*(1-t)*t*cy + t*t*y2 ];
@@ -4755,7 +4772,7 @@ function drawArrow(a){
   /* The operation name runs along the curve above its middle, capitals with
      a dark rim; behind it the committed strength and, when a planned
      strength is set, "12/20 (60 %)". */
-  if (view.z > 1.1 && (staerke || a.label || a.soll)){
+  if (view.z > 1.1 && (staerke || a.label || a.soll || a.sym)){
     const soll = +a.soll || 0;
     const zahl = soll ? `${staerke}/${soll} (${Math.round(100*staerke/soll)} %)` : (staerke ? `${mit.length}× ${staerke}` : "");
     const txt = [a.label ? String(a.label).toUpperCase() : "", zahl].filter(Boolean).join("   ");
@@ -4773,11 +4790,21 @@ function drawArrow(a){
     const ab = (breite/2 + gr*0.75) * aussen;
     ctx.save();
     ctx.translate(mx + nx*ab, my + ny*ab); ctx.rotate(ang);
+    const bild = a.sym ? pfeilSymbolBild(a.sym, fb || (light() ? "#1a1409" : "#f4ead9")) : null;
+    const bw = bild ? gr*1.5 : 0, bh = bild ? gr : 0, tw = ctx.measureText(txt).width;
+    const links = -(bw + (bw ? gr*0.4 : 0) + tw)/2;   // sign, gap, text - centred together
+    if (bild){
+      ctx.fillStyle = light() ? "rgba(255,255,255,.85)" : "rgba(10,7,4,.85)";
+      ctx.fillRect(links - 2, -bh/2 - 2, bw + 4, bh + 4);
+      ctx.drawImage(bild, links, -bh/2, bw, bh);
+    }
+    ctx.textAlign = "left";
+    const tx0 = links + bw + (bw ? gr*0.4 : 0);
     ctx.lineJoin = "round"; ctx.lineWidth = Math.max(2.5, gr*0.28);
     ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(10,7,4,.92)";
-    ctx.strokeText(txt, 0, 0);
+    ctx.strokeText(txt, tx0, 0);
     ctx.fillStyle = fb || (light() ? "#1a1409" : "#f4ead9");
-    ctx.fillText(txt, 0, 0);
+    ctx.fillText(txt, tx0, 0);
     ctx.restore();
   }
 }
@@ -7464,6 +7491,13 @@ function arrowDialog(a){
         <input type="number" id="a-soll" min="0" max="999" value="${+a.soll || ""}" placeholder="—" style="width:70px">
       </div>
       <div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Unit sign</span>
+        <select id="a-sym" class="mini" style="width:170px">
+          <option value="">—</option>
+          ${MAP.at.map(t => `<option value="${esc(t.k)}"${a.sym === t.k ? " selected" : ""}>${esc(atName(t.k))}</option>`).join("")}
+        </select>
+      </div>
+      <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
         <input type="hidden" id="a-farbe" value="${esc(a.farbe||"")}">
         <div class="pf-farben">${PFEIL_FARBEN.map(p => `<button type="button" data-farbe="${p.k}" title="${p.name}"
@@ -7493,6 +7527,8 @@ function arrowDialog(a){
     if (lbl !== (a.label||"")){ a.label = lbl; neu = true; }
     if (soll !== (+a.soll || 0)){ a.soll = soll || undefined; neu = true; }
     if (farbe !== (a.farbe||"")){ a.farbe = farbe || undefined; neu = true; }
+    const sym = document.getElementById("a-sym").value;
+    if (sym !== (a.sym||"")){ a.sym = sym || undefined; neu = true; }
     if (neu){ a.t = jetzt(); dirty.add(`arrow:${a.id}`); save(); }
     closeDlg(); draw(); toast("Saved");
   });
@@ -23413,11 +23449,15 @@ const MENUES = [
   /* The board stays in the top bar itself - its "new" badge must be seen
      without opening a menu first. */
   {id:"lage",  titel:"Reports",  knoepfe:["b-intel","b-battle"]},
+  /* "War": the war's own settings and the reset. The reset button is shown
+     to those who may press it today (the admin); whether a clan leader
+     should have it instead is a rights question and stays open. */
+  {id:"krieg", titel:"War",      knoepfe:["b-war","b-reset"]},
   {id:"sicht", titel:"View",     werkzeuge:true},
   /* Hilfe darf jeder - sie hat unter "Admin" nichts verloren. Solange sie
      dort stand, bekam die Gruppe fuer JEDEN einen Titel, und ein einfaches
      Mitglied sah "ADMIN" in der Leiste. */
-  {id:"werkz", titel:"Tools",    knoepfe:["b-shot","b-war","b-help"]},
+  {id:"werkz", titel:"Tools",    knoepfe:["b-shot","b-help"]},
   {id:"verw",  titel:"Admin",    knoepfe:["b-members", "b-frisch"]},
 ];
 let menuOffen = null;
@@ -28180,37 +28220,38 @@ const IMPORT_HTML = `
           style="flex:1"></div>
       </details>`;
 
+/* Starting a new war - one function for the button in the War menu and
+   the one inside the settings window. Order matters: right, question,
+   backup, cut (see the long note that used to sit on the button). */
+function neuenKriegStarten(){
+  if (!istAdmin()){ toast("Starting a new war is the admin's call."); return; }
+  if (!confirm("Start a new war?\n\nControl, battles, deployed teams, arrows, defence lines, "
+             + "the board and all sightings go — for everyone.\n\nDepots, the arsenal, the "
+             + "player list and everything recorded about the enemy are kept.")) return;
+  sicherungAnlegen("new war");
+  const stand = neuerKrieg();
+  if (stand === false) return;          // die Begruendung steht schon da
+  after(); closeDlg();
+  if (stand) toast("New war — depots kept");   // beim Serverschnitt meldet der sich selbst
+}
+document.getElementById("b-reset").addEventListener("click", neuenKriegStarten);
+
 document.getElementById("b-war").addEventListener("click", ()=>{
-  /* Zwei Stufen in einem Fenster: Clanname und Seite gehoeren dem Leiter,
-     Kriegsname und Startstadt dem Verwalter. Abgeblendete Felder sind
-     ehrlicher als Knoepfe, die nachher nichts bewirken. */
-  const leiter = istLeader(), verw = istAdmin();
+  /* Kriegsname und Startstadt gehoeren dem Verwalter. Clanname und Seite
+     stehen seit dem 02.09. unter Manage - Card, beim Leiter. */
+  const verw = istAdmin();
   openDlg(`
-    <div class="dlg-h"><h2>War</h2></div>
+    <div class="dlg-h"><h2>War settings</h2>
+      <p>The clan's name and side are under <b>Manage → Card</b>.</p></div>
     <div class="dlg-b">
       <div style="display:flex;flex-direction:column;gap:8px">
-        <div class="row" style="align-items:center">
-          <span style="font-size:12px;color:var(--dim);width:74px">Clan</span>
-          <input type="text" id="set-clan" value="${esc(clanName())}" style="flex:1"
-            placeholder="Red Onion Soldiers" ${leiter?"":"disabled"}>
-        </div>
         <div class="row" style="align-items:center">
           <span style="font-size:12px;color:var(--dim);width:74px">War</span>
           <input type="text" id="set-war" value="${esc(warName())}" style="flex:1"
             placeholder="e.g. 1940 The Start_112" ${verw?"":"disabled"}>
+          <button class="btn" id="set-save" ${verw?"":"disabled"}>Save</button>
         </div>
-        <div class="row" style="align-items:center">
-          <span style="font-size:12px;color:var(--dim);width:74px">Faction</span>
-          <div class="own4" style="flex:1">
-            ${FACTIONS.map(q=>`<button data-cf="${q.id}" style="--f:${q.color}"
-              aria-pressed="${clanFaktion()===q.id}" ${leiter?"":"disabled"}>${q.tag}</button>`).join("")}
-          </div>
-          <button class="btn" id="set-save" ${(leiter||verw)?"":"disabled"}>Save</button>
-        </div>
-        <div class="note" style="font-size:11px">Which side the clan plays this war. The
-          <b>Arsenal</b> then only offers what your people can buy.${leiter?"":`
-          <br><b>Read-only for you</b> — this binds the whole clan, so only the leader sets it.`}${
-          verw?"":`<br>Only an admin can set the <b>war name</b> and the <b>start town</b>.`}</div>
+        ${verw?"":`<div class="note" style="font-size:11px">Only an admin can set the <b>war name</b> and the <b>start town</b>.</div>`}
       </div>
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;flex-direction:column;gap:8px">
         <span style="font-size:12px;color:var(--dim)">Start town</span>
@@ -28281,12 +28322,6 @@ document.getElementById("b-war").addEventListener("click", ()=>{
   };
   startZeichnen();
 
-  let neueFrak = clanFaktion();
-  document.querySelectorAll("#dlg [data-cf]").forEach(b => b.addEventListener("click", ()=>{
-    neueFrak = +b.dataset.cf;
-    document.querySelectorAll("#dlg [data-cf]").forEach(x => x.setAttribute("aria-pressed",
-      String(+x.dataset.cf === neueFrak)));
-  }));
   document.getElementById("set-save").addEventListener("click", ()=>{
     /* Jede Zeile nur, wenn der Betreffende sie auch schreiben darf. Vorher
        ging alles auf einmal raus: ein Leiter ohne Verwalterrecht haette
@@ -28297,18 +28332,13 @@ document.getElementById("b-war").addEventListener("click", ()=>{
     /* Und melden, was WIRKLICH geschrieben wurde. "Saved" fiel bisher
        unbedingt, ohne einen der Rueckgabewerte anzusehen. */
     let n = 0;
-    if (istLeader()){
-      if (setMeta("clan", document.getElementById("set-clan").value.trim() || "War Map")) n++;
-      setClanFaktion(neueFrak); n++;
-    }
     if (istAdmin()){
       if (setMeta("war", document.getElementById("set-war").value.trim())) n++;
       if (setStartStaedte(startNeu)) n++;
     }
     closeDlg();
     if (n) toast("Saved");
-    else toast("Nothing was saved. Only the leader can set the clan name, "
-             + "only an admin the war name and start towns.");
+    else toast("Nothing was saved. Only an admin can set the war name and start towns.");
   });
   document.getElementById("d-merge")?.addEventListener("click", async ()=>{
     try {
@@ -28346,28 +28376,19 @@ document.getElementById("b-war").addEventListener("click", ()=>{
                            + `had your name on them. They stay here and are not shared.` : ""}`);
     } catch(e){ toast("That link or file could not be read."); }
   });
-  document.getElementById("d-newwar").addEventListener("click", ()=>{
-    /* DIE REIHENFOLGE WAR VERKEHRT. sicherungAnlegen stand ganz vorne -
-       vor der Rueckfrage und vor jeder Rechtepruefung. Es gibt genau EINEN
-       Sicherungsplatz, und er ueberlebt genau einen Schritt. Drei Wege ins
-       Leere: ein Mitglied ohne Verwalteramt drueckte den Knopf und bekam
-       die Absage - die Sicherung war trotzdem weg; ein Verwalter ohne
-       Aufklaerungsrecht ebenso; und JEDER, der die Rueckfrage mit
-       Abbrechen beantwortete, hatte seine Sicherung schon verloren.
-       Besonders bitter direkt nach "Forget the local copy": dort wird
-       korrekt der volle Stand gesichert, und ein Fehlklick hier ersetzte
-       ihn durch den eben geleerten.
-       Der Nachbarknopf d-wipe macht es seit jeher richtig herum. */
-    if (!istAdmin()){ toast("Starting a new war is the admin's call."); return; }
-    if (!confirm("Start a new war?\n\nControl, battles, deployed teams, arrows, defence lines, "
-               + "the board and all sightings go — for everyone.\n\nDepots, the arsenal, the "
-               + "player list and everything recorded about the enemy are kept.")) return;
-    sicherungAnlegen("new war");
-    const stand = neuerKrieg();
-    if (stand === false) return;          // die Begruendung steht schon da
-    after(); closeDlg();
-    if (stand) toast("New war — depots kept");   // beim Serverschnitt meldet der sich selbst
-  });
+  /* DIE REIHENFOLGE WAR VERKEHRT. sicherungAnlegen stand ganz vorne -
+     vor der Rueckfrage und vor jeder Rechtepruefung. Es gibt genau EINEN
+     Sicherungsplatz, und er ueberlebt genau einen Schritt. Drei Wege ins
+     Leere: ein Mitglied ohne Verwalteramt drueckte den Knopf und bekam
+     die Absage - die Sicherung war trotzdem weg; ein Verwalter ohne
+     Aufklaerungsrecht ebenso; und JEDER, der die Rueckfrage mit
+     Abbrechen beantwortete, hatte seine Sicherung schon verloren.
+     Besonders bitter direkt nach "Forget the local copy": dort wird
+     korrekt der volle Stand gesichert, und ein Fehlklick hier ersetzte
+     ihn durch den eben geleerten.
+     Der Nachbarknopf d-wipe macht es seit jeher richtig herum.
+     Die Reihenfolge steht jetzt in neuenKriegStarten, fuer beide Knoepfe. */
+  document.getElementById("d-newwar").addEventListener("click", neuenKriegStarten);
   {
     const ub = document.getElementById("d-undo"), st = sicherungStand();
     if (!st) ub.disabled = true;
@@ -28453,7 +28474,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b1ca967f90</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 8b71ceba35</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28588,7 +28609,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b1ca967f90";
+const BAU = "8b71ceba35";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -29478,6 +29499,8 @@ function mitgliederKnopf(){
   /* Der Frisch-Knopf haengt an derselben Bedingung. */
   const f = document.getElementById("b-frisch");
   if (f) f.style.display = (CFG && CFG.admin) ? "" : "none";
+  const r = document.getElementById("b-reset");
+  if (r) r.style.display = (CFG && CFG.admin) ? "" : "none";
   /* Der Knopf allein reicht nicht - der Gruppentitel "Admin" stand sonst
      auch fuer ein einfaches Mitglied in der Leiste. */
   if (typeof menueTitelPruefen === "function") menueTitelPruefen();
