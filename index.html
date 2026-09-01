@@ -9381,6 +9381,101 @@ function unitsRing(d, x0, x1, fy){
   for (let y=fy; y<fy+50; y++){ for (let x=x0; x<x0+5; x++) add(x,y); for (let x=x1-5; x<x1; x++) add(x,y); }
   return px;
 }
+/* A pale card mid-blink fails the colour rules; its rim still leans to one
+   channel. The dominant channel of the rim ring with a margin above 12
+   names the side - measured on 63 of 63 pale cards. */
+function unitsBlass(px){
+  let r = 0, g = 0, b = 0, n = 0;
+  for (const p of px){ r += p[0]; g += p[1]; b += p[2]; n++; }
+  if (!n) return "-";
+  r /= n; g /= n; b /= n;
+  const s = [["SU", r], ["US", g], ["GE", b]].sort((a, c) => c[1] - a[1]);
+  return s[0][1] - s[1][1] > 12 ? s[0][0] : "-";
+}
+/* The plate of the picked card is darker. Plate rim: columns x0+1..8 and
+   x0+82..89, rows y0+14..60, y0 the plate's top edge (rim top minus 12).
+   Measured: picked 70-88, the others brighter; in 80 of 90 pictures the
+   gap to the median of the others is 12 or more. */
+function unitsPlattenRand(d, x0, y0){
+  let sum = 0, n = 0;
+  for (let y = y0+14; y < y0+60; y++){
+    for (let x = x0+1; x < x0+8; x++){ sum += unitsMax(d, (y*UNITS_W + x)*4); n++; }
+    for (let x = x0+82; x < x0+89; x++){ sum += unitsMax(d, (y*UNITS_W + x)*4); n++; }
+  }
+  return n ? sum/n : 255;
+}
+function unitsAuswahl(raender){
+  if (raender.length < 2) return null;
+  let iMin = 0;
+  for (let i = 1; i < raender.length; i++) if (raender[i] < raender[iMin]) iMin = i;
+  const andere = raender.filter((_, i) => i !== iMin).sort((a, b) => a - b);
+  const med = andere[Math.floor(andere.length/2)];
+  return med - raender[iMin] >= 12 ? iMin : null;
+}
+/* The unit type from the card's symbol: the inner field of the frame
+   (frame 72 x 50 anchored top-left at plate x0+9 / rim top, inset by 5 to
+   62 x 40) brought to the template size and correlated with the eighteen
+   templates the map carries, at shifts of two pixels each way. Measured on
+   1285 cards: median correlation 0.96, sixteen types apart by 0.40 or
+   more; the two fighter squadrons stay apart by only 0.02 and are left
+   undecided here. */
+/* The embedded templates (48 x 33) carry a three-pixel margin and the
+   black frame of the purchase screen at columns 3-4 and 43-44, rows 3 and
+   29. Their inner field is columns 5..42 by rows 4..28 (38 x 25) - that is
+   what the card's inner field (62 x 40, no frame) is compared with. Held
+   against the whole template, frame and margin included, the same cards
+   correlated at 0.1 instead of 0.96. */
+let unitsTypVorlagen = null;
+function unitsTypVorlagenBauen(){
+  if (unitsTypVorlagen) return unitsTypVorlagen;
+  const B = MAP.symB || 48, abc = "0123456789abcdef";
+  unitsTypVorlagen = [];
+  for (const [k, str] of Object.entries(MAP.sym || {})){
+    const v = new Float32Array(38*25);
+    let m = 0, i = 0;
+    /* the embedded templates are stored light-on-dark, the cards are
+       dark-on-light: inverted here, so that a match is a positive
+       correlation (0.95 on a light-armour card; -0.65 without) */
+    for (let y = 4; y <= 28; y++) for (let x = 5; x <= 42; x++){ v[i] = 1 - abc.indexOf(str[y*B + x]) / 15; m += v[i]; i++; }
+    m /= v.length;
+    let q = 0;
+    for (let j = 0; j < v.length; j++){ v[j] -= m; q += v[j]*v[j]; }
+    q = Math.sqrt(q) || 1;
+    for (let j = 0; j < v.length; j++) v[j] /= q;
+    unitsTypVorlagen.push({k, v});
+  }
+  return unitsTypVorlagen;
+}
+function unitsTypVon(c, x0, fy){
+  const vorl = unitsTypVorlagenBauen();
+  if (!vorl.length) return null;
+  const klein = document.createElement("canvas"); klein.width = 38; klein.height = 25;
+  const g = klein.getContext("2d", {willReadFrequently:true});
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+  let best = null, zweit = null;
+  for (const dy of [-2, 0, 2]) for (const dx of [-2, 0, 2]){
+    g.drawImage(c, x0+9+5+dx, fy+5+dy, 62, 40, 0, 0, 38, 25);
+    const px = g.getImageData(0, 0, 38, 25).data;
+    const v = new Float32Array(38*25);
+    let m = 0;
+    for (let i = 0, j = 0; j < v.length; i += 4, j++){ v[j] = (299*px[i] + 587*px[i+1] + 114*px[i+2])/255000; m += v[j]; }
+    m /= v.length;
+    let q = 0;
+    for (let j = 0; j < v.length; j++){ v[j] -= m; q += v[j]*v[j]; }
+    q = Math.sqrt(q) || 1;
+    for (const t of vorl){
+      let k = 0;
+      for (let j = 0; j < v.length; j++) k += v[j]*t.v[j];
+      k /= q;
+      if (!best || k > best.k){ if (best && best.key !== t.k) zweit = best; best = {key: t.k, k}; }
+      else if (t.k !== best.key && (!zweit || k > zweit.k)) zweit = {key: t.k, k};
+    }
+  }
+  if (!best) return null;
+  const abstand = best.k - (zweit ? zweit.k : 0);
+  return {typ: best.key, korr: best.k, abstand, sicher: abstand >= 0.08 && best.k >= 0.6};
+}
+
 /* The coloured disc with the town's symbol, left of the name. */
 function unitsNode(d, yReihe){
   const px = []; let n = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
@@ -9540,7 +9635,12 @@ async function unitsFremdSchliessen(){
   for (const k of Object.keys(unitsFremd)){ try { await unitsFremd[k].terminate(); } catch(e){} delete unitsFremd[k]; }
 }
 async function unitsTextSchriften(c, x, y, w, h, beste, melde){
-  if (beste.zuv >= 70) return beste;
+  /* a middling Latin read is still Latin: only a low confidence together
+     with few Latin letters calls the other models (a 68 percent "SANTAS
+     ELVES" cost four extra readings) */
+  const t = beste.text || "";
+  const lateinAnteil = t.length ? (t.match(/[A-Za-z0-9 _\-|.:]/g) || []).length / t.length : 0;
+  if (beste.zuv >= 70 || (beste.zuv >= 45 && lateinAnteil >= 0.8 && t.length >= 6)) return beste;
   const feld = unitsSchlicht(c, {x, y, w, h}, 3);
   let top = beste;
   for (const sp of UNITS_SCHRIFTEN){
@@ -9631,10 +9731,24 @@ async function unitsLesen(quelle, melde){
   R.reihe = reihe;
   if (reihe.staerke >= UNITS_REIHE_MIN){
     const k = unitsKartenFinden(d, reihe.y);
+    R.rahmenY = k.fy;
+    /* The plate's top edge hangs on the bar's form, not on the row the rim
+       search settled on: 1818 with a scroll track, 1854 without. Filled
+       yellow cards have no coloured rim, and the search then lands on the
+       green strength bar 50 px lower - symbol and plate rim would be read
+       from the wrong rows. */
+    R.roll = unitsRoll(d);
+    const plattenOben = R.roll ? 1818 : 1854, rimOben = plattenOben + 12;
     R.karten = k.rahmen.map(([x0,x1]) => {
       const u = unitsUrteil(unitsFlaeche(d, x0, x1));
-      return {x0: x0-9, x1: x1+9, seite: u.klasse};
+      const seite = u.klasse !== "-" ? u.klasse : unitsBlass(unitsRing(d, x0, x1, rimOben));
+      const t = unitsTypVon(c, x0-9, rimOben);
+      return {x0: x0-9, x1: x1+9, seite, rand: unitsPlattenRand(d, x0-9, plattenOben),
+              typ: t && t.sicher ? t.typ : null, typKorr: t ? t.korr : null, typAbstand: t ? t.abstand : null};
     });
+    /* which of the visible cards is picked - the darkest plate, when it is
+       clearly darker than the rest */
+    R.auswahl = unitsAuswahl(R.karten.map(x => x.rand));
     const fy = R.karten.length ? k.fy : reihe.y - 5;      /* rim top, 1830 in the usual bar */
     R.node = unitsNode(d, fy + 5);
     /* A bar is open when the card runs stand in the 105 grid (at least one
@@ -9650,7 +9764,6 @@ async function unitsLesen(quelle, melde){
        not a holder */
     R.seite = R.node.kompakt ? ["US","GE","SU"].indexOf(R.node.klasse) : -1;
     if (R.seite < 0) R.seite = null;
-    R.roll = unitsRoll(d);
     /* no bar, no cards, no holder - what was found there came from the map */
     if (!R.leiste){ R.karten = []; R.seite = null; R.roll = null; }
     if (R.leiste){
@@ -9832,13 +9945,18 @@ function kbNeu(){
    frame, the order counts: the first unit in the visible window that is
    not on the sheet yet - left to right, the way the clicking is meant. */
 function kbAuswahlIndex(R){
+  /* the dark plate names the picked card outright */
+  if (R.auswahl !== null && R.auswahl !== undefined){
+    const i = KB.erste + R.auswahl;
+    if (i >= 0 && i < KB.N) return i;
+  }
   const von = KB.erste, bis = Math.min(KB.N, KB.erste + Math.max(1, R.karten.length || 1));
   for (let i = von; i < bis; i++) if (KB.zeilen[i] && KB.zeilen[i].status !== "erfasst") return i;
   for (let i = 0; i < KB.N; i++) if (KB.zeilen[i] && KB.zeilen[i].status !== "erfasst") return i;
   return null;
 }
-/* The unit type from the card symbol - not measured yet. */
-function kbTypVon(R, idx){ return null; }
+/* The unit type as read from the card's symbol, when it was clear. */
+function kbTypVon(R, idx){ const k = R.karten[idx - KB.erste]; return k && k.typ ? k.typ : null; }
 
 /* Total and window from the track: the thumb's share of the channel is the
    share of units on screen, its offset the share scrolled past. */
@@ -9925,6 +10043,7 @@ function kbVerarbeiten(R){
       let i = kand;
       if (i === null){ i = KB.zeilen.length; KB.zeilen.push(kbZeileLeer(i)); KB.N = KB.zeilen.length; }
       const z = KB.zeilen[i];
+      if (!z.typ){ const t = kbTypVon(R, i); if (t) z.typ = t; }
       Object.assign(z, {status: "erfasst", tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp, nameZuv: e.nameZuv,
                         eigen: !!e.eigen, seite: e.seite !== null && e.seite !== undefined ? e.seite : z.seite,
                         zwilling: zwilling ? da.i + 1 : null});
@@ -27814,7 +27933,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 6b4d16ee00</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 42a149688c</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -27949,7 +28068,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "6b4d16ee00";
+const BAU = "42a149688c";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
