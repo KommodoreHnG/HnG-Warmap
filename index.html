@@ -301,7 +301,22 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 body.zieht{cursor:col-resize;user-select:none}
 body.zieht #mapwrap canvas{pointer-events:none}
 #rechts.schmal #zieher{display:none}
-#side{width:100%;border-left:0;flex:0 1 auto;max-height:58%}
+/* The detail view takes the whole column; the depot folds to its header
+   (click it to unfold). With the Unit tool the column stays split, because
+   the teams are dragged out of the depot. */
+#side{width:100%;border-left:0;flex:1 1 auto;min-height:0}
+#rechts.geteilt #side{flex:0 1 auto;max-height:58%}
+#rechts.detail:not(.depot-auf) #depot{flex:0 0 auto}
+#rechts.detail:not(.depot-auf) #depot > :not(h4){display:none}
+#rechts.detail #depot h4{cursor:pointer}
+#rechts.detail #depot h4::after{content:"▸";margin-left:auto;padding-left:8px;color:var(--dim)}
+#rechts.detail.depot-auf #depot h4::after{content:"▾"}
+#rechts.detail.depot-auf #side{flex:0 1 auto;max-height:50%}
+/* the para-block menu at the mouse */
+#pb-menu{position:fixed;z-index:60;min-width:150px;padding:6px;background:var(--panel);
+  border:1px solid var(--line);border-radius:3px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-size:12px}
+#pb-menu .t{color:var(--dim);margin:0 2px 5px;white-space:nowrap}
+#pb-menu .own4{grid-template-columns:repeat(4,1fr)}
 #depot{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;
   border-top:1px solid var(--accent-dk)}
 #depot.zu{display:none}
@@ -537,6 +552,11 @@ body.txt-modus{cursor:text}
 #b-board.neu{box-shadow:inset 0 0 0 1px var(--accent)}
 .btn .marke[hidden]{display:none}
 .flagge{vertical-align:-2px;margin-right:4px;border:1px solid rgba(0,0,0,.35);border-radius:1px;flex:none}
+/* the outline colours of an order */
+.pf-farben{display:flex;gap:5px}
+.pf-farben button{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);cursor:pointer;
+  background:var(--pf,transparent);color:var(--dim);font:inherit;font-size:12px;line-height:1;padding:0}
+.pf-farben button[aria-pressed="true"]{border-color:var(--text);box-shadow:0 0 0 1px var(--text)}
 /* the lifted player's note above the map */
 #hebe-zettel{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:12;
   display:flex;align-items:center;gap:8px;padding:5px 6px 5px 12px;font-size:12px;
@@ -4658,6 +4678,18 @@ function drawLine(l, bisMaus, id){
    shape used on operational maps — not a stroked line with a triangle stuck
    on the end. It widens with what the clan has committed to it. */
 const SCHMAL = '"Bahnschrift Condensed","Bahnschrift","Arial Narrow","Segoe UI",system-ui,sans-serif';
+/* A fixed palette for an order's outline and name - two values each, for
+   the dark and the light theme. The body keeps the faction colour so green,
+   purple and red stay readable as sides. */
+const PFEIL_FARBEN = [
+  {k:"",       name:"none"},
+  {k:"gold",   name:"gold",   d:"#f0b845", l:"#a56d00"},
+  {k:"white",  name:"white",  d:"#f4ead9", l:"#2a2a2a"},
+  {k:"cyan",   name:"cyan",   d:"#5fd6e8", l:"#0a7c8c"},
+  {k:"orange", name:"orange", d:"#ff8a3d", l:"#b84a00"},
+  {k:"pink",   name:"pink",   d:"#ff6fb5", l:"#b0136a"},
+];
+const pfeilFarbe = k => { const p = PFEIL_FARBEN.find(x => x.k === k && x.d); return p ? (light() ? p.l : p.d) : ""; };
 function pfeilForm(x1,y1,cx,cy,x2,y2,breite){
   const B  = t => [ (1-t)*(1-t)*x1 + 2*(1-t)*t*cx + t*t*x2,
                     (1-t)*(1-t)*y1 + 2*(1-t)*t*cy + t*t*y2 ];
@@ -4713,24 +4745,40 @@ function drawArrow(a){
   ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 1.5;
   ctx.globalAlpha = vor ? .32 : .9; ctx.fillStyle = f; ctx.fill(pfad);
   ctx.restore();
-  ctx.strokeStyle = vor ? f : "rgba(0,0,0,.5)";
-  ctx.lineWidth = vor ? 1.6*uiScale : 1.1;
+  const fb = pfeilFarbe(a.farbe);          // chosen outline colour, if any
+  ctx.strokeStyle = vor ? f : (fb || "rgba(0,0,0,.5)");
+  ctx.lineWidth = vor ? 1.6*uiScale : (fb ? 2*uiScale : 1.1);
   if (vor) ctx.setLineDash([5,4]);
   ctx.stroke(pfad);
   ctx.setLineDash([]);
 
-  if (view.z > 1.1 && (staerke || a.label)){
-    const txt = (a.label ? a.label + "   " : "") + (staerke ? `${mit.length}× ${staerke}` : "");
-    ctx.font = `600 ${Math.min(14, 8.4*Math.sqrt(view.z))*uiScale}px ${SCHMAL}`;
+  /* The operation name runs along the curve above its middle, capitals with
+     a dark rim; behind it the committed strength and, when a planned
+     strength is set, "12/20 (60 %)". */
+  if (view.z > 1.1 && (staerke || a.label || a.soll)){
+    const soll = +a.soll || 0;
+    const zahl = soll ? `${staerke}/${soll} (${Math.round(100*staerke/soll)} %)` : (staerke ? `${mit.length}× ${staerke}` : "");
+    const txt = [a.label ? String(a.label).toUpperCase() : "", zahl].filter(Boolean).join("   ");
+    const gr = Math.min(14, 8.4*Math.sqrt(view.z))*uiScale;
+    ctx.font = `700 ${gr}px ${SCHMAL}`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    const bw = ctx.measureText(txt).width + 12*uiScale;
-    const bh = Math.min(20, 13*Math.sqrt(view.z))*uiScale;
-    const mx = (x1+x2)/2*.35 + cx*.65, my = (y1+y2)/2*.35 + cy*.65;
-    ctx.fillStyle = "rgba(14,10,6,.9)";
-    ctx.fillRect(mx-bw/2, my-bh/2, bw, bh);
-    ctx.strokeStyle = f; ctx.lineWidth = 1.2;
-    ctx.strokeRect(mx-bw/2, my-bh/2, bw, bh);
-    ctx.fillStyle = "#f4ead9"; ctx.fillText(txt, mx, my);
+    /* midpoint of the curve and its direction; text always reads left to right */
+    const mx = .25*x1 + .5*cx + .25*x2, my = .25*y1 + .5*cy + .25*y2;
+    let tx = x2 - x1, ty = y2 - y1; const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+    let ang = Math.atan2(ty, tx), nx = -ty, ny = tx;
+    if (tx < 0){ ang += Math.PI; nx = -nx; ny = -ny; }
+    /* the curve bulges to one side of the chord; put the text on the outer
+       side of the bulge so it does not sit on the body */
+    const aussen = ((cx - mx)*nx + (cy - my)*ny) > 0 ? -1 : 1;
+    const ab = (breite/2 + gr*0.75) * aussen;
+    ctx.save();
+    ctx.translate(mx + nx*ab, my + ny*ab); ctx.rotate(ang);
+    ctx.lineJoin = "round"; ctx.lineWidth = Math.max(2.5, gr*0.28);
+    ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(10,7,4,.92)";
+    ctx.strokeText(txt, 0, 0);
+    ctx.fillStyle = fb || (light() ? "#1a1409" : "#f4ead9");
+    ctx.fillText(txt, 0, 0);
+    ctx.restore();
   }
 }
 const joinOf = id => Object.keys(S.join)
@@ -6085,6 +6133,7 @@ function setTool(t){
      man die Teams auf die Karte, und ohne die Liste ist das Werkzeug halb
      blind. Wieder einklappen laesst es sich jederzeit. */
   if (t === "unit" && !showDepot) depotAuf(true);
+  rechtsPruefen();
   tips(); draw();
 }
 function depotAuf(an){
@@ -6104,11 +6153,56 @@ function depotAuf(an){
 function rechtsPruefen(){
   const r = document.getElementById("rechts");
   if (!r) return;
-  const leer = document.getElementById("side").classList.contains("hidden")
-            && document.getElementById("depot").classList.contains("zu");
+  const offen = !document.getElementById("side").classList.contains("hidden");
+  const leer = !offen && document.getElementById("depot").classList.contains("zu");
   r.classList.toggle("schmal", leer);
+  r.classList.toggle("detail",  offen && tool !== "unit");
+  r.classList.toggle("geteilt", offen && tool === "unit");
 }
+document.querySelector("#depot h4").addEventListener("click", () => {
+  const r = document.getElementById("rechts");
+  if (r.classList.contains("detail")){ r.classList.toggle("depot-auf"); requestAnimationFrame(resize); }
+});
 document.querySelectorAll(".tool[data-t]").forEach(b => b.addEventListener("click", () => setTool(b.dataset.t)));
+
+/* Right-click on a town: the para-block as a small menu at the mouse, so
+   nobody has to open the detail view for it. */
+function pbMenueZu(){ const m = document.getElementById("pb-menu"); if (m) m.remove(); }
+function pbMenue(i, x, y){
+  pbMenueZu();
+  const pb = paraAt(i);
+  const m = document.createElement("div"); m.id = "pb-menu";
+  m.innerHTML = `<div class="t">Para-block · <b>${esc(MAP.n[i][0])}</b></div>
+    <div class="own4">
+      ${FACTIONS.map(q=>`<button data-pb="${q.id}" style="--f:${q.color}" aria-pressed="${pb && pb.f===q.id}">${q.tag}</button>`).join("")}
+      <button data-pb="" style="--f:${NEUTRAL.color}" aria-pressed="${!pb}">none</button>
+    </div>
+    <label class="toggle" style="margin-top:6px"><input type="checkbox" id="pb-menu-plan" ${pb && pb.plan ? "checked" : ""}>
+      <span>Only planned</span></label>`;
+  document.body.appendChild(m);
+  const b = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(innerWidth - b.width - 4, x)) + "px";
+  m.style.top  = Math.max(4, Math.min(innerHeight - b.height - 4, y)) + "px";
+  m.querySelectorAll("[data-pb]").forEach(k => k.addEventListener("click", () => {
+    const v = k.dataset.pb, plan = m.querySelector("#pb-menu-plan").checked;
+    setPara(i, v === "" ? null : +v, plan);
+    pbMenueZu(); if (sel === i) side(); draw(); tally();
+  }));
+  m.querySelector("#pb-menu-plan").addEventListener("change", ev => {
+    if (paraAt(i)) { setPara(i, paraAt(i).f, ev.target.checked); if (sel === i) side(); draw(); }
+  });
+}
+cv.addEventListener("contextmenu", ev => {
+  const i = hitTest(ev.offsetX, ev.offsetY);
+  if (i === null || i === undefined || i < 0) return;
+  ev.preventDefault();
+  pbMenue(i, ev.clientX, ev.clientY);
+});
+document.addEventListener("pointerdown", ev => {
+  const m = document.getElementById("pb-menu");
+  if (m && !m.contains(ev.target)) pbMenueZu();
+});
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") pbMenueZu(); });
 function setFaction(f){
   faction = f;
   faktionSelbstGewaehlt = true;   // ab jetzt nicht mehr nachziehen
@@ -7362,8 +7456,18 @@ function arrowDialog(a){
         <button class="btn primary" id="a-join">Save</button>
       </div>
       <div class="row" style="align-items:center">
-        <span style="font-size:12px;color:var(--dim);flex:1">Label on the map</span>
-        <input type="text" id="a-lbl" value="${esc(a.label||"")}" placeholder="e.g. 20:00" style="width:130px">
+        <span style="font-size:12px;color:var(--dim);flex:1">Operation name</span>
+        <input type="text" id="a-lbl" value="${esc(a.label||"")}" placeholder="e.g. Push to Berlin" maxlength="40" style="width:150px">
+      </div>
+      <div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
+        <input type="number" id="a-soll" min="0" max="999" value="${+a.soll || ""}" placeholder="—" style="width:70px">
+      </div>
+      <div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
+        <input type="hidden" id="a-farbe" value="${esc(a.farbe||"")}">
+        <div class="pf-farben">${PFEIL_FARBEN.map(p => `<button type="button" data-farbe="${p.k}" title="${p.name}"
+          aria-pressed="${(a.farbe||"") === p.k}" style="${p.d ? `--pf:${light() ? p.l : p.d}` : ""}">${p.d ? "" : "×"}</button>`).join("")}</div>
       </div>
       <div class="note">You have <b>${habe}</b> teams on the map in total. Committing here is a plan,
         it does not move anything by itself.</div>
@@ -7376,10 +7480,20 @@ function arrowDialog(a){
     </div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
   okVerdrahten();
+  document.querySelectorAll("#dlg .pf-farben button").forEach(b => b.addEventListener("click", ()=>{
+    document.getElementById("a-farbe").value = b.dataset.farbe;
+    document.querySelectorAll("#dlg .pf-farben button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  }));
   document.getElementById("a-join").addEventListener("click", ()=>{
     setJoin(a.id, Math.max(0, Math.min(99, +document.getElementById("a-n").value || 0)));
     const lbl = document.getElementById("a-lbl").value.trim();
-    if (lbl !== (a.label||"")){ a.label = lbl; a.t = jetzt(); dirty.add(`arrow:${a.id}`); save(); }
+    const soll = Math.max(0, Math.min(999, +document.getElementById("a-soll").value || 0));
+    const farbe = document.getElementById("a-farbe").value;
+    let neu = false;
+    if (lbl !== (a.label||"")){ a.label = lbl; neu = true; }
+    if (soll !== (+a.soll || 0)){ a.soll = soll || undefined; neu = true; }
+    if (farbe !== (a.farbe||"")){ a.farbe = farbe || undefined; neu = true; }
+    if (neu){ a.t = jetzt(); dirty.add(`arrow:${a.id}`); save(); }
     closeDlg(); draw(); toast("Saved");
   });
   document.getElementById("a-del")?.addEventListener("click", ()=>{
@@ -28339,7 +28453,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 57a7d32163</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b1ca967f90</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28474,7 +28588,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "57a7d32163";
+const BAU = "b1ca967f90";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
