@@ -9255,6 +9255,20 @@ function unitsUrteil(px){
   const k = ["US","GE","SU","gelb"].sort((a,b) => z[b]-z[a])[0];
   return {klasse: z[k] > 0 ? k : "-", z};
 }
+/* The whole card, not a ring on one row. Own units have filled yellow
+   cards with a green strength bar at the foot; a ring taken on the bar's
+   row saw green and grey and never the yellow. The vote runs over the
+   plate rows 1822-1892, fixed: a window around the raster row also took
+   in a supply line crossing above the card, and one keyed to the scroll
+   track picked up the row of totals below. Measured on all 1059 cards of
+   116 pictures: 28 yellow instead of 9, the three red cards next to them
+   red instead of green, two cards mid-blink honestly without a colour. */
+function unitsFlaeche(d, x0, x1){
+  const px = [];
+  for (let yy=1822; yy<1892; yy++)
+    for (let x=x0; x<x1; x++){ const p = (yy*UNITS_W + x)*4; px.push([d[p], d[p+1], d[p+2]]); }
+  return px;
+}
 function unitsRing(d, x0, x1, fy){
   const px = [];
   const add = (x,y) => { const p = (y*UNITS_W + x)*4; px.push([d[p], d[p+1], d[p+2]]); };
@@ -9320,11 +9334,11 @@ function unitsForm(d){
    the top ten rows of the band - digits never do, and a four-digit block
    ("3/12", 65 px) is as wide as a diamond. */
 function unitsStaerkeBloecke(d, y0, y1, x0=1690, x1=2210){
-  const n = x1-x0, dk = new Uint8Array(n), oben = new Uint8Array(n);
+  const n = x1-x0, dk = new Uint8Array(n), oben = new Uint8Array(n), unten = new Uint8Array(n);
   for (let x=x0; x<x1; x++){
-    let c = 0, o = 0;
-    for (let y=y0; y<y1; y++){ if (unitsMax(d, (y*UNITS_W + x)*4) < 90){ c++; if (y < y0+10) o++; } }
-    dk[x-x0] = c; oben[x-x0] = o;
+    let c = 0, o = 0, u = 0;
+    for (let y=y0; y<y1; y++){ if (unitsMax(d, (y*UNITS_W + x)*4) < 90){ c++; if (y < y0+10) o++; if (y >= y1-10) u++; } }
+    dk[x-x0] = c; oben[x-x0] = o; unten[x-x0] = u;
   }
   const runs = []; let s = null, leer = 0;
   for (let i=0; i<=n; i++){
@@ -9335,8 +9349,17 @@ function unitsStaerkeBloecke(d, y0, y1, x0=1690, x1=2210){
   const bl = [], rauten = [];
   for (const [a,b] of runs){
     const w = b-a; if (w < 6) continue;
-    let o = 0; for (let i=a; i<b; i++) o += oben[i];
-    if (o >= 6 && w >= 50 && w <= 80) rauten.push([a+x0, b+x0]);
+    let o = 0, u = 0; for (let i=a; i<b; i++){ o += oben[i]; u += unten[i]; }
+    /* A diamond is an outline: dark in the top rows AND the bottom rows,
+       light inside. Bare terrain of the same width can be dark on top; it
+       is not dark below and light in the middle at the same time. Measured
+       on real diamonds: ~90 dark points on top, ~100 below, inside 131-150
+       bright. With this rule 90 of 90 boxes stay found, and 39 candidates
+       on bare terrain in a picture without a box drop to none. */
+    let innen = 0, m = 0;
+    for (let y=y0+22; y<y0+46; y++) for (let x=a+x0+18; x<a+x0+50; x++){ innen += unitsMax(d, (y*UNITS_W + x)*4); m++; }
+    innen = m ? innen/m : 0;
+    if (o >= 6 && u >= 30 && innen >= 110 && w >= 50 && w <= 80) rauten.push([a+x0, b+x0]);
     else bl.push({x0: a+x0-5, x1: b+x0+6});
   }
   return {bl, rauten};
@@ -9418,7 +9441,7 @@ async function unitsLesen(quelle, melde){
   if (reihe.staerke >= UNITS_REIHE_MIN){
     const k = unitsKartenFinden(d, reihe.y);
     R.karten = k.rahmen.map(([x0,x1]) => {
-      const u = unitsUrteil(unitsRing(d, x0, x1, k.fy));
+      const u = unitsUrteil(unitsFlaeche(d, x0, x1));
       return {x0: x0-9, x1: x1+9, seite: u.klasse};
     });
     const fy = R.karten.length ? k.fy : reihe.y - 5;      /* rim top, 1830 in the usual bar */
@@ -27225,7 +27248,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b6611ae6c8</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 494ac2d602</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -27360,7 +27383,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b6611ae6c8";
+const BAU = "494ac2d602";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
