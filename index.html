@@ -9519,6 +9519,42 @@ function unitsSchlicht(c, bx, f=4){
   return o;
 }
 const unitsBox = (x, y, w, h) => ({x: x/UNITS_W, y: y/UNITS_H, w: w/UNITS_W, h: h/UNITS_H});
+/* OTHER ALPHABETS. Unit and player names come in Korean, Chinese, Cyrillic
+   and more, and the English model turns those into noise ("27 | ZrO HCH"
+   for 2기갑예비대). With the matching model the same line reads at 84 to
+   90 percent. The engine's own script detection gives nothing on a single
+   line, so: English first, and below 70 percent the other models read the
+   line too - the most confident one wins when it is ten points better.
+   Each model loads once and stays until the cabin closes. */
+const UNITS_SCHRIFTEN = ["kor", "chi_sim", "rus", "jpn"];
+const unitsFremd = {};
+async function unitsFremdWorker(sprache){
+  if (unitsFremd[sprache]) return unitsFremd[sprache];
+  await ocrLaden();
+  const w = await window.Tesseract.createWorker(sprache, 1);
+  await w.setParameters({tessedit_pageseg_mode: "7"});
+  unitsFremd[sprache] = w;
+  return w;
+}
+async function unitsFremdSchliessen(){
+  for (const k of Object.keys(unitsFremd)){ try { await unitsFremd[k].terminate(); } catch(e){} delete unitsFremd[k]; }
+}
+async function unitsTextSchriften(c, x, y, w, h, beste, melde){
+  if (beste.zuv >= 70) return beste;
+  const feld = unitsSchlicht(c, {x, y, w, h}, 3);
+  let top = beste;
+  for (const sp of UNITS_SCHRIFTEN){
+    try {
+      if (melde) melde(`Trying ${sp} …`);
+      const wk = await unitsFremdWorker(sp);
+      const r = await wk.recognize(feld);
+      const zuv = Math.round((r.data && r.data.confidence) || 0);
+      const text = ((r.data && r.data.text) || "").trim().replace(/\s+/g, " ");
+      if (text && zuv >= top.zuv + 10 && zuv > beste.zuv) top = {text, zuv, schrift: sp};
+    } catch(e){}
+  }
+  return top;
+}
 /* art "schlicht" takes the plain threshold; anything else the tool's
    local-contrast path. Measured on 106 pictures: the town name reads
    exactly 86 times with the plain threshold and 76 with the other, the
@@ -9655,7 +9691,7 @@ async function unitsLesen(quelle, melde){
     const besser = async (x, y, w, hh) => {
       const a = await unitsText(c, x, y, w, hh);
       const b = await unitsText(c, x, y, w, hh, null, "schlicht");
-      return b.zuv > a.zuv + 5 ? b : a;
+      return unitsTextSchriften(c, x, y, w, hh, b.zuv > a.zuv + 5 ? b : a, sag);
     };
     const name = await besser(UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h);
     const bes  = await besser(UNITS_KASTEN.x0, o+Z.besitzer.dy, B, Z.besitzer.h);
@@ -9672,6 +9708,7 @@ async function unitsLesen(quelle, melde){
     const t = roh.split(AT_TRENNER);
     const bm = /^\s*BESITZER\s*[:;.]?\s*(.*)$/i.exec((bes.text || "") + (bes2 && bes2.text ? " " + bes2.text : ""));
     R.einheit = {
+      schrift: name.schrift || bes.schrift || null,
       tag: t.length > 1 ? t[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "",
       name: (t.length > 1 ? t.slice(1).join(" - ") : roh).trim(),
       nameZuv: name.zuv,
@@ -10193,6 +10230,7 @@ function kabineZu(){
   kbLiveStop(); kbRauschenAus();
   document.getElementById("kabine").classList.remove("an");
   KB = null;
+  unitsFremdSchliessen();
 }
 document.getElementById("b-units").addEventListener("click", kabineAuf);
 document.getElementById("kb-zu").addEventListener("click", kabineZu);
@@ -27776,7 +27814,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 85e8c5479d</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 6b4d16ee00</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -27911,7 +27949,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "85e8c5479d";
+const BAU = "6b4d16ee00";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
