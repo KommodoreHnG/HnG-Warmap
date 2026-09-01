@@ -598,6 +598,65 @@ body.meld-modus{cursor:help}
   grid-template-areas:"kopf kopf kopf" "links schirm pult";
   font-family:var(--schmal)}
 #radar.an{display:grid}
+/* ---- The signals cabin: same grid as the radar, its own screen. The room is
+   dark metal like the radar; the sheet in the middle is paper, because that
+   is what a signals clerk writes on. */
+#kabine{position:fixed;inset:0;z-index:120;display:none;background:#0b0c10;
+  grid-template-columns:auto 1fr auto;grid-template-rows:auto 1fr;
+  grid-template-areas:"kopf kopf kopf" "links schirm pult";
+  font-family:var(--schmal)}
+#kabine.an{display:grid}
+#kabine .rd-kopf{grid-area:kopf;background:#101216;border-bottom-color:#22252c}
+#kabine .rd-pult{grid-area:pult}
+.kb-links{grid-area:links;width:260px;background:#0e1013;border-right:1px solid #22252c;
+  padding:14px;color:#a9b0b8;font-size:13px;line-height:1.5;overflow:auto}
+.kb-links h3{margin:0 0 6px;font-size:10px;letter-spacing:.14em;color:#6d7680;text-transform:uppercase}
+.kb-links .kb-jetzt{background:#15181d;border:1px solid #2a2e36;border-radius:3px;padding:10px 12px;margin-bottom:14px}
+.kb-links .kb-jetzt b{color:#e8d9a8;font-size:15px}
+.kb-schirm{grid-area:schirm;position:relative;overflow:auto;padding:16px 18px;
+  background:radial-gradient(ellipse at 50% 30%, #15171c 0%, #0b0c10 75%)}
+/* the strip: one box per unit in town, in the side's colour, a question mark
+   until the type is known, binoculars once the unit is on the sheet */
+.kb-streifen{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;min-height:34px}
+.kb-k{position:relative;width:38px;height:28px;border:2px solid #4a4f58;border-radius:3px;
+  background:#1a1d23;color:#8b929b;display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:700;cursor:default;transition:box-shadow .15s}
+.kb-k.us{border-color:#2fa458}.kb-k.ge{border-color:#8d7bff}.kb-k.su{border-color:#d9463c}
+.kb-k.eigen{border-color:#f0b13a;background:#3a2b12}
+.kb-k.fenster{box-shadow:0 0 0 1px #6c7480 inset}
+.kb-k.jetzt{box-shadow:0 0 10px 2px rgba(232,217,168,.55)}
+.kb-k canvas{width:24px;height:17px;image-rendering:auto}
+.kb-k .fg{position:absolute;right:-5px;top:-7px;width:16px;height:16px;border-radius:50%;
+  background:#e8d9a8;color:#1a1d23;font-size:10px;line-height:16px;text-align:center}
+.kb-k .nr{position:absolute;left:2px;bottom:-14px;font-size:9px;color:#5f666f}
+.kb-streifen.gross .kb-k{margin-bottom:12px}
+/* the sheet */
+.kb-blatt{background:#e9dfc6;color:#2b2416;border-radius:2px;padding:14px 18px 18px;
+  box-shadow:0 8px 30px rgba(0,0,0,.5), inset 0 0 0 1px #d7ccb0;
+  background-image:repeating-linear-gradient(180deg, transparent 0 27px, rgba(80,60,30,.13) 27px 28px);
+  font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive;font-size:15px;line-height:28px}
+.kb-blatt .kb-titel{font-family:var(--schmal);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:#7a6a48;border-bottom:1px solid #b9ab8a;margin-bottom:6px}
+.kb-z{display:grid;grid-template-columns:34px 44px 1.1fr 2fr 1.4fr 1fr 56px 24px;gap:8px;align-items:center;
+  border-bottom:1px dotted rgba(90,70,40,.25)}
+.kb-z.kopfz{font-family:var(--schmal);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#7a6a48;
+  border-bottom:1px solid #b9ab8a}
+.kb-z.vermutet{color:#8f7f5e}
+.kb-z.eigen{color:#a08c5a;text-decoration:line-through}
+.kb-z .f{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:26px;cursor:text}
+.kb-z .f:hover{background:rgba(255,255,255,.35)}
+.kb-z .f input,.kb-z .f select{width:100%;font:inherit;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 4px}
+.kb-z .weg{background:transparent;border:0;color:#9b3b2e;font-size:16px;cursor:pointer;line-height:1}
+.kb-z .weg:hover{color:#d0392a}
+.kb-z .sym{display:inline-flex;width:34px;height:24px;border:2px solid #7a6a48;border-radius:2px;
+  align-items:center;justify-content:center;font-weight:700;color:#7a6a48;background:#f6efdc}
+.kb-z .sym.us{border-color:#2fa458}.kb-z .sym.ge{border-color:#6f5fd6}.kb-z .sym.su{border-color:#c33a30}.kb-z .sym.eigen{border-color:#c8942a}
+.kb-z .sym canvas{width:26px;height:18px}
+.kb-z.schreibt .f{color:#1a3a8a}
+.kb-tinte{display:inline-block;border-right:2px solid #1a3a8a;animation:kbTinte .7s steps(1) infinite}
+@keyframes kbTinte{50%{border-color:transparent}}
+.kb-hinweis{font-family:var(--schmal);font-size:12px;color:#7a6a48;margin-top:10px}
+#kabine .rd-pult .kb-abstand{height:14px}
 .rd-kopf{grid-area:kopf}
 .rd-schirm{grid-area:schirm}
 .rd-links{grid-area:links}
@@ -1355,6 +1414,17 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
     <canvas id="rd-cv"></canvas></div>
   <aside class="rd-pult" id="rd-pult"></aside>
   <button class="rd-zu" id="rd-zu" title="Close">&times;</button>
+</div>
+<!-- The signals cabin: the units reader's own room, laid out like the radar. -->
+<div id="kabine" data-fest>
+  <div class="rd-kopf" id="kb-kopf"></div>
+  <aside class="rd-links kb-links" id="kb-links"></aside>
+  <div class="kb-schirm" id="kb-schirm">
+    <div class="kb-streifen" id="kb-streifen"></div>
+    <div class="kb-blatt" id="kb-blatt"></div>
+  </div>
+  <aside class="rd-pult" id="kb-pult"></aside>
+  <button class="rd-zu" id="kb-zu" title="Close">&times;</button>
 </div>
 <div id="txt-bar" data-fest><span>Editing labels — click any wording to change it.</span>
   <button class="btn primary" id="txt-fertig">Done</button></div>
@@ -9322,12 +9392,36 @@ function unitsNode(d, yReihe){
     }
   }
   const u = unitsUrteil(px);
-  /* The disc is compact: about 60 px across, over 1500 saturated points
-     inside a box of at most 80 x 80. Map red or green showing through at
-     the same place is neither (6207 points spread over the whole window
-     in one picture without a bar). */
-  const kompakt = n >= 1500 && (x1-x0) < 80 && (y1-y0) < 80;
-  return {klasse: n > 200 ? u.klasse : "-", n, kompakt};
+  /* The disc is a filled circle of one colour, about 60 px across at
+     (1100, row + 43). Tested as a circle: inside a radius of 30 most points
+     must be saturated and of the winning class; a busy map under the
+     translucent bar - lines and dots zoomed far out - fills a box, not a
+     circle, and never in one colour. */
+  /* The circle sits on the centroid of the saturated points - the disc is
+     45 px under the rim in the usual bar but 27 px in the short one without
+     a track. Inside a radius of 28 most points must be saturated and of the
+     winning class; in a ring from 36 to 46 out there must be few, because
+     the disc has a dark border and the panel around it is grey. A busy map
+     under the translucent bar fills the ring as well as the circle. */
+  let cx = 0, cy = 0;
+  if (n > 200){ for (const _ of px){} }
+  { let sx = 0, sy = 0, m = 0;
+    for (let y=yReihe-40; y<yReihe+90; y++) for (let x=1050; x<1150; x++){
+      const p = (y*UNITS_W + x)*4;
+      if (unitsMax(d,p) - unitsMin(d,p) > 70){ sx += x; sy += y; m++; }
+    }
+    cx = m ? Math.round(sx/m) : 1100; cy = m ? Math.round(sy/m) : yReihe + 45; }
+  let drin = 0, drinKlasse = 0, gesamt = 0, ring = 0, ringGesamt = 0;
+  const test = [SHOT_COL[0], SHOT_COL[1], SHOT_COL[2]][["US","GE","SU"].indexOf(u.klasse)];
+  for (let y = cy-46; y <= cy+46; y++) for (let x = cx-46; x <= cx+46; x++){
+    if (y < 0 || y >= UNITS_H || x < 0 || x >= UNITS_W) continue;
+    const r2 = (x-cx)*(x-cx) + (y-cy)*(y-cy);
+    const p = (y*UNITS_W + x)*4, satt = unitsMax(d,p) - unitsMin(d,p) > 70;
+    if (r2 <= 784){ gesamt++; if (satt){ drin++; if (test && test(d[p], d[p+1], d[p+2])) drinKlasse++; } }
+    else if (r2 >= 1296 && r2 <= 2116){ ringGesamt++; if (satt) ring++; }
+  }
+  const kompakt = gesamt > 0 && drin >= 0.5*gesamt && drinKlasse >= 0.8*drin && ring <= 0.25*ringGesamt;
+  return {klasse: n > 200 ? u.klasse : "-", n, kompakt, drin, gesamt, ring, cx, cy};
 }
 /* The white thumb in the scroll track, and the track's left end. Track
    width and thumb width give the share of units on screen. */
@@ -9529,9 +9623,20 @@ async function unitsLesen(quelle, melde){
       const rechts = (R.roll && R.roll.bahnLinks) ? R.roll.bahnLinks - 8
                    : (R.karten.length ? Math.min(R.karten[0].x0 - 20, 1700) : 1700);
       sag("Reading the town name …");
-      const ort = await unitsText(c, UNITS_NAME_X, fy + 8, Math.max(60, rechts-UNITS_NAME_X), 62, null, "schlicht");
+      /* Both preparations. The plain threshold reads the PNGs best, but the
+         bar is translucent: zoomed far out, a dense net of lines and dots
+         lies under the name and shifts a global threshold. The reading
+         that names a town wins; with neither, the more confident one. */
+      const o1 = await unitsText(c, UNITS_NAME_X, fy + 8, Math.max(60, rechts-UNITS_NAME_X), 62, null, "schlicht");
+      const s1 = unitsStadt(o1.text);
+      let ort = o1, stadt = s1;
+      if (!s1 || !s1.sicher){
+        const o2 = await unitsText(c, UNITS_NAME_X, fy + 8, Math.max(60, rechts-UNITS_NAME_X), 62);
+        const s2 = unitsStadt(o2.text);
+        if (s2 && (!s1 || s2.sicher || s2.d < s1.d)){ ort = o2; stadt = s2; }
+      }
       R.ortText = ort.text; R.ortZuv = ort.zuv;
-      R.stadt = unitsStadt(ort.text);
+      R.stadt = stadt;
       /* "BAD LOBENSTEIN - C": the letter names the attack line (A to E) the
          units stand on. They are not in the town - they are attacking it
          from that line. Kept, because it says where they are. */
@@ -9577,219 +9682,467 @@ async function unitsLesen(quelle, melde){
   return R;
 }
 
-/* ---- the window --------------------------------------------------------- */
-let unitsStand = null;      /* the current reading */
-let unitsOrtMerk = null;    /* {stadt, linie} from the last battle window, for units read without a town */
-let unitsListe = [];        /* units collected in this session of the window */
-let unitsLive = null;       /* {timer, letzte} while the live feed runs */
+/* ---- the signals cabin --------------------------------------------------
+   The reader's own room, laid out like the radar: a head line to read at a
+   glance, a sheet in the middle that a clerk writes on, a panel on the
+   right with the few switches that do something.
 
-const unitsSeiteName = s => ["US","GE","USSR"][s] || "?";
-function unitsEsc(t){ return esc(t == null ? "" : String(t)); }
+   What the sheet holds: one line per unit in the town, laid out before the
+   first click. With no scroll track every unit is on screen; with one, the
+   total comes from the track geometry. Lines start as guesses - side from
+   the card colour, a question mark for the type - and fill in as the
+   person clicks the units one after another, left to right. Nothing is
+   written twice: a unit already on the sheet is recognised even when the
+   letters came out a little differently.                                 */
+let KB = null;                 /* the cabin's state while it is open */
+let kbKlang = null, kbRauschen = null, kbTon = true;
+const KB_LOCAL = "units_seen";
 
-/* A unit the reader has not seen yet - or has, but with a different owner
-   (another player took it over). Same tag AND same owner means the same
-   unit clicked twice. */
-function unitsNeu(e){
-  const k = x => namKey((x.tag || "") + " " + (x.name || ""));
-  const ke = k(e);
-  return !unitsListe.some(u => {
-    if (u.tag === e.tag && u.name === e.name && u.besitzer === e.besitzer) return true;
-    /* the same unit read twice with a slip in the letters: same owner and
-       strength, and tag plus name within a quarter of the letters */
-    if (namKey(u.besitzer || "") !== namKey(e.besitzer || "")) return false;
-    if (JSON.stringify(u.hp || []) !== JSON.stringify(e.hp || [])) return false;
-    const ku = k(u);
-    return levenshtein(ku, ke) <= Math.max(2, Math.round(0.25*Math.max(ku.length, ke.length)));
-  });
+const kbSeiteKlasse = s => s === 0 ? "us" : s === 1 ? "ge" : s === 2 ? "su" : "";
+const kbSeiteName = s => ["US","GE","USSR"][s] || "?";
+const kbEsc = t => esc(t == null ? "" : String(t));
+
+/* A tactical symbol drawn from the map's own templates (48 x 33, sixteen
+   greys). Same drawing the depot uses. */
+function kbSymbol(k){
+  const s = (MAP.sym || {})[k];
+  if (!s) return null;
+  const B = MAP.symB || 48, H = MAP.symH || 33, abc = "0123456789abcdef";
+  const c = document.createElement("canvas"); c.width = B; c.height = H;
+  const g = c.getContext("2d"), id = g.createImageData(B, H), d = id.data;
+  for (let i = 0; i < B*H; i++){ const v = Math.round(abc.indexOf(s[i]) * 17); d[i*4] = d[i*4+1] = d[i*4+2] = v; d[i*4+3] = 255; }
+  g.putImageData(id, 0, 0);
+  return c;
 }
-/* Own units are told three ways, any one is enough: the owner is the member
-   name, the card is yellow, or the head box is the taller form - the game
-   shows morale and the visibility toggle only for units of one's own. */
-/* When the holder is unknown, the cards say what side the units are - but
-   only when every coloured card agrees, and never from yellow (own) cards.
-   On an attack line the cards are the attackers, so this is right there
-   even when a holder is known and differs. */
+
+/* ---- sound: a hiss while the set is on, Morse while the clerk writes ---- */
+function kbKlangAuf(){
+  try {
+    kbKlang = kbKlang || new (window.AudioContext || window.webkitAudioContext)();
+    if (kbKlang.state === "suspended") kbKlang.resume();
+  } catch(e){ kbKlang = null; }
+  return kbKlang;
+}
+function kbRauschenAn(){
+  if (!kbTon || kbRauschen || !kbKlangAuf()) return;
+  try {
+    const sr = kbKlang.sampleRate, n = sr*2, buf = kbKlang.createBuffer(1, n, sr), ch = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) ch[i] = Math.random()*2 - 1;
+    const src = kbKlang.createBufferSource(); src.buffer = buf; src.loop = true;
+    const bp = kbKlang.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1400; bp.Q.value = 0.6;
+    const g = kbKlang.createGain(); g.gain.value = 0.014;
+    src.connect(bp); bp.connect(g); g.connect(kbKlang.destination); src.start();
+    kbRauschen = {src, g};
+  } catch(e){}
+}
+function kbRauschenAus(){
+  if (!kbRauschen) return;
+  try { kbRauschen.src.stop(); } catch(e){}
+  kbRauschen = null;
+}
+const KB_MORSE = {A:".-",B:"-...",C:"-.-.",D:"-..",E:".",F:"..-.",G:"--.",H:"....",I:"..",J:".---",K:"-.-",L:".-..",M:"--",
+  N:"-.",O:"---",P:".--.",Q:"--.-",R:".-.",S:"...",T:"-",U:"..-",V:"...-",W:".--",X:"-..-",Y:"-.--",Z:"--..",
+  "0":"-----","1":".----","2":"..---","3":"...--","4":"....-","5":".....","6":"-....","7":"--...","8":"---..","9":"----."};
+/* The tag in Morse, capped to six characters - a signal, not a lecture. */
+function kbMorse(text){
+  if (!kbTon || !kbKlangAuf()) return 0;
+  const dit = 0.05; let t = kbKlang.currentTime + 0.05;
+  try {
+    for (const ch of String(text || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6)){
+      for (const z of (KB_MORSE[ch] || "")){
+        const dauer = z === "." ? dit : 3*dit;
+        const o = kbKlang.createOscillator(), g = kbKlang.createGain();
+        o.type = "sine"; o.frequency.value = 640;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.006);
+        g.gain.setValueAtTime(0.05, t + dauer - 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dauer);
+        o.connect(g); g.connect(kbKlang.destination); o.start(t); o.stop(t + dauer + 0.01);
+        t += dauer + dit;
+      }
+      t += 2*dit;
+    }
+  } catch(e){}
+  return Math.max(0, t - kbKlang.currentTime);
+}
+
+/* When the holder is unknown, the cards say what side the units are - only
+   when every coloured card agrees, never from yellow (own) cards. On an
+   attack line the cards are the attackers, so this is right there even
+   when a holder is known and differs. */
 function unitsReihenSeite(R){
   const s = new Set((R.karten || []).map(k => k.seite).filter(x => x === "US" || x === "GE" || x === "SU"));
   return s.size === 1 ? ["US","GE","SU"].indexOf([...s][0]) : null;
 }
+/* Own units are told three ways, any one is enough: the owner is the member
+   name, the card is yellow, or the head box is the taller form - the game
+   shows morale and the visibility toggle only for units of one's own. */
 function unitsZeileAus(R){
   const e = R.einheit; if (!e) return null;
-  /* no town of its own: the last battle window said where we are */
-  const merk = (!R.stadt && unitsOrtMerk) ? unitsOrtMerk : null;
+  const rs = unitsReihenSeite(R);
   return {tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp,
-          seite: unitsReihenSeite(R) !== null ? unitsReihenSeite(R) : R.seite,
-          linie: R.linie || (merk ? merk.linie : null), stadt: R.stadt ? R.stadt.i : (merk ? merk.stadt : null),
+          seite: rs !== null ? rs : R.seite, linie: R.linie || null, stadt: R.stadt ? R.stadt.i : null,
           nameZuv: e.nameZuv, besitzerZuv: e.besitzerZuv,
           eigen: !!(S.name && e.besitzer && namKey(e.besitzer) === namKey(S.name)) || e.form === "erweitert"};
 }
-function unitsZeichnen(){
-  const kopf = document.getElementById("units-kopf"), tab = document.getElementById("units-tab");
-  if (!kopf || !tab) return;
-  const R = unitsStand;
-  let k = "";
-  if (R){
-    if (R.quer) k += `<div class="note">This picture is not 16:9 (${R.gross.w}×${R.gross.h}); the bar has only been measured on 16:9 screens.</div>`;
-    /* what the capture delivers - the one number that explains a bad read */
-    k += `<div class="dim" style="font-size:12px">Frame ${R.gross.w}×${R.gross.h}, brightness ${R.hell}${
-          R.gain > 1 ? ` — dark capture, brightened ×${R.gain.toFixed(1)}` : ""}${
-          R.gross.w < 3000 ? " — shared below 4K, letters get harder to read" : ""}</div>`;
-    if (R.dialog){
-      const zielD = (R.linie && R.stadt) ? linieZiel(R.stadt.i, R.linie) : null;
-      k += R.stadt ? `<div>Battle window: <b>${unitsEsc(MAP.n[R.stadt.i][0])}</b>${R.linie ? ` · attack line ${R.linie}${zielD !== null ? " → " + unitsEsc(MAP.n[zielD][0]) : ""}` : ""} — units read next are placed there.</div>`
-                   : `<div>Battle window seen, but its heading did not read as a town (${unitsEsc(R.dialogText || "")}). Type the town below.</div>`;
-    } else if (!R.leiste){
-      k += R.form ? `<div>No bar - a town with a single unit. <b>Type the town below.</b></div>`
-                  : `<div>No detail bar in this picture.</div>`;
+
+/* ---- the state ----------------------------------------------------------- */
+function kbNeu(){
+  return {live: null, laeuft: false, letzte: null, vorige: null, hatteBahn: false,
+          ort: null, linie: null, ziel: null, halter: null, merk: null,
+          N: 0, erste: 0, sichtbar: 0, karten: [], zeilen: [],
+          frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null};
+}
+/* Which card is picked. Until the measurement gives a rule for a single
+   frame, the order counts: the first unit in the visible window that is
+   not on the sheet yet - left to right, the way the clicking is meant. */
+function kbAuswahlIndex(R){
+  const von = KB.erste, bis = Math.min(KB.N, KB.erste + Math.max(1, R.karten.length || 1));
+  for (let i = von; i < bis; i++) if (KB.zeilen[i] && KB.zeilen[i].status !== "erfasst") return i;
+  for (let i = 0; i < KB.N; i++) if (KB.zeilen[i] && KB.zeilen[i].status !== "erfasst") return i;
+  return null;
+}
+/* The unit type from the card symbol - not measured yet. */
+function kbTypVon(R, idx){ return null; }
+
+/* Total and window from the track: the thumb's share of the channel is the
+   share of units on screen, its offset the share scrolled past. */
+function kbFenster(R){
+  const n = R.karten.length;
+  if (R.roll && R.roll.anteil && R.roll.bahnLinks){
+    /* The window holds a fixed number of card SLOTS - its width over the
+       105 px pitch - whatever the rim search found in this frame: a card
+       mid-blink has no rim and would otherwise shrink the total from 18 to
+       11 between two frames of the same view. */
+    const fensterBreite = 2624 - (R.roll.bahnLinks - 3);
+    const plaetze = Math.max(n, Math.round(fensterBreite / UNITS_RASTER));
+    const kanal = (UNITS_BAHN_RECHTS - 8) - (R.roll.bahnLinks + 7);
+    const N = Math.max(plaetze, Math.round(plaetze / R.roll.anteil));
+    const erste = Math.max(0, Math.min(N - plaetze, Math.round(((R.roll.x0 - (R.roll.bahnLinks + 7)) / kanal) * N)));
+    return {N, erste, sichtbar: plaetze};
+  }
+  return {N: n, erste: 0, sichtbar: n};
+}
+function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0}; }
+function kbSchluessel(z){ return namKey((z.tag || "") + " " + (z.name || "")); }
+/* Already on the sheet? Same owner and strength, tag and name within a
+   quarter of the letters - the same unit read twice with a slip. */
+function kbSchonDa(e){
+  const ke = kbSchluessel(e);
+  return KB.zeilen.find(u => u.status === "erfasst" && (
+    (u.tag === e.tag && u.name === e.name && u.besitzer === e.besitzer) ||
+    (namKey(u.besitzer || "") === namKey(e.besitzer || "") && JSON.stringify(u.hp || []) === JSON.stringify(e.hp || [])
+      && levenshtein(kbSchluessel(u), ke) <= Math.max(2, Math.round(0.25*Math.max(kbSchluessel(u).length, ke.length))))));
+}
+
+/* One reading -> the sheet. */
+function kbVerarbeiten(R){
+  KB.frame = R.gross; KB.hell = R.hell; KB.gain = R.gain;
+  if (R.dialog){
+    if (R.stadt){ KB.merk = {stadt: R.stadt.i, linie: R.linie || null}; KB.ort = R.stadt.i; KB.linie = R.linie || null; }
+    KB.status = R.stadt ? `Battle window: ${MAP.n[R.stadt.i][0]}${R.linie ? " - line " + R.linie : ""}. Now click the units.`
+                        : "Battle window seen, but no town read from it.";
+    kbZeichnen(); return;
+  }
+  if (R.leiste){
+    if (R.stadt){ KB.ort = R.stadt.i; KB.linie = R.linie || null; }
+    else if (KB.merk && KB.ort === null){ KB.ort = KB.merk.stadt; KB.linie = KB.merk.linie; }
+    KB.halter = R.seite;
+    /* a frame without the thumb (it blinks too) must not turn a scrolled
+       town into a short one - keep the total once a track has been seen */
+    if (R.roll && R.roll.anteil) KB.hatteBahn = true;
+    const f = (!R.roll && KB.hatteBahn && KB.N) ? {N: KB.N, erste: KB.erste, sichtbar: KB.sichtbar} : kbFenster(R);
+    /* a changed total keeps what is on the sheet and grows or trims the guesses */
+    if (f.N !== KB.N){
+      const alt = KB.zeilen;
+      KB.zeilen = [];
+      for (let i = 0; i < f.N; i++) KB.zeilen.push(alt[i] && alt[i].status === "erfasst" ? alt[i] : kbZeileLeer(i));
+      for (let i = f.N; i < alt.length; i++) if (alt[i] && alt[i].status === "erfasst") KB.zeilen.push(alt[i]);
+      KB.zeilen.forEach((z, i) => z.i = i);
+      KB.N = KB.zeilen.length;
+    }
+    KB.erste = f.erste; KB.sichtbar = f.sichtbar; KB.karten = R.karten;
+    R.karten.forEach((k, j) => {
+      const z = KB.zeilen[KB.erste + j];
+      if (z && z.status !== "erfasst"){
+        z.seite = k.seite === "US" ? 0 : k.seite === "GE" ? 1 : k.seite === "SU" ? 2 : z.seite;
+        z.eigen = k.seite === "gelb";
+        const t = kbTypVon(R, KB.erste + j); if (t) z.typ = t;
+      }
+    });
+  } else if (!R.form){
+    KB.status = "No detail bar in the picture.";
+  }
+  KB.ziel = (KB.ort !== null && KB.linie) ? linieZiel(KB.ort, KB.linie) : null;
+  if (R.einheit){
+    const e = unitsZeileAus(R);
+    if (!R.leiste && KB.N === 0){ KB.zeilen = [kbZeileLeer(0)]; KB.N = 1; }
+    const da = kbSchonDa(e);
+    /* Two units may carry the same tag and name (rare, but it happens). A
+       reading that matches a line OUTSIDE the visible window, while the
+       window still holds an unread place, is such a twin, not a repeat. */
+    const kand = kbAuswahlIndex(R);
+    const imFenster = i => i >= KB.erste && i < KB.erste + Math.max(1, KB.sichtbar);
+    const zwilling = da && kand !== null && !imFenster(da.i) && imFenster(kand);
+    if (da && !zwilling){
+      KB.status = `${e.tag || e.name} is already on the sheet (line ${da.i + 1}).`;
     } else {
-      const st = R.stadt ? `${unitsEsc(MAP.n[R.stadt.i][0])}${R.stadt.sicher ? "" : " (?)"}`
-               : unitsOrtMerk ? `${unitsEsc(MAP.n[unitsOrtMerk.stadt][0])} <span class="dim">(from the battle window)</span>`
-               : `<i>not read</i>`;
-      const n = R.karten.length, gelb = R.karten.filter(x => x.seite === "gelb").length, blass = R.karten.filter(x => x.seite === "-").length;
-      const zielI = (R.linie && R.stadt) ? linieZiel(R.stadt.i, R.linie) : null;
-      k += `<div><b>${st}</b>${R.linie ? ` · attack line ${R.linie}${zielI !== null ? " → " + unitsEsc(MAP.n[zielI][0]) : ""}` : ""} · ${R.seite !== null ? "held by " + unitsSeiteName(R.seite) : "holder ?"} ·
-            ${n} cards on screen${gelb ? `, ${gelb} yours` : ""}${blass ? `, ${blass} blinking` : ""}${
-            R.roll && R.roll.anteil ? ` · about <b>${Math.round(n/R.roll.anteil)}</b> units in town` : ""}</div>`;
+      let i = kand;
+      if (i === null){ i = KB.zeilen.length; KB.zeilen.push(kbZeileLeer(i)); KB.N = KB.zeilen.length; }
+      const z = KB.zeilen[i];
+      Object.assign(z, {status: "erfasst", tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp, nameZuv: e.nameZuv,
+                        eigen: !!e.eigen, seite: e.seite !== null && e.seite !== undefined ? e.seite : z.seite,
+                        zwilling: zwilling ? da.i + 1 : null});
+      if (KB.ort === null && e.stadt !== null && e.stadt !== undefined) KB.ort = e.stadt;
+      KB.status = `Writing down ${e.tag || ""} ${e.name} …`;
+      kbSchreiben(z);
     }
   }
-  kopf.innerHTML = k || "Waiting for a picture …";
-  const ort = document.getElementById("units-ort");
-  if (R && R.dialog && R.stadt) unitsOrtMerk = {stadt: R.stadt.i, linie: R.linie || null};
-  /* no town of its own - with or without a bar - takes the remembered one */
-  const ortI = R && R.stadt ? R.stadt.i : (R && !R.stadt && unitsOrtMerk ? unitsOrtMerk.stadt : null);
-  if (ort && ortI !== null && ortI !== undefined && !ort.dataset.hand) ort.value = MAP.n[ortI][0];
+  kbZeichnen();
+}
 
-  tab.innerHTML = unitsListe.length ? `<table>
-    <tr><th>Tag</th><th>Name</th><th>Owner</th><th>Strength</th><th>Side</th></tr>
-    ${unitsListe.map((u,i) => `<tr class="${u.eigen ? "dim" : ""}" title="${u.eigen ? "your own unit - not kept" : ""}">
-      <td>${unitsEsc(u.tag)}</td>
-      <td style="${u.nameZuv < 60 ? "color:var(--warn)" : ""}" title="${u.nameZuv < 60 ? "read with low confidence" : ""}">${unitsEsc(u.name)}</td>
-      <td style="${u.besitzer ? "" : "color:var(--warn)"}">${u.besitzer ? unitsEsc(u.besitzer) : "not read"}</td>
-      <td>${(u.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  ")}</td>
-      <td>${u.seite !== null ? unitsSeiteName(u.seite) : "?"}${u.linie ? ` · line ${u.linie}` : ""}</td></tr>`).join("")}
-  </table>` : `<div class="hint">No units yet. Click a unit in the game's detail bar, or drop a picture of it.</div>`;
-  const b = document.getElementById("units-keep"); if (b) b.disabled = !unitsListe.some(u => !u.eigen);
+/* The clerk writes: the line's letters appear one by one over about a
+   second and a half, the tag goes out in Morse meanwhile. */
+function kbSchreiben(z){
+  const text = [z.tag, z.name, z.besitzer, (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  ")];
+  const gesamt = text.join("").length || 1;
+  const dauer = Math.max(900, Math.min(2200, 35*gesamt));
+  KB.schreibt = {i: z.i, ab: jetzt(), dauer};
+  kbMorse(z.tag);
+  const takt = setInterval(() => {
+    if (!KB || !KB.schreibt || KB.schreibt.i !== z.i){ clearInterval(takt); return; }
+    const p = (jetzt() - KB.schreibt.ab) / KB.schreibt.dauer;
+    if (p >= 1){ KB.schreibt = null; clearInterval(takt); KB.status = `${z.tag || z.name} is on the sheet - click the next unit.`; }
+    kbZeichnen();
+  }, 60);
 }
-async function unitsBildHerein(datei, herkunft){
-  const st = document.getElementById("units-status");
-  const setz = t => { if (st) st.textContent = t; };
-  try {
-    const R = await unitsLesen(datei, setz);
-    unitsStand = R;
-    const z = unitsZeileAus(R);
-    if (z && unitsNeu(z)) unitsListe.push(z);
-    setz(R.einheit ? `Read: ${R.einheit.tag || ""} ${R.einheit.name}` : "No unit picked in this picture.");
-  } catch(e){ setz("Could not read this picture: " + (e.message || e)); }
-  unitsZeichnen();
+
+/* ---- drawing ----------------------------------------------------------- */
+function kbZeichnen(){
+  if (!KB) return;
+  const kopf = document.getElementById("kb-kopf"), links = document.getElementById("kb-links"),
+        streifen = document.getElementById("kb-streifen"), blatt = document.getElementById("kb-blatt");
+  const erfasst = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen).length;
+  const ortName = KB.ort !== null && KB.ort !== undefined ? MAP.n[KB.ort][0] : null;
+  kopf.innerHTML = `
+    <div class="rd-kf weit"><div class="t">Town</div>
+      <div class="v">${ortName ? kbEsc(ortName) : "<small>not read - type it on the left</small>"}${
+        KB.linie ? ` <small>line ${kbEsc(KB.linie)}${KB.ziel !== null ? " → " + kbEsc(MAP.n[KB.ziel][0]) : ""}</small>` : ""}</div></div>
+    <div class="rd-kf"><div class="t">Held by</div><div class="v">${KB.halter !== null && KB.halter !== undefined ? kbSeiteName(KB.halter) : "?"}</div></div>
+    <div class="rd-kf ${KB.N && erfasst >= KB.N ? "gut" : ""}"><div class="t">Units on the sheet</div>
+      <div class="v">${erfasst}<small> of ${KB.N || "?"}</small></div>
+      <div class="bar"><i style="width:${KB.N ? Math.round(100*erfasst/KB.N) : 0}%"></i></div></div>
+    <div class="rd-kf"><div class="t">Capture</div>
+      <div class="v"><small>${KB.frame ? `${KB.frame.w}×${KB.frame.h}, brightness ${KB.hell}${KB.gain > 1 ? `, ×${KB.gain.toFixed(1)}` : ""}` : "—"}</small></div></div>`;
+  /* left: what is being written now, and the town field */
+  const sz = KB.schreibt !== null && KB.schreibt !== undefined ? KB.zeilen[KB.schreibt.i] : null;
+  links.innerHTML = `
+    <h3>Now</h3>
+    <div class="kb-jetzt">${sz ? `<b>${kbEsc(sz.tag)}</b><br>${kbEsc(sz.name)}<br>${kbEsc(sz.besitzer)}` : kbEsc(KB.status)}</div>
+    <h3>Town</h3>
+    <input id="kb-ort" list="units-orte" value="${ortName ? kbEsc(ortName) : ""}" placeholder="read from the bar, or type it" style="width:100%;background:#15181d;border:1px solid #2a2e36;color:#e8d9a8;padding:6px 8px;border-radius:3px">
+    <datalist id="units-orte">${MAP.n.map(n => `<option value="${kbEsc(n[0])}">`).join("")}</datalist>
+    <h3 style="margin-top:14px">How it works</h3>
+    Open a town with several units in the game and click its units one after another, <b>left to right</b>.
+    Each one is written down as it appears. A unit already on the sheet is not written twice.
+    On an attack line without a name, click the battle first - its window names town and line.`;
+  /* the strip */
+  streifen.className = "kb-streifen" + (KB.N > 20 ? " gross" : "");
+  streifen.innerHTML = KB.zeilen.map((z, i) => {
+    const imFenster = i >= KB.erste && i < KB.erste + KB.sichtbar;
+    const kl = ["kb-k", z.eigen ? "eigen" : kbSeiteKlasse(z.seite), imFenster ? "fenster" : "", KB.schreibt && KB.schreibt.i === i ? "jetzt" : ""].join(" ");
+    return `<div class="${kl}" data-i="${i}" title="${kbEsc(z.status === "erfasst" ? `${z.tag} ${z.name} - ${z.besitzer}` : "not read yet")}">${
+      z.typ && kbSymbol(z.typ) ? "" : "?"}${z.status === "erfasst" ? `<span class="fg" title="on the sheet">◎</span>` : ""}<span class="nr">${i+1}</span></div>`;
+  }).join("");
+  streifen.querySelectorAll(".kb-k").forEach(el => {
+    const z = KB.zeilen[+el.dataset.i];
+    if (z && z.typ){ const c = kbSymbol(z.typ); if (c) el.insertBefore(c, el.firstChild); }
+  });
+  /* the sheet */
+  const p = KB.schreibt ? Math.max(0, Math.min(1, (jetzt() - KB.schreibt.ab) / KB.schreibt.dauer)) : 1;
+  const zeig = (z, feld, txt) => {
+    if (!(KB.schreibt && KB.schreibt.i === z.i)) return kbEsc(txt);
+    /* reveal the fields in order: tag, name, owner, strength */
+    const reihe = ["tag","name","besitzer","hp"], k = reihe.indexOf(feld);
+    const laengen = reihe.map(f => String(f === "hp" ? (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  ") : (z[f] || "")).length);
+    const gesamt = laengen.reduce((a,b) => a+b, 0) || 1;
+    const vorher = laengen.slice(0, k).reduce((a,b) => a+b, 0);
+    const n = Math.max(0, Math.min(String(txt).length, Math.round(p*gesamt) - vorher));
+    const teil = String(txt).slice(0, n);
+    return kbEsc(teil) + (n < String(txt).length && n > 0 ? `<span class="kb-tinte"></span>` : "");
+  };
+  blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Town ?"}${KB.linie ? ` · attack line ${kbEsc(KB.linie)}` : ""} · ${new Date().toLocaleDateString()}</div>
+    <div class="kb-z kopfz"><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Side</div><div></div></div>
+    ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""}" data-i="${z.i}">
+      <div>${z.i + 1}</div>
+      <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set"}">${z.typ ? "" : "?"}</span></div>
+      <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${z.status === "erfasst" ? zeig(z, "tag", z.tag) + (z.zwilling ? " ²" : "") : "<i>?</i>"}</div>
+      <div class="f" data-f="name" title="click to correct" style="${z.nameZuv && z.nameZuv < 60 ? "color:#9b3b2e" : ""}">${z.status === "erfasst" ? zeig(z, "name", z.name) : ""}</div>
+      <div class="f" data-f="besitzer" title="click to correct">${z.status === "erfasst" ? zeig(z, "besitzer", z.besitzer || "") : ""}</div>
+      <div class="f" data-f="hp" title="click to correct">${z.status === "erfasst" ? zeig(z, "hp", (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  ")) : ""}</div>
+      <div class="f" data-f="seite" title="click to change">${z.eigen ? "own" : kbSeiteName(z.seite)}</div>
+      <div><button class="weg" data-i="${z.i}" title="remove this line">×</button></div>
+    </div>`).join("")}
+    ${KB.N ? "" : `<div class="kb-hinweis">Nothing on the sheet yet.</div>`}`;
+  blatt.querySelectorAll(".kb-z[data-i] .sym").forEach(el => {
+    const z = KB.zeilen[+el.closest(".kb-z").dataset.i];
+    if (z && z.typ){ const c = kbSymbol(z.typ); if (c) el.appendChild(c); }
+  });
+  kbPult();
 }
-/* The live feed: one frame a second from the shared game window. A frame
-   is read only when the head box changed since the last reading - the
-   engine needs a second or two per unit, and the same unit on screen for
-   ten seconds should not be read ten times. */
-function unitsKennung(d){
-  /* cheap fingerprint of the head box area: dark-pixel counts per 16 columns */
+function kbPult(){
+  const pult = document.getElementById("kb-pult");
+  const live = !!KB.live;
+  pult.innerHTML = `
+    <button class="rd-schalter ${live ? "an" : ""}" id="kb-kraft">${live ? "Capture running" : "Capture the game"}</button>
+    <div class="kb-abstand"></div>
+    <button class="rd-schalter ${kbTon ? "an" : ""}" id="kb-ton">${kbTon ? "Sound on" : "Sound off"}</button>
+    <div class="kb-abstand"></div>
+    <button class="rd-schalter" id="kb-keep" ${KB.zeilen.some(z => z.status === "erfasst" && !z.eigen) ? "" : "disabled"}>Keep the sheet</button>
+    <div class="kb-abstand"></div>
+    <button class="rd-schalter" id="kb-leer">New sheet</button>
+    <div class="kb-abstand"></div>
+    <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run borderless or windowed. Your own units are shown but not kept.</div>`;
+  document.getElementById("kb-kraft").addEventListener("click", ()=>{ KB.live ? kbLiveStop() : kbLiveStart(); });
+  document.getElementById("kb-ton").addEventListener("click", ()=>{ kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); kbPult(); });
+  document.getElementById("kb-keep").addEventListener("click", kbBehalten);
+  document.getElementById("kb-leer").addEventListener("click", ()=>{ const t = KB.ton; const live = KB.live; kbLiveStop(); KB = kbNeu(); if (live) kbLiveStart(); kbZeichnen(); });
+}
+
+/* ---- editing the sheet ---------------------------------------------------- */
+function kbBearbeiten(ev){
+  const f = ev.target.closest("[data-f]"); const zel = ev.target.closest(".kb-z[data-i]");
+  if (ev.target.closest(".weg")){
+    const i = +ev.target.closest(".weg").dataset.i;
+    KB.zeilen.splice(i, 1); KB.zeilen.forEach((z, k) => z.i = k); KB.N = KB.zeilen.length;
+    KB.status = "Line removed."; kbZeichnen(); return;
+  }
+  if (!f || !zel || f.querySelector("input,select")) return;
+  const z = KB.zeilen[+zel.dataset.i]; if (!z) return;
+  const feld = f.dataset.f;
+  let el;
+  if (feld === "seite"){
+    el = document.createElement("select");
+    el.innerHTML = `<option value="">?</option><option value="0">US</option><option value="1">GE</option><option value="2">USSR</option><option value="eigen">own</option>`;
+    el.value = z.eigen ? "eigen" : (z.seite === null || z.seite === undefined ? "" : String(z.seite));
+  } else if (feld === "typ"){
+    el = document.createElement("select");
+    el.innerHTML = `<option value="">?</option>` + MAP.at.map(a => `<option value="${a.k}">${kbEsc(atName(a.k))}</option>`).join("");
+    el.value = z.typ || "";
+  } else {
+    el = document.createElement("input"); el.type = "text";
+    el.value = feld === "hp" ? (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "").join(" ") : (z[feld] || "");
+  }
+  const fertig = () => {
+    const v = el.value;
+    if (feld === "seite"){ z.eigen = v === "eigen"; z.seite = v === "" || v === "eigen" ? (v === "eigen" ? z.seite : null) : +v; }
+    else if (feld === "typ"){ z.typ = v || null; }
+    else if (feld === "hp"){ z.hp = [...v.matchAll(/(\d+)\s*\/\s*(\d+)/g)].map(m => [+m[1], +m[2]]); }
+    else { z[feld] = v.trim(); }
+    if (z.status !== "erfasst" && (z.tag || z.name || z.besitzer)) z.status = "erfasst";
+    kbZeichnen();
+  };
+  el.addEventListener("blur", fertig);
+  el.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); el.blur(); } if (e.key === "Escape"){ el.removeEventListener("blur", fertig); kbZeichnen(); } });
+  f.innerHTML = ""; f.appendChild(el); el.focus();
+  if (el.select) el.select();
+}
+
+/* ---- the live feed --------------------------------------------------------- */
+function kbKennung(d){
   const out = [];
-  for (let x=UNITS_KASTEN.x0; x<UNITS_KASTEN.x1; x+=16){
+  for (let x = UNITS_KASTEN.x0; x < UNITS_KASTEN.x1; x += 16){
     let n = 0;
-    for (let y=1380; y<2140; y+=4) if (unitsMax(d, (y*UNITS_W + x)*4) < 90) n++;
+    for (let y = 1380; y < 2140; y += 4) if (unitsMax(d, (y*UNITS_W + x)*4) < 90) n++;
+    out.push(n);
+  }
+  /* and the card row, so that scrolling counts as a change */
+  for (let x = 1250; x < 2640; x += 24){
+    let n = 0;
+    for (let y = 1822; y < 1892; y += 6){ const p = (y*UNITS_W + x)*4; if (unitsMax(d,p) - unitsMin(d,p) > 60) n++; }
     out.push(n);
   }
   return out.join(",");
 }
-async function unitsLiveStart(){
-  if (unitsLive) return;
-  const st = document.getElementById("units-status");
-  const setz = t => { if (st) st.textContent = t; };
-  unitsLive = {letzte: null, vorige: null, laeuft: false};
-  const tick = async () => {
-    if (!unitsLive || unitsLive.laeuft) return;
-    unitsLive.laeuft = true;
-    try {
-      const f = await bildAufnehmen();
-      const {c, d} = await unitsRahmen(f);
-      const kn = unitsKennung(d);
-      /* read only what has stood still for two frames: the frame right
-         after a click catches the box half-drawn ("i lJS-002 2AT002") */
-      if (kn !== unitsLive.letzte && kn === unitsLive.vorige){
-        unitsLive.letzte = kn;
-        const R = await unitsLesen(c, setz);
-        unitsStand = R;
-        const z = unitsZeileAus(R);
-        if (z && unitsNeu(z)) unitsListe.push(z);
-        setz(R.einheit ? `Read: ${R.einheit.tag || ""} ${R.einheit.name} — click the next unit` : "Waiting — click a unit in the bar");
-        unitsZeichnen();
-      }
-      unitsLive.vorige = kn;
-    } catch(e){
-      setz(/denied|Permission/i.test(String(e.message || e)) ? "Screen sharing was declined." : "Live: " + (e.message || e));
-      unitsLiveStop();
-    } finally { if (unitsLive) unitsLive.laeuft = false; }
-  };
-  unitsLive.timer = setInterval(tick, 900);
-  const b = document.getElementById("units-live"); if (b) b.textContent = "Stop";
-  setz("Live — click the units in the game's detail bar one after another.");
-  tick();
+async function kbTick(){
+  if (!KB || !KB.live || KB.laeuft) return;
+  KB.laeuft = true;
+  try {
+    const f = await bildAufnehmen();
+    const {c, d, quer, gross, hell, gain} = await unitsRahmen(f);
+    KB.frame = gross; KB.hell = hell; KB.gain = gain;
+    const kn = kbKennung(d);
+    /* read only what stood still for two frames */
+    if (kn !== KB.letzte && kn === KB.vorige){
+      KB.letzte = kn;
+      const R = await unitsLesen(c, t => { KB.status = t; });
+      kbVerarbeiten(R);
+    } else if (kn !== KB.vorige){ kbZeichnen(); }
+    KB.vorige = kn;
+  } catch(e){
+    KB.status = /denied|Permission/i.test(String(e.message || e)) ? "Screen sharing was declined." : "Capture: " + (e.message || e);
+    kbLiveStop(); kbZeichnen();
+  } finally { if (KB) KB.laeuft = false; }
 }
-function unitsLiveStop(){
-  if (!unitsLive) return;
-  clearInterval(unitsLive.timer); unitsLive = null;
-  const b = document.getElementById("units-live"); if (b) b.textContent = "Capture the game …";
+function kbLiveStart(){
+  if (!KB || KB.live) return;
+  KB.live = setInterval(kbTick, 900);
+  KB.status = "Live - click the units in the game's detail bar, left to right.";
+  kbRauschenAn(); kbZeichnen(); kbTick();
 }
-/* "Keep": the list goes into the browser's own store, keyed by town. The
-   rows are shaped so that they can move into a server pot unchanged once
-   there is one. */
-function unitsBehalten(){
-  const ort = document.getElementById("units-ort");
-  const f = ort && ort.value ? unitsStadt(ort.value) : null;
-  if (!f){ toast("Which town? Type its name first."); ort && ort.focus(); return; }
-  const zeilen = unitsListe.filter(u => !u.eigen).map(u => ({
-    town: (u.stadt !== null && u.stadt !== undefined) ? u.stadt : f.i, line: u.linie || null, side: u.seite, tag: u.tag, name: u.name, owner: u.besitzer, hp: u.hp, t: jetzt(), by: S.me }));
+function kbLiveStop(){
+  if (!KB || !KB.live) return;
+  clearInterval(KB.live); KB.live = null;
+  kbRauschenAus(); kbZeichnen();
+}
+/* one picture, for checks without the game */
+async function kbBild(datei){ if (!KB) return; const R = await unitsLesen(datei, t => { KB.status = t; }); kbVerarbeiten(R); return R; }
+
+/* ---- keeping ---------------------------------------------------------------- */
+function kbBehalten(){
+  const ortFeld = document.getElementById("kb-ort");
+  const f = ortFeld && ortFeld.value ? unitsStadt(ortFeld.value) : null;
+  const ort = f ? f.i : KB.ort;
+  if (ort === null || ort === undefined){ toast("Which town? Type its name on the left."); ortFeld && ortFeld.focus(); return; }
+  const zeilen = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen).map(z => ({
+    town: ort, line: KB.linie || null, side: z.seite, type: z.typ || null, tag: z.tag, name: z.name, owner: z.besitzer, hp: z.hp, t: jetzt(), by: S.me }));
   if (!zeilen.length){ toast("Nothing to keep - only your own units."); return; }
   let alles = {};
-  try { alles = JSON.parse(localStorage.getItem(UNITS_LOCAL) || "{}"); } catch(e){}
-  alles[f.i] = {t: jetzt(), rows: zeilen};
-  try { localStorage.setItem(UNITS_LOCAL, JSON.stringify(alles)); } catch(e){}
-  toast(`${zeilen.length} units kept for ${MAP.n[f.i][0]} — in this browser only, for now.`);
-  unitsListe = []; unitsStand = null; unitsZeichnen();
+  try { alles = JSON.parse(localStorage.getItem(KB_LOCAL) || "{}"); } catch(e){}
+  alles[ort] = {t: jetzt(), rows: zeilen};
+  try { localStorage.setItem(KB_LOCAL, JSON.stringify(alles)); } catch(e){}
+  toast(`${zeilen.length} units kept for ${MAP.n[ort][0]} - in this browser only, for now.`);
+  KB.status = `${zeilen.length} units kept for ${MAP.n[ort][0]}.`;
+  kbZeichnen();
 }
 
-document.getElementById("b-units").addEventListener("click", ()=>{
-  unitsListe = []; unitsStand = null; unitsOrtMerk = null;
-  openDlg(`
-    <div class="dlg-h"><h2>Read the units of a town</h2>
-      <p>Tag, name, owner and strength — from the game's detail bar.</p></div>
-    <div class="dlg-b">
-      <div style="border:1px solid var(--accent-dk);border-radius:2px;padding:11px 13px;
-           background:rgba(226,172,72,.05)">
-        <div style="font-size:13px;line-height:1.5;margin-bottom:9px">Open a town with several units in the game,
-          then click its units one after another. Each one is read as it appears.</div>
-        <button class="btn primary" id="units-live" style="width:100%;justify-content:center">Capture the game …</button>
-        <div class="note">The game must run <b>borderless or windowed</b>. Your own units (yellow cards) are shown but not kept.</div>
-      </div>
-      <div id="units-status" style="margin-top:10px;color:var(--dim)">Waiting for a picture …</div>
-      <div id="units-kopf" style="margin-top:8px"></div>
-      <div class="row" style="margin-top:8px;align-items:center">
-        <label for="units-ort" style="min-width:60px">Town</label>
-        <input id="units-ort" list="units-orte" placeholder="read from the bar, or type it" style="flex:1">
-        <datalist id="units-orte">${MAP.n.map(n => `<option value="${unitsEsc(n[0])}">`).join("")}</datalist>
-      </div>
-      <div id="units-tab" style="margin-top:10px"></div>
-    </div>
-    <div class="dlg-f">
-      <button class="btn" id="d-close">Close</button>
-      <span style="flex:1"></span>
-      <button class="btn primary" id="units-keep" disabled>Keep</button>
-    </div>`, true);
-  document.getElementById("d-close").addEventListener("click", closeDlg);
-  bildQuelle("units-file", unitsBildHerein);
-  /* the live feed must stop with the window */
-  const abAlt = bildAbmelden;
-  bildAbmelden = () => { unitsLiveStop(); if (abAlt) abAlt(); };
-  document.getElementById("units-live").addEventListener("click", ()=>{ unitsLive ? unitsLiveStop() : unitsLiveStart(); });
-  document.getElementById("units-ort").addEventListener("input", ev => { ev.target.dataset.hand = "1"; });
-  document.getElementById("units-keep").addEventListener("click", unitsBehalten);
-  unitsZeichnen();
+/* ---- open and close ---------------------------------------------------------- */
+let kbOffen = false;
+async function kabineAuf(){
+  if (kbOffen) return;
+  kbOffen = true;
+  KB = kbNeu();
+  document.getElementById("kabine").classList.add("an");
+  kbZeichnen();
+  /* Opening the cabin means wanting to read - ask for the window right away,
+     as the radar does. Not without the intel right. */
+  if (kannTeilen() && darf("aufklaerung")) kbLiveStart();
+  else if (!darf("aufklaerung")) KB.status = rechtSatz("aufklaerung");
+  else KB.status = "This browser cannot share a window here.";
+  kbZeichnen();
+}
+function kabineZu(){
+  if (!kbOffen) return;
+  kbOffen = false;
+  kbLiveStop(); kbRauschenAus();
+  document.getElementById("kabine").classList.remove("an");
+  KB = null;
+}
+document.getElementById("b-units").addEventListener("click", kabineAuf);
+document.getElementById("kb-zu").addEventListener("click", kabineZu);
+document.getElementById("kb-blatt").addEventListener("click", ev => { if (KB) kbBearbeiten(ev); });
+document.getElementById("kb-links").addEventListener("change", ev => {
+  if (ev.target && ev.target.id === "kb-ort" && KB){ const f = unitsStadt(ev.target.value); if (f){ KB.ort = f.i; KB.ziel = KB.linie ? linieZiel(KB.ort, KB.linie) : null; kbZeichnen(); } }
 });
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && kbOffen) kabineZu(); });
 
 let shotState = null;
 document.getElementById("b-shot").addEventListener("click", ()=>{
@@ -27365,7 +27718,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f8b90a09f3</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 6d2d37e33d</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -27500,7 +27853,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f8b90a09f3";
+const BAU = "6d2d37e33d";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
