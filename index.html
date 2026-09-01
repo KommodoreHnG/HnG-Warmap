@@ -524,6 +524,7 @@ body.txt-modus{cursor:text}
   vertical-align:middle}
 #b-board.neu{box-shadow:inset 0 0 0 1px var(--accent)}
 .btn .marke[hidden]{display:none}
+.flagge{vertical-align:-2px;margin-right:4px;border:1px solid rgba(0,0,0,.35);border-radius:1px;flex:none}
 /* the lifted player's note above the map */
 #hebe-zettel{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:12;
   display:flex;align-items:center;gap:8px;padding:5px 6px 5px 12px;font-size:12px;
@@ -1663,6 +1664,40 @@ function symbolSVG(key, farbe, w=26, h=18){
 /* Die drei Abzeichen, die das Spiel selbst benutzt: Stern im Ring fuer die
    US, Balkenkreuz fuer Deutschland, der blanke Stern fuer die Sowjetunion.
    Damit liest sich eine Clanzeile als Seite und nicht nur als Kuerzel. */
+/* Where a player plays from - four rough regions, optional. Coarse on
+   purpose: a region says when a clan is likely awake, nothing more. */
+const REGIONEN = [{k:"eu", name:"Europe"}, {k:"us", name:"USA"}, {k:"ru", name:"Russia"}, {k:"cn", name:"China"}];
+const regionName = k => (REGIONEN.find(r => r.k === k) || {}).name || "";
+function regionSVG(k, w = 18){
+  const st = (cx, cy, r) => Array.from({length: 10}, (_, i) => {
+    const a = -Math.PI/2 + i*Math.PI/5, rr = i % 2 ? r*0.4 : r;
+    return (cx + rr*Math.cos(a)).toFixed(2) + "," + (cy + rr*Math.sin(a)).toFixed(2);
+  }).join(" ");
+  let inhalt = "";
+  if (k === "eu")
+    inhalt = `<rect width="24" height="16" fill="#003399"/>` + Array.from({length: 12}, (_, i) => {
+      const a = i*Math.PI/6;
+      return `<circle cx="${(12 + 5*Math.cos(a)).toFixed(2)}" cy="${(8 + 5*Math.sin(a)).toFixed(2)}" r="0.85" fill="#ffcc00"/>`;
+    }).join("");
+  else if (k === "us")
+    inhalt = `<rect width="24" height="16" fill="#fff"/>` + Array.from({length: 7}, (_, i) =>
+      `<rect y="${(i*2.46).toFixed(2)}" width="24" height="1.23" fill="#b22234"/>`).join("")
+      + `<rect width="10" height="8.6" fill="#3c3b6e"/>`;
+  else if (k === "ru")
+    inhalt = `<rect width="24" height="5.34" fill="#fff"/><rect y="5.33" width="24" height="5.34" fill="#0039a6"/>
+      <rect y="10.66" width="24" height="5.34" fill="#d52b1e"/>`;
+  else if (k === "cn")
+    inhalt = `<rect width="24" height="16" fill="#de2910"/><polygon points="${st(5, 5.5, 3.2)}" fill="#ffde00"/>`;
+  else return "";
+  return `<svg class="flagge" viewBox="0 0 24 16" width="${w}" height="${Math.round(w*2/3)}"
+    role="img" aria-label="${regionName(k)}"><title>${regionName(k)}</title>${inhalt}</svg>`;
+}
+const regionVon = name => { const e = S.roster[spielerKey(name)]; return (e && e.v && e.v.region) || ""; };
+const regionWahl = (attr, wert) => `<select ${attr} class="mini" title="Where this player plays from — optional">
+    <option value="">—</option>
+    ${REGIONEN.map(r => `<option value="${r.k}"${wert === r.k ? " selected" : ""}>${r.name}</option>`).join("")}
+  </select>`;
+
 function fraktionSVG(f, gr = 15){
   if (f == null) return "";
   const c = col(FACTIONS[f]);
@@ -2617,7 +2652,7 @@ function namUnterschied(a, b){
   }
   return raus;
 }
-function merkeSpieler(name, f, clan, fp){
+function merkeSpieler(name, f, clan, fp, region){
   name = String(name).trim();
   if (name.length < 2) return null;
   /* DER RIEGEL. Das Spielerverzeichnis haengt am Recht "aufklaerung"
@@ -2655,14 +2690,19 @@ function merkeSpieler(name, f, clan, fp){
   /* Ein einmal hinterlegter Abdruck bleibt, wenn keiner mitgeliefert wird -
      die OCR-Maske kennt keinen. */
   const neuFp = fp === undefined ? (av ? av.fp : undefined) : (fp || undefined);
+  /* The region follows the same rule - undefined leaves it alone, so a
+     faction or clan change does not wipe it (the tz field was lost exactly
+     that way once). Only the four known keys are kept. */
+  const neuR = region === undefined ? ((av && av.region) || "")
+             : (REGIONEN.some(r => r.k === region) ? region : "");
   if (av && av.name === name && av.f === neuF && (av.clan||"") === (neuC||"")
-      && (av.fp||"") === (neuFp||"")) return k;
+      && (av.fp||"") === (neuFp||"") && (av.region||"") === neuR) return k;
   /* Die vermutete Zeitzone bleibt erhalten - sie wird woanders gesetzt und
      darf durch eine Fraktions- oder Clanaenderung nicht verlorengehen. */
   /* Kein tz mehr: eine geschaetzte Zeitzone, einer Person zugeordnet, ist
      Profilbildung ueber einen einzelnen Menschen. Alte Werte werden beim
      naechsten Schreiben nicht mitgenommen und verschwinden dadurch. */
-  S.roster[k] = {v:{name, f: neuF, clan: neuC, fp: neuFp},
+  S.roster[k] = {v:{name, f: neuF, clan: neuC, fp: neuFp, region: neuR || undefined},
                  t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`roster:${k}`);
   if (!av) gutschrift("pl", k);        // nur der erste Eintrag zaehlt
@@ -2681,7 +2721,7 @@ function clanListe(){
   const m = new Map();
   for (const [id, v] of clans())
     m.set(id, {id, tag: v.tag || "", name: v.name || "", f: v.f,
-               eigen: !!v.eigen, vorl: !!v.vorl,
+               eigen: !!v.eigen, vorl: !!v.vorl, region: v.region || "",
                titel: clanTitel(id), spieler: [], teams: 0});
   for (const p of spielerListe()){
     const id = clanIdVon(p.name);
@@ -2986,7 +3026,7 @@ function clansAt(i){
 }
 const spielerListe = () => Object.entries(S.roster)
   .filter(([,e]) => e && e.v && e.v.name)
-  .map(([k,e]) => ({key:k, name:e.v.name, f:e.v.f, clan:e.v.clan||"", t:e.t, by:e.n || e.by}))
+  .map(([k,e]) => ({key:k, name:e.v.name, f:e.v.f, clan:e.v.clan||"", region:e.v.region||"", t:e.t, by:e.n || e.by}))
   .sort((a,b) => a.name.localeCompare(b.name));
 /* Loose search: "peter" finds Peter, Peter123 and the decorated spelling. */
 function spielerSuche(q){
@@ -6910,7 +6950,7 @@ function side(){
             <div class="unit" style="--f:${col(FACTIONS[u.f!=null?u.f:faction])}">
               <span class="sym">${symbolSVG(u.k, c)}</span>
               <span class="n">${u.n}× ${esc(atName(u.k))}
-                <em>${FACTIONS[u.f!=null?u.f:faction].tag}${u.owner?` · ${nameMitClan(u.owner)}`:""}</em></span>
+                <em>${FACTIONS[u.f!=null?u.f:faction].tag}${u.owner?` · ${regionSVG(regionVon(u.owner), 13)}${nameMitClan(u.owner)}`:""}</em></span>
               ${g.mine ? `<button class="x" data-sprm="${k}" title="Remove">×</button>` : `<span class="lock">🔒</span>`}
             </div>`).join("")}
         </div>`).join("") : `<span class="empty">Nothing reported here.</span>`}
@@ -7129,8 +7169,8 @@ function side(){
 const AUFKL_IM_FENSTER = [
   "#en-add", "#en-bulk", "#en-ocr", "#bulk-go",       // Spieler eintragen
   "#cl-neu", "#cl-neu-unbek",                         // Clan anlegen
-  "[data-fac]", "[data-clanwahl]",                    // Fraktion und Clan je Zeile
-  "[data-clanname]", "[data-clanseite]", "[data-claneigen]",
+  "[data-fac]", "[data-clanwahl]", "[data-reg]",      // Fraktion, Clan und Region je Zeile
+  "[data-clanname]", "[data-clanseite]", "[data-claneigen]", "[data-clanreg]",
   "[data-clanmit]", "[data-clanfusion]",              // Clan aendern
   "#fd-add", "#fa-w-add", "#fa-v-add", "[data-addu]", // Feind: Einheiten, Arsenal
   "#fr-add", "[data-rset]",                           // Feind: Rollen
@@ -18621,7 +18661,7 @@ function intelDialog(tab, seite){
             + They belong together (no name yet)</button>
         </div>
         ${clans.length ? `<div class="tw"><table>
-          <thead><tr><th>Clan</th><th>Side</th><th>Ours?</th><th>Players</th><th>Known teams</th>
+          <thead><tr><th>Clan</th><th>Side</th><th>Region</th><th>Ours?</th><th>Players</th><th>Known teams</th>
             <th>Seen</th><th colspan="2">What they field</th><th>Last</th></tr></thead>
           <tbody>${clans.map(cl=>`<tr class="fac-row"
               style="--f:${cl.f!=null?col(FACTIONS[cl.f]):"var(--dim2)"}">
@@ -18640,6 +18680,7 @@ function intelDialog(tab, seite){
               <button class="btn" data-clanmit="${esc(cl.id)}"
                 style="padding:0 6px;font-size:10px;margin-left:3px"
                 title="Also move every recorded member to this side">→ ${cl.spieler.length}</button>` : ""}</td>
+            <td style="text-align:left;white-space:nowrap">${regionSVG(cl.region)}${regionWahl(`data-clanreg="${esc(cl.id)}"`, cl.region)}</td>
             <td><label class="toggle" style="justify-content:center"><input type="checkbox"
                 data-claneigen="${esc(cl.id)}"${cl.eigen?" checked":""}><span></span></label></td>
             <td>${cl.spieler.length}</td>
@@ -18672,7 +18713,7 @@ function intelDialog(tab, seite){
           <button class="btn" id="en-ocr" style="flex:1">Read a battle screenshot …</button>
         </div>
         ${liste.length ? `<div class="tw"><table>
-          <thead><tr><th>Player</th><th>Clan</th><th>Fights for</th><th>Known teams</th><th>Seen</th><th>Towns</th><th>What</th><th>Last</th></tr></thead>
+          <thead><tr><th>Player</th><th>Clan</th><th>Fights for</th><th>Region</th><th>Known teams</th><th>Seen</th><th>Towns</th><th>What</th><th>Last</th></tr></thead>
           <tbody>${liste.map(([key,d])=>`<tr>
             <td><a href="#" data-oeffne="${esc(key)}" style="color:var(--accent)">${esc(d.name)}</a>${
               uebergelaufen(key) ? ` <em style="color:var(--accent);font-size:10px">ours</em>` : ""}</td>
@@ -18682,6 +18723,7 @@ function intelDialog(tab, seite){
               <option value="">—</option>
               ${FACTIONS.map(f=>`<option value="${f.id}"${d.f===f.id?" selected":""}>${f.tag}</option>`).join("")}
             </select></td>
+            <td style="text-align:left;white-space:nowrap">${regionSVG(regionVon(d.name))}${regionWahl(`data-reg="${esc(key)}"`, regionVon(d.name))}</td>
             <td>${atEcht(feindDepot(key)).length || "—"}</td>
             <td>${d.teams?nz(d.teams):"—"}</td>
             <td>${d.orte.size
@@ -18818,6 +18860,15 @@ function intelDialog(tab, seite){
     merkeSpieler(d.name, s.value === "" ? null : +s.value);
     draw(); toast("Faction updated");
   }));
+  document.querySelectorAll("[data-reg]").forEach(s => s.addEventListener("change", ev=>{
+    ev.stopPropagation();
+    const d = proSpieler.get(s.dataset.reg);
+    if (merkeSpieler(d.name, undefined, undefined, undefined, s.value) === null){
+      toast("Recording players needs the scouting right"); return;
+    }
+    const fl = s.parentElement.querySelector(".flagge"); if (fl) fl.remove();
+    s.insertAdjacentHTML("beforebegin", regionSVG(s.value));
+  }));
   const neuAuf = reiter => intelDialog(reiter, nurSeite === null ? undefined : nurSeite);
   {
     const ab = document.getElementById("ak-add");
@@ -18930,6 +18981,12 @@ function intelDialog(tab, seite){
 
   /* Eigen oder gegnerisch. Steht am Clan, nicht am Spieler - sonst muesste
      man es fuenfmal eintragen und koennte sich fuenfmal widersprechen. */
+  document.querySelectorAll("[data-clanreg]").forEach(sel => sel.addEventListener("change", ev => {
+    ev.stopPropagation();
+    if (!clanSetzen(sel.dataset.clanreg, {region: sel.value})) return;
+    const fl = sel.parentElement.querySelector(".flagge"); if (fl) fl.remove();
+    sel.insertAdjacentHTML("beforebegin", regionSVG(sel.value));
+  }));
   document.querySelectorAll("[data-claneigen]").forEach(cb => {
     cb.addEventListener("change", ()=>{
       clanSetzen(cb.dataset.claneigen, {eigen: cb.checked ? 1 : 0});
@@ -28149,7 +28206,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c885dba5bc</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 8e79a675dd</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28284,7 +28341,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "c885dba5bc";
+const BAU = "8e79a675dd";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
