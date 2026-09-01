@@ -9788,6 +9788,17 @@ const LEISTEN_FELD = {x0:0.2474, x1:0.6667, y0:0.145, y1:0.194};
    Grenzen aus den Rahmenspruengen: oben 0,8343 (Helligkeit 64 auf
    125), unten 0,8995 (125 auf 38), links 0,2734, rechts 0,727. */
 const DETAIL_FELD = {x0:0.270, x1:0.730, y0:0.832, y1:0.900};
+/* THE UNIT LIST AT THE RIGHT EDGE, with the ZUM KAMPF button under it.
+   Each of the player's own units is listed there with three bars that are
+   green - or red once the unit is battered. Measured on 29 full frames:
+   the list passes the colour rules on 2.9 % (US) and 3.6 % (USSR) of its
+   area, about as much as the map itself; the button is a solid block that
+   passes the US rule on 71 % of its area. Both lie right of KARTEN_FELD
+   and only matter on the full-frame pass - there a town whose probe box
+   touches them reads the bars' colour as its own. One zone covers the
+   whole right column below the top bar; the list is scrollable, so its
+   height cannot be trusted. */
+const EINHEITEN_FELD = {x0:0.78, x1:1.0, y0:0.20, y1:1.0};
 /* DER SUCHINDEX DES SPIELS. Drueckt man "Schlachtfeld finden", klappt
    links eine Liste aller Staedte auf - und der Zoomregler verschwindet
    dahinter. Der Befund, zweimal gemeldet.
@@ -10260,6 +10271,7 @@ function kartenAusBild(quelle, melde, opt){
   };
   const lspr = festeSperre(LEISTEN_FELD);
   const dspr = festeSperre(DETAIL_FELD);
+  const espr = festeSperre(EINHEITEN_FELD);
   /* Zweite Sperre, wenn der Suchindex offen steht: sein Panel verdeckt
      bis zu einem Viertel des Lesefeldes und traegt am linken Rand
      farbige Fraktionskreise, die sonst als Stadtfarben gelesen werden.
@@ -10267,7 +10279,7 @@ function kartenAusBild(quelle, melde, opt){
      pruefen, dann sperren. Der Detektor liefert die Sperre gleich
      mit, samt gemessener Unterkante. */
   const ispr = suchIndexOffen(a);
-  return {erg: farbenLesen(a.mk, punkte, tr, [lspr, dspr, ispr]),
+  return {erg: farbenLesen(a.mk, punkte, tr, [lspr, dspr, ispr, espr]),
           indexOffen: !!ispr,
           brennt: feuerLesen(a.mk, punkte, tr, feuerKlemm),
           adern: linienLesen(a.mk, punkte, tr),
@@ -27208,7 +27220,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0ff41b1aa0</span></p></div>
+         installation. <span style="color:var(--dim2)">· build cea8e3b45c</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -27343,7 +27355,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0ff41b1aa0";
+const BAU = "cea8e3b45c";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
