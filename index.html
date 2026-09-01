@@ -1250,18 +1250,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
     <div id="me-tile"></div>
     <div id="forces" title="Your clan's forces — click for the depot"></div>
     <div id="top-right">
-      <button class="btn" id="b-clan" title="Members, depot, requests, roles">Manage</button>
-      <button class="btn" id="b-arms">Arsenal</button>
-      <button class="btn" id="b-note" title="Encrypted — nobody else can read it">Notebook</button>
-      <button class="btn" id="b-intel">Intel</button>
-      <button class="btn" id="b-battle">Battle</button>
-      <button class="btn" id="b-board">Board</button>
-      <button class="btn" id="b-view">View</button>
-      <button class="btn" id="b-shot">Read screenshot</button>
-      <button class="btn" id="b-units" title="Read the units of a town from the game's detail bar">Units</button>
-      <button class="btn" id="b-war">War</button>
-      <!-- Der Radarraum ist die zentrale Funktion und war unter "Read
-           screenshot" in einem zugeklappten Bereich versteckt. -->
+      <!-- The two capture rooms come first: they are what the map is fed with. -->
       <button class="btn" id="b-radar" title="Watch the war map — reads towns as you play">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="9.3"/><circle cx="12" cy="12" r="4.7"/>
@@ -1269,6 +1258,23 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
           <circle cx="16.4" cy="8.2" r="1.3" fill="currentColor" stroke="none"/>
         </svg><span class="txt">Radar</span>
       </button>
+      <button class="btn" id="b-units" title="Read the units of a town from the game's detail bar">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4.5 11.5 a7.5 6.5 0 0 1 15 0 v1.2 H4.5 z"/>
+          <path d="M3.2 12.7 H20.8"/>
+          <path d="M7.5 14.5 v1.6 a4.5 4.2 0 0 0 9 0 v-1.6"/>
+          <path d="M9.5 20.2 h5"/>
+        </svg><span class="txt">Units</span>
+      </button>
+      <button class="btn" id="b-clan" title="Members, depot, requests, roles">Manage</button>
+      <button class="btn" id="b-arms">Arsenal</button>
+      <button class="btn" id="b-note" title="Encrypted — nobody else can read it">Notebook</button>
+      <button class="btn" id="b-intel">Intel</button>
+      <button class="btn" id="b-battle">Battle</button>
+      <button class="btn" id="b-board">Board</button>
+      <button class="btn" id="b-view">View</button>
+      <button class="btn" id="b-shot" hidden>Read screenshot</button>
+      <button class="btn" id="b-war">War</button>
       <div id="menubar"></div>
       <button class="btn" id="b-burger" aria-label="Menu" aria-expanded="false">☰</button>
       <button class="btn" id="b-sync"><span class="dot"></span><span class="txt">Sync off</span></button>
@@ -6458,7 +6464,7 @@ document.getElementById("dep-add").addEventListener("click", ()=>{
         <span style="font-size:12px;color:var(--dim)">How many</span>
         <input type="number" id="qa-n" value="1" min="1" max="50" style="width:66px">
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);cursor:pointer">
-          <input type="checkbox" id="qa-name" checked> name them the way the game does
+          <input type="checkbox" id="qa-name" checked> ingame naming convention
         </label>
       </div>
       <div class="note" id="qa-vor" style="font-size:11px"></div>
@@ -18897,7 +18903,7 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
     <div class="dlg-f">
       <button class="btn" id="d-close">Cancel</button>
       <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);cursor:pointer">
-        <input type="checkbox" id="ds-stellen"> also put them on the map for the clan
+        <input type="checkbox" id="ds-stellen"> Publish depot for clan
       </label>
       <button class="btn primary" id="ds-go" disabled>Add ticked</button>
     </div>`, true);
@@ -27198,9 +27204,15 @@ function arsenalDialog(tab){
         <select data-feld="cls" style="width:126px">
           ${MAP.cls.map(c => `<option value="${esc(c.k)}"${c.k === s.cls ? " selected" : ""}>${esc(c.name)}</option>`).join("")}
         </select>
-        <select data-feld="rank" style="width:86px" title="Rank">
-          ${Array.from({length: RANG_MAX+1}, (_, n) => `<option value="${n}"${n === (s.rank||0) ? " selected" : ""}>rank ${n}${
+        <select data-feld="rank" style="width:96px" title="Rank - soldiers reach 17, the ranks above are generals">
+          <optgroup label="Soldier">
+          ${Array.from({length: RANG_GENERAL}, (_, n) => `<option value="${n}"${n === (s.rank||0) ? " selected" : ""}>rank ${n}${
             rangCP(n) ? ` · ${rangCP(n)} CP` : ""}</option>`).join("")}
+          </optgroup>
+          <optgroup label="General">
+          ${Array.from({length: RANG_MAX+1-RANG_GENERAL}, (_, k) => { const n = RANG_GENERAL + k; return `<option value="${n}"${n === (s.rank||0) ? " selected" : ""}>general ${n}${
+            rangCP(n) ? ` · ${rangCP(n)} CP` : ""}</option>`; }).join("")}
+          </optgroup>
         </select>
         <select data-feld="kb" style="width:118px" title="War Victory ribbon">
           ${KRIEG_BADGE.map((b, n) => `<option value="${n}"${n === (s.kb||0) ? " selected" : ""}>${
@@ -27743,14 +27755,10 @@ document.getElementById("b-war").addEventListener("click", ()=>{
           verw && CFG ? `<button class="btn danger" id="d-abriss"
             style="font-size:11px">Wipe the room</button>` : ""}
       </div>
-      ${/* NUR DER VERWALTER. Die Vorgabe: "Eine Muelldatei einfuegen soll
-           grundsaetzlich niemand koennen, ausser mir." Das ist die Tuer,
-           durch die die untergeschobenen Pfeile kamen. */
-        verw ? IMPORT_HTML : ""}
     </div>
     <div class="dlg-f">
-      ${verw ? `<button class="btn" id="d-replace" style="font-size:11px">Replace</button>
-      <button class="btn" id="d-merge" style="font-size:11px">Merge</button>` : ""}
+      <!-- Loading a shared state (Replace / Merge) is gone: the live sync
+           does that job, and nobody could say who should ever use it. -->
       <span style="flex:1"></span>
       <button class="btn primary" id="d-close">Close</button>
     </div>`);
@@ -27967,7 +27975,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5472fcbfab</span></p></div>
+         installation. <span style="color:var(--dim2)">· build e87a5bc9de</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28102,7 +28110,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "5472fcbfab";
+const BAU = "e87a5bc9de";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
