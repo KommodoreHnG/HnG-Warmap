@@ -1284,7 +1284,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
            des Browsers - und laesst die Anmeldung dabei in Ruhe. -->
       <button class="btn" id="b-frisch" style="display:none"
         title="Fetch the newest version from the server — your login stays">Reload fresh</button>
-      <button class="btn" id="b-help">Help</button>
+      <button class="btn" id="b-help" hidden>Help</button>
       <button class="btn" id="b-gear" title="Settings — layout, sizes, your account">
         <!-- Sechs Zaehne, gerechnet statt gezeichnet. Das alte hatte acht
              ungleiche und war bei 60-Grad-Drehung um 2,96 Punkte daneben;
@@ -6888,7 +6888,10 @@ function side(){
       }).join("")}
     </div>`;
 
-  el.querySelectorAll(".own4 button").forEach(b => b.addEventListener("click", ()=>{
+  /* Only the owner buttons carry data-o. The para-block buttons share the
+     .own4 box, and a handler on every button there set the owner to NaN -
+     "open" on screen - whenever a para-block side was picked. */
+  el.querySelectorAll(".own4 button[data-o]").forEach(b => b.addEventListener("click", ()=>{
     setOwner(i, +b.dataset.o); side(); draw(); tally();
   }));
   el.querySelector("#fight-cb")?.addEventListener("change", ev=>{
@@ -23645,6 +23648,9 @@ function zahnradZeichnen(){
         <span>${esc(s.n)}</span><span class="pf">&rsaquo;</span></button>`).join("")}
     </div>
 
+    <h3>Help</h3>
+    <button class="btn" id="zr-hilfe">How this works …</button>
+
     <h3>Something wrong?</h3>
     <div class="note" style="margin-top:0">Lands on the admin's list with your name.</div>
     <button class="btn" id="zr-meld">Report or suggest …</button>
@@ -23663,6 +23669,7 @@ function zahnradZeichnen(){
       <button class="btn" id="zr-todo">Open points${offen ? ` · ${offen}` : ""} …</button>` : ""}`;
 
   el.querySelector("#zr-zu").addEventListener("click", zahnradZu);
+  el.querySelector("#zr-hilfe").addEventListener("click", ()=>{ zahnradZu(); document.getElementById("b-help").click(); });
   el.querySelectorAll("[data-zw]").forEach(b =>
     b.addEventListener("click", ()=>zwZeigen(b.dataset.zw)));
   el.querySelector("#zr-aufsicht")?.addEventListener("click", ()=>{ zahnradZu(); aufsichtFenster(); });
@@ -26692,7 +26699,7 @@ function clanDialog(tab){
       <button data-tab="growth" aria-pressed="false">Growth</button>
       <button data-tab="who"    aria-pressed="false">Team owners</button>
       <button data-tab="deploy" aria-pressed="false">In the field</button>
-      <button data-tab="pool"   aria-pressed="false">Faction pool</button>
+
       <button data-tab="req"    aria-pressed="false">Requests${anfragen.length?` ${anfragen.length}`:""}</button>
       <button data-tab="people" aria-pressed="false">Roles</button>
       <button data-tab="clans"  aria-pressed="false">Other clans</button>
@@ -26885,7 +26892,7 @@ function clanDialog(tab){
         ` : `<div class="empty">Nobody has set up a depot yet.</div>`}
       </div>
 
-      <div class="tabp" data-tab="pool">${poolPanel()}</div>
+
 
       <div class="tabp" data-tab="req">
         ${anfragen.length ? `<div style="display:flex;flex-direction:column;gap:5px">
@@ -26920,7 +26927,8 @@ function clanDialog(tab){
       <button class="btn primary" id="d-close">Close</button>
     </div>`, "xwide");
   tabsAktiv(document.getElementById("dlg"), tab);
-  poolPanelWiring();
+  /* the faction pool tab is gone - it was a screenshot reading by hand,
+     and nobody kept it up */
   document.getElementById("d-close").addEventListener("click", closeDlg);
   /* Clan-Reiter: Name, Seite, Krieg, Befehle. */
   document.getElementById("cl-save")?.addEventListener("click", ()=>{
@@ -27975,7 +27983,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build e87a5bc9de</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0070defc1f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28110,7 +28118,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "e87a5bc9de";
+const BAU = "0070defc1f";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
