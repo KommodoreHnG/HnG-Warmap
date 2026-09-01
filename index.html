@@ -2216,7 +2216,7 @@ const TOPFTAFEL = {
   link:   {wer:1, recht:"", krieg:0},              // welches Geraet zusieht
   units:  {wer:2, recht:"", krieg:0},              // eigene Einheiten am Ort
   join:   {wer:2, recht:"", krieg:0},              // Zusage an einem Pfeil
-  post:   {wer:2, recht:"", krieg:0},              // Brettbeitrag
+  post:   {wer:2, recht:"brett", krieg:0},         // Brettbeitrag
   line:   {wer:2, recht:"", krieg:0},              // Verteidigungslinie
   area:   {wer:2, recht:"", krieg:0},              // Vieleckzone
 
@@ -2792,8 +2792,7 @@ const AUFK_ARTEN = [
   {k:"pl", n:"Players", feind:1,
    d:"Somebody from the other side written into the register for the first time."},
   {k:"at", n:"Their teams", feind:1,
-   d:"An enemy assault team put on record for the first time ever — the unit itself, "
-    + "regardless of where it stood."},
+   d:"An enemy assault team recorded for the first time, wherever it stood."},
   {k:"wp", n:"Their kit", feind:1,
    d:"A weapon or a vehicle on one of their soldiers, recorded for the first time."},
   {k:"sp", n:"Positions", feind:1,
@@ -5003,10 +5002,21 @@ function addPost(text, town, prio, req){
   dirty.add(`post:${k}`); save();
   return true;
 }
+/* EINE Pruefung fuer alle Wege hierher. Bisher hing die Strenge allein an
+   den Behandlern, und die waren ungleich: der Requests-Reiter fragte
+   darfWeg, das Brett-Fenster nicht. Gezeichnet wurde der Verweis zwar in
+   beiden Faellen nur bei darfWeg - der Schutz lag damit im Vorlagetext
+   statt im Code, und wer sich an der Oberflaeche vorbeimogelte, rief
+   dropEntry ohne jede Huerde.
+   Gibt zurueck, OB geloescht wurde. Ein Aufrufer, der das wegwirft, meldet
+   sonst "Removed" ueber eine Absage hinweg. */
 function dropEntry(bucket, id){
+  const e = S[bucket] && S[bucket][id];
+  if (e && !darfWeg(e)){ darfNicht("loeschen"); return false; }
   S.gone[id] = {t: jetzt(), by: S.me}; dirty.add(`gone:${id}`);
   if (S[bucket][id]){ S[bucket][id] = {v:null, t:jetzt(), by:S.me}; dirty.add(`${bucket}:${id}`); }
   save();
+  return true;
 }
 function lineSpeichern(pts){
   if (!darfIchNochMalen("line")) return;
@@ -5226,7 +5236,18 @@ function neuerKrieg(){
      folgenschwerste Knopf im Werkzeug - und er gehoert dem VERWALTER, nicht
      dem Leiter. Bei einem Clan ist das dasselbe; bei mehreren koennte ein
      Leiter sonst den Krieg fuer alle beenden. */
-  if (!istAdmin()){ toast("Starting a new war is the admin's call."); return; }
+  /* GIBT ZURUECK, OB GESCHNITTEN WURDE.
+       false  - abgelehnt, die Begruendung steht schon auf dem Schirm
+       null   - der Server schneidet gerade; er meldet sich selbst
+       true   - oertlich geschnitten, der Aufrufer darf melden
+     Bisher gab die Funktion in allen drei Absagepfaden nichts zurueck und
+     der Aufrufer meldete unbedingt "New war - depots kept". Weil toast()
+     denselben textContent ersetzt, ueberschrieb der Erfolg jede Absage.
+     Am schlimmsten im dritten Fall: dort sagt die Absage gerade "warte,
+     sonst kommt der alte Krieg zurueck" - der Verwalter las stattdessen,
+     der Krieg sei geschnitten, drueckte nicht noch einmal, und die Karte
+     blieb der alte Krieg. */
+  if (!istAdmin()){ toast("Starting a new war is the admin's call."); return false; }
   /* EIN SCHNITT, DER NICHT ZU ENDE GEHEN KANN, DARF NICHT BEGINNEN.
      Der Verwalter ist nicht zwangslaeufig auch Leiter, und was ein
      Mitglied ohne eigenen Rang darf, schreibt der Leiter in den
@@ -5241,7 +5262,7 @@ function neuerKrieg(){
     toast("A new war has to set the three start towns, and that needs File "
         + "intel. Without it the map would start empty. "
         + "Ask the leader for the right first.");
-    return;
+    return false;
   }
   /* AUS EINEM LEEREN BILD WIRD NICHT GESCHNITTEN. Der Strich unten wird aus
      dem gerechnet, was DIESER Browser kennt. Kennt er nichts, bleibt
@@ -5253,7 +5274,7 @@ function neuerKrieg(){
   if (CFG && !ersterAbrufDurch){
     toast("The map has not finished loading yet — give it a moment, "
         + "then start the war. Right now it would bring the old one back.");
-    return;
+    return false;
   }
   /* MIT ANSCHLUSS LOESCHT DER SERVER WIRKLICH - kein Datumsstrich mehr,
      der die alten Zeilen liegen laesst. Der Satz dazu: "da soll nicht mein
@@ -5262,7 +5283,11 @@ function neuerKrieg(){
      blockierte Stadt fuer alle ausser dem Verwalter dichtmachte.
      Die Grabsteinschleifen weiter unten laufen dann NICHT - sie wuerden
      die eben geloeschten Zeilen als Leerzeilen neu anlegen. */
-  if (CFG){ kriegsschnittServer(); return; }
+  /* null, nicht true: kriegsschnittServer laeuft ohne await weiter und
+     meldet sich am Ende SELBST - mit alert() und einem Neuladen, im
+     Fehlerfall mit einem eigenen Toast. Ein Erfolgstoast des Aufrufers
+     waere hier eine Behauptung ueber etwas, das noch laeuft. */
+  if (CFG){ kriegsschnittServer(); return null; }
   const linien = liveLines().map(([id]) => id);
   const briefe = livePosts().map(([id]) => id);
   const zonen  = liveAreas().map(([id]) => id);
@@ -5305,6 +5330,7 @@ function neuerKrieg(){
   for (const id of briefe) dropEntry("post", id);
   for (const id of zonen)  dropEntry("area", id);
   for (const id of pfeile) dropArrow(id);
+  return true;
 }
 
 /* Deploy one named team. It can only be in one place, so it is pulled off
@@ -16441,7 +16467,8 @@ function areaDialog(id, e, neuGezogen){
     dirty.add(`area:${id}`); save(); closeDlg(); draw(); toast("Saved");
   });
   document.getElementById("ar-del")?.addEventListener("click", ()=>{
-    dropEntry("area", id); closeDlg(); draw(); toast("Area removed");
+    if (!dropEntry("area", id)) return;   // die Absage steht schon da
+    closeDlg(); draw(); toast("Area removed");
   });
 }
 
@@ -16474,7 +16501,8 @@ function lineDialog(id, e){
     dirty.add(`line:${id}`); save(); closeDlg(); draw(); toast("Saved");
   });
   document.getElementById("l-del")?.addEventListener("click", ()=>{
-    dropEntry("line", id); closeDlg(); draw(); toast("Line removed");
+    if (!dropEntry("line", id)) return;   // die Absage steht schon da
+    closeDlg(); draw(); toast("Line removed");
   });
 }
 
@@ -16539,6 +16567,19 @@ document.getElementById("b-board").addEventListener("click", ()=>{
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, true);
   document.getElementById("d-close").addEventListener("click", closeDlg);
   stadtWahl(document.getElementById("p-town"), sel, "— not tied to a town —");
+  /* Die Oberflaeche fragt zuerst. Bis hierher konnte jemand ohne das Recht
+     seinen Befehl fertig tippen, auf Post klicken und erst DANN erfahren,
+     dass nichts davon ankommt - der Text war mit dem Schliessen des
+     Fensters weg. addPost weist richtig ab; das ist die zweite Linie,
+     nicht die erste. */
+  if (!darf("brett")){
+    const feld = document.getElementById("p-text");
+    const knopf = document.getElementById("p-add");
+    const satz = rechtSatz("brett");
+    feld.readOnly = true; feld.placeholder = satz; feld.title = satz;
+    knopf.disabled = true; knopf.title = satz;
+    document.getElementById("p-prio").disabled = true;
+  }
   document.getElementById("p-add").addEventListener("click", ()=>{
     const t = document.getElementById("p-text").value.trim();
     if (!t){ toast("Write something first."); return; }
@@ -16546,7 +16587,9 @@ document.getElementById("b-board").addEventListener("click", ()=>{
     closeDlg(); boardZahl(); draw(); toast("Posted");
   });
   document.querySelectorAll("#dlg [data-del]").forEach(a => a.addEventListener("click", ev=>{
-    ev.preventDefault(); dropEntry("post", a.dataset.del); closeDlg(); boardZahl(); toast("Removed");
+    ev.preventDefault();
+    if (!dropEntry("post", a.dataset.del)) return;
+    closeDlg(); boardZahl(); toast("Removed");
   }));
   document.querySelectorAll("#dlg [data-go]").forEach(a => a.addEventListener("click", ev=>{
     ev.preventDefault(); sel = +a.dataset.go; closeDlg(); flyTo(sel); side(); draw();
@@ -22627,7 +22670,19 @@ const meldungen = () => Object.entries(S.todo)
   .filter(([,e]) => e && e.v)
   .sort((a,b) => (a[1].v.st||0) - (b[1].v.st||0) || (b[1].t||0) - (a[1].t||0));
 function meldungSenden(art, text, wo){
-  const id = Math.random().toString(36).slice(2,10);
+  /* DIE KENNUNG GEHOERT IN DEN SCHLUESSEL. Bis zum 01.09.2026 hiess er
+     todo:<zufall>, und die Serverregel stand deshalb auf blankem "true" -
+     sie hatte nichts, woran sie pruefen konnte. Jedes Mitglied konnte jede
+     fremde Meldung auf "erledigt" setzen, ihren Text austauschen oder sie
+     ganz wegraeumen. Aufgefallen waere es nicht: die Anzeige nennt v.von,
+     also den Namen, den der Faelscher hineinschreibt. Wer etwas
+     Unangenehmes gemeldet bekam, konnte die Meldung selbst verschwinden
+     lassen.
+     Der Abgleich zerlegt Schluessel am ERSTEN Doppelpunkt (applyRemote:
+     key.slice(p+1)); der zweite bleibt unversehrt im Kennsatz stehen.
+     Deshalb braucht meldungStand keine Zeile Aenderung - es arbeitet mit
+     derselben id weiter. */
+  const id = Math.random().toString(36).slice(2,10) + ":" + S.me;
   /* DER MELDER STEHT IN v.von, nicht oben in n. Der Ausloeser in der
      Datenbank schreibt bei jeder angenommenen Zeile die obersten Felder by
      und n auf den Anrufer um - setzt der Verwalter die Meldung auf
@@ -23102,7 +23157,7 @@ async function notizFenster(){
           another password. Log out in the gear menu and sign in with the password it was written
           under.</div>
         ${pwSession ? `<button class="btn danger" id="nz-neu" style="font-size:11.5px">Start a
-          new notebook here — the old text is gone for good</button>`
+          new notebook here</button>`
         : `<div class="note">To start a new one here instead, log out in the gear menu and sign
           back in by typing your password.</div>`}`
       : `
@@ -23121,7 +23176,7 @@ async function notizFenster(){
         <div class="note">${wandert
           ? `Your password unlocks this on any computer you sign in from.`
           : `<b>Only on this computer for now.</b> Sign in once and it travels with you.`}
-          Lose the password and the notebook is gone — nobody can open it for you.</div>`}
+          Without the password nobody can open the notebook.</div>`}
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`);
   /* Womit das Fenster aufgeschlagen wurde. Nur wenn sich daran etwas
@@ -23142,7 +23197,7 @@ async function notizFenster(){
      wie ein Passwortproblem aus. */
   document.getElementById("nz-neu")?.addEventListener("click", async ()=>{
     if (!confirm("Start a new notebook here? The old text is written over on every computer "
-               + "and can never be read again - not by you, not by anyone.")) return;
+               + "and cannot be read again.")) return;
     try {
       const k = await crypto.subtle.generateKey({name:"AES-GCM", length:256}, true,
                                                 ["encrypt","decrypt"]);
@@ -23241,8 +23296,7 @@ function torZeigen(meldung){
            jetzt getrennt da, mit dem Neuling oben und dem Rueckkehrer als
            eigenem Abschnitt darunter. -->
       <div data-tor-teil="neu">
-        <p class="tor-text"><b>First time here?</b> Your personal code — yours alone, do not
-          pass it on.</p>
+        <p class="tor-text"><b>First time here?</b> Your personal code. Do not pass it on.</p>
         <input type="password" id="tor-code" placeholder="your invite code" autocomplete="off"
           spellcheck="false">
         <button class="btn primary" id="tor-go">Set up this device</button>
@@ -23273,8 +23327,7 @@ function torZeigen(meldung){
             the old one stops working, and your private notebook stays locked.</p>
         </details>
       </div>
-      <p class="tor-klein" style="margin-top:11px">Your password is never sent anywhere — lose
-        it and nobody can hand it back.</p>
+      <p class="tor-klein" style="margin-top:11px">Your password never leaves this browser.</p>
     </div>`;
   el.style.display = "flex";
   /* Die Sicherungsdatei ist AUSDRUECKLICH fuer den zweiten Rechner
@@ -23600,8 +23653,8 @@ function torPruefFehler(ich, e, vergessen){
       <p class="tor-text">The look-up of your account failed. Nothing was changed.</p>
       <button class="btn primary" id="pt-neu">Try again</button>
       <button class="btn" id="pt-zur" style="font-size:11px;margin-top:6px">Start over</button>
-      <p class="tor-klein">Setting a password now could lock you out of your own notebook for
-        good — hence no way past this screen.<br>${esc(String((e && e.message) || e))}</p>
+      <p class="tor-klein">Setting a password now could lock you out of your own notebook,
+        so this screen cannot be skipped.<br>${esc(String((e && e.message) || e))}</p>
     </div>`;
   document.getElementById("pt-neu").addEventListener("click", ()=>passwortTor(ich, vergessen));
   /* Neu laden statt weiterklicken: bis hierhin wurde nichts gespeichert,
@@ -23750,7 +23803,7 @@ function passwortAltFragen(ich, lage, meldung){
        Genau das ist hier einmal passiert. */
     if (!confirm(`Set a new password?
 
-${verlust.join(" and ")} stay locked with the old one — nobody can open them for you afterwards.`)) return;
+${verlust.join(" and ")} were locked with the old password and stay unreadable.`)) return;
     passwortAnlegen(ich, null, Object.assign({}, lage, {vergessen: true}));
   });
   setTimeout(()=>document.getElementById("pw-1")?.focus(), 60);
@@ -24940,8 +24993,7 @@ function leuteZeichnen(liste){
             <b style="color:var(--accent)">${esc((leuteListe.find(m=>m.player===leaderId())||{}).name
               || leaderId())}</b>.</div>`
         : `<div class="note" style="margin-top:0">Nobody has been named yet, so whoever runs the
-            map decides. Name a leader and that stops — the map stops being the admin's map and
-            becomes the clan's.</div>`}
+            map decides. Name a leader and that person decides instead.</div>`}
       ${/* HIER STAND EINE AUSWAHL "Name the leader", die nichts bewirkte.
            Sie schrieb nur eine Datenzeile, die der Server fuer kein
            einziges Recht heranzieht - der Verwalter glaubte, den Clan
@@ -25189,7 +25241,7 @@ function clanDialog(tab){
             <span style="font-size:12px;color:var(--dim);width:86px">War</span>
             <input type="text" id="cl-war" value="${esc(warName())}" style="flex:1"
               placeholder="e.g. 1940 The Start_113" ${verw?"":"disabled"}
-              title="${verw ? "" : "The war name belongs to the war itself — an admin sets it."}">
+              title="${verw ? "" : "Only an admin can set the war name."}">
             <button class="btn primary" id="cl-save" ${(leiter||verw)?"":"disabled"}>Save</button>
           </div>
           <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:9px">
@@ -25208,7 +25260,7 @@ function clanDialog(tab){
           </div>
           <div class="note">Sets which depot is shown, what the <b>Arsenal</b> offers, and the
             side of new teams.${leiter?"":" Leader only — read-only for you."}${
-            verw?"":" The <b>war name</b> belongs to the war itself and is the admin's to set."}</div>`;
+            verw?"":" Only an admin sets the <b>war name</b>."}</div>`;
         })()}
       </div>
 
@@ -25428,8 +25480,10 @@ The depot of that side becomes the active one.`)) return;
   });
   document.querySelectorAll("#dlg [data-del]").forEach(a => a.addEventListener("click", ev=>{
     ev.preventDefault();
-    if (!darfWeg(S.post[a.dataset.del])){ darfNicht("loeschen"); return; }
-    dropEntry("post", a.dataset.del); closeDlg(); boardZahl();
+    /* Die Pruefung sitzt seit dem 01.09.2026 in dropEntry selbst - eine
+       Stelle statt zweier ungleich strenger. */
+    if (!dropEntry("post", a.dataset.del)) return;
+    closeDlg(); boardZahl();
     clanDialog("req");
   }));
   document.querySelectorAll("#dlg [data-go]").forEach(a => a.addEventListener("click", ev=>{
@@ -26164,9 +26218,8 @@ document.getElementById("b-war").addEventListener("click", ()=>{
         </div>
         <div class="note" style="font-size:11px">Which side the clan plays this war. The
           <b>Arsenal</b> then only offers what your people can buy.${leiter?"":`
-          <br><b>Read-only for you</b> — this binds the whole clan, so it is the leader's to set.`}${
-          verw?"":`<br>The <b>war name</b> and the <b>start town</b> belong to the war itself and
-          are the admin's to set.`}</div>
+          <br><b>Read-only for you</b> — this binds the whole clan, so only the leader sets it.`}${
+          verw?"":`<br>Only an admin can set the <b>war name</b> and the <b>start town</b>.`}</div>
       </div>
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;flex-direction:column;gap:8px">
         <span style="font-size:12px;color:var(--dim)">Start town</span>
@@ -26176,7 +26229,8 @@ document.getElementById("b-war").addEventListener("click", ()=>{
           town works too, just type its name.</div>
       </div>
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;gap:7px;flex-wrap:wrap">
-        <button class="btn danger" id="d-newwar">Start a new war</button>
+        <button class="btn danger" id="d-newwar" ${verw ? "" :
+          `disabled title="Starting a new war is the admin's call."`}>Start a new war</button>
         <span style="flex:1"></span>
         <button class="btn" id="d-undo" style="font-size:11px">Undo the last reset</button>
         <button class="btn" id="d-wipe" style="font-size:11px">Forget the local copy</button>
@@ -26219,7 +26273,8 @@ document.getElementById("b-war").addEventListener("click", ()=>{
               text-align:center;flex:none">${q.tag}</span>
         <input type="text" list="set-caps" data-hin="${q.id}" style="flex:1"
                value="${startNeu[q.id] != null ? esc(MAP.n[startNeu[q.id]][0]) : ""}"
-               placeholder="none">
+               placeholder="none" ${verw ? "" : `disabled
+               title="Only an admin can set the start towns."`}>
       </div>`).join("")
       + `<datalist id="set-caps">${MAP.n.map((n,i) =>
            n[4] !== 0 ? `<option value="${esc(n[0])}">` : "").join("")}</datalist>`;
@@ -26252,15 +26307,21 @@ document.getElementById("b-war").addEventListener("click", ()=>{
        still verloren - der Abgleich weist sie ab.
        Clanname und Fraktion gehoeren dem Leiter, Kriegsname und
        Startstaedte dem Verwalter. */
+    /* Und melden, was WIRKLICH geschrieben wurde. "Saved" fiel bisher
+       unbedingt, ohne einen der Rueckgabewerte anzusehen. */
+    let n = 0;
     if (istLeader()){
-      setMeta("clan", document.getElementById("set-clan").value.trim() || "War Map");
-      setClanFaktion(neueFrak);
+      if (setMeta("clan", document.getElementById("set-clan").value.trim() || "War Map")) n++;
+      setClanFaktion(neueFrak); n++;
     }
     if (istAdmin()){
-      setMeta("war", document.getElementById("set-war").value.trim());
-      setStartStaedte(startNeu);
+      if (setMeta("war", document.getElementById("set-war").value.trim())) n++;
+      if (setStartStaedte(startNeu)) n++;
     }
-    closeDlg(); toast("Saved");
+    closeDlg();
+    if (n) toast("Saved");
+    else toast("Nothing was saved. Only the leader can set the clan name, "
+             + "only an admin the war name and start towns.");
   });
   document.getElementById("d-merge")?.addEventListener("click", async ()=>{
     try {
@@ -26299,11 +26360,26 @@ document.getElementById("b-war").addEventListener("click", ()=>{
     } catch(e){ toast("That link or file could not be read."); }
   });
   document.getElementById("d-newwar").addEventListener("click", ()=>{
-    sicherungAnlegen("new war");
+    /* DIE REIHENFOLGE WAR VERKEHRT. sicherungAnlegen stand ganz vorne -
+       vor der Rueckfrage und vor jeder Rechtepruefung. Es gibt genau EINEN
+       Sicherungsplatz, und er ueberlebt genau einen Schritt. Drei Wege ins
+       Leere: ein Mitglied ohne Verwalteramt drueckte den Knopf und bekam
+       die Absage - die Sicherung war trotzdem weg; ein Verwalter ohne
+       Aufklaerungsrecht ebenso; und JEDER, der die Rueckfrage mit
+       Abbrechen beantwortete, hatte seine Sicherung schon verloren.
+       Besonders bitter direkt nach "Forget the local copy": dort wird
+       korrekt der volle Stand gesichert, und ein Fehlklick hier ersetzte
+       ihn durch den eben geleerten.
+       Der Nachbarknopf d-wipe macht es seit jeher richtig herum. */
+    if (!istAdmin()){ toast("Starting a new war is the admin's call."); return; }
     if (!confirm("Start a new war?\n\nControl, battles, deployed teams, arrows, defence lines, "
                + "the board and all sightings go — for everyone.\n\nDepots, the arsenal, the "
                + "player list and everything recorded about the enemy are kept.")) return;
-    neuerKrieg(); after(); closeDlg(); toast("New war — depots kept");
+    sicherungAnlegen("new war");
+    const stand = neuerKrieg();
+    if (stand === false) return;          // die Begruendung steht schon da
+    after(); closeDlg();
+    if (stand) toast("New war — depots kept");   // beim Serverschnitt meldet der sich selbst
   });
   {
     const ub = document.getElementById("d-undo"), st = sicherungStand();
@@ -26312,7 +26388,18 @@ document.getElementById("b-war").addEventListener("click", ()=>{
       ub.title = `Saved before "${st.grund}" on ${new Date(st.t).toLocaleString()}`;
       ub.addEventListener("click", ()=>{
         if (!confirm("Go back to the state saved before the last reset?")) return;
-        if (sicherungZurueck()){ after(); closeDlg(); toast("Restored"); }
+        if (sicherungZurueck()){
+          /* Sonst stuende der zurueckgeholte Stand nur auf diesem
+             Bildschirm - und nicht einmal das lange. Weil die Schluessel
+             nicht in dirty stehen, gewinnt beim naechsten Abgleich die
+             Serverzeile: der Nutzer sieht "Restored", die Karte springt
+             zurueck, und Sekunden spaeter ist der Rueckschritt lautlos
+             wieder weg. Merge und Replace haben diese Zeile am 01.09.2026
+             bekommen; d-undo, der dritte Knopf derselben Bauart, nicht. */
+          const n = importVormerken();
+          after(); closeDlg();
+          toast(`Restored — ${n} entr${n === 1 ? "y" : "ies"} queued to send`);
+        }
         else toast("Nothing saved to go back to.");
       });
     }
@@ -26345,7 +26432,15 @@ document.getElementById("b-war").addEventListener("click", ()=>{
     }
   });
   document.getElementById("d-wipe").addEventListener("click", ()=>{
-    if (!confirm("Throw away the copy stored in this browser?\n\nDepots, the arsenal, the player "
+    /* Die Zahl gehoert VOR die Entscheidung. Der Satz "the rest comes back
+       from the server" gilt nur fuer das, was schon oben war - was noch in
+       der Warteschlange liegt, kommt NICHT wieder. Die Zahl steht in einer
+       Zeile zur Verfuegung: dirty ist ein Set. */
+    const offen = dirty.size;
+    if (!confirm("Throw away the copy stored in this browser?\n\n"
+               + (offen ? `${offen} change${offen === 1 ? "" : "s"} here ${offen === 1 ? "has" : "have"} `
+                        + `not reached the server yet and will be lost.\n\n` : "")
+               + "Depots, the arsenal, the player "
                + "list and the enemy depot are kept. With live sync on, the rest comes back from "
                + "the server on the next connect.")) return;
     sicherungAnlegen("forget local copy");
@@ -26371,7 +26466,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 7fdde329a4</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 066691d663</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -26506,7 +26601,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "7fdde329a4";
+const BAU = "066691d663";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -26776,9 +26871,8 @@ async function syncPull(){
        genau die Sorte Freundlichkeit, die einen Angriff verdeckt. */
     if (zukunftGesehen && !zukunftGemeldet){
       zukunftGemeldet = true;
-      toast(`${zukunftGesehen} entr${zukunftGesehen===1?"y was":"ies were"} stamped in the `
-          + `future and pulled back to now — somebody's clock is wrong, or somebody tried `
-          + `to pin a row.`);
+      toast(`${zukunftGesehen} entr${zukunftGesehen===1?"y was":"ies were"} dated in the `
+          + `future and set back to now. Either a clock is wrong, or somebody faked a date.`);
     }
     syncMark(n ? `+${n}` : "Live", "ok");
   } catch(e){ syncMark("Offline", "err"); }
@@ -26975,9 +27069,9 @@ async function syncPushInner(){
          steht er weiter, nur sieht ihn sonst niemand. Wer das nicht weiss,
          verlaesst sich auf einen Befehl, den ausser ihm keiner hat. */
       const welche = [...new Set(abgelehnt)].join(", ");
-      toast(`${weg} entr${weg === 1 ? "y" : "ies"} refused by the database (${welche}). `
-          + `Still on your screen, but nobody else will see ${weg === 1 ? "it" : "them"} — `
-          + `usually that means it was not yours to change.`);
+      toast(`The server refused ${weg} entr${weg === 1 ? "y" : "ies"} (${welche}). `
+          + `${weg === 1 ? "It stays" : "They stay"} on your screen only. `
+          + `Usually that means you do not have the right for it.`);
     } else syncMark(durch ? "Live" : "Offline", durch ? "ok" : "err");
   }
 }
@@ -27477,6 +27571,19 @@ async function mitgliederDialog(meldung){
           <th>Last seen</th><th></th></tr></thead>
         <tbody>${liste.map(m => {
           const ich = m.player === (CFG.player || S.me);
+          /* ZWEI RECHTEACHSEN. Aussen schuetzt der Verwalter die
+             oeffentliche Karte, innen fuehrt der Clanleiter seinen Clan;
+             die Achsen stehen nebeneinander, nicht uebereinander. Wer
+             fuehrt, wird von aussen weder gesperrt noch entfernt - der
+             Hinweis unter der Tabelle sagt genau das zu.
+             Sperren waere dabei das Stillere von beidem: es laesst die
+             Rolle unberuehrt, aber warmap_fuehrt verlangt approved UND
+             rolle='leiter'. Der Leiter haette augenblicklich kein Recht
+             mehr, waehrend in der Tabelle weiter "leader" stuende.
+             Seit dem 01.09.2026 weisen warmap_member_drop und
+             warmap_member_set beides auch selbst ab - das hier ist die
+             erste Linie, nicht die einzige. */
+          const fuehrt = m.approved && m.rolle === "leiter";
           return `<tr${ich ? ' class="me"' : ""}>
             <td>${esc(m.name || "—")}${ich ? " <em>you</em>" : ""}</td>
             <td class="mono" style="text-align:left">
@@ -27496,16 +27603,20 @@ async function mitgliederDialog(meldung){
               <button class="btn" data-ren="${esc(m.player)}" data-name="${esc(m.name || "")}"
                 style="padding:2px 7px;font-size:10.5px"
                 title="Their name in the game — this is what everybody sees on the map">Rename</button>
+              ${fuehrt ? "" : `
               <button class="btn" data-lock="${esc(m.player)}" data-to="${m.approved ? "0" : "1"}"
-                style="padding:2px 7px;font-size:10.5px">${m.approved ? "Lock" : "Unlock"}</button>
+                style="padding:2px 7px;font-size:10.5px">${m.approved ? "Lock" : "Unlock"}</button>`}
               <button class="btn" data-adm="${esc(m.player)}" data-to="${m.is_admin ? "0" : "1"}"
                 style="padding:2px 7px;font-size:10.5px">${m.is_admin ? "Demote" : "Promote"}</button>
               ${(!hatLeiter && m.approved) ? `
               <button class="btn" data-ltr="${esc(m.player)}" data-nm="${esc(m.name || m.player)}"
                 style="padding:2px 7px;font-size:10.5px"
                 title="Hand this clan over to them. This is the one thing you can do to a clan from the outside — and only once.">Make leader</button>` : ""}
-              <button class="btn danger" data-del="${esc(m.player)}"
-                style="padding:2px 7px;font-size:10.5px">Remove</button>`}</td>
+              ${fuehrt
+                ? `<span style="color:var(--dim2);font-size:10.5px;padding:0 4px"
+                     title="An admin cannot lock or remove a leader. The leader has to hand the clan over first.">leads this clan</span>`
+                : `<button class="btn danger" data-del="${esc(m.player)}"
+                style="padding:2px 7px;font-size:10.5px">Remove</button>`}`}</td>
           </tr>`;
         }).join("")}</tbody>
       </table></div>
