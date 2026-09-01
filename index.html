@@ -9979,7 +9979,7 @@ function kbZeichnen(){
       <div class="f" data-f="besitzer" title="click to correct">${z.status === "erfasst" ? zeig(z, "besitzer", z.besitzer || "") : ""}</div>
       <div class="f" data-f="hp" title="click to correct">${z.status === "erfasst" ? zeig(z, "hp", (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  ")) : ""}</div>
       <div class="f" data-f="seite" title="click to change">${z.eigen ? "own" : kbSeiteName(z.seite)}</div>
-      <div><button class="weg" data-i="${z.i}" title="remove this line">×</button></div>
+      <div>${z.gespeichert ? `<span title="recorded" style="color:#4f7a3a">✓</span>` : `<button class="weg" data-i="${z.i}" title="remove this line">×</button>`}</div>
     </div>`).join("")}
     ${KB.N ? "" : `<div class="kb-hinweis">Nothing on the sheet yet.</div>`}`;
   blatt.querySelectorAll(".kb-z[data-i] .sym").forEach(el => {
@@ -10104,21 +10104,71 @@ function kbLiveStop(){
 /* one picture, for checks without the game */
 async function kbBild(datei){ if (!KB) return; const R = await unitsLesen(datei, t => { if (KB) KB.status = t; }); if (KB) kbVerarbeiten(R); return R; }
 
-/* ---- keeping ---------------------------------------------------------------- */
+/* ---- keeping: into the clan's records ----------------------------------
+   The same three pots the battle-screen reader and the sighting tool
+   write: the player (roster), the teams known of that player (enemy depot)
+   and the sighting in this town (spot). Each writer checks the right
+   itself; the check is repeated once here so that the message comes
+   before the work, not after it. */
+/* Which types the strength maxima allow: 45/90 alone means a 90-man team
+   without vehicles; 45/90 0/30 a 90-man team with 30 vehicles. Often one
+   type, sometimes three. */
+function kbTypKandidaten(hp){
+  if (!hp || !hp.length) return [];
+  const maxima = hp.map(h => h && +h[1]).filter(Boolean);
+  if (maxima.length !== hp.length) return [];
+  return MAP.at.filter(a => a.crew.length === maxima.length && a.crew.every((c, i) => c[1] === maxima[i])).map(a => a.k);
+}
 function kbBehalten(){
   const ortFeld = document.getElementById("kb-ort");
   const f = ortFeld && ortFeld.value ? unitsStadt(ortFeld.value) : null;
   const ort = f ? f.i : KB.ort;
   if (ort === null || ort === undefined){ toast("Which town? Type its name on the left."); ortFeld && ortFeld.focus(); return; }
-  const zeilen = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen).map(z => ({
-    town: ort, line: KB.linie || null, side: z.seite, type: z.typ || null, tag: z.tag, name: z.name, owner: z.besitzer, hp: z.hp, t: jetzt(), by: S.me }));
-  if (!zeilen.length){ toast("Nothing to keep - only your own units."); return; }
-  let alles = {};
-  try { alles = JSON.parse(localStorage.getItem(KB_LOCAL) || "{}"); } catch(e){}
-  alles[ort] = {t: jetzt(), rows: zeilen};
-  try { localStorage.setItem(KB_LOCAL, JSON.stringify(alles)); } catch(e){}
-  toast(`${zeilen.length} units kept for ${MAP.n[ort][0]} - in this browser only, for now.`);
-  KB.status = `${zeilen.length} units kept for ${MAP.n[ort][0]}.`;
+  const zeilen = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen && !z.gespeichert);
+  if (!zeilen.length){ toast("Nothing new to keep."); return; }
+  if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return; }
+  let spieler = 0, teams = 0, sicht = 0;
+  const spotK = `${ort}:${S.me}`;
+  const liste = (((S.spot || {})[spotK] && S.spot[spotK].v) || []).slice();
+  for (const z of zeilen){
+    const kand = z.typ ? [z.typ] : kbTypKandidaten(z.hp);
+    const k = kand[0] || "infantry";
+    const unbestaetigt = !(z.typ || kand.length === 1);
+    const seite = (z.seite !== null && z.seite !== undefined) ? z.seite : null;
+    if (z.besitzer){
+      if (merkeSpieler(z.besitzer, seite === null ? undefined : seite)) spieler++;
+      const key = spielerKey(z.besitzer);
+      const depot = feindDepot(key).slice();
+      const neu = {tag: String(z.tag || "").replace(/\s+/g, "").toUpperCase(), name: String(z.name || ""), kurz: 0};
+      const da = depot.find(d => gleicheAT(d, neu));
+      if (!da){
+        depot.push(Object.assign({id: Math.random().toString(36).slice(2,9), k, name: neu.name, tag: neu.tag, kurz: 0},
+                                 unbestaetigt ? {ung: 1} : {}));
+        setFeindDepot(key, depot); teams++;
+      } else if (da.ung && !unbestaetigt){
+        setFeindDepot(key, depot.map(d => d === da ? Object.assign({}, d, {k, name: neu.name || d.name, ung: 0}) : d));
+      }
+    }
+    if (seite !== null){
+      const idx = liste.findIndex(u => u.k === k && u.f === seite && (u.owner || "") === (z.besitzer || ""));
+      if (idx >= 0) liste[idx] = Object.assign({}, liste[idx], {n: (liste[idx].n || 0) + 1});
+      else liste.push(z.besitzer ? {k, n: 1, f: seite, owner: z.besitzer} : {k, n: 1, f: seite});
+      sicht++;
+    }
+    z.gespeichert = true;
+  }
+  if (sicht) setSpot(ort, liste);
+  /* and the browser copy, as before - it costs nothing */
+  try {
+    const alles = JSON.parse(localStorage.getItem(KB_LOCAL) || "{}");
+    alles[ort] = {t: jetzt(), rows: zeilen.map(z => ({town: ort, line: KB.linie || null, side: z.seite, type: z.typ || null,
+                                                     tag: z.tag, name: z.name, owner: z.besitzer, hp: z.hp, t: jetzt(), by: S.me}))};
+    localStorage.setItem(KB_LOCAL, JSON.stringify(alles));
+  } catch(e){}
+  const ohneTyp = zeilen.filter(z => !z.typ && kbTypKandidaten(z.hp).length !== 1).length;
+  toast(`${MAP.n[ort][0]}: ${spieler} player${spieler === 1 ? "" : "s"}, ${teams} team${teams === 1 ? "" : "s"}, ${sicht} sighting${sicht === 1 ? "" : "s"} recorded`
+        + (ohneTyp ? ` — ${ohneTyp} with the type still to confirm in Intel.` : "."));
+  KB.status = `Recorded for ${MAP.n[ort][0]} - see Intel → Players.`;
   kbZeichnen();
 }
 
@@ -27726,7 +27776,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build ef1ef128b8</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 85e8c5479d</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -27861,7 +27911,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "ef1ef128b8";
+const BAU = "85e8c5479d";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
