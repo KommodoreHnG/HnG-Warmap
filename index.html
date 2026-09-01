@@ -9963,16 +9963,24 @@ function kbTypVon(R, idx){ const k = R.karten[idx - KB.erste]; return k && k.typ
 function kbFenster(R){
   const n = R.karten.length;
   if (R.roll && R.roll.anteil && R.roll.bahnLinks){
-    /* The window holds a fixed number of card SLOTS - its width over the
-       105 px pitch - whatever the rim search found in this frame: a card
-       mid-blink has no rim and would otherwise shrink the total from 18 to
-       11 between two frames of the same view. */
-    const fensterBreite = 2624 - (R.roll.bahnLinks - 3);
-    const plaetze = Math.max(n, Math.round(fensterBreite / UNITS_RASTER));
-    const kanal = (UNITS_BAHN_RECHTS - 8) - (R.roll.bahnLinks + 7);
-    const N = Math.max(plaetze, Math.round(plaetze / R.roll.anteil));
-    const erste = Math.max(0, Math.min(N - plaetze, Math.round(((R.roll.x0 - (R.roll.bahnLinks + 7)) / kanal) * N)));
-    return {N, erste, sichtbar: plaetze};
+    /* Total and window from the scroll track, measured on 19 bars to a
+       sub-pixel: the thumb sits 6.06 px in at the left stop and 7.30 px at
+       the right, the track's right edge is at 2622.1, the card window runs
+       from the track's left edge to 2628, the content is 105 N - 15 px
+       (no run-out behind the last card). The thumb is a little narrower
+       than pure geometry says, by 5.76 px less a term of the visible
+       share; with that correction N comes out whole in all 19 bars
+       (Weimar 19, Colmar 16 then 15, Wetzlar 26) - the plain ratio was
+       off by up to 0.44. The window holds a fixed number of card slots,
+       whatever the rim search found in this frame. */
+    const tL = R.roll.bahnLinks, b = R.roll.breite;
+    const K = (2622.1 - 7.30) - (tL + 6.06), Wv = 2628 - tL;
+    const N0 = Math.round(((K + 6.91) * Wv / (b + 5.76) + 15) / 105);
+    const plaetze = Math.max(n, Math.round(Wv / UNITS_RASTER));
+    const N = Math.max(plaetze, N0);
+    const V = Math.max(0, ((R.roll.x0 - (tL + 6.06)) / Math.max(1, K - b)) * (105*N - 15 - Wv));
+    const erste = Math.max(0, Math.min(N - plaetze, Math.ceil(V / UNITS_RASTER - 0.02)));
+    return {N, erste, sichtbar: plaetze, ungenau: N >= 45};
   }
   return {N: n, erste: 0, sichtbar: n};
 }
@@ -27933,7 +27941,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 42a149688c</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bac0f75d5e</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28068,7 +28076,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "42a149688c";
+const BAU = "bac0f75d5e";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
