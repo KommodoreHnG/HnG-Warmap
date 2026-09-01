@@ -442,7 +442,9 @@ body.zieht #mapwrap canvas{pointer-events:none}
 #hover .h-hint{font-size:10px;color:var(--dim2);margin-top:5px;text-transform:uppercase;letter-spacing:.1em}
 
 /* ---------- side ---------- */
-#side{width:304px;background:linear-gradient(180deg,#1e1913,#171208);border-left:1px solid var(--line);
+/* width comes from the column #rechts - the detail view grows with it when
+   the handle is dragged; the column already carries the left edge */
+#side{width:100%;background:linear-gradient(180deg,#1e1913,#171208);border-left:0;
   display:flex;flex-direction:column;overflow-y:auto}
 #side.hidden{display:none}
 .s-head{padding:11px 13px 9px;border-bottom:1px solid var(--line)}
@@ -464,7 +466,7 @@ body.zieht #mapwrap canvas{pointer-events:none}
 .unit{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;
   background:var(--panel2);border-radius:var(--r);padding:5px 7px;border-left:3px solid var(--f)}
 .unit .sym{width:26px;height:18px;flex:0 0 auto}
-.unit .n{font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.unit .n{font-size:11.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .unit .n em{display:block;font-style:normal;font-size:10.5px;color:var(--dim2);font-variant-numeric:tabular-nums}
 .unit .x{background:transparent;border:0;cursor:pointer;color:var(--dim2);padding:0 2px;font-size:14px}
 .unit .x:hover{color:var(--su)}
@@ -511,7 +513,32 @@ body.txt-modus{cursor:text}
    ruhig stehen. stroke-linejoin:round nimmt den Spitzen die Haerte. */
 .btn .ico{width:15px;height:15px;display:block;flex:0 0 auto;stroke:currentColor;
   fill:none;stroke-width:1.7;stroke-linejoin:round;stroke-linecap:round}
-#b-radar{display:flex;align-items:center;gap:5px}
+#b-radar,#b-units{display:flex;align-items:center;gap:5px}
+/* every capture button carries the same camera sign */
+.mit-ico{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.mit-ico .ico{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+/* the small counter on the board button */
+.btn .marke{display:inline-block;min-width:16px;height:16px;padding:0 4px;margin-left:5px;border-radius:8px;
+  background:var(--accent);color:#1a1409;font-size:10.5px;font-weight:700;line-height:16px;text-align:center;
+  vertical-align:middle}
+#b-board.neu{box-shadow:inset 0 0 0 1px var(--accent)}
+.btn .marke[hidden]{display:none}
+/* the lifted player's note above the map */
+#hebe-zettel{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:12;
+  display:flex;align-items:center;gap:8px;padding:5px 6px 5px 12px;font-size:12px;
+  background:var(--panel);color:var(--text);border:1px solid var(--accent);border-radius:3px;
+  box-shadow:0 4px 18px rgba(0,0,0,.4);white-space:nowrap}
+#hebe-zettel button{background:transparent;border:1px solid var(--line);border-radius:2px;color:var(--text);
+  font:inherit;font-size:13px;line-height:1;padding:2px 7px;cursor:pointer}
+#hebe-zettel button:hover{border-color:var(--accent)}
+/* the sightings filter in the detail view */
+.sp-filter{display:flex;flex-wrap:wrap;gap:3px;margin:0 0 6px}
+.sp-filter button{background:transparent;border:1px solid var(--line);border-radius:2px;color:var(--dim);
+  font:inherit;font-size:11px;padding:2px 6px;cursor:pointer}
+.sp-filter button:hover{border-color:var(--accent-dk);color:var(--text)}
+.sp-filter button[aria-pressed="true"]{background:var(--accent-dk);color:#f6ecd8;border-color:var(--accent-dk)}
+.sp-filter b{font-weight:700;margin-left:3px;color:var(--text)}
 #b-gear{padding:4px 7px;line-height:1}
 #b-gear svg{width:15px;height:15px;display:block;stroke:currentColor;fill:none;stroke-width:1.7;
   stroke-linecap:round;stroke-linejoin:round}
@@ -1072,7 +1099,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   #brand b{font-size:16px}
 }
 @media (max-width:980px){
-  #side{position:absolute;right:0;top:0;bottom:0;z-index:20;box-shadow:-8px 0 24px rgba(0,0,0,.4)}
+  #side{position:absolute;right:0;top:0;bottom:0;z-index:20;width:min(304px,100%);box-shadow:-8px 0 24px rgba(0,0,0,.4)}
   #bar{width:76px} #tally{display:none}
 }
 /* ================= Telefon und kleines Tablet =========================
@@ -1268,10 +1295,11 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       </button>
       <button class="btn" id="b-clan" title="Members, depot, requests, roles">Manage</button>
       <button class="btn" id="b-arms">Arsenal</button>
+      <button class="btn" id="b-mydepot" title="Your assault teams — the column on the right (D)">Depot</button>
       <button class="btn" id="b-note" title="Encrypted — nobody else can read it">Notebook</button>
       <button class="btn" id="b-intel">Intel</button>
       <button class="btn" id="b-battle">Battle</button>
-      <button class="btn" id="b-board">Board</button>
+      <button class="btn" id="b-board" title="Clan board — notes, requests, sightings">Board<span class="marke" hidden></span></button>
       <button class="btn" id="b-view">View</button>
       <button class="btn" id="b-shot" hidden>Read screenshot</button>
       <button class="btn" id="b-war">War</button>
@@ -1398,9 +1426,11 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
              ist - bei ALL waeren achtzehn Typen nebeneinander eine Tapete. -->
         <div id="depot-fein"></div>
         <div id="depot-list"></div>
-        <div id="depot-foot">
-          <button class="btn" id="dep-add" style="flex:1">Add teams …</button>
-          <button class="btn" id="dep-shot" title="Read your assault team list from a screenshot">Screenshot …</button>
+        <div id="depot-foot" style="flex-direction:column;align-items:stretch">
+          <button class="btn" id="dep-add">Add teams by hand …</button>
+          <button class="btn mit-ico" id="dep-shot" title="Capture the game's assault team list and read it"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3.5 8.2 h4.2 l1.9-2.7 h4.8 l1.9 2.7 h4.2 v10.6 h-17 z"/>
+            <circle cx="12" cy="13.3" r="3.3"/></svg>Read teams from the game …</button>
         </div>
       </section>
     </div>
@@ -2452,6 +2482,14 @@ let tool = "inspect", faction = 1, sel = null, arrowFrom = null, lineDraft = nul
    eine vergessene 7 teurer ist als ein zweiter Tastendruck. */
 let spotTypMerk = null, spotWemMerk = "";
 let objOnly = false, showNames = true, showKey = false, showDepot = true, paraGeplant = false;
+/* one player's reported positions, lifted on the map (a Set of town indices) */
+let hebe = null, hebeName = "";
+/* the sightings filter in the detail view - a type key and an owner key,
+   both as strings; they live outside side() because side() is rebuilt by
+   dozens of callers */
+let sichtTyp = null, sichtWem = null;
+const sichtWemVon = u => u.owner ? spielerKey(u.owner) : "?";
+const sichtZeigt = u => (!sichtTyp || String(u.k) === sichtTyp) && (!sichtWem || sichtWemVon(u) === sichtWem);
 /* Die Flugplatzbrille. Aus, solange niemand sie einschaltet - sie legt 117
    zusaetzliche Ringe auf die Karte und waere staendig an im Weg. */
 let showFlug = false;
@@ -3152,8 +3190,47 @@ const ownerOf   = i => (imKrieg(S.owner[i]) && S.owner[i].v != null) ? S.owner[i
    Und der GEWAEHLTE Ort wird nie zurueckgenommen. Die Zeile daneben
    verschont ihn bei der Zoomschwelle ausdruecklich; hier fehlte das,
    und eine gerade angeklickte Stadt blieb blass. */
-const blassOrt = i => objOnly && !isObj(i) && ownerOf(i) < 0
-                      && !unitsAt(i).length && i !== sel;
+/* Nothing is faded any more. The Objectives switch used to take back every
+   town that was not a target - "no hiding of towns, never" was the verdict.
+   The switch now marks the targets instead (a pin, see the drawing) and
+   leaves everything else as it is. */
+const blassOrt = i => false;
+
+/* Every town where a player's assault teams were reported - sightings with
+   an owner. Enemy depots carry no place, so sightings are the only source. */
+function spielerOrte(key){
+  const orte = new Map();
+  for (const k of Object.keys(S.spot)){
+    const e = S.spot[k];
+    if (!e || !Array.isArray(e.v)) continue;
+    const town = +k.slice(0, k.indexOf(":"));
+    for (const u of e.v){
+      if (!u || !u.owner || spielerKey(u.owner) !== key) continue;
+      orte.set(town, (orte.get(town) || 0) + (u.n || 0));
+    }
+  }
+  return orte;
+}
+function hebeSetzen(key, name){
+  const orte = key ? spielerOrte(key) : new Map();
+  hebe = orte.size ? new Set(orte.keys()) : null;
+  hebeName = hebe ? (name || "") : "";
+  hebeZettel(); draw();
+  if (key && !hebe) toast(`No reported position for ${name || "this player"}`);
+  return hebe;
+}
+/* the small note above the map: whom we are lifting, and the way out */
+function hebeZettel(){
+  let z = document.getElementById("hebe-zettel");
+  if (!hebe){ if (z) z.remove(); return; }
+  if (!z){
+    z = document.createElement("div"); z.id = "hebe-zettel";
+    (document.getElementById("mapwrap") || document.body).appendChild(z);
+  }
+  z.innerHTML = `<span>Lifting <b>${esc(hebeName)}</b> — ${hebe.size} town${hebe.size === 1 ? "" : "s"}</span>
+    <button type="button" id="hebe-weg" title="Stop">×</button>`;
+  z.querySelector("#hebe-weg").addEventListener("click", () => hebeSetzen(null));
+}
 const factionOf = i => { const o = ownerOf(i); return o >= 0 ? FACTIONS[o] : NEUTRAL; };
 const noteOf    = i => (imKrieg(S.notes[i]) && S.notes[i].v) || "";
 const fightAt   = i => !!(imKrieg(S.fight[i]) && S.fight[i].v);
@@ -4075,6 +4152,30 @@ function draw(){
     if (fightAt(i)){                        // contested: brass ring
       ctx.strokeStyle = "#f0b845"; ctx.lineWidth = Math.max(1.6, 1.8*Math.sqrt(z));
       ctx.beginPath(); ctx.arc(x, y, r+3.4, 0, 6.284); ctx.stroke();
+    }
+    /* Objectives switch: a translucent pin above every target - marks the
+       town without touching anything around it. */
+    if (objOnly && obj && r >= 3){
+      const ph = Math.min(16, Math.max(6, r*1.6)), py = y - r - ph*1.05;
+      ctx.globalAlpha = 0.62*aOrt;
+      ctx.fillStyle = light() ? "#1a2029" : "#f3ecd8";
+      ctx.strokeStyle = light() ? "rgba(255,255,255,.9)" : "rgba(5,8,12,.9)"; ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(x, py, ph*0.48, Math.PI*0.85, Math.PI*2.15);
+      ctx.lineTo(x, y - r - 1.5);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = aOrt;
+      ctx.fillStyle = light() ? "#f3ecd8" : "#1a2029";
+      ctx.beginPath(); ctx.arc(x, py, ph*0.18, 0, 6.284); ctx.fill();
+    }
+    if (hebe && hebe.has(i)){               // a player's reported positions: double ring
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = light() ? "rgba(20,24,30,.9)" : "rgba(255,255,255,.95)";
+      ctx.lineWidth = Math.max(3.4, 3.8*Math.sqrt(z));
+      ctx.beginPath(); ctx.arc(x, y, r+5.4, 0, 6.284); ctx.stroke();
+      ctx.strokeStyle = "#f0b845"; ctx.lineWidth = Math.max(1.8, 2*Math.sqrt(z));
+      ctx.stroke();
+      ctx.globalAlpha = aOrt;
     }
     const pb = paraAt(i);
     if (pb){                                // para-block: parachute glyph beside the disc
@@ -6036,6 +6137,7 @@ document.getElementById("b-key").addEventListener("click", function(){
   if (showKey) drawKey();
 });
 document.getElementById("b-depot").addEventListener("click", () => depotAuf(!showDepot));
+document.getElementById("b-mydepot").addEventListener("click", () => depotAuf(!showDepot));
 
 /* ================= Die Breite der rechten Spalte ziehen ==================
    DIE ZOOMFALLE: #rechts traegt zoom:calc(var(--ui) * var(--f-rechts)). Eine
@@ -6673,19 +6775,6 @@ function side(){
         <span>Fighting here right now</span></label>
       <label class="toggle"><input type="checkbox" id="star-cb" ${starAt(i)?"checked":""}>
         <span>Key objective — highlight for everyone</span></label>
-      <div class="para-row">
-        <span class="para-lbl">Para-block</span>
-        <div class="own4" style="grid-template-columns:repeat(4,1fr);flex:1">
-          ${FACTIONS.map(q=>`<button data-pb="${q.id}" style="--f:${q.color}"
-            aria-pressed="${pb && pb.f===q.id}">${q.tag}</button>`).join("")}
-          <button data-pb="" style="--f:${NEUTRAL.color}" aria-pressed="${!pb}">none</button>
-        </div>
-      </div>
-      ${pb ? `<label class="toggle"><input type="checkbox" id="pb-plan" ${pb.plan?"checked":""}>
-        <span>Only planned, not in place yet</span></label>
-        <div style="font-size:11.5px;color:var(--dim);margin-top:5px">${
-          standText(`para:${i}`, pb, S.para[i] && (S.para[i].n || S.para[i].by))}</div>
-        ${okKnopf(`para:${i}`, pb)}` : ""}
     </div>
     ${(() => {
       /* WER KANN HIER FLIEGEN? Nur bei einer Hauptstadt und nur, wenn die
@@ -6795,11 +6884,29 @@ function side(){
     </div>` : ""}
     <div class="sec">
       <h3>Enemy sightings ${spo.length?`<span class="sub">${spo.reduce((s,g)=>s+g.list.reduce((t,u)=>t+u.n,0),0)} reported</span>`:""}</h3>
-      ${spo.length ? spo.map(g=>`
+      ${spo.length ? (() => {
+        /* filter row: the types that occur, and the owners if there are
+           several; only shown once there is something to choose from */
+        const typen = new Map(), wem = new Map();
+        for (const g of spo) for (const u of g.list){
+          typen.set(String(u.k), (typen.get(String(u.k)) || 0) + (u.n || 0));
+          const wk = sichtWemVon(u), w = wem.get(wk) || {name: u.owner || "unknown owner", n: 0};
+          w.n += u.n || 0; wem.set(wk, w);
+        }
+        if (typen.size < 2 && wem.size < 2 && !sichtTyp && !sichtWem) return "";
+        return `<div class="sp-filter">
+            <button data-sf="" aria-pressed="${!sichtTyp && !sichtWem}">all</button>
+            ${[...typen.entries()].map(([k,n]) => `<button data-sf="t:${k}" aria-pressed="${sichtTyp === k}"
+              title="${esc(atName(k))}">${esc(atKurz(k))}<b>${n}</b></button>`).join("")}
+          </div>${wem.size > 1 ? `<div class="sp-filter">
+            ${[...wem.entries()].map(([k,w]) => `<button data-sf="w:${k}" aria-pressed="${sichtWem === k}">${esc(w.name)}<b>${w.n}</b></button>`).join("")}
+          </div>` : ""}`;
+      })() : ""}
+      ${spo.length ? spo.map(g=> !g.list.some(sichtZeigt) ? "" : `
         <div class="grp">
           <div class="grp-h">${g.mine ? "Your report" : esc(g.name || "Another player")}
             <span class="${alter(g.t)<FRISCH?"":"stale"}">${alterText(g.t)}</span></div>
-          ${g.list.map((u,k)=>`
+          ${g.list.map((u,k)=> !sichtZeigt(u) ? "" : `
             <div class="unit" style="--f:${col(FACTIONS[u.f!=null?u.f:faction])}">
               <span class="sym">${symbolSVG(u.k, c)}</span>
               <span class="n">${u.n}× ${esc(atName(u.k))}
@@ -6875,6 +6982,21 @@ function side(){
       <div class="hint">Faster: drag a team from the <b>depot</b> (<kbd>D</kbd>) onto the map.</div>
     </div>
     <div class="sec">
+      <!-- The para-block used to sit at the very top, under Control. It is
+           the rarest thing to set, so it moved down here. -->
+      <h3>Para-block</h3>
+      <div class="own4" style="grid-template-columns:repeat(4,1fr)">
+        ${FACTIONS.map(q=>`<button data-pb="${q.id}" style="--f:${q.color}"
+          aria-pressed="${pb && pb.f===q.id}">${q.tag}</button>`).join("")}
+        <button data-pb="" style="--f:${NEUTRAL.color}" aria-pressed="${!pb}">none</button>
+      </div>
+      ${pb ? `<label class="toggle"><input type="checkbox" id="pb-plan" ${pb.plan?"checked":""}>
+        <span>Only planned, not in place yet</span></label>
+        <div style="font-size:11.5px;color:var(--dim);margin-top:5px">${
+          standText(`para:${i}`, pb, S.para[i] && (S.para[i].n || S.para[i].by))}</div>
+        ${okKnopf(`para:${i}`, pb)}` : ""}
+    </div>
+    <div class="sec">
       <h3>Note</h3>
       <textarea id="note" placeholder="e.g. push at 20:00, supplies low …">${esc(noteOf(i))}</textarea>
     </div>
@@ -6900,6 +7022,13 @@ function side(){
   el.querySelector("#star-cb")?.addEventListener("change", ev=>{
     stamp("star", i, ev.target.checked ? 1 : null); save(); side(); draw();
   });
+  el.querySelectorAll("[data-sf]").forEach(b => b.addEventListener("click", ()=>{
+    const v = b.dataset.sf;
+    if (!v){ sichtTyp = null; sichtWem = null; }
+    else if (v.startsWith("t:")){ const t = v.slice(2); sichtTyp = sichtTyp === t ? null : t; }
+    else { const w = v.slice(2); sichtWem = sichtWem === w ? null : w; }
+    side();
+  }));
   el.querySelectorAll("[data-pb]").forEach(b => b.addEventListener("click", ()=>{
     const v = b.dataset.pb;
     setPara(i, v === "" ? null : +v, pb ? pb.plan : false);
@@ -7135,11 +7264,16 @@ let bildAbmelden = null;     // räumt die Zuhörer des offenen Fensters weg
 const bildAufnahmeMoeglich = () =>
   !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia && window.isSecureContext);
 
+/* The camera: one sign for every function that takes a picture of the game. */
+const ICO_CAPTURE = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M3.5 8.2 h4.2 l1.9-2.7 h4.8 l1.9 2.7 h4.2 v10.6 h-17 z"/>
+  <circle cx="12" cy="13.3" r="3.3"/></svg>`;
+
 function bildQuelleHTML(id){
   return `<div class="row" style="flex-wrap:wrap;align-items:center">
       <input type="file" id="${id}" accept="image/png,image/jpeg" style="flex:1;min-width:170px">
       ${bildAufnahmeMoeglich()
-        ? `<button class="btn" data-bild="grab">Capture the game …</button>`
+        ? `<button class="btn mit-ico" data-bild="grab">${ICO_CAPTURE}Capture the game …</button>`
         : ""}
     </div>
     <div class="hint" data-bild="hint">Or press <kbd>Ctrl</kbd>+<kbd>V</kbd> to paste a screenshot
@@ -10191,7 +10325,7 @@ function kbPult(){
   const pult = document.getElementById("kb-pult");
   const live = !!KB.live;
   pult.innerHTML = `
-    <button class="rd-schalter ${live ? "an" : ""}" id="kb-kraft">${live ? "Capture running" : "Capture the game"}</button>
+    <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="kb-kraft">${ICO_CAPTURE}${live ? "Capture running" : "Capture the game"}</button>
     <div class="kb-abstand"></div>
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="kb-ton">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
@@ -17997,11 +18131,16 @@ function lineDialog(id, e){
 }
 
 /* ---------------- board: written orders and intel ---------------- */
+/* "New" on the board: posts by others since this browser last opened it,
+   and no older than a day. The moment of opening is kept per browser. */
+const BRETT_STORE = "hng-warmap-brett-gesehen";
+function brettGesehen(){ try { return +localStorage.getItem(BRETT_STORE) || 0; } catch (e){ return 0; } }
 function boardZahl(){
-  const n = livePosts().filter(([,e]) => alter(e.t) < FRISCH).length;
-  const b = document.getElementById("b-board");
-  b.textContent = n ? `Board ${n}` : "Board";
-  b.classList.toggle("primary", n > 0);
+  const seit = brettGesehen();
+  const n = livePosts().filter(([,e]) => e.by !== S.me && (e.t || 0) > seit && alter(e.t) < ALT).length;
+  const b = document.getElementById("b-board"), m = b.querySelector(".marke");
+  if (m){ m.textContent = String(n); m.hidden = !n; }
+  b.classList.toggle("neu", n > 0);
 }
 const PRIO = [
   {v:0, name:"Note",  farbe:"var(--dim)"},
@@ -18009,6 +18148,8 @@ const PRIO = [
   {v:2, name:"Urgent",farbe:"var(--su)"},
 ];
 document.getElementById("b-board").addEventListener("click", ()=>{
+  try { localStorage.setItem(BRETT_STORE, String(jetzt())); } catch (e){}
+  boardZahl();
   const posts = livePosts(), sicht = allSpots();
   const nz = n => n.toLocaleString("en");
   openDlg(`
@@ -18543,7 +18684,10 @@ function intelDialog(tab, seite){
             </select></td>
             <td>${atEcht(feindDepot(key)).length || "—"}</td>
             <td>${d.teams?nz(d.teams):"—"}</td>
-            <td>${d.orte.size||"—"}</td>
+            <td>${d.orte.size
+              ? `<button class="btn" data-hebe="${esc(key)}" data-hebename="${esc(d.name)}"
+                   title="Lift these towns on the map" style="padding:1px 8px;min-width:0">${d.orte.size}</button>`
+              : "—"}</td>
             <td style="text-align:left">${[...d.arten.entries()].map(([k,v])=>
                 `<span title="${esc(atName(k))}" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px">
                    ${symbolSVG(k, c, 20, 14)}<small>${v}</small></span>`).join("") || "—"}</td>
@@ -18818,6 +18962,14 @@ function intelDialog(tab, seite){
     ev.preventDefault();
     feindDialog(el.dataset.oeffne, proSpieler.get(el.dataset.oeffne).name);
   }));
+  document.querySelectorAll("#dlg [data-hebe]").forEach(el => el.addEventListener("click", ev=>{
+    ev.preventDefault(); ev.stopPropagation();
+    if (hebeSetzen(el.dataset.hebe, el.dataset.hebename)){
+      closeDlg();
+      const erste = [...hebe][0];
+      if (erste != null) flyTo(erste);
+    }
+  }));
   document.querySelectorAll("#dlg [data-go]").forEach(el => el.addEventListener("click", ()=>{
     sel = +el.dataset.go; closeDlg(); flyTo(sel); side(); draw();
   }));
@@ -18872,10 +19024,15 @@ function massenDialog(){
 document.getElementById("dep-shot").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>Read your assault teams</h2>
-      <p>Take the shot on the war map — the assault team list down the right-hand side.</p></div>
+      <p>On the war map, open the assault team list down the right-hand side — then capture.</p></div>
     <div class="dlg-b">
-      ${bildQuelleHTML("ds-file")}
-      <div id="ds-status" style="font-size:12px;color:var(--dim)">Waiting for an image …</div>
+      ${/* capture only - no file picker any more; paste and drop still work
+           quietly, bildQuelle listens on the window */
+        bildAufnahmeMoeglich()
+        ? `<div class="row"><button class="btn primary mit-ico" data-bild="grab">${ICO_CAPTURE}Capture the game …</button></div>
+           <div class="hint" data-bild="hint"><b>Capture</b> asks which window it may see — pick the Heroes &amp; Generals window.</div>`
+        : `<div class="hint">Capturing a window needs the page to run over https; on a local file the browser does not allow it.</div>`}
+      <div id="ds-status" style="font-size:12px;color:var(--dim)">Waiting for a capture …</div>
       <div id="ds-crop" style="display:none;flex-direction:column;gap:6px">
         <div class="hint">The box moves itself to the list. Drag your own only if a shot has
           several lists in it.</div>
@@ -22943,15 +23100,20 @@ const MENUES = [
      verschluesselt und hat mit dem Clan nichts zu tun. Unter "Tools"
      steht es richtig. In der Gruppe bleibt, was wirklich clanweit
      ist. */
-  {id:"clan",  titel:"Clan",      knoepfe:["b-clan","b-arms"]},
+  /* "Personal": what is yours alone - your soldiers, your depot, your
+     notebook. The clan group keeps what is really clan-wide. */
+  {id:"pers",  titel:"Personal",  knoepfe:["b-arms","b-mydepot","b-note"]},
+  {id:"clan",  titel:"Clan",      knoepfe:["b-clan"]},
   /* "Situation" musste erklaert werden - dann ist der Name falsch. Was hier
      steckt, meldet man oder sieht man nach: Gegner, Schlacht, Brett. */
-  {id:"lage",  titel:"Reports",  knoepfe:["b-intel","b-battle","b-board"]},
+  /* The board stays in the top bar itself - its "new" badge must be seen
+     without opening a menu first. */
+  {id:"lage",  titel:"Reports",  knoepfe:["b-intel","b-battle"]},
   {id:"sicht", titel:"View",     werkzeuge:true},
   /* Hilfe darf jeder - sie hat unter "Admin" nichts verloren. Solange sie
      dort stand, bekam die Gruppe fuer JEDEN einen Titel, und ein einfaches
      Mitglied sah "ADMIN" in der Leiste. */
-  {id:"werkz", titel:"Tools",    knoepfe:["b-shot","b-war","b-note","b-help"]},
+  {id:"werkz", titel:"Tools",    knoepfe:["b-shot","b-war","b-help"]},
   {id:"verw",  titel:"Admin",    knoepfe:["b-members", "b-frisch"]},
 ];
 let menuOffen = null;
@@ -25930,7 +26092,11 @@ function feindDialog(key, name){
           elsewhere, so a shared vocabulary forms instead of fifteen spellings for the same thing.</div>
       </div>
     </div>
-    <div class="dlg-f"><button class="btn" id="d-close">Back</button></div>`, true);
+    <div class="dlg-f"><button class="btn" id="fd-hebe" title="Lift every town this player was reported in">Lift on the map</button>
+      <span style="flex:1"></span><button class="btn" id="d-close">Back</button></div>`, true);
+  document.getElementById("fd-hebe").addEventListener("click", ()=>{
+    if (hebeSetzen(key, name)){ closeDlg(); flyTo([...hebe][0]); }
+  });
   /* Reiter im Gegnerfenster */
   document.querySelectorAll("#dlg [data-ftab]").forEach(b => {
     if (b.tagName !== "BUTTON" || !b.parentElement.classList.contains("tabs")) return;
@@ -27983,7 +28149,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0070defc1f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c885dba5bc</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28118,7 +28284,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0070defc1f";
+const BAU = "c885dba5bc";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
