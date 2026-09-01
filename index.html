@@ -1199,6 +1199,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-board">Board</button>
       <button class="btn" id="b-view">View</button>
       <button class="btn" id="b-shot">Read screenshot</button>
+      <button class="btn" id="b-units" title="Read the units of a town from the game's detail bar">Units</button>
       <button class="btn" id="b-war">War</button>
       <!-- Der Radarraum ist die zentrale Funktion und war unter "Read
            screenshot" in einem zugeklappten Bereich versteckt. -->
@@ -9137,6 +9138,513 @@ function linienLesen(mk, punkte, tr){
   }
   return {besitz, kampf};
 }
+
+
+/* ================= units reader: the town detail bar =====================
+   Click a town with several units and the game opens a bar at the bottom:
+   town name and controlling side on the left, one card per unit in the
+   middle, a scroll thumb underneath, and above it all the head box of the
+   unit currently picked - tag, name, owner and strength. This reads that
+   bar. Every position below was measured on 135 full-size pictures
+   (3840 x 2160) and then checked on other pictures; the numbers are in
+   grabber-ergebnisse/at_leiste_vermessen.md.
+
+   Four things the measurements insist on:
+   - The head box is anchored at the BOTTOM (y 1800) and grows upwards: the
+     usual form starts at 1524, a taller one with a wrapped owner name at
+     1371. The form is read off the brightness step, never assumed.
+   - The strength entries (one or two) are centred as a block, not
+     left-aligned: with two entries the first diamond sits 93 px further
+     left than with one.
+   - The card row and the scroll track move with the town name: the name is
+     anchored at x 1170 and the cards begin 34 px after it ends. Only the
+     right edges are fixed (window 2624, track 2621).
+   - A card mid-blink has a pale rim and fails the colour rules. Several
+     frames of the same view are needed to colour every card.
+
+   Pictures are scaled to 3840 x 2160 before anything is measured; other
+   sizes have not been measured and are said so.                          */
+const UNITS_W = 3840, UNITS_H = 2160;
+const UNITS_KASTEN = {x0:1560, x1:2340};
+/* Lines relative to the top of the diamond band. With the bar open the box
+   ends at y 1800 and the band starts at 1701 (usual form) or 1614 (taller
+   form). With no bar under it - a town holding a single unit - the whole
+   box sits 330 px lower: band 2031, owner line 1965-2001 against
+   1635-1670, measured on one such picture. The box hangs from the bar,
+   not from the screen. */
+const UNITS_ZEILEN = {
+  standard:  {name:{dy:-165, h:76}, besitzer:{dy:-73, h:56}},
+  erweitert: {name:{dy:-221, h:62}, besitzer:{dy:-138, h:48}, besitzer2:{dy:-72, h:48}}
+};
+const UNITS_BAND = 68, UNITS_ZIFFERN = [19, 61];   /* band height; digit rows within it */
+const UNITS_BAENDER = [["erweitert",1614], ["standard",1701], ["erweitert",1944], ["standard",2031]];
+const UNITS_NAME_X = 1165, UNITS_BAHN_RECHTS = 2621, UNITS_RASTER = 105;
+const UNITS_REIHE_MIN = 8;          /* raster strength below which there is no bar */
+const UNITS_LOCAL = "units_seen";   /* browser-side store, see unitsBehalten */
+
+/* A frame of any size, normalised to the measured size. Returns the canvas
+   and its pixels; both are reused by every reading step. */
+async function unitsRahmen(quelle){
+  const bm = await createImageBitmap(quelle);
+  const c = document.createElement("canvas");
+  c.width = UNITS_W; c.height = UNITS_H;
+  const g = c.getContext("2d", {willReadFrequently:true});
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+  g.drawImage(bm, 0, 0, UNITS_W, UNITS_H);
+  const quer = Math.abs(bm.width/bm.height - 16/9) > 0.02;
+  const gross = {w: bm.width, h: bm.height};
+  if (bm.close) bm.close();
+  return {c, d: g.getImageData(0, 0, UNITS_W, UNITS_H).data, quer, gross};
+}
+const unitsMax = (d,p) => Math.max(d[p], d[p+1], d[p+2]);
+const unitsMin = (d,p) => Math.min(d[p], d[p+1], d[p+2]);
+
+/* How strongly a row of pixels repeats every 105 px - the card pitch. The
+   row with the strongest repeat is the card row; if no row repeats, no bar
+   is open. */
+function unitsRasterStaerke(d, y){
+  const x0 = 1340, x1 = 2800, N = x1-x0, z = new Float64Array(N);
+  let m = 0;
+  for (let i=0; i<N; i++){ const p = (y*UNITS_W + x0 + i)*4; z[i] = (d[p]+d[p+1]+d[p+2])/3; m += z[i]; }
+  m /= N;
+  const k = N/UNITS_RASTER;
+  let re = 0, im = 0;
+  for (let i=0; i<N; i++){ const v = z[i]-m, a = -2*Math.PI*k*i/N; re += v*Math.cos(a); im += v*Math.sin(a); }
+  return Math.hypot(re, im)/N;
+}
+function unitsReihe(d){
+  let best = [0, 0];
+  for (let y=1700; y<=2050; y+=3){ const st = unitsRasterStaerke(d, y); if (st > best[0]) best = [st, y]; }
+  return {staerke: best[0], y: best[1]};
+}
+/* Runs of saturated pixels along one row: each card rim is one run of
+   60..80 px. The row is searched a little up and down from the raster row,
+   because the rim's top edge is not the row that repeats most strongly. */
+function unitsLaeufe(d, y, minL, maxL, x0=1250, x1=2640){
+  const r = []; let s = null;
+  for (let x=x0; x<=x1; x++){
+    const p = (y*UNITS_W + x)*4, v = (unitsMax(d,p) - unitsMin(d,p)) > 60;
+    if (v && s === null) s = x;
+    if ((!v || x === x1) && s !== null){ if (x-s >= minL && x-s <= maxL) r.push([s, x]); s = null; }
+  }
+  return r;
+}
+/* The raster row is not the rim row: with filled yellow cards the strongest
+   repeat sits 40 px lower than with outlined ones. So the rim is searched
+   well above and a little below the raster row, and everything else in the
+   bar is placed from the rim. */
+function unitsKartenFinden(d, yReihe){
+  let best = {n:0, dy:0, runs:[]};
+  for (let dy=-56; dy<=24; dy++){
+    const runs = unitsLaeufe(d, yReihe+dy, 60, 80);
+    if (runs.length > best.n) best = {n: runs.length, dy, runs};
+  }
+  return {fy: yReihe + best.dy, rahmen: best.runs};
+}
+/* Side of a set of pixels, by the same three rules the map reader uses,
+   plus the yellow of one's own units. */
+function unitsUrteil(px){
+  const z = {US:0, GE:0, SU:0, gelb:0, rest:0};
+  for (const [r,g,b] of px){
+    if (atNah(r,g,b, AT_FUELL_EIGEN, 30)) z.gelb++;
+    else if (SHOT_COL[0](r,g,b)) z.US++;
+    else if (SHOT_COL[1](r,g,b)) z.GE++;
+    else if (SHOT_COL[2](r,g,b)) z.SU++;
+    else z.rest++;
+  }
+  const k = ["US","GE","SU","gelb"].sort((a,b) => z[b]-z[a])[0];
+  return {klasse: z[k] > 0 ? k : "-", z};
+}
+function unitsRing(d, x0, x1, fy){
+  const px = [];
+  const add = (x,y) => { const p = (y*UNITS_W + x)*4; px.push([d[p], d[p+1], d[p+2]]); };
+  for (let y=fy;    y<fy+5;  y++) for (let x=x0; x<x1; x++) add(x,y);
+  for (let y=fy+45; y<fy+50; y++) for (let x=x0; x<x1; x++) add(x,y);
+  for (let y=fy; y<fy+50; y++){ for (let x=x0; x<x0+5; x++) add(x,y); for (let x=x1-5; x<x1; x++) add(x,y); }
+  return px;
+}
+/* The coloured disc with the town's symbol, left of the name. */
+function unitsNode(d, yReihe){
+  const px = []; let n = 0;
+  for (let y=yReihe-40; y<yReihe+90; y++) for (let x=1050; x<1150; x++){
+    const p = (y*UNITS_W + x)*4;
+    if (unitsMax(d,p) - unitsMin(d,p) > 70){ px.push([d[p], d[p+1], d[p+2]]); n++; }
+  }
+  const u = unitsUrteil(px);
+  return {klasse: n > 200 ? u.klasse : "-", n};
+}
+/* The white thumb in the scroll track, and the track's left end. Track
+   width and thumb width give the share of units on screen. */
+function unitsRoll(d){
+  let best = null;
+  for (let y=1895; y<=2000; y++){
+    let s = null;
+    for (let x=1250; x<=2640; x++){
+      const p = (y*UNITS_W + x)*4, w = d[p] >= 245 && d[p+1] >= 245 && d[p+2] >= 245;
+      if (w && s === null) s = x;
+      if ((!w || x === 2640) && s !== null){ if (x-s >= 40 && (!best || x-s > best.breite)) best = {y, x0:s, x1:x, breite:x-s}; s = null; }
+    }
+  }
+  if (!best) return null;
+  /* two track rows, one above and one below the thumb, and the earlier of
+     the two answers: a supply line shining through the translucent track
+     lifts single rows above the threshold (Colmar came out 1357 instead of
+     1335 four times that way) */
+  let links = null;
+  for (const yb of [best.y-7, best.y+16]){
+    let lauf = 0;
+    for (let x=1200; x<best.x0+8; x++){
+      const p = (yb*UNITS_W + x)*4;
+      lauf = unitsMax(d,p) < 95 ? lauf+1 : 0;
+      if (lauf >= 5){ if (links === null || x-4 < links) links = x-4; break; }
+    }
+  }
+  const kanal = links ? (UNITS_BAHN_RECHTS - 8) - (links + 7) : null;
+  return {...best, bahnLinks: links, anteil: kanal ? Math.min(1, best.breite/kanal) : null};
+}
+/* Which form, if any, by the diamonds of the strength line - not by the
+   box's top edge. Over bright terrain the translucent box adds too little
+   brightness for a step (a whole series of 33 pictures was missed that
+   way), while the diamond outlines are black whatever lies behind them. A
+   diamond is 67 px wide and the first one starts between 1750 and 1880. */
+function unitsForm(d){
+  const plaus = r => r.filter(([a,b]) => b-a >= 60 && b-a <= 74 && a >= 1740 && a <= 1900);
+  for (const [form, oben] of UNITS_BAENDER)
+    if (plaus(unitsStaerkeBloecke(d, oben, oben+UNITS_BAND).rauten).length) return {form, oben};
+  return null;
+}
+/* The strength line: diamonds and digits side by side. The diamonds are
+   outlines, so the line is cut into runs of columns carrying any dark
+   pixel, with gaps of 12 px or more between them (diamond to digits is 23,
+   digits to the next diamond 36). A run is a diamond when it reaches into
+   the top ten rows of the band - digits never do, and a four-digit block
+   ("3/12", 65 px) is as wide as a diamond. */
+function unitsStaerkeBloecke(d, y0, y1, x0=1690, x1=2210){
+  const n = x1-x0, dk = new Uint8Array(n), oben = new Uint8Array(n);
+  for (let x=x0; x<x1; x++){
+    let c = 0, o = 0;
+    for (let y=y0; y<y1; y++){ if (unitsMax(d, (y*UNITS_W + x)*4) < 90){ c++; if (y < y0+10) o++; } }
+    dk[x-x0] = c; oben[x-x0] = o;
+  }
+  const runs = []; let s = null, leer = 0;
+  for (let i=0; i<=n; i++){
+    const some = i < n && dk[i] > 0;
+    if (some){ if (s === null) s = i; leer = 0; }
+    else if (s !== null){ if (++leer >= 12 || i === n){ runs.push([s, i-leer+1]); s = null; leer = 0; } }
+  }
+  const bl = [], rauten = [];
+  for (const [a,b] of runs){
+    const w = b-a; if (w < 6) continue;
+    let o = 0; for (let i=a; i<b; i++) o += oben[i];
+    if (o >= 6 && w >= 50 && w <= 80) rauten.push([a+x0, b+x0]);
+    else bl.push({x0: a+x0-5, x1: b+x0+6});
+  }
+  return {bl, rauten};
+}
+/* Plain threshold at four times the size. The head box is translucent over
+   the map and comes out darker than mid-grey, so the local-contrast path
+   (bildAufbereiten) takes the black digits for background and hands the
+   engine white-on-black - "45/90" then reads as "45190". With a plain
+   threshold all test crops read correctly. */
+function unitsSchlicht(c, bx, f=4){
+  const o = document.createElement("canvas"); o.width = bx.w*f; o.height = bx.h*f;
+  const g = o.getContext("2d", {willReadFrequently:true});
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+  g.drawImage(c, bx.x, bx.y, bx.w, bx.h, 0, 0, o.width, o.height);
+  const im = g.getImageData(0, 0, o.width, o.height), d = im.data, n = o.width*o.height, v = new Uint8Array(n);
+  let mn = 255, mx = 0;
+  for (let i=0, j=0; j<n; i+=4, j++){ v[j] = unitsMax(d, i); if (v[j] < mn) mn = v[j]; if (v[j] > mx) mx = v[j]; }
+  const t = (mn+mx)/2;
+  for (let i=0, j=0; j<n; i+=4, j++){ const p = v[j] < t ? 0 : 255; d[i] = d[i+1] = d[i+2] = p; d[i+3] = 255; }
+  g.putImageData(im, 0, 0);
+  return o;
+}
+const unitsBox = (x, y, w, h) => ({x: x/UNITS_W, y: y/UNITS_H, w: w/UNITS_W, h: h/UNITS_H});
+/* art "schlicht" takes the plain threshold; anything else the tool's
+   local-contrast path. Measured on 106 pictures: the town name reads
+   exactly 86 times with the plain threshold and 76 with the other, the
+   owner line does fine with the tool's path (85 of 90). */
+async function unitsText(c, x, y, w, h, melde, art){
+  const feld = art === "schlicht" ? unitsSchlicht(c, {x, y, w, h})
+                                  : await bildAufbereiten(c, unitsBox(x, y, w, h));
+  const r = await ocrMitZuv(feld, 7, melde || (()=>{}), "");
+  return {text: (r.text || "").trim().replace(/\s+/g, " "), zuv: r.zuv};
+}
+/* Town lookup with one difference to findeStadt: "ß" counts as "ss". The
+   game prints names in capitals, so Gießen appears as GIESSEN - read with
+   96 % and, with the plain key, two edits away from its town, one too many
+   for a name that short. */
+const unitsKey = t => namKey(t).replace(/ß/g, "ss");
+let unitsKeys = null;
+function unitsStadt(text){
+  if (!unitsKeys) unitsKeys = MAP.n.map((n,i) => [unitsKey(n[0]), i]);
+  const versuch = k => {
+    if (k.length < 4) return null;
+    let best = null;
+    for (const [sk, i] of unitsKeys){
+      if (sk === k) return {i, d:0, sicher:true};
+      if (Math.abs(sk.length - k.length) > 4) continue;
+      const d = levenshtein(k, sk);
+      if (!best || d < best.d) best = {i, d, sicher:false};
+    }
+    if (!best) return null;
+    const rel = best.d / Math.max(4, unitsKeys[best.i][0].length);
+    return rel <= 0.25 ? {...best, sicher: rel <= 0.12} : null;
+  };
+  /* the game appends " - C" or " - E" to some names; not part of the town */
+  return versuch(unitsKey(text || "")) || versuch(unitsKey((text || "").replace(/\s*[-–]\s*[A-Z]\s*$/, "")));
+}
+async function unitsStaerke(c, d, oben, melde){
+  const {bl} = unitsStaerkeBloecke(d, oben, oben+UNITS_BAND);
+  const teile = [];
+  for (const b of bl){
+    const feld = unitsSchlicht(c, {x: b.x0, y: oben+UNITS_ZIFFERN[0], w: b.x1-b.x0, h: UNITS_ZIFFERN[1]-UNITS_ZIFFERN[0]});
+    const r = await ocrMitZuv(feld, 7, melde || (()=>{}), "0123456789/");
+    const m = /(\d+)\s*\/\s*(\d+)/.exec(r.text || "");
+    teile.push(m ? [+m[1], +m[2]] : null);
+  }
+  return teile;
+}
+
+/* One picture -> what the bar says. Every field that could not be read is
+   null, never guessed. */
+async function unitsLesen(quelle, melde){
+  const sag = melde || (()=>{});
+  const {c, d, quer, gross} = await unitsRahmen(quelle);
+  const R = {gross, quer, karten: [], stadt: null, seite: null, roll: null, form: null, einheit: null};
+  sag("Looking for the bar …");
+  const reihe = unitsReihe(d);
+  R.reihe = reihe;
+  if (reihe.staerke >= UNITS_REIHE_MIN){
+    const k = unitsKartenFinden(d, reihe.y);
+    R.karten = k.rahmen.map(([x0,x1]) => {
+      const u = unitsUrteil(unitsRing(d, x0, x1, k.fy));
+      return {x0: x0-9, x1: x1+9, seite: u.klasse};
+    });
+    const fy = R.karten.length ? k.fy : reihe.y - 5;      /* rim top, 1830 in the usual bar */
+    R.node = unitsNode(d, fy + 5);
+    /* a bar is open when cards or the town disc are there - the raster alone
+       also fires on the row of total diamonds further down */
+    R.leiste = R.karten.length > 0 || R.node.klasse !== "-";
+    R.seite = ["US","GE","SU"].indexOf(R.node.klasse);
+    if (R.seite < 0) R.seite = null;
+    R.roll = unitsRoll(d);
+    if (R.leiste){
+      /* the name field ends at the track's left end - a card mid-blink is
+         not found, and the field must not swallow the pale cards */
+      const rechts = (R.roll && R.roll.bahnLinks) ? R.roll.bahnLinks - 8
+                   : (R.karten.length ? Math.min(R.karten[0].x0 - 20, 1700) : 1700);
+      sag("Reading the town name …");
+      const ort = await unitsText(c, UNITS_NAME_X, fy + 8, Math.max(60, rechts-UNITS_NAME_X), 62, null, "schlicht");
+      R.ortText = ort.text; R.ortZuv = ort.zuv;
+      R.stadt = unitsStadt(ort.text);
+    }
+  }
+  const kasten = unitsForm(d);
+  R.form = kasten ? kasten.form : null; R.kastenOben = kasten ? kasten.oben : null;
+  if (kasten){
+    const Z = UNITS_ZEILEN[kasten.form], B = UNITS_KASTEN.x1-UNITS_KASTEN.x0, o = kasten.oben;
+    sag("Reading the unit …");
+    const name = await unitsText(c, UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h);
+    const bes  = await unitsText(c, UNITS_KASTEN.x0, o+Z.besitzer.dy, B, Z.besitzer.h);
+    let bes2 = null;
+    if (Z.besitzer2) bes2 = await unitsText(c, UNITS_KASTEN.x0, o+Z.besitzer2.dy, B, Z.besitzer2.h);
+    const hp = await unitsStaerke(c, d, o);
+    /* "GE-008 - AT008 - KATSARIDAS": the tag is what stands before the first
+       dash, the rest is the name */
+    const t = name.text.split(AT_TRENNER);
+    const bm = /^\s*BESITZER\s*[:;.]?\s*(.*)$/i.exec((bes.text || "") + (bes2 && bes2.text ? " " + bes2.text : ""));
+    R.einheit = {
+      tag: t.length > 1 ? t[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "",
+      name: (t.length > 1 ? t.slice(1).join(" - ") : name.text).trim(),
+      nameZuv: name.zuv,
+      besitzer: bm ? bm[1].trim() : null, besitzerRoh: bes.text, besitzerZuv: bes.zuv,
+      hp, form: R.form
+    };
+  }
+  return R;
+}
+
+/* ---- the window --------------------------------------------------------- */
+let unitsStand = null;      /* the current reading */
+let unitsListe = [];        /* units collected in this session of the window */
+let unitsLive = null;       /* {timer, letzte} while the live feed runs */
+
+const unitsSeiteName = s => ["US","GE","USSR"][s] || "?";
+function unitsEsc(t){ return esc(t == null ? "" : String(t)); }
+
+/* A unit the reader has not seen yet - or has, but with a different owner
+   (another player took it over). Same tag AND same owner means the same
+   unit clicked twice. */
+function unitsNeu(e){
+  return !unitsListe.some(u => u.tag === e.tag && u.name === e.name && u.besitzer === e.besitzer);
+}
+/* Own units are told three ways, any one is enough: the owner is the member
+   name, the card is yellow, or the head box is the taller form - the game
+   shows morale and the visibility toggle only for units of one's own. */
+function unitsZeileAus(R){
+  const e = R.einheit; if (!e) return null;
+  return {tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp,
+          seite: R.seite, nameZuv: e.nameZuv, besitzerZuv: e.besitzerZuv,
+          eigen: !!(S.name && e.besitzer && namKey(e.besitzer) === namKey(S.name)) || e.form === "erweitert"};
+}
+function unitsZeichnen(){
+  const kopf = document.getElementById("units-kopf"), tab = document.getElementById("units-tab");
+  if (!kopf || !tab) return;
+  const R = unitsStand;
+  let k = "";
+  if (R){
+    if (R.quer) k += `<div class="note">This picture is not 16:9 (${R.gross.w}×${R.gross.h}); the bar has only been measured on 16:9 screens.</div>`;
+    if (!R.leiste){
+      k += R.form ? `<div>No bar - a town with a single unit. <b>Type the town below.</b></div>`
+                  : `<div>No detail bar in this picture.</div>`;
+    } else {
+      const st = R.stadt ? `${unitsEsc(MAP.n[R.stadt.i][0])}${R.stadt.sicher ? "" : " (?)"}` : `<i>not read</i>`;
+      const n = R.karten.length, gelb = R.karten.filter(x => x.seite === "gelb").length, blass = R.karten.filter(x => x.seite === "-").length;
+      k += `<div><b>${st}</b> · ${R.seite !== null ? unitsSeiteName(R.seite) : "side ?"} ·
+            ${n} cards on screen${gelb ? `, ${gelb} yours` : ""}${blass ? `, ${blass} blinking` : ""}${
+            R.roll && R.roll.anteil ? ` · about <b>${Math.round(n/R.roll.anteil)}</b> units in town` : ""}</div>`;
+    }
+  }
+  kopf.innerHTML = k || "Waiting for a picture …";
+  const ort = document.getElementById("units-ort");
+  if (ort && R && R.stadt && !ort.dataset.hand) ort.value = MAP.n[R.stadt.i][0];
+
+  tab.innerHTML = unitsListe.length ? `<table>
+    <tr><th>Tag</th><th>Name</th><th>Owner</th><th>Strength</th><th>Side</th></tr>
+    ${unitsListe.map((u,i) => `<tr class="${u.eigen ? "dim" : ""}" title="${u.eigen ? "your own unit - not kept" : ""}">
+      <td>${unitsEsc(u.tag)}</td>
+      <td style="${u.nameZuv < 60 ? "color:var(--warn)" : ""}" title="${u.nameZuv < 60 ? "read with low confidence" : ""}">${unitsEsc(u.name)}</td>
+      <td style="${u.besitzer ? "" : "color:var(--warn)"}">${u.besitzer ? unitsEsc(u.besitzer) : "not read"}</td>
+      <td>${(u.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  ")}</td>
+      <td>${u.seite !== null ? unitsSeiteName(u.seite) : "?"}</td></tr>`).join("")}
+  </table>` : `<div class="hint">No units yet. Click a unit in the game's detail bar, or drop a picture of it.</div>`;
+  const b = document.getElementById("units-keep"); if (b) b.disabled = !unitsListe.some(u => !u.eigen);
+}
+async function unitsBildHerein(datei, herkunft){
+  const st = document.getElementById("units-status");
+  const setz = t => { if (st) st.textContent = t; };
+  try {
+    const R = await unitsLesen(datei, setz);
+    unitsStand = R;
+    const z = unitsZeileAus(R);
+    if (z && unitsNeu(z)) unitsListe.push(z);
+    setz(R.einheit ? `Read: ${R.einheit.tag || ""} ${R.einheit.name}` : "No unit picked in this picture.");
+  } catch(e){ setz("Could not read this picture: " + (e.message || e)); }
+  unitsZeichnen();
+}
+/* The live feed: one frame a second from the shared game window. A frame
+   is read only when the head box changed since the last reading - the
+   engine needs a second or two per unit, and the same unit on screen for
+   ten seconds should not be read ten times. */
+function unitsKennung(d){
+  /* cheap fingerprint of the head box area: dark-pixel counts per 16 columns */
+  const out = [];
+  for (let x=UNITS_KASTEN.x0; x<UNITS_KASTEN.x1; x+=16){
+    let n = 0;
+    for (let y=1380; y<2140; y+=4) if (unitsMax(d, (y*UNITS_W + x)*4) < 90) n++;
+    out.push(n);
+  }
+  return out.join(",");
+}
+async function unitsLiveStart(){
+  if (unitsLive) return;
+  const st = document.getElementById("units-status");
+  const setz = t => { if (st) st.textContent = t; };
+  unitsLive = {letzte: null, vorige: null, laeuft: false};
+  const tick = async () => {
+    if (!unitsLive || unitsLive.laeuft) return;
+    unitsLive.laeuft = true;
+    try {
+      const f = await bildAufnehmen();
+      const {c, d} = await unitsRahmen(f);
+      const kn = unitsKennung(d);
+      /* read only what has stood still for two frames: the frame right
+         after a click catches the box half-drawn ("i lJS-002 2AT002") */
+      if (kn !== unitsLive.letzte && kn === unitsLive.vorige){
+        unitsLive.letzte = kn;
+        const R = await unitsLesen(c, setz);
+        unitsStand = R;
+        const z = unitsZeileAus(R);
+        if (z && unitsNeu(z)) unitsListe.push(z);
+        setz(R.einheit ? `Read: ${R.einheit.tag || ""} ${R.einheit.name} — click the next unit` : "Waiting — click a unit in the bar");
+        unitsZeichnen();
+      }
+      unitsLive.vorige = kn;
+    } catch(e){
+      setz(/denied|Permission/i.test(String(e.message || e)) ? "Screen sharing was declined." : "Live: " + (e.message || e));
+      unitsLiveStop();
+    } finally { if (unitsLive) unitsLive.laeuft = false; }
+  };
+  unitsLive.timer = setInterval(tick, 900);
+  const b = document.getElementById("units-live"); if (b) b.textContent = "Stop";
+  setz("Live — click the units in the game's detail bar one after another.");
+  tick();
+}
+function unitsLiveStop(){
+  if (!unitsLive) return;
+  clearInterval(unitsLive.timer); unitsLive = null;
+  const b = document.getElementById("units-live"); if (b) b.textContent = "Capture the game …";
+}
+/* "Keep": the list goes into the browser's own store, keyed by town. The
+   rows are shaped so that they can move into a server pot unchanged once
+   there is one. */
+function unitsBehalten(){
+  const ort = document.getElementById("units-ort");
+  const f = ort && ort.value ? unitsStadt(ort.value) : null;
+  if (!f){ toast("Which town? Type its name first."); ort && ort.focus(); return; }
+  const zeilen = unitsListe.filter(u => !u.eigen).map(u => ({
+    town: f.i, side: u.seite, tag: u.tag, name: u.name, owner: u.besitzer, hp: u.hp, t: jetzt(), by: S.me }));
+  if (!zeilen.length){ toast("Nothing to keep - only your own units."); return; }
+  let alles = {};
+  try { alles = JSON.parse(localStorage.getItem(UNITS_LOCAL) || "{}"); } catch(e){}
+  alles[f.i] = {t: jetzt(), rows: zeilen};
+  try { localStorage.setItem(UNITS_LOCAL, JSON.stringify(alles)); } catch(e){}
+  toast(`${zeilen.length} units kept for ${MAP.n[f.i][0]} — in this browser only, for now.`);
+  unitsListe = []; unitsStand = null; unitsZeichnen();
+}
+
+document.getElementById("b-units").addEventListener("click", ()=>{
+  unitsListe = []; unitsStand = null;
+  openDlg(`
+    <div class="dlg-h"><h2>Read the units of a town</h2>
+      <p>Tag, name, owner and strength — from the game's detail bar.</p></div>
+    <div class="dlg-b">
+      <div style="border:1px solid var(--accent-dk);border-radius:2px;padding:11px 13px;
+           background:rgba(226,172,72,.05)">
+        <div style="font-size:13px;line-height:1.5;margin-bottom:9px">Open a town with several units in the game,
+          then click its units one after another. Each one is read as it appears.</div>
+        <button class="btn primary" id="units-live" style="width:100%;justify-content:center">Capture the game …</button>
+        <div class="note">The game must run <b>borderless or windowed</b>. Your own units (yellow cards) are shown but not kept.</div>
+      </div>
+      <details style="margin-top:12px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--dim)">One picture instead …</summary>
+        <div style="margin-top:9px">${bildQuelleHTML("units-file")}</div>
+      </details>
+      <div id="units-status" style="margin-top:10px;color:var(--dim)">Waiting for a picture …</div>
+      <div id="units-kopf" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:8px;align-items:center">
+        <label for="units-ort" style="min-width:60px">Town</label>
+        <input id="units-ort" list="units-orte" placeholder="read from the bar, or type it" style="flex:1">
+        <datalist id="units-orte">${MAP.n.map(n => `<option value="${unitsEsc(n[0])}">`).join("")}</datalist>
+      </div>
+      <div id="units-tab" style="margin-top:10px"></div>
+    </div>
+    <div class="dlg-f">
+      <button class="btn" id="d-close">Close</button>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="units-keep" disabled>Keep</button>
+    </div>`, true);
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  bildQuelle("units-file", unitsBildHerein);
+  /* the live feed must stop with the window */
+  const abAlt = bildAbmelden;
+  bildAbmelden = () => { unitsLiveStop(); if (abAlt) abAlt(); };
+  document.getElementById("units-live").addEventListener("click", ()=>{ unitsLive ? unitsLiveStop() : unitsLiveStart(); });
+  document.getElementById("units-ort").addEventListener("input", ev => { ev.target.dataset.hand = "1"; });
+  document.getElementById("units-keep").addEventListener("click", unitsBehalten);
+  unitsZeichnen();
+});
 
 let shotState = null;
 document.getElementById("b-shot").addEventListener("click", ()=>{
@@ -26700,7 +27208,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build bda6d3e90b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0ff41b1aa0</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -26835,7 +27343,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "bda6d3e90b";
+const BAU = "0ff41b1aa0";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
