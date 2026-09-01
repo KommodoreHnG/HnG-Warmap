@@ -1,0 +1,10 @@
+index.html
+  Bau       7fdde329a4
+  SHA-256   5c64393b368feee76feb696323e569c89b9f1b0171f3bfbf20bbb692e3d54551
+  Groesse   2018186 Bytes
+
+Selbst nachbauen:  python karte_bauen.py
+Nachrechnen:       certutil -hashfile index.html SHA256
+
+Stimmen beide ueberein, ist die ausgelieferte Seite die aus
+dem Quelltext - und niemand hat unterwegs etwas eingebaut.
