@@ -1856,18 +1856,55 @@ function faehigkeiten(s){
 /* Ein Soldateneintrag aus fremder Hand kann alles enthalten - eine Zahl statt
    einer Liste reichte, um das ganze Fenster zu verschlucken. Einmal
    begradigen, danach darf die Anzeige den Feldern trauen. */
+/* WHAT A SOLDIER CARRIES, taken from the game and not from taste.
+   weaponslotcategory has four rows - primary, sidearm, closecombat,
+   equipment - and weapontemplate field 58 carries exactly those numbers.
+   Four vehicles alongside them, one upgrade and one ammunition each.
+
+   Equipment points are a second, finer rule the game applies on top:
+   charactertemplate field 8 gives each class a budget (rifleman 10,
+   paratrooper and recon 8, pilot and tank crew 6) and weapontemplate
+   field 65 gives each weapon its price (bolt rifle 2, StG44 7, MG42 8).
+   A rifleman fits an MG42 plus knife plus grenade at exactly 10. That
+   rule decides which COMBINATION is legal; it is not what protects the
+   database, so it is not enforced here.
+
+   THE SIZE IS WHY THESE ARE HARD LIMITS. All of a player's teams and
+   soldiers live in ONE database row. Measured with the real game keys:
+   30 soldiers at 4+4 come to 16 225 bytes and 300 teams to 25 091, so a
+   full depot is about 41 000. Rows above the cap are refused and dropped
+   from the queue - the depot then stays on one screen and the clan never
+   sees it again, without a word. */
+const WAFFEN_MAX   = 4, FAHRZEUG_MAX = 4;
+const AUSBAU_MAX   = 1, MUNITION_MAX = 1;
+/* Assault teams cost command points, and rank gives them: 30 soldiers at
+   rank 22 give 300 CP, a team costs 1 or 2. So 300 is the ceiling the
+   game itself sets - a number no real player reaches, which is what a
+   guard against damage should be. */
+const TEAM_MAX = 300;
+const SOLDAT_NAME_MAX = 24, TEAM_NAME_MAX = 20;
+
 function soldatNorm(s){
   if (!s || typeof s !== "object") return null;
   const nurText = x => (Array.isArray(x) ? x : []).filter(y => typeof y === "string");
   const text = x => typeof x === "string" ? x : "";
-  /* Der Rang war frueher freier Text und einmal faelschlich eine "Stufe".
-     Beides wird uebernommen, damit alte Eintraege nicht verloren gehen. */
+  /* Rank used to be free text, and once wrongly a "level". Both are still
+     accepted so older entries are not lost. */
   const roh = s.rank !== undefined && s.rank !== "" ? s.rank : s.lvl;
   const rang = Number.isFinite(+roh) ? Math.max(0, Math.min(RANG_MAX, Math.round(+roh))) : 0;
+  /* The quiet second line. Every path to a soldier runs through here, so
+     anything past the game's own limits is cut off - a pasted file, the
+     screenshot reader, a hand-edited backup. The buttons say WHY before it
+     gets this far; this is what holds when somebody works around them. */
+  /* The War Victory tier: 0 none, 1 bronze, 2 silver, 3 gold. Older entries
+     have no field at all and come back as 0, which is right - nobody is
+     credited with a ribbon they never entered. */
+  const badge = Math.max(0, Math.min(3, Math.round(+s.kb || 0)));
   return {id: text(s.id) || Math.random().toString(36).slice(2,9),
-          cls: text(s.cls), name: text(s.name), rank: rang,
-          w: nurText(s.w),
-          v: (Array.isArray(s.v) ? s.v : []).map(fzNorm).filter(Boolean)};
+          cls: text(s.cls), name: text(s.name).slice(0, SOLDAT_NAME_MAX), rank: rang, kb: badge,
+          w: nurText(s.w).slice(0, WAFFEN_MAX),
+          v: (Array.isArray(s.v) ? s.v : []).map(fzNorm).filter(Boolean)
+                                            .slice(0, FAHRZEUG_MAX)};
 }
 const soldatenListe = a => (Array.isArray(a) ? a : []).map(soldatNorm).filter(Boolean);
 const UPG = {};
@@ -1893,12 +1930,53 @@ const RANG_OFFIZIER = 12, RANG_GENERAL = 18;
    stehen in keiner Datei und werden hier von Hand nachgetragen. */
 const RANG_CP = {12:1, 13:1, 14:1, 15:2, 16:3, 17:4, 18:5, 19:6, 20:7, 21:8, 22:10};
 const rangCP = r => RANG_CP[Math.max(0, Math.min(RANG_MAX, +r || 0))] || 0;
+/* THE WAR VICTORY RIBBON, worth up to three more command points. Rank alone
+   cannot say how many - the ribbon is earned separately - so it is entered
+   per soldier.
+   Twelve steps, and a command point at step 4, 8 and 12: the ribbon screen
+   in the game puts its three reward markers under exactly those. The XP
+   figures are the game's own (ribbonlevel), and one war victory awards 4060
+   (statRequirement, ribbon 3000, CharacterWarVictory; an assault-team
+   victory without the soldier present gives 980).
+   Checked, not assumed: a live screen showed 8745 / 10000 on the way to
+   step 7, and 10000 is exactly the gap between step 6 (19500) and step 7
+   (29500) - so those numbers are cumulative. */
+const KRIEG_BADGE = [
+  {cp: 0, name: "no war badge", stufe: 0,  xp: 0},
+  {cp: 1, name: "bronze",       stufe: 4,  xp: 7500},
+  {cp: 2, name: "silver",       stufe: 8,  xp: 41500},
+  {cp: 3, name: "gold",         stufe: 12, xp: 184500},
+];
+const XP_JE_KRIEGSSIEG = 4060;
+const badgeCP = b => (KRIEG_BADGE[Math.max(0, Math.min(3, +b || 0))] || {}).cp || 0;
+/* What a soldier is worth on the war map right now. */
+const soldatCP = so => so ? rangCP(so.rank) + badgeCP(so.kb) : 0;
+/* AT MOST how many more war victories to the next command point. The tool
+   knows the tier, not the progress inside it - somebody who just reached
+   bronze and somebody one victory short of silver both show "bronze". So
+   this is a ceiling, and the text says so. */
+function siegeBisNaechstePunkt(b){
+  const i = Math.max(0, Math.min(3, +b || 0));
+  if (i >= 3) return null;                      // gold, nothing above it
+  return {ziel: KRIEG_BADGE[i+1].name,
+          siege: Math.ceil((KRIEG_BADGE[i+1].xp - KRIEG_BADGE[i].xp) / XP_JE_KRIEGSSIEG)};
+}
+/* The rank half on its own - still used where no soldier is at hand. */
 function rangText(r){
   r = +r || 0;
   const cp = rangCP(r);
   if (r >= RANG_GENERAL) return `general · ${cp} CP`;
   if (r >= RANG_OFFIZIER) return `officer · ${cp} CP`;
   return `shooter · 0 CP`;
+}
+/* What the soldier row shows: rank and ribbon together, because that is
+   the number that decides how many assault teams they can lead. */
+function soldatCPText(so){
+  const r = +((so || {}).rank) || 0;
+  const rang = r >= RANG_GENERAL ? "general" : r >= RANG_OFFIZIER ? "officer" : "shooter";
+  const cp = soldatCP(so), von = rangCP(r), bad = badgeCP((so || {}).kb);
+  if (!cp) return `${rang} · 0 CP`;
+  return bad ? `${rang} · ${cp} CP (${von} + ${bad})` : `${rang} · ${cp} CP`;
 }
 /* Welche Seite der Clan gerade spielt. Zentral gesetzt, weil sich das
    zwischen zwei Kriegen aendert und weil die Karte auch anderen Clans
@@ -1960,13 +2038,23 @@ function abStufe(d, frak, cls){
 }
 /* Ein Fahrzeug am Soldaten ist mehr als ein Name: Ausbauten und Munition
    haengen daran. Aeltere Eintraege waren blosse Zeichenketten. */
+/* One upgrade and one ammunition per vehicle, same as the game. Ammunition
+   names are long ("[85x629mmR] UBR-365K Armor Piercing High Explosive" is
+   49 characters), so an open list here is what pushed a measured depot to
+   29 260 bytes and out of sync for good. */
 const fzNorm = x => {
   if (typeof x === "string") return x ? {k: x, u: [], a: []} : null;
   if (!x || typeof x !== "object" || !x.k) return null;
   const liste = y => (Array.isArray(y) ? y : []).filter(z => typeof z === "string");
-  return {k: String(x.k), u: liste(x.u), a: liste(x.a)};
+  return {k: String(x.k),
+          u: liste(x.u).slice(0, AUSBAU_MAX),
+          a: liste(x.a).slice(0, MUNITION_MAX)};
 };
-const soldatenVon = who => soldatenListe(S.depot[who] && S.depot[who].arms);
+/* Reads the new row, and falls back to the old place. Until 01.09.2026 the
+   soldiers sat inside the depot row; anything still there stays readable and
+   moves across the next time it is written. */
+const soldatenVon = who => soldatenListe(
+  (S.sold[who] && S.sold[who].v) || (S.depot[who] && S.depot[who].arms));
 
 /* ---- anonym veroeffentlichen -----------------------------------------
    Den Namen bloss im Fenster wegzulassen waere keine Anonymitaet: die
@@ -2117,7 +2205,7 @@ function anonAn(){ return true; }
 /* Wer seine Soldaten frueher unter seinem Namen eingetragen hat, zieht beim
    naechsten Start um. Der alte Platz wird geleert, nicht nur verlassen. */
 function soldatenUmziehen(){
-  const alt = soldatenListe(S.depot[S.me] && S.depot[S.me].arms);
+  const alt = soldatenVon(S.me);
   if (!alt.length) return 0;
   S.anon ||= {};
   const k = anonKennung();
@@ -2140,7 +2228,7 @@ function soldatenUmziehen(){
   return alt.length;
 }
 const meineSoldaten = () => anonAn() ? anonSoldaten(anonKennung())
-                                     : soldatenListe(S.depot[S.me] && S.depot[S.me].arms);
+                                     : soldatenVon(S.me);
 function anonSchreiben(liste){
   S.anon ||= {};
   const k = anonKennung(), l = soldatenListe(liste);
@@ -2204,9 +2292,20 @@ const TOPFTAFEL = {
   btl:    {wer:0, recht:"aufklaerung", krieg:0},   // Vorrat aus der Schlachtanalyse
 
   /* --- Eigenes: der Verfasser steht im Schluessel --- */
-  depot:  {wer:1, recht:"", krieg:1},              // eigene Einheiten und Arsenal
-  priv:   {wer:1, recht:"", krieg:0},              // verschluesselte Notiz
-  wish:   {wer:1, recht:"", krieg:0},              // Verstaerkungswunsch
+  depot:  {wer:1, recht:"", krieg:1},              // eigene Kampfeinheiten
+  /* Soldiers used to live inside the depot row. They were split off on
+     01.09.2026: a full depot came to 41 382 bytes, so every change to a
+     single weapon pushed the whole team list back up as well, and the two
+     together could not stay under any sensible size cap. Same owner, same
+     rights, same survival of a new war - only a row of their own. */
+  sold:   {wer:1, recht:"", krieg:1},              // eigene Soldaten und ihr Arsenal
+  /* krieg:1 since 01.09.2026. The server has always kept these two
+     (warmap_raum_leeren spares depot, roster, edep, clan, meta, anon, priv,
+     wish) - the page did not, and altlastFegen deleted them at the next
+     start. A notebook and a wish describe the PERSON, and the rule at the
+     top of this table says those stay. */
+  priv:   {wer:1, recht:"", krieg:1},              // verschluesselte Notiz
+  wish:   {wer:1, recht:"", krieg:1},              // Verstaerkungswunsch
   sweep:  {wer:1, recht:"", krieg:0},              // welcher Sektor abgesucht wurde
   /* Wer wo hingesehen hat. Steht bei den EIGENEN Toepfen, weil jeder nur
      seine eigene Abdeckung meldet; gezeichnet wird die Vereinigung aller.
@@ -2233,7 +2332,16 @@ const TOPFTAFEL = {
   /* --- Sonderfaelle --- */
   meta:   {wer:0, recht:"meta",  krieg:1},         // Kriegs- und Clanschalter
   ok:     {wer:0, recht:"bestaetigen", krieg:0},   // macht aus Vorschlag Befehl
-  anon:   {wer:0, recht:"anon",  krieg:0},         // anonyme Soldatenliste
+  /* krieg:1 since 01.09.2026, and this was the serious one. anonAn()
+     returns true unconditionally, so EVERY soldier list lives here - not in
+     depot and not in sold. With krieg:0 this pot was outside KRIEG_BLEIBT,
+     and altlastFegen deletes anything older than the war line at every page
+     start. A new war therefore wiped every arsenal in the clan, while the
+     confirmation text promised in so many words that it is kept.
+     A full pull brings it back - but not in the same session, and whoever
+     edits a soldier in between writes the near-empty list over the server
+     copy for good. */
+  anon:   {wer:0, recht:"anon",  krieg:1},         // anonyme Soldatenliste
   para:   {wer:0, recht:"",      krieg:0},         // Parablock, Eigentum in der Zeile
   akt:    {wer:0, recht:"",      krieg:0},         // Anwesenheitsmeldung
   todo:   {wer:0, recht:"",      krieg:0},         // Meldung ans Werkzeug
@@ -3270,14 +3378,22 @@ function rebuildUnits(){
     unitIdx.get(town).push({who, name: e.n || who, mine: who === S.me, list: e.v});
   }
   depotIdx = new Map();
-  for (const who of Object.keys(S.depot)){
-    const e = S.depot[who];
-    /* Nur das Depot der eingestellten Seite - wer eine andere spielt, hat
-       hier nichts zu suchen. */
-    if (e && Array.isArray(e.v))
-      depotIdx.set(who, {name: e.n || who, list: aufSeite(depotListe(e.v), aktiveSeite()),
-                         h: verlaufVon(who), t: e.t,
-                         arms: soldatenListe(e.arms)});
+  /* BOTH pots, not just the depot. Since the soldiers moved into a row of
+     their own, somebody can have soldiers and no teams - walking only
+     S.depot would drop them from every list in the tool: the roster, the
+     clan overview, the printout. They would simply not exist, and the
+     screen would look right. */
+  for (const who of new Set([...Object.keys(S.depot), ...Object.keys(S.sold)])){
+    const e = S.depot[who] || {};
+    const sold = soldatenVon(who);
+    if (!Array.isArray(e.v) && !sold.length) continue;
+    /* Only the depot of the faction on screen - somebody playing another
+       side has nothing to show here. */
+    depotIdx.set(who, {name: e.n || (S.sold[who] || {}).n || who,
+                       list: aufSeite(depotListe(Array.isArray(e.v) ? e.v : []), aktiveSeite()),
+                       h: verlaufVon(who),
+                       t: Math.max(e.t || 0, (S.sold[who] || {}).t || 0),
+                       arms: sold});
   }
 }
 const unitsAt = i => unitIdx.get(i) || [];
@@ -4752,18 +4868,45 @@ function setMyUnits(i, list){
    das eine aendert, darf das andere nicht mitloeschen. */
 function depotSchreiben(felder){
   const alt = S.depot[S.me] || {};
-  const liste = felder.list !== undefined ? felder.list
-                                          : (Array.isArray(alt.v) ? alt.v : []);
-  const arms  = soldatenListe(felder.arms !== undefined ? felder.arms : alt.arms);
+  let liste  = felder.list !== undefined ? felder.list
+                                         : (Array.isArray(alt.v) ? alt.v : []);
+  const arms = soldatenListe(felder.arms !== undefined ? felder.arms : soldatenVon(S.me));
+  /* The teams share the row with the soldiers, so they need a ceiling too.
+     Only cut when THIS change made the list longer - somebody who already
+     sits above the limit from an older version keeps what they have and
+     just cannot add more. Same rule as setMyArms uses for soldiers. */
+  const vorher = Array.isArray(alt.v) ? alt.v.length : 0;
+  if (Array.isArray(liste) && liste.length > Math.max(TEAM_MAX, vorher)){
+    toast(`${TEAM_MAX} assault teams is the ceiling. Remove one before adding another.`);
+    liste = liste.slice(0, Math.max(TEAM_MAX, vorher));
+  }
   const f = aktiveSeite();
   const hf = Object.assign({}, alt.hf);
   hf[f] = verlaufFort(alt, aufSeite(depotListe(liste), f), f);
   /* Name und Kuerzel gehen NICHT mit. Was der Clan sehen soll, ist WAS
      jemand mitbringt - Gattung und Anzahl. Wie die Einheit heisst, ist
      Privatsache und steht ohnehin im Spiel auf der Karte. */
-  S.depot[S.me] = {v: namenAbstreifen(depotListe(liste)), t: jetzt(), by: S.me,
-                   n: S.name || "", hf, arms};
-  dirty.add(`depot:${S.me}`); rebuildUnits(); save(); kraftLeiste();
+  /* TWO ROWS. Only the half this call actually touched is rewritten and
+     queued - that is the point of the split. Changing one weapon used to
+     push the whole team list back up as well, and the other way round.
+     On the very first write both rows are created, so neither half can
+     stay missing. */
+  /* alt.arms is the legacy field: until 01.09.2026 the soldiers sat inside
+     this row. It has to be rebuilt once to drop it - and queued, or the
+     full list stays on the server under a key every clan member may read.
+     soldatenUmziehen depends on exactly this: it clears the old place with
+     depotSchreiben({arms: []}), and without this condition that call only
+     touched the new pot while the named list stayed behind. */
+  if (felder.list !== undefined || S.depot[S.me] === undefined || alt.arms !== undefined){
+    S.depot[S.me] = {v: namenAbstreifen(depotListe(liste)), t: jetzt(), by: S.me,
+                     n: S.name || "", hf};
+    dirty.add(`depot:${S.me}`);
+  }
+  if (felder.arms !== undefined || S.sold[S.me] === undefined){
+    S.sold[S.me] = {v: arms, t: jetzt(), by: S.me, n: S.name || ""};
+    dirty.add(`sold:${S.me}`);
+  }
+  rebuildUnits(); save(); kraftLeiste();
 }
 /* Beim Schreiben bleiben die anderen beiden Depots unangetastet, und was neu
    dazukommt, bekommt die eingestellte Seite eingetragen. */
@@ -25721,10 +25864,16 @@ function arsenalDialog(tab){
           ${Array.from({length: RANG_MAX+1}, (_, n) => `<option value="${n}"${n === (s.rank||0) ? " selected" : ""}>rank ${n}${
             rangCP(n) ? ` · ${rangCP(n)} CP` : ""}</option>`).join("")}
         </select>
+        <select data-feld="kb" style="width:118px" title="War Victory ribbon">
+          ${KRIEG_BADGE.map((b, n) => `<option value="${n}"${n === (s.kb||0) ? " selected" : ""}>${
+            esc(b.name)}${b.cp ? ` · ${b.cp} CP` : ""}</option>`).join("")}
+        </select>
         <input type="text" data-feld="name" value="${esc(s.name || "")}"
           placeholder="name (optional)" style="flex:1;min-width:90px">
-        <span style="font-size:10.5px;color:${rangCP(s.rank) ? "var(--accent)" : "var(--dim2)"};
-          width:190px">${esc(rangText(s.rank))}</span>
+        <span style="font-size:10.5px;color:${soldatCP(s) ? "var(--accent)" : "var(--dim2)"};
+          width:190px" title="${esc((()=>{ const n = siegeBisNaechstePunkt(s.kb);
+            return n ? `At most ${n.siege} more war victories to ${n.ziel}.`
+                     : "Gold is the highest tier."; })())}">${esc(soldatCPText(s))}</span>
         <button class="btn danger" data-loesch="${i}" style="padding:3px 8px">Remove</button>
       </div>
       <div class="sold-z"><span class="sold-l">Weapons</span>
@@ -25877,9 +26026,13 @@ function arsenalDialog(tab){
     karte.querySelectorAll("[data-feld]").forEach(el => {
       el.addEventListener("change", () => {
         const feld = el.dataset.feld;
-        aendere(feld, feld === "rank" ? +el.value
+        /* rank and kb are numbers; a select otherwise hands back a string. */
+        aendere(feld, (feld === "rank" || feld === "kb") ? +el.value
                     : el.tagName === "SELECT" ? el.value : el.value.trim());
-        if (feld === "cls" || feld === "rank") arsenalDialog("mine");
+        /* Redraw for kb as well - the command point sum next to the row is
+           built from rank AND ribbon, and would otherwise keep showing the
+           old number. */
+        if (feld === "cls" || feld === "rank" || feld === "kb") arsenalDialog("mine");
       });
     });
     karte.querySelector("[data-loesch]")?.addEventListener("click", () => {
@@ -25907,9 +26060,15 @@ function arsenalDialog(tab){
       kitWahl(b, art, {cls: s.cls}, k => schreibe(x => {
         if (art === "w"){
           if ((x.w || []).includes(k)) return toast("Already on that soldier.");
+          /* Four weapon slots, same as the game. Without a word here the
+             fifth one would simply vanish in soldatNorm. */
+          if ((x.w || []).length >= WAFFEN_MAX)
+            return toast(`A soldier carries ${WAFFEN_MAX} weapons. Remove one first.`);
           x.w = (x.w || []).concat([k]);
         } else {
           if ((x.v || []).some(f => f.k === k)) return toast("Already on that soldier.");
+          if ((x.v || []).length >= FAHRZEUG_MAX)
+            return toast(`A soldier carries ${FAHRZEUG_MAX} vehicles. Remove one first.`);
           x.v = (x.v || []).concat([{k, u: [], a: []}]);
         }
       }));
@@ -25923,6 +26082,10 @@ function arsenalDialog(tab){
       kitWahl(b, istAusbau ? "u" : "a", {cls: s.cls, veh: fz.k}, k => schreibe(x => {
         const ziel = istAusbau ? "u" : "a";
         if (!x.v[vi] || x.v[vi][ziel].includes(k)) return toast("Already fitted.");
+        const deckel = istAusbau ? AUSBAU_MAX : MUNITION_MAX;
+        if (x.v[vi][ziel].length >= deckel)
+          return toast(istAusbau ? "One upgrade per vehicle. Remove it first."
+                                 : "One ammunition per vehicle. Remove it first.");
         x.v[vi][ziel] = x.v[vi][ziel].concat([k]);
       }));
     }));
@@ -26466,7 +26629,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 066691d663</span></p></div>
+         installation. <span style="color:var(--dim2)">· build ed8303f9ab</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -26601,7 +26764,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "066691d663";
+const BAU = "ed8303f9ab";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -26963,9 +27126,22 @@ async function syncPushInner(){
                    : tf.recht || "!sonst");
       continue;
     }
-    /* Die Datenbank begrenzt eine Zeile auf 20 KB, gemessen in Bytes - nicht
-       in JavaScript-Zeichen, wo ein Umlaut fuer eins zaehlt und zwei belegt. */
-    if (byteLaenge(JSON.stringify(val)) > 18000){
+    /* The database caps a row in BYTES - not in JavaScript characters,
+       where an umlaut counts as one and takes two.
+       Since 01.09.2026 the cap is per pot. A depot holds a whole player -
+       30 soldiers and up to 300 teams, measured at 41 382 bytes - and
+       could never fit under the flat 20 000, so depot: and anon: were
+       raised to 64 000 on the server. Every other pot stayed where it was,
+       because a blanket raise would have loosened all of them.
+       The numbers here sit below the server's, so the page stops first and
+       can say what happened. */
+    /* Each half on its own now: 30 soldiers come to 16 225 bytes, 300 teams
+       to 25 091. The caps sit above those and below the server's, so the
+       page stops first and can say what happened. */
+    const deckel = (bucket === "sold" || bucket === "anon") ? 28000
+                 : bucket === "depot"                       ? 36000
+                 : 18000;
+    if (byteLaenge(JSON.stringify(val)) > deckel){
       dirty.delete(k);
       toast(`"${bucket}" is too large to sync and was left out.`);
       continue;
