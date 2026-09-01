@@ -10066,18 +10066,26 @@ async function kbTick(){
   if (!KB || !KB.live || KB.laeuft) return;
   KB.laeuft = true;
   try {
+    /* Every await is a place where the cabin may have been closed in the
+       meantime - the reading that came back after the stop reached into
+       nothing ("Cannot read properties of null"). So: look again after
+       each one. */
     const f = await bildAufnehmen();
+    if (!KB || !KB.live) return;
     const {c, d, quer, gross, hell, gain} = await unitsRahmen(f);
+    if (!KB || !KB.live) return;
     KB.frame = gross; KB.hell = hell; KB.gain = gain;
     const kn = kbKennung(d);
     /* read only what stood still for two frames */
     if (kn !== KB.letzte && kn === KB.vorige){
       KB.letzte = kn;
-      const R = await unitsLesen(c, t => { KB.status = t; });
+      const R = await unitsLesen(c, t => { if (KB) KB.status = t; });
+      if (!KB) return;
       kbVerarbeiten(R);
     } else if (kn !== KB.vorige){ kbZeichnen(); }
     KB.vorige = kn;
   } catch(e){
+    if (!KB) return;
     KB.status = /denied|Permission/i.test(String(e.message || e)) ? "Screen sharing was declined." : "Capture: " + (e.message || e);
     kbLiveStop(); kbZeichnen();
   } finally { if (KB) KB.laeuft = false; }
@@ -10094,7 +10102,7 @@ function kbLiveStop(){
   kbRauschenAus(); kbZeichnen();
 }
 /* one picture, for checks without the game */
-async function kbBild(datei){ if (!KB) return; const R = await unitsLesen(datei, t => { KB.status = t; }); kbVerarbeiten(R); return R; }
+async function kbBild(datei){ if (!KB) return; const R = await unitsLesen(datei, t => { if (KB) KB.status = t; }); if (KB) kbVerarbeiten(R); return R; }
 
 /* ---- keeping ---------------------------------------------------------------- */
 function kbBehalten(){
@@ -27718,7 +27726,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 6d2d37e33d</span></p></div>
+         installation. <span style="color:var(--dim2)">· build ef1ef128b8</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -27853,7 +27861,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "6d2d37e33d";
+const BAU = "ef1ef128b8";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
