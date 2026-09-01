@@ -9443,6 +9443,25 @@ async function unitsLesen(quelle, melde){
   const sag = melde || (()=>{});
   const {c, d, quer, gross} = await unitsRahmen(quelle);
   const R = {gross, quer, karten: [], stadt: null, seite: null, roll: null, form: null, einheit: null};
+  /* THE BATTLE WINDOW FIRST. A line's bar can come without town name and
+     disc; the window opened by clicking the battle itself names both in
+     its heading - "EINNEHMEN & HALTEN BEI SUHL - C", or just the town. Its
+     frame is found the way the battle-screen reader finds it; the heading
+     sits 0.03 to 0.065 frame widths below the top edge. Nothing else is
+     read from such a picture - the bar behind the window is half hidden. */
+  const dlg = dialogRahmen(d, UNITS_W, UNITS_H);
+  if (dlg && dlg.breite > 1200){
+    sag("Reading the battle window …");
+    const B = dlg.breite;
+    const kopf = await unitsText(c, dlg.x0 + Math.round(B*0.07), dlg.y0 + Math.round(B*0.03), Math.round(B*0.48), Math.round(B*0.035));
+    const m = /\bBEI\b\s*(.+)$/i.exec(kopf.text);
+    const rest = (m ? m[1] : kopf.text).trim();
+    R.dialog = true; R.dialogText = kopf.text; R.dialogZuv = kopf.zuv;
+    R.stadt = unitsStadt(rest);
+    const lm = /[-–]\s*([A-E])\s*$/.exec(rest);
+    R.linie = lm ? lm[1] : null;
+    return R;
+  }
   sag("Looking for the bar …");
   const reihe = unitsReihe(d);
   R.reihe = reihe;
@@ -9463,7 +9482,9 @@ async function unitsLesen(quelle, melde){
     let paare = 0;
     for (let i=0; i+1<k.rahmen.length; i++) if (Math.abs((k.rahmen[i+1][0] - k.rahmen[i][0]) - UNITS_RASTER) <= 3) paare++;
     R.leiste = paare >= 1 || R.node.kompakt;
-    R.seite = ["US","GE","SU"].indexOf(R.node.klasse);
+    /* the holder only from a compact disc - map colour at that place is
+       not a holder */
+    R.seite = R.node.kompakt ? ["US","GE","SU"].indexOf(R.node.klasse) : -1;
     if (R.seite < 0) R.seite = null;
     R.roll = unitsRoll(d);
     /* no bar, no cards, no holder - what was found there came from the map */
@@ -9511,6 +9532,7 @@ async function unitsLesen(quelle, melde){
 
 /* ---- the window --------------------------------------------------------- */
 let unitsStand = null;      /* the current reading */
+let unitsOrtMerk = null;    /* {stadt, linie} from the last battle window, for units read without a town */
 let unitsListe = [];        /* units collected in this session of the window */
 let unitsLive = null;       /* {timer, letzte} while the live feed runs */
 
@@ -9528,8 +9550,11 @@ function unitsNeu(e){
    shows morale and the visibility toggle only for units of one's own. */
 function unitsZeileAus(R){
   const e = R.einheit; if (!e) return null;
+  /* no town of its own: the last battle window said where we are */
+  const merk = (!R.stadt && unitsOrtMerk) ? unitsOrtMerk : null;
   return {tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp,
-          seite: R.seite, linie: R.linie || null, nameZuv: e.nameZuv, besitzerZuv: e.besitzerZuv,
+          seite: R.seite, linie: R.linie || (merk ? merk.linie : null), stadt: R.stadt ? R.stadt.i : (merk ? merk.stadt : null),
+          nameZuv: e.nameZuv, besitzerZuv: e.besitzerZuv,
           eigen: !!(S.name && e.besitzer && namKey(e.besitzer) === namKey(S.name)) || e.form === "erweitert"};
 }
 function unitsZeichnen(){
@@ -9539,11 +9564,16 @@ function unitsZeichnen(){
   let k = "";
   if (R){
     if (R.quer) k += `<div class="note">This picture is not 16:9 (${R.gross.w}×${R.gross.h}); the bar has only been measured on 16:9 screens.</div>`;
-    if (!R.leiste){
+    if (R.dialog){
+      k += R.stadt ? `<div>Battle window: <b>${unitsEsc(MAP.n[R.stadt.i][0])}</b>${R.linie ? ` · attack line ${R.linie}` : ""} — units read next are placed there.</div>`
+                   : `<div>Battle window seen, but its heading did not read as a town (${unitsEsc(R.dialogText || "")}). Type the town below.</div>`;
+    } else if (!R.leiste){
       k += R.form ? `<div>No bar - a town with a single unit. <b>Type the town below.</b></div>`
                   : `<div>No detail bar in this picture.</div>`;
     } else {
-      const st = R.stadt ? `${unitsEsc(MAP.n[R.stadt.i][0])}${R.stadt.sicher ? "" : " (?)"}` : `<i>not read</i>`;
+      const st = R.stadt ? `${unitsEsc(MAP.n[R.stadt.i][0])}${R.stadt.sicher ? "" : " (?)"}`
+               : unitsOrtMerk ? `${unitsEsc(MAP.n[unitsOrtMerk.stadt][0])} <span class="dim">(from the battle window)</span>`
+               : `<i>not read</i>`;
       const n = R.karten.length, gelb = R.karten.filter(x => x.seite === "gelb").length, blass = R.karten.filter(x => x.seite === "-").length;
       k += `<div><b>${st}</b>${R.linie ? ` · attack line ${R.linie}` : ""} · ${R.seite !== null ? "held by " + unitsSeiteName(R.seite) : "holder ?"} ·
             ${n} cards on screen${gelb ? `, ${gelb} yours` : ""}${blass ? `, ${blass} blinking` : ""}${
@@ -9552,7 +9582,10 @@ function unitsZeichnen(){
   }
   kopf.innerHTML = k || "Waiting for a picture …";
   const ort = document.getElementById("units-ort");
-  if (ort && R && R.stadt && !ort.dataset.hand) ort.value = MAP.n[R.stadt.i][0];
+  if (R && R.dialog && R.stadt) unitsOrtMerk = {stadt: R.stadt.i, linie: R.linie || null};
+  /* no town of its own - with or without a bar - takes the remembered one */
+  const ortI = R && R.stadt ? R.stadt.i : (R && !R.stadt && unitsOrtMerk ? unitsOrtMerk.stadt : null);
+  if (ort && ortI !== null && ortI !== undefined && !ort.dataset.hand) ort.value = MAP.n[ortI][0];
 
   tab.innerHTML = unitsListe.length ? `<table>
     <tr><th>Tag</th><th>Name</th><th>Owner</th><th>Strength</th><th>Side</th></tr>
@@ -9638,7 +9671,7 @@ function unitsBehalten(){
   const f = ort && ort.value ? unitsStadt(ort.value) : null;
   if (!f){ toast("Which town? Type its name first."); ort && ort.focus(); return; }
   const zeilen = unitsListe.filter(u => !u.eigen).map(u => ({
-    town: f.i, line: u.linie || null, side: u.seite, tag: u.tag, name: u.name, owner: u.besitzer, hp: u.hp, t: jetzt(), by: S.me }));
+    town: (u.stadt !== null && u.stadt !== undefined) ? u.stadt : f.i, line: u.linie || null, side: u.seite, tag: u.tag, name: u.name, owner: u.besitzer, hp: u.hp, t: jetzt(), by: S.me }));
   if (!zeilen.length){ toast("Nothing to keep - only your own units."); return; }
   let alles = {};
   try { alles = JSON.parse(localStorage.getItem(UNITS_LOCAL) || "{}"); } catch(e){}
@@ -9649,7 +9682,7 @@ function unitsBehalten(){
 }
 
 document.getElementById("b-units").addEventListener("click", ()=>{
-  unitsListe = []; unitsStand = null;
+  unitsListe = []; unitsStand = null; unitsOrtMerk = null;
   openDlg(`
     <div class="dlg-h"><h2>Read the units of a town</h2>
       <p>Tag, name, owner and strength — from the game's detail bar.</p></div>
@@ -27264,7 +27297,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 885e153969</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 8e2a7ff530</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -27399,7 +27432,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "885e153969";
+const BAU = "8e2a7ff530";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
