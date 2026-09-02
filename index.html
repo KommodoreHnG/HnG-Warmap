@@ -90,7 +90,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .mono{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;font-variant-numeric:tabular-nums}
 
 #app{display:grid;grid-template-rows:auto 1fr;height:100%}
-#top{display:flex;align-items:center;gap:14px;padding:7px 14px;flex-wrap:wrap;
+#top{position:relative;display:flex;align-items:center;gap:14px;padding:7px 14px;flex-wrap:wrap;
   background:linear-gradient(180deg,#241d16 0%,#181310 100%);
   border-bottom:2px solid var(--accent-dk);box-shadow:0 2px 10px rgba(0,0,0,.5)}
 #brand{display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -197,6 +197,15 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
   background:var(--accent);opacity:0;transition:opacity .12s}
 #zieher-l:hover::before,#zieher-l:focus-visible::before,body.zieht #zieher-l::before{opacity:.85}
 #zieher-l:focus-visible{outline:none}
+/* the handle on the lower edge of the top bar - it pulls the bar's size */
+#zieher-o{position:absolute;left:0;right:0;bottom:0;height:6px;z-index:12;cursor:row-resize;
+  background:transparent;touch-action:none}
+#zieher-o::before{content:"";position:absolute;left:0;right:0;bottom:1px;height:2px;
+  background:var(--accent);opacity:0;transition:opacity .12s}
+#zieher-o:hover::before,#zieher-o:focus-visible::before,body.zieht-h #zieher-o::before{opacity:.85}
+#zieher-o:focus-visible{outline:none}
+body.zieht-h{cursor:row-resize;user-select:none}
+body.zieht-h #mapwrap canvas{pointer-events:none}
 /* Nur die Werkzeuge rollen. Die Fraktionswahl bleibt unten stehen, wo sie
    hingehoert - im Spiel greift man auch dort nach dem eigenen Depot. Vorher
    rollte die ganze Leiste, und auf einem 1366x768-Schirm fiel genau dieser
@@ -770,14 +779,30 @@ body.meld-modus{cursor:help}
 /* the strip: one box per unit in town, in the side's colour, a question mark
    until the type is known, binoculars once the unit is on the sheet */
 .kb-streifen{position:relative;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;min-height:34px}
-/* the finder frame over the picked card - corner rails, notched movement */
+/* the finder frame over the picked card - corner rails, notched movement.
+   It can be taken by hand and run along the strip; it then holds still
+   where it was put and tells the tool which unit is meant. */
 .kb-rahmen{position:absolute;box-sizing:border-box;border:2px solid #cbb98a;border-radius:2px;
-  pointer-events:none;z-index:3;box-shadow:inset 0 0 0 1px rgba(0,0,0,.55),0 0 10px rgba(232,217,168,.3);
-  transition:left .16s steps(4),top .16s steps(4)}
+  z-index:3;box-shadow:inset 0 0 0 1px rgba(0,0,0,.55),0 0 10px rgba(232,217,168,.3);
+  transition:left .16s steps(4),top .16s steps(4);
+  cursor:grab;touch-action:none}
+.kb-rahmen:active{cursor:grabbing}
+.kb-rahmen:focus-visible{outline:2px solid #f0b13a;outline-offset:3px}
 .kb-rahmen::before,.kb-rahmen::after{content:"";position:absolute;left:-4px;right:-4px;height:3px;
   background:#cbb98a;border-radius:1px}
 .kb-rahmen::before{top:-5px}
 .kb-rahmen::after{bottom:-5px}
+/* by hand: golden, and it does not glide - it follows the finger */
+.kb-rahmen.hand{border-color:#f0b13a;box-shadow:inset 0 0 0 1px rgba(0,0,0,.55),0 0 12px rgba(240,177,58,.45)}
+.kb-rahmen.hand::before,.kb-rahmen.hand::after{background:#f0b13a}
+body.kb-zieht .kb-rahmen{transition:none}
+body.kb-zieht{user-select:none}
+/* the note under the strip while the hand leads */
+.kb-schiene{min-height:15px;margin:-8px 0 12px;font-size:11px;color:#8b929b}
+.kb-schiene.an{color:#f0b13a}
+.kb-schiene button{background:none;border:1px solid #6a5a2c;color:#f0b13a;border-radius:3px;
+  font:inherit;padding:0 6px;margin-left:8px;cursor:pointer}
+.kb-schiene button:hover{background:#3a2b12}
 .kb-k{position:relative;width:46px;height:34px;border:2px solid #4a4f58;border-radius:3px;
   background:#1a1d23;color:#8b929b;display:flex;align-items:center;justify-content:center;
   font-size:15px;font-weight:700;cursor:default;transition:box-shadow .15s}
@@ -786,6 +811,19 @@ body.meld-modus{cursor:help}
 .kb-k.fenster{box-shadow:0 0 0 1px #6c7480 inset}
 .kb-k.jetzt{box-shadow:0 0 10px 2px rgba(232,217,168,.55)}
 .kb-k canvas{width:32px;height:22px;image-rendering:auto}
+/* TAKEN, NOT YET READ. The sign stands there pale; once the card is at the
+   front of the queue a solid copy of it fills in from the left, as far as
+   the reading has come. */
+.kb-k.wartet canvas,.kb-k.liest canvas{opacity:.17}
+.kb-k.wartet{border-style:dashed}
+.kb-k.liest{box-shadow:0 0 8px 1px rgba(240,177,58,.4)}
+.kb-k .fuell{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  pointer-events:none;clip-path:inset(0 100% 0 0)}
+.kb-k .fuell canvas{opacity:1}
+.kb-k .kante{position:absolute;top:2px;bottom:2px;width:2px;left:0;background:#f0b13a;
+  box-shadow:0 0 7px 1px rgba(240,177,58,.85);pointer-events:none;z-index:2}
+.kb-k .uhr{position:absolute;right:-4px;top:-7px;width:14px;height:14px;border-radius:50%;
+  background:#f0b13a;color:#1a1d23;font-size:9px;line-height:14px;text-align:center;font-weight:700}
 .kb-k .fg{position:absolute;right:-5px;top:-7px;width:16px;height:16px;border-radius:50%;
   background:#e8d9a8;color:#1a1d23;font-size:10px;line-height:16px;text-align:center}
 .kb-k .nr{position:absolute;left:2px;bottom:-14px;font-size:9px;color:#5f666f}
@@ -1366,7 +1404,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   /* Der Riegel: hier ist #rechts das Blatt und keine Spalte. "schmal" traegt
      Kennung UND Merkmal und schluege sonst die Zeile darueber. */
   #rechts.schmal{width:auto;overflow:visible}
-  #zieher,#zieher-l{display:none}
+  #zieher,#zieher-l,#zieher-o{display:none}
 
   /* Fenster bildschirmfuellend - der Rand des Schleiers muss dafuer weg,
      sonst bleiben auf 375 Bildpunkten vierzig davon ungenutzt. */
@@ -1416,6 +1454,8 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
     <div id="tally"></div>
     <div id="me-tile"></div>
     <div id="forces" title="Your clan's forces — click for the depot"></div>
+    <div id="zieher-o" role="separator" aria-orientation="horizontal" tabindex="0"
+         title="Drag to resize the top bar — double-click to reset"></div>
     <div id="top-right">
       <!-- The capture rooms and the board come first, in their own box: the
            remembered button order cannot push them to the back. -->
@@ -1429,20 +1469,25 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
         </button>
         <button class="btn" id="b-units" title="Read the units of a town from the game's detail bar">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
-            <!-- A soldier under a steel helmet. The dome and the rim are
-                 FILLED: the parachute next door is an open arc over a line,
-                 and an outlined helmet was the same silhouette. A closed
-                 mass is a different shape at any size, and the face, the
-                 eyes and the chin strap carry the detail up close. -->
-            <path d="M4.9 11.4 C4.9 6.6 8.1 3.7 12 3.7 C15.9 3.7 19.1 6.6 19.1 11.4 Z"
+            <!-- THE UNIT STACK OFF THE WAR MAP, the sign that stands over a
+                 town holding units. Measured on the map at six times size:
+                 a black plate 55 x 19 carrying the white tactical sign, and
+                 under it three cards 43 x 25 with a faction rim and a cream
+                 field, each stepped six points right and down - the front
+                 one at the upper left, the two behind showing only their
+                 edges. The cards are filled and their edges dark, so the
+                 stack stays one closed mass and still reads as a stack at
+                 the twenty-two points of a button. -->
+            <rect x="3.0" y="1.5" width="17.0" height="5.8" rx="0.5"
                   fill="currentColor" stroke="none"/>
-            <path d="M3.1 11.4 H20.9 C20.9 12.7 19.9 13.4 18.6 13.4 H5.4 C4.1 13.4 3.1 12.7 3.1 11.4 Z"
-                  fill="currentColor" stroke="none"/>
-            <path d="M8.1 13.4 V15.4 C8.1 17.4 9.8 18.9 12 18.9 C14.2 18.9 15.9 17.4 15.9 15.4 V13.4"/>
-            <circle cx="10" cy="15.6" r="0.85" fill="currentColor" stroke="none"/>
-            <circle cx="14" cy="15.6" r="0.85" fill="currentColor" stroke="none"/>
-            <path d="M8.4 14.6 C7.2 15.6 7.4 17.4 8.8 18.2 M15.6 14.6 C16.8 15.6 16.6 17.4 15.2 18.2"/>
-            <path d="M8.8 18.2 H15.2"/>
+            <path d="M9.6 2.9 L13.4 5.9 M13.4 2.9 L9.6 5.9"
+                  stroke="var(--panel2,#241d16)" stroke-width="1.5"/>
+            <rect x="7.0" y="11.4" width="13.4" height="7.9" rx="0.6"
+                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.5"/>
+            <rect x="5.1" y="9.2" width="13.4" height="7.9" rx="0.6"
+                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.5"/>
+            <rect x="3.2" y="7.0" width="13.4" height="7.9" rx="0.6"
+                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.5"/>
           </svg><span class="txt">Units</span>
         </button>
         <button class="btn" id="b-spieler" title="Read the players of a battle from the war map">
@@ -1646,6 +1691,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   <aside class="rd-links kb-links" id="kb-links"></aside>
   <div class="kb-schirm" id="kb-schirm">
     <div class="kb-streifen" id="kb-streifen"></div>
+    <div class="kb-schiene" id="kb-schiene"></div>
     <div class="kb-blatt" id="kb-blatt"></div>
   </div>
   <aside class="rd-pult" id="kb-pult"></aside>
@@ -7094,6 +7140,53 @@ function barBreiteSetzen(css, merken){
     else if (e.key === "Home"){ standard(); e.preventDefault(); }
   });
 })();
+/* THE TOP BAR. Its height comes from what stands in it - there is nothing
+   to give away there. What it does have is a size factor of its own
+   (--f-top, the "Top bar" slider in the gear), and that is what this handle
+   pulls: downwards bigger, upwards smaller. Two hundred points of dragging
+   are one step of size, which is about as fine as the eye wants it. */
+const TOP_MIN = 0.65, TOP_MAX = 1.75;
+function topGroesseSetzen(f, merken){
+  const g = Math.max(TOP_MIN, Math.min(TOP_MAX, Math.round(f*100)/100));
+  LAY.gr ||= {}; LAY.gr.top = g;
+  document.documentElement.style.setProperty("--f-top", String(g));
+  if (merken) laySpeichern();
+  requestAnimationFrame(resize);
+  return g;
+}
+(function zieherObenBauen(){
+  const griff = document.getElementById("zieher-o");
+  if (!griff) return;
+  let start = 0, startF = 1, zieht = false;
+  const standard = () => { topGroesseSetzen(1, true); zwNachziehen && zwNachziehen(); };
+  function anfang(y){
+    startF = layGr("top"); start = y; zieht = true;
+    document.body.classList.add("zieht-h");
+  }
+  function bewegen(y){ if (zieht) topGroesseSetzen(startF + (y - start)/200, false); }
+  function ende(){
+    if (!zieht) return;
+    zieht = false;
+    document.body.classList.remove("zieht-h");
+    laySpeichern();
+    if (typeof zwNachziehen === "function") zwNachziehen();
+  }
+  griff.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    try { griff.setPointerCapture(e.pointerId); } catch(err){}
+    anfang(e.clientY);
+  });
+  griff.addEventListener("pointermove", e => bewegen(e.clientY));
+  griff.addEventListener("pointerup",     ende);
+  griff.addEventListener("pointercancel", ende);
+  griff.addEventListener("dblclick", standard);
+  griff.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown"){ topGroesseSetzen(layGr("top") + 0.05, true); e.preventDefault(); }
+    else if (e.key === "ArrowUp"){ topGroesseSetzen(layGr("top") - 0.05, true); e.preventDefault(); }
+    else if (e.key === "Home"){ standard(); e.preventDefault(); }
+  });
+})();
 /* Alle achtzehn, nicht die ersten zehn. Wer die Zeichenerklaerung aufmacht,
    will nicht fuer den Rest ins Hilfefenster wechseln - und ausgerechnet die
    Panzerjaeger und die Flieger, die vorher fehlten, sind die, die man selten
@@ -10378,7 +10471,7 @@ async function unitsRahmen(quelle){
     for (let p = 0; p < d.length; p += 4){ d[p] = lut[d[p]]; d[p+1] = lut[d[p+1]]; d[p+2] = lut[d[p+2]]; }
     g.putImageData(id, 0, 0);
   }
-  return {c, d, quer, gross, hell, gain};
+  return {rahmen: true, c, d, quer, gross, hell, gain};
 }
 const unitsMax = (d,p) => Math.max(d[p], d[p+1], d[p+2]);
 const unitsMin = (d,p) => Math.min(d[p], d[p+1], d[p+2]);
@@ -10551,8 +10644,16 @@ function unitsTypVon(c, x0, fy){
   const klein = document.createElement("canvas"); klein.width = unitsTypB; klein.height = unitsTypH;
   const g = klein.getContext("2d", {willReadFrequently:true});
   g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
-  let best = null, zweit = null;
-  for (const dy of [-2, 0, 2]) for (const dx of [-2, 0, 2]){
+  /* ONE SHIFT AT A TIME. The runner-up used to be collected across all
+     nine shifts together, so the gap on which "sure" hangs compared the
+     best sign at one shift with the second-best at another - a number that
+     says nothing about this card, and it let signs through that were not
+     read at all. Every shift is now ranked on its own, and the shift that
+     fits best hands over its own two.
+     AND FINER. Two points of step is coarser than the drift of the bar, so
+     the nine coarse shifts only point the way; eight more at one point
+     around the winner settle it. */
+  const einSchritt = (dx, dy) => {
     g.drawImage(c, x0+9+5+dx, fy+5+dy, 62, 40, 0, 0, unitsTypB, unitsTypH);
     const px = g.getImageData(0, 0, unitsTypB, unitsTypH).data;
     const v = new Float32Array(unitsTypB*unitsTypH);
@@ -10562,16 +10663,31 @@ function unitsTypVon(c, x0, fy){
     let q = 0;
     for (let j = 0; j < v.length; j++){ v[j] -= m; q += v[j]*v[j]; }
     q = Math.sqrt(q) || 1;
+    let b1 = null, b2 = null;
     for (const t of vorl){
       let k = 0;
       for (let j = 0; j < v.length; j++) k += v[j]*t.v[j];
       k /= q;
-      if (!best || k > best.k){ if (best && best.key !== t.k) zweit = best; best = {key: t.k, k}; }
-      else if (t.k !== best.key && (!zweit || k > zweit.k)) zweit = {key: t.k, k};
+      if (!b1 || k > b1.k){ b2 = b1; b1 = {key: t.k, k}; }
+      else if (!b2 || k > b2.k) b2 = {key: t.k, k};
+    }
+    return b1 ? {key: b1.key, k: b1.k, zweit: b2 ? b2.k : 0, dx, dy} : null;
+  };
+  let best = null;
+  for (const dy of [-2, 0, 2]) for (const dx of [-2, 0, 2]){
+    const r = einSchritt(dx, dy);
+    if (r && (!best || r.k > best.k)) best = r;
+  }
+  if (best){
+    const bx = best.dx, by = best.dy;
+    for (const dy of [by-1, by, by+1]) for (const dx of [bx-1, bx, bx+1]){
+      if (dx === bx && dy === by) continue;
+      const r = einSchritt(dx, dy);
+      if (r && r.k > best.k) best = r;
     }
   }
   if (!best) return null;
-  const abstand = best.k - (zweit ? zweit.k : 0);
+  const abstand = best.k - best.zweit;
   /* every confirmed reading in the measurement lay at 0.93 or above; a sign
      that is in no template (a wingless parachute) came out at 0.78 and is
      honestly unknown */
@@ -10814,9 +10930,19 @@ async function unitsStaerke(c, d, oben, melde){
    hands in the fingerprint of the row it last read a town for; if the row
    is unchanged, the pass is skipped. Scrolling or a different town changes
    the row, and then the name is read again. */
-async function unitsLesen(quelle, melde, letzteReihe){
+/* TWO SPEEDS. Everything down to the cards - where they stand, whose they
+   are, which one the game has picked, what their symbols say - is geometry
+   and costs no text recognition at all. That half now runs on its own,
+   several times a second, so the strip follows the clicking at once. The
+   slow half, the names, only runs on a picture that stands still.
+   "art" says which half is wanted: "bild" the quick one (no text at all),
+   "ort" the quick one plus the town name, "einheit" only the box with
+   name, owner and strength, and nothing at all means everything. A frame
+   that has already been normalised may be handed in place of a picture, so
+   that one look goes through the eight million points once, not twice. */
+async function unitsLesen(quelle, melde, letzteReihe, art){
   const sag = melde || (()=>{});
-  const {c, d, quer, gross, hell, gain} = await unitsRahmen(quelle);
+  const {c, d, quer, gross, hell, gain} = (quelle && quelle.rahmen) ? quelle : await unitsRahmen(quelle);
   const R = {gross, quer, hell, gain, karten: [], stadt: null, seite: null, roll: null, form: null, einheit: null};
   /* THE BATTLE WINDOW FIRST. A line's bar can come without town name and
      disc; the window opened by clicking the battle itself names both in
@@ -10824,7 +10950,7 @@ async function unitsLesen(quelle, melde, letzteReihe){
      frame is found the way the battle-screen reader finds it; the heading
      sits 0.03 to 0.065 frame widths below the top edge. Nothing else is
      read from such a picture - the bar behind the window is half hidden. */
-  const dlg = dialogRahmen(d, UNITS_W, UNITS_H);
+  const dlg = art === "einheit" ? null : dialogRahmen(d, UNITS_W, UNITS_H);
   if (dlg && dlg.breite > 1200){
     sag("Reading the battle window …");
     const B = dlg.breite;
@@ -10838,7 +10964,9 @@ async function unitsLesen(quelle, melde, letzteReihe){
     return R;
   }
   sag("Looking for the bar …");
-  const reihe = unitsReihe(d);
+  /* reading a set-aside box: the rest of the picture is black, there is no
+     bar in it and none is looked for */
+  const reihe = art === "einheit" ? {staerke: 0, y: 0} : unitsReihe(d);
   R.reihe = reihe;
   if (reihe.staerke >= UNITS_REIHE_MIN){
     const k = unitsKartenFinden(d, reihe.y);
@@ -10886,7 +11014,7 @@ async function unitsLesen(quelle, melde, letzteReihe){
          far the bar is rolled */
       R.reiheKennung = R.karten.map(k => Math.round(k.x0/4)).join(",")
         + "|" + (R.roll ? Math.round(R.roll.x0/4) + ":" + Math.round(R.roll.breite/4) : "-");
-      if (letzteReihe && letzteReihe === R.reiheKennung){
+      if (art === "bild" || (letzteReihe && letzteReihe === R.reiheKennung)){
         R.ortGespart = true;
         R.stadt = null; R.linie = null;
       } else {
@@ -10915,6 +11043,8 @@ async function unitsLesen(quelle, melde, letzteReihe){
   }
   const kasten = unitsForm(d);
   R.form = kasten ? kasten.form : null; R.kastenOben = kasten ? kasten.oben : null;
+  /* the halves that do not read the box end here */
+  if (art === "bild" || art === "ort") return R;
   if (kasten){
     const Z = UNITS_ZEILEN[kasten.form], B = UNITS_KASTEN.x1-UNITS_KASTEN.x0, o = kasten.oben;
     sag("Reading the unit …");
@@ -10984,14 +11114,26 @@ const kbEsc = t => esc(t == null ? "" : String(t));
 
 /* A tactical symbol drawn from the map's own templates (48 x 33, sixteen
    greys). Same drawing the depot uses. */
+/* The picture of a sign is built once and after that only copied. With
+   sixty-four lines on the sheet it was sixty-four times thirty-six hundred
+   points, twice per line, on every redraw - and a redraw runs on every
+   look and every sixtieth of a second while the clerk is writing. */
+const kbSymSpeicher = new Map();
+function kbSymbolDa(k){ return !!(MAP.sym || {})[k]; }
 function kbSymbol(k){
   const s = (MAP.sym || {})[k];
   if (!s) return null;
   const B = MAP.symB || 48, H = MAP.symH || 33, abc = "0123456789abcdef";
+  let vor = kbSymSpeicher.get(k);
+  if (!vor){
+    vor = document.createElement("canvas"); vor.width = B; vor.height = H;
+    const gv = vor.getContext("2d"), id = gv.createImageData(B, H), d = id.data;
+    for (let i = 0; i < B*H; i++){ const v = Math.round(abc.indexOf(s[i]) * 17); d[i*4] = d[i*4+1] = d[i*4+2] = v; d[i*4+3] = 255; }
+    gv.putImageData(id, 0, 0);
+    kbSymSpeicher.set(k, vor);
+  }
   const c = document.createElement("canvas"); c.width = B; c.height = H;
-  const g = c.getContext("2d"), id = g.createImageData(B, H), d = id.data;
-  for (let i = 0; i < B*H; i++){ const v = Math.round(abc.indexOf(s[i]) * 17); d[i*4] = d[i*4+1] = d[i*4+2] = v; d[i*4+3] = 255; }
-  g.putImageData(id, 0, 0);
+  c.getContext("2d").drawImage(vor, 0, 0);
   return c;
 }
 
@@ -11099,6 +11241,8 @@ function kbOrtSetzen(i, linie){
     const live = KB.live, ton = kbTon;
     KB.zeilen = []; KB.N = 0; KB.erste = 0; KB.sichtbar = 0; KB.karten = []; KB.reiheKennung = null;
     KB.auswahl = null; KB.wandel = null; KB.hatteBahn = false;
+    KB.handAn = false; KB.handWahl = null; KB.handZieht = false;
+    kbSchlangeLeeren(); KB.kastenLetzte = null;
     KB.letzte = null; KB.vorige = null; KB.schreibt = null;
     if (offen) toast(`${offen} unit${offen === 1 ? "" : "s"} kept — new sheet for ${MAP.n[i][0]}`);
   }
@@ -11162,20 +11306,38 @@ function kbNeu(){
           ort: null, linie: null, ziel: null, halter: null, merk: null,
           N: 0, erste: 0, sichtbar: 0, karten: [], zeilen: [],
           auswahl: null, wandel: null, gemeldet: null, scan: false, reiheKennung: null,
+          handAn: false, handWahl: null, handZieht: false,
+          warte: [], werkt: false, arbeit: null, kastenLetzte: null, dauerMittel: 850,
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null};
 }
 /* Which card is picked. Until the measurement gives a rule for a single
    frame, the order counts: the first unit in the visible window that is
    not on the sheet yet - left to right, the way the clicking is meant. */
-function kbAuswahlIndex(R){
+/* WHICH CARD IS MEANT. The game's own pick, read from the slightly darker
+   plate, unless the hand has taken the frame - then the hand decides, and
+   it keeps deciding until it is handed back. */
+function kbWahl(){
+  if (KB && KB.handAn && KB.handWahl !== null && KB.handWahl !== undefined
+      && KB.handWahl >= 0 && KB.handWahl < KB.N) return KB.handWahl;
+  return (KB && KB.auswahl !== null && KB.auswahl !== undefined) ? KB.auswahl : null;
+}
+function kbAuswahlIndex(R, vorgabe){
+  /* a line bound when the picture was set aside outranks everything: that
+     is the unit that stood in the box at that moment */
+  if (vorgabe !== null && vorgabe !== undefined && vorgabe >= 0 && vorgabe < KB.N) return vorgabe;
+  /* the hand outranks the picture */
+  if (KB.handAn && KB.handWahl !== null && KB.handWahl !== undefined
+      && KB.handWahl >= 0 && KB.handWahl < KB.N) return KB.handWahl;
   /* the dark plate names the picked card outright */
   if (R.auswahl !== null && R.auswahl !== undefined){
     const i = KB.erste + R.auswahl;
     if (i >= 0 && i < KB.N) return i;
   }
+  /* untouched lines only - one that is already waiting for its reading, or
+     being read right now, must not be handed out a second time */
   const von = KB.erste, bis = Math.min(KB.N, KB.erste + Math.max(1, R.karten.length || 1));
-  for (let i = von; i < bis; i++) if (KB.zeilen[i] && KB.zeilen[i].status !== "erfasst") return i;
-  for (let i = 0; i < KB.N; i++) if (KB.zeilen[i] && KB.zeilen[i].status !== "erfasst") return i;
+  for (let i = von; i < bis; i++) if (KB.zeilen[i] && KB.zeilen[i].status === "vermutet") return i;
+  for (let i = 0; i < KB.N; i++) if (KB.zeilen[i] && KB.zeilen[i].status === "vermutet") return i;
   return null;
 }
 /* The unit type as read from the card's symbol, when it was clear. */
@@ -11206,8 +11368,16 @@ function kbFenster(R){
     const plaetze = Math.round(Wv / UNITS_RASTER);
     const N = Math.max(plaetze, N0);
     const V = Math.max(0, ((R.roll.x0 - (tL + 6.06)) / Math.max(1, K - b)) * (105*N - 15 - Wv));
-    const erste = Math.max(0, Math.min(N - plaetze, Math.ceil(V / UNITS_RASTER - 0.02)));
-    return {N, erste, sichtbar: plaetze, ungenau: N >= 45};
+    /* THE ROW CANNOT BEGIN LATER THAN ITS OWN CARDS ALLOW. Counting the
+       slots from the geometry alone keeps units off the sheet that cannot
+       exist - but it also let the first place slip one too far whenever the
+       rim search found one card more than the window nominally holds, and
+       then every name landed on its neighbour. The cards settle it
+       themselves: n of them ending at N means the first one is N-n. */
+    const nk = R.karten ? R.karten.length : 0;
+    let erste = Math.max(0, Math.min(N - plaetze, Math.ceil(V / UNITS_RASTER - 0.02)));
+    if (nk) erste = Math.min(erste, Math.max(0, N - nk));
+    return {N, erste, sichtbar: Math.max(plaetze, nk), ungenau: N >= 45};
   }
   return {N: n, erste: 0, sichtbar: n};
 }
@@ -11224,7 +11394,7 @@ function kbSchonDa(e){
 }
 
 /* One reading -> the sheet. */
-function kbVerarbeiten(R){
+function kbVerarbeiten(R, vorgabe){
   KB.frame = R.gross; KB.hell = R.hell; KB.gain = R.gain;
   if (R.dialog){
     if (R.stadt){ KB.merk = {stadt: R.stadt.i, linie: R.linie || null}; kbOrtSetzen(R.stadt.i, R.linie || null); }
@@ -11261,7 +11431,7 @@ function kbVerarbeiten(R){
         if (f.N > KB.zeilen.length)
           for (let i = KB.zeilen.length; i < f.N; i++) KB.zeilen.push(kbZeileLeer(i));
         else
-          while (KB.zeilen.length > f.N && KB.zeilen[KB.zeilen.length - 1].status !== "erfasst") KB.zeilen.pop();
+          while (KB.zeilen.length > f.N && KB.zeilen[KB.zeilen.length - 1].status === "vermutet") KB.zeilen.pop();
         KB.wandel = null;
       }
     } else KB.wandel = null;
@@ -11289,7 +11459,7 @@ function kbVerarbeiten(R){
     /* Two units may carry the same tag and name (rare, but it happens). A
        reading that matches a line OUTSIDE the visible window, while the
        window still holds an unread place, is such a twin, not a repeat. */
-    const kand = kbAuswahlIndex(R);
+    const kand = kbAuswahlIndex(R, vorgabe);
     const imFenster = i => i >= KB.erste && i < KB.erste + Math.max(1, KB.sichtbar);
     const zwilling = da && kand !== null && !imFenster(da.i) && imFenster(kand);
     if (da && !zwilling){
@@ -11336,9 +11506,189 @@ function kbSchreiben(z){
   }, 60);
 }
 
+/* ---- taking the picture now, reading it afterwards ---------------------
+   The box with name, owner and strength is set aside as a small picture as
+   soon as something else stands in it. Reading happens behind that, one
+   after another, so that clicking on never has to wait for a reading. */
+const KB_KASTEN_AUS = {x: 1480, w: 900, hoch: 250, tief: 90};
+let kbArbeitC = null, kbArbeitG = null;
+/* A fingerprint of what stands in the box - the name and owner rows, every
+   ninth point. A different unit gives a different number. */
+function kbKastenKennung(d, oben, form){
+  const Z = UNITS_ZEILEN[form];
+  let h = 2166136261;
+  for (const zeile of [Z.name, Z.besitzer]){
+    const y0 = oben + zeile.dy, y1 = y0 + zeile.h;
+    for (let y = Math.max(0, y0); y < Math.min(UNITS_H, y1); y += 3)
+      for (let x = UNITS_KASTEN.x0; x < UNITS_KASTEN.x1; x += 9){
+        h ^= unitsMax(d, (y*UNITS_W + x)*4);
+        h = (h * 16777619) >>> 0;
+      }
+  }
+  return form + ":" + oben + ":" + h;
+}
+function kbSchlangeLeeren(){
+  if (!KB) return;
+  for (const j of (KB.warte || [])) if (j.bmp && j.bmp.close) j.bmp.close();
+  KB.warte = []; KB.arbeit = null; KB.werkt = false;
+}
+/* The set-aside picture back in its place on one working surface, so that
+   every measurement taken on a whole screen still holds. */
+function kbArbeitsRahmen(job){
+  if (!kbArbeitC){
+    kbArbeitC = document.createElement("canvas");
+    kbArbeitC.width = UNITS_W; kbArbeitC.height = UNITS_H;
+    kbArbeitG = kbArbeitC.getContext("2d", {willReadFrequently:true});
+  }
+  kbArbeitG.fillStyle = "#000";
+  kbArbeitG.fillRect(0, 0, UNITS_W, UNITS_H);
+  kbArbeitG.drawImage(job.bmp, job.sx, job.sy);
+  const id = kbArbeitG.getImageData(0, 0, UNITS_W, UNITS_H);
+  return {rahmen: true, c: kbArbeitC, d: id.data, quer: false,
+          gross: job.gross, hell: job.hell, gain: job.gain};
+}
+async function kbEinreihen(F, G){
+  if (!KB || KB.warte.length >= 24) return;
+  const oben = G.kastenOben;
+  const sx = KB_KASTEN_AUS.x, sw = KB_KASTEN_AUS.w;
+  const sy = Math.max(0, oben - KB_KASTEN_AUS.hoch);
+  const sh = Math.min(UNITS_H - sy, KB_KASTEN_AUS.hoch + UNITS_BAND + KB_KASTEN_AUS.tief);
+  let bmp;
+  try { bmp = await createImageBitmap(F.c, sx, sy, sw, sh); } catch(e){ return; }
+  if (!KB){ if (bmp.close) bmp.close(); return; }
+  /* the line is bound NOW - this is the unit that stood in the box when the
+     picture was taken, whatever is clicked next */
+  const ziel = kbWahl();
+  KB.warte.push({bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel});
+  if (ziel !== null && KB.zeilen[ziel] && KB.zeilen[ziel].status === "vermutet")
+    KB.zeilen[ziel].status = "wartet";
+  kbZeichnen();
+  kbSchlange();
+}
+async function kbSchlange(){
+  if (!KB || KB.werkt) return;
+  KB.werkt = true;
+  KB.scan = true;
+  try {
+    while (KB && KB.warte.length){
+      const job = KB.warte.shift();
+      KB.arbeit = {ziel: job.ziel, ab: jetzt(), dauer: KB.dauerMittel};
+      if (job.ziel !== null && KB.zeilen[job.ziel] && KB.zeilen[job.ziel].status === "wartet")
+        KB.zeilen[job.ziel].status = "liest";
+      kbZeichnen();
+      const t0 = jetzt();
+      let R = null;
+      try { R = await unitsLesen(kbArbeitsRahmen(job), null, null, "einheit"); }
+      catch(e){ R = null; }
+      if (job.bmp && job.bmp.close) job.bmp.close();
+      if (!KB) return;
+      const gebraucht = jetzt() - t0;
+      KB.dauerMittel = Math.max(250, Math.round(0.7*KB.dauerMittel + 0.3*gebraucht));
+      KB.arbeit = null;
+      if (R && R.einheit) kbVerarbeiten(R, job.ziel);
+      else if (job.ziel !== null && KB.zeilen[job.ziel] && KB.zeilen[job.ziel].status === "liest")
+        KB.zeilen[job.ziel].status = "vermutet";
+      kbZeichnen();
+    }
+  } finally { if (KB){ KB.werkt = false; KB.scan = false; kbZeichnen(); } }
+}
+/* The filling of the sign, left to right, while its unit is being read.
+   There is no honest progress to be had from the recogniser, so it runs
+   against the time the last readings took and stops short of the end until
+   the reading is really done. */
+let kbFuellLauf = null;
+function kbFuellen(){
+  if (kbFuellLauf) return;
+  const takt = () => {
+    kbFuellLauf = null;
+    if (!KB || !KB.arbeit) return;
+    const el = document.querySelector(".kb-k.liest .fuell");
+    if (el){
+      const p = Math.min(0.92, (jetzt() - KB.arbeit.ab) / Math.max(200, KB.arbeit.dauer));
+      el.style.clipPath = `inset(0 ${((1-p)*100).toFixed(1)}% 0 0)`;
+      const k = el.parentNode.querySelector(".kante");
+      if (k) k.style.left = (p*100).toFixed(1) + "%";
+    }
+    kbFuellLauf = requestAnimationFrame(takt);
+  };
+  kbFuellLauf = requestAnimationFrame(takt);
+}
+
+/* ---- the frame on its rail --------------------------------------------
+   Which card lies under the finger. STRAIGHT ALONG THE STRIP: sideways
+   distance counts as it is, up and down counts triple, so the frame stays
+   in the row it is in and does not jump into the next one at the smallest
+   movement of the hand. */
+function kbKarteBei(streifen, x, y){
+  let best = null;
+  streifen.querySelectorAll(".kb-k").forEach(el => {
+    const mx = el.offsetLeft + el.offsetWidth/2, my = el.offsetTop + el.offsetHeight/2;
+    const dx = x - mx, dy = (y - my) * 3;
+    const w = dx*dx + dy*dy;
+    if (!best || w < best.w) best = {w, i: +el.dataset.i, el};
+  });
+  return best;
+}
+function kbHandSetzen(i, klack){
+  if (i === null || i === undefined || i < 0 || i >= KB.N) return false;
+  const anders = !KB.handAn || KB.handWahl !== i;
+  KB.handAn = true; KB.handWahl = i;
+  if (anders && klack) kbKlack();
+  return anders;
+}
+function kbSpangeVerdrahten(r, streifen){
+  const stelle = e => {
+    const k = streifen.getBoundingClientRect();
+    return kbKarteBei(streifen, e.clientX - k.left, e.clientY - k.top);
+  };
+  r.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    try { r.setPointerCapture(e.pointerId); } catch(err){}
+    KB.handZieht = true;
+    document.body.classList.add("kb-zieht");
+    r.classList.add("hand");
+    const t = stelle(e); if (t) kbHandSetzen(t.i, false);
+  });
+  r.addEventListener("pointermove", e => {
+    if (!KB.handZieht) return;
+    const t = stelle(e);
+    if (t && kbHandSetzen(t.i, true)){
+      /* move the frame itself - the strip stays as it is under the finger */
+      r.style.left = t.el.offsetLeft + "px"; r.style.top = t.el.offsetTop + "px";
+      r.style.width = t.el.offsetWidth + "px"; r.style.height = t.el.offsetHeight + "px";
+    }
+  });
+  const los = () => {
+    if (!KB.handZieht) return;
+    KB.handZieht = false;
+    document.body.classList.remove("kb-zieht");
+    kbZeichnen();
+  };
+  r.addEventListener("pointerup", los);
+  r.addEventListener("pointercancel", los);
+  /* handed back to the game */
+  r.addEventListener("dblclick", e => {
+    e.preventDefault();
+    KB.handAn = false; KB.handWahl = null; kbZeichnen();
+  });
+  r.addEventListener("keydown", e => {
+    const jetztI = kbWahl();
+    if (jetztI === null) return;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown"){ kbHandSetzen(Math.min(KB.N-1, jetztI+1), true); kbZeichnen(); e.preventDefault(); }
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp"){ kbHandSetzen(Math.max(0, jetztI-1), true); kbZeichnen(); e.preventDefault(); }
+    else if (e.key === "Home"){ kbHandSetzen(0, true); kbZeichnen(); e.preventDefault(); }
+    else if (e.key === "End"){ kbHandSetzen(KB.N-1, true); kbZeichnen(); e.preventDefault(); }
+    else if (e.key === "Escape"){ KB.handAn = false; KB.handWahl = null; kbZeichnen(); e.preventDefault(); }
+  });
+}
+
 /* ---- drawing ----------------------------------------------------------- */
 function kbZeichnen(){
   if (!KB) return;
+  /* while the frame is being dragged the strip must not be rebuilt under
+     the finger - the element would be replaced and the drag would break */
+  if (KB.handZieht) return;
   const kopf = document.getElementById("kb-kopf"), links = document.getElementById("kb-links"),
         streifen = document.getElementById("kb-streifen"), blatt = document.getElementById("kb-blatt");
   const erfasst = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen).length;
@@ -11355,6 +11705,10 @@ function kbZeichnen(){
     <div class="rd-kf ${KB.N && erfasst >= KB.N ? "gut" : ""}"><div class="t">Units on the sheet</div>
       <div class="v">${erfasst}<small> of ${KB.N || "?"}</small></div>
       <div class="bar"><i style="width:${KB.N ? Math.round(100*erfasst/KB.N) : 0}%"></i></div></div>
+    ${(() => { const w = (KB.warte || []).length + (KB.arbeit ? 1 : 0);
+      return `<div class="rd-kf ${w ? "scannt" : ""}"><div class="t">Queue</div>
+        <div class="v">${w ? `${w}<small> waiting</small>` : "<small>clear</small>"}</div>
+        ${w ? `<div class="kb-scan"><i></i></div>` : `<div class="bar"></div>`}</div>`; })()}
     <div class="rd-kf ${KB.scan ? "scannt" : ""}"><div class="t">${KB.scan ? "Reading" : "Capture"}</div>
       <div class="v"><small>${KB.frame ? `${KB.frame.w}×${KB.frame.h}, brightness ${KB.hell}${KB.gain > 1 ? `, ×${KB.gain.toFixed(1)}` : ""}` : "—"}</small></div>
       ${KB.scan ? `<div class="kb-scan"><i></i></div>` : `<div class="bar"></div>`}</div>`;
@@ -11376,25 +11730,69 @@ function kbZeichnen(){
   streifen.className = "kb-streifen" + (KB.N > 20 ? " gross" : "");
   streifen.innerHTML = KB.zeilen.map((z, i) => {
     const imFenster = i >= KB.erste && i < KB.erste + KB.sichtbar;
-    const kl = ["kb-k", z.eigen ? "eigen" : kbSeiteKlasse(z.seite), imFenster ? "fenster" : "", KB.schreibt && KB.schreibt.i === i ? "jetzt" : ""].join(" ");
-    return `<div class="${kl}" data-i="${i}" title="${kbEsc(z.status === "erfasst" ? `${z.tag} ${z.name} - ${z.besitzer}` : "not read yet")}">${
-      z.typ && kbSymbol(z.typ) ? "" : "?"}${z.status === "erfasst" ? `<span class="fg" title="on the sheet">◎</span>` : ""}<span class="nr">${i+1}</span></div>`;
+    const kl = ["kb-k", z.eigen ? "eigen" : kbSeiteKlasse(z.seite), imFenster ? "fenster" : "",
+                z.status === "wartet" ? "wartet" : "", z.status === "liest" ? "liest" : "",
+                KB.schreibt && KB.schreibt.i === i ? "jetzt" : ""].join(" ");
+    const sagt = z.status === "erfasst" ? `${z.tag} ${z.name} - ${z.besitzer}`
+               : z.status === "wartet" ? "picture taken - waiting to be read"
+               : z.status === "liest" ? "being read now"
+               : "not read yet";
+    return `<div class="${kl}" data-i="${i}" title="${kbEsc(sagt)}">${
+      z.typ && kbSymbolDa(z.typ) ? "" : "?"}${
+      z.status === "wartet" ? `<span class="uhr" title="waiting to be read">⋯</span>` : ""}${
+      z.status === "erfasst" ? `<span class="fg" title="on the sheet">◎</span>` : ""}<span class="nr">${i+1}</span></div>`;
   }).join("");
   streifen.querySelectorAll(".kb-k").forEach(el => {
     const z = KB.zeilen[+el.dataset.i];
     if (z && z.typ){ const c = kbSymbol(z.typ); if (c) el.insertBefore(c, el.firstChild); }
+    /* the solid copy that fills in while the unit is being read */
+    if (z && z.typ && z.status === "liest"){
+      const f = document.createElement("span"); f.className = "fuell";
+      const c2 = kbSymbol(z.typ); if (c2) f.appendChild(c2);
+      el.insertBefore(f, el.firstChild);
+      const kante = document.createElement("span"); kante.className = "kante";
+      el.appendChild(kante);
+    }
+    /* clicking a card sets the frame just as dragging it does */
+    el.style.cursor = "pointer";
+    el.onclick = () => { kbHandSetzen(+el.dataset.i, true); kbZeichnen(); };
   });
   /* The finder frame sits over the card the game has picked and steps over
      to the next one - notched, not gliding, like the switch it sounds. */
-  if (KB.auswahl !== null && KB.auswahl !== undefined){
-    const ziel = streifen.querySelector(`.kb-k[data-i="${KB.auswahl}"]`);
+  const wahl = kbWahl();
+  if (wahl !== null && wahl !== undefined){
+    const ziel = streifen.querySelector(`.kb-k[data-i="${wahl}"]`);
     if (ziel){
-      const r = document.createElement("div"); r.className = "kb-rahmen";
+      const r = document.createElement("div");
+      r.className = "kb-rahmen" + (KB.handAn ? " hand" : "");
+      r.tabIndex = 0;
+      r.title = KB.handAn
+        ? "Led by hand - drag along the strip, arrow keys step, double-click hands it back to the game"
+        : "The unit the game has picked - drag it to set it by hand";
       r.style.left = ziel.offsetLeft + "px"; r.style.top = ziel.offsetTop + "px";
       r.style.width = ziel.offsetWidth + "px"; r.style.height = ziel.offsetHeight + "px";
       streifen.appendChild(r);
+      kbSpangeVerdrahten(r, streifen);
     }
   }
+  /* the note under the strip */
+  const schiene = document.getElementById("kb-schiene");
+  if (schiene){
+    if (KB.handAn && wahl !== null){
+      const z = KB.zeilen[wahl];
+      schiene.className = "kb-schiene an";
+      schiene.innerHTML = `Frame led by hand - unit ${wahl + 1}${
+        z && z.status === "erfasst" ? " (" + kbEsc(z.tag || z.name) + ")" : ""
+        }. What is read next goes on this line.<button type="button" id="kb-hand-los">Hand back to the game</button>`;
+      const b = document.getElementById("kb-hand-los");
+      if (b) b.onclick = () => { KB.handAn = false; KB.handWahl = null; kbZeichnen(); };
+    } else {
+      schiene.className = "kb-schiene";
+      schiene.innerHTML = KB.N ? "Drag the frame along the strip, or click a card, to set the unit by hand." : "";
+    }
+  }
+  /* keep the filling going while a unit is being read */
+  if (KB.arbeit) kbFuellen();
   /* the sheet */
   const p = KB.schreibt ? Math.max(0, Math.min(1, (jetzt() - KB.schreibt.ab) / KB.schreibt.dauer)) : 1;
   const zeig = (z, feld, txt) => {
@@ -11513,21 +11911,39 @@ async function kbTick(){
        each one. */
     const f = await bildAufnehmen();
     if (!KB || !KB.live) return;
-    const {c, d, quer, gross, hell, gain} = await unitsRahmen(f);
+    const F = await unitsRahmen(f);
     if (!KB || !KB.live) return;
+    const {d, gross, hell, gain} = F;
     KB.frame = gross; KB.hell = hell; KB.gain = gain;
     const kn = kbKennung(d);
-    /* Read what stood still for two frames - but the FIRST reading of a
-       bar goes at once: waiting there only made the room feel slow. */
+    /* THE QUICK LOOK, every time. It reads no text at all: which cards
+       stand in the bar, whose they are, what their signs say, and which one
+       the game has picked. That is what the strip shows, and it now follows
+       the clicking without waiting for anything. Its picture is the one
+       already normalised - one pass over the points, not two. */
+    const G = await unitsLesen(F, null, null, "bild");
+    if (!KB || !KB.live) return;
+    kbVerarbeiten(G);
+    /* THE BOX IS SET ASIDE AT ONCE. Whatever stands in it now is kept as a
+       small picture and read afterwards; clicking on never waits for a
+       reading. A box that says the same as a moment ago is not kept twice. */
+    if (G.form && G.kastenOben !== null && G.kastenOben !== undefined){
+      const kk = kbKastenKennung(d, G.kastenOben, G.form);
+      if (kk !== KB.kastenLetzte){
+        KB.kastenLetzte = kk;
+        await kbEinreihen(F, G);
+        if (!KB || !KB.live) return;
+      }
+    } else KB.kastenLetzte = null;
+    /* THE TOWN NAME, from a picture that stood still for two looks - the
+       first one at once, so that the room does not sit idle when it opens. */
     if (kn !== KB.letzte && (kn === KB.vorige || KB.letzte === null)){
       KB.letzte = kn;
-      KB.scan = true; kbZeichnen();
-      const R = await unitsLesen(c, t => { if (KB) KB.status = t; }, KB.reiheKennung);
+      const R = await unitsLesen(F, t => { if (KB) KB.status = t; }, KB.reiheKennung, "ort");
       if (!KB) return;
-      KB.scan = false;
       if (R.reiheKennung) KB.reiheKennung = R.reiheKennung;
       kbVerarbeiten(R);
-    } else if (kn !== KB.vorige){ kbZeichnen(); }
+    }
     KB.vorige = kn;
   } catch(e){
     if (!KB) return;
@@ -11538,10 +11954,13 @@ async function kbTick(){
 }
 function kbLiveStart(){
   if (!KB || KB.live) return;
-  /* Four looks a second: a state must hold for two looks (half a second)
-     before it is read, and a look that overlaps a running one is skipped
-     (KB.laeuft) - so the rate costs nothing while a reading is under way. */
-  KB.live = setInterval(kbTick, 250);
+  /* Nearly seven looks a second. Every one of them does the quick half -
+     cards, sides, signs, the picked one - and that is what the strip
+     follows. The names are read from a picture that has stood still for two
+     looks, which is now a third of a second instead of a whole one. A look
+     that overlaps a running one is skipped (KB.laeuft), so the rate costs
+     nothing while a reading is under way. */
+  KB.live = setInterval(kbTick, 150);
   KB.status = "Live - click the units in the game's detail bar, left to right.";
   kbRauschenAn(); kbZeichnen(); kbTick();
 }
@@ -11651,16 +12070,20 @@ function kbFunkgeraetSVG(){
 /* The line on the little screen follows the recording that is playing. The
    element is routed through the sound context once - after that it has to
    stay connected, or the room goes silent. */
-let kbFunkQuelle = null, kbAnalyse = null, kbOszLauf = null;
+let kbFunkQuelle = null, kbAnalyse = null, kbOszLauf = null, kbAnalyseHin = false;
 function kbAnalyseAuf(){
   if (kbAnalyse) return kbAnalyse;
+  /* ONE ATTEMPT. A media element can be tapped once; every further try
+     threw - and the try sat inside the oscilloscope's frame loop, sixty
+     failures a second, which the whole room could feel. */
+  if (kbAnalyseHin) return null;
   if (!kbFunk || !kbKlangAuf()) return null;
   try {
     kbFunkQuelle = kbKlang.createMediaElementSource(kbFunk);
     kbAnalyse = kbKlang.createAnalyser();
     kbAnalyse.fftSize = 1024; kbAnalyse.smoothingTimeConstant = 0.55;
     kbFunkQuelle.connect(kbAnalyse); kbAnalyse.connect(kbKlang.destination);
-  } catch(e){ kbAnalyse = null; }
+  } catch(e){ kbAnalyse = null; kbAnalyseHin = true; }
   return kbAnalyse;
 }
 function kbOszAn(){
@@ -29695,7 +30118,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 6979e3be64</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 235342acc9</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -29837,7 +30260,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "6979e3be64";
+const BAU = "235342acc9";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
