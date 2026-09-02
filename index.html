@@ -871,6 +871,18 @@ body.kb-zieht{user-select:none}
 .kb-raute{width:15px;height:15px;flex:none;stroke:#5c5137;fill:none;stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round}
 .kb-z.vermutet .kb-raute{stroke:#93855f}
+/* the lock on a line, and the note a locked line collects */
+.kb-schluss{display:flex;align-items:center;gap:3px;justify-content:flex-end}
+.kb-fest{background:none;border:none;cursor:pointer;font-size:11px;line-height:1;padding:1px 2px;
+  border-radius:3px;opacity:.45;filter:grayscale(1)}
+.kb-fest:hover{opacity:1;background:rgba(0,0,0,.08)}
+.kb-fest.zu{opacity:1;filter:none}
+.kb-fest.warnt{background:#f0b13a;opacity:1}
+.kb-nehmen{background:#9b3b2e;color:#f4ead9;border:none;border-radius:3px;cursor:pointer;
+  font:700 10px/1 system-ui;padding:2px 5px}
+.kb-nehmen:hover{background:#b8452f}
+.kb-z.fest{background:rgba(80,60,30,.07)}
+.kb-z.fest .f{cursor:default}
 .rd-kf.ort .kb-ortname{font-weight:700;letter-spacing:.02em;color:#eaf6e4}
 .kb-z.schreibt .f{color:#1a3a8a}
 .kb-tinte{display:inline-block;border-right:2px solid #1a3a8a;animation:kbTinte .7s steps(1) infinite}
@@ -11455,11 +11467,11 @@ function kbAuswahlIndex(R, vorgabe){
     const i = KB.erste + R.auswahl;
     if (i >= 0 && i < KB.N) return i;
   }
-  /* untouched lines only - one that is already waiting for its reading, or
-     being read right now, must not be handed out a second time */
-  const von = KB.erste, bis = Math.min(KB.N, KB.erste + Math.max(1, R.karten.length || 1));
-  for (let i = von; i < bis; i++) if (KB.zeilen[i] && KB.zeilen[i].status === "vermutet") return i;
-  for (let i = 0; i < KB.N; i++) if (KB.zeilen[i] && KB.zeilen[i].status === "vermutet") return i;
+  /* NO SUBSTITUTE. There used to be a way out here: with no card certainly
+     picked, the tool took "the first unread line", and failing that hung a
+     new line on the end. That is where entries came from that belong to no
+     clicked card at all - and on a bar of 28 units they land anywhere.
+     Only the picture and the hand may name a line now. */
   return null;
 }
 /* The unit type as read from the card's symbol, when it was clear. */
@@ -11503,16 +11515,74 @@ function kbFenster(R){
   }
   return {N: n, erste: 0, sichtbar: n};
 }
-function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0}; }
+function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, fest: false, abweichung: null}; }
+/* A LOCKED LINE IS NOT TOUCHED. Not by a reading, not by a move, not by
+   clearing, not by the tidying up of a bar that has grown shorter. What
+   the tool reads differently it only reports: the line gets a note, the
+   lock turns to warning colour, and taking the note over is one click -
+   the Kommodore's decision, not the tool's. */
+const kbFest = z => !!(z && z.fest);
+function kbFrieren(i, an){
+  const z = KB && KB.zeilen[i];
+  if (!z) return;
+  z.fest = an === undefined ? !z.fest : !!an;
+  if (!z.fest) z.abweichung = null;
+  KB.status = z.fest ? `Line ${i + 1} is locked — the tool will not change it.`
+                     : `Line ${i + 1} is open again.`;
+  kbZeichnen();
+}
+/* The note the reading leaves on a locked line. */
+function kbAbweichungMerken(z, e){
+  const gleich = (a, b) => namKey(String(a || "")) === namKey(String(b || ""));
+  if (gleich(z.tag, e.tag) && gleich(z.name, e.name) && gleich(z.besitzer, e.besitzer)){ z.abweichung = null; return false; }
+  z.abweichung = {tag: e.tag || "", name: e.name || "", besitzer: e.besitzer || "",
+                  hp: e.hp || null, seite: e.seite, nameZuv: e.nameZuv || 0};
+  return true;
+}
+/* Taking the note over - by hand, on purpose. */
+function kbAbweichungNehmen(i){
+  const z = KB && KB.zeilen[i];
+  if (!z || !z.abweichung) return;
+  const a = z.abweichung;
+  Object.assign(z, {tag: a.tag, name: a.name, besitzer: a.besitzer, hp: a.hp,
+                    nameZuv: a.nameZuv, status: "erfasst", gespeichert: false,
+                    seite: a.seite !== null && a.seite !== undefined ? a.seite : z.seite});
+  z.abweichung = null;
+  KB.status = `Line ${i + 1} taken over: ${a.tag || a.name}.`;
+  kbZeichnen();
+}
 function kbSchluessel(z){ return namKey((z.tag || "") + " " + (z.name || "")); }
-/* Already on the sheet? Same owner and strength, tag and name within a
-   quarter of the letters - the same unit read twice with a slip. */
+/* Already on the sheet?
+   THE TAG DECIDES, EXACTLY. The old rule let two readings count as one
+   unit when owner and strength matched and the tag differed by no more
+   than a quarter of its letters. A tag like "3-1-004" has seven
+   characters, a quarter of that is two - and "3-1-007" differs by ONE. But
+   a clan numbers its units in sequence, and those units share their owner
+   and very often their composition; the rule therefore threw DIFFERENT
+   units together by the dozen and then refused to write them, which is
+   exactly what stood on the sheet at Bonn: "3-1-007 is already on the
+   sheet (line 1)", where line 1 held 3-1-004.
+   So: if both tags were read, they must match to the letter. The loose
+   comparison only stands in where a tag is missing - there the name,
+   owner and strength have to carry it alone. */
+const kbTagDa = t => /[0-9]/.test(String(t || "")) && String(t).trim().length >= 3;
 function kbSchonDa(e){
   const ke = kbSchluessel(e);
-  return KB.zeilen.find(u => u.status === "erfasst" && (
-    (u.tag === e.tag && u.name === e.name && u.besitzer === e.besitzer) ||
-    (namKey(u.besitzer || "") === namKey(e.besitzer || "") && JSON.stringify(u.hp || []) === JSON.stringify(e.hp || [])
-      && levenshtein(kbSchluessel(u), ke) <= Math.max(2, Math.round(0.25*Math.max(kbSchluessel(u).length, ke.length))))));
+  return KB.zeilen.find(u => {
+    if (u.status !== "erfasst") return false;
+    if (u.tag === e.tag && u.name === e.name && u.besitzer === e.besitzer) return true;
+    /* both tags read and different -> two different units, full stop */
+    if (kbTagDa(u.tag) && kbTagDa(e.tag)) return namKey(u.tag) === namKey(e.tag);
+    return namKey(u.besitzer || "") === namKey(e.besitzer || "")
+      && JSON.stringify(u.hp || []) === JSON.stringify(e.hp || [])
+      && levenshtein(kbSchluessel(u), ke) <= Math.max(2, Math.round(0.25*Math.max(kbSchluessel(u).length, ke.length)));
+  });
+}
+/* A line back to empty - the type and the side stay, they come from the
+   card in the bar and not from the reading. */
+function kbZeileLeeren(z){
+  Object.assign(z, {status: "vermutet", tag: "", name: "", besitzer: "", hp: null,
+                    nameZuv: 0, zwilling: null, gespeichert: false});
 }
 
 /* One reading -> the sheet. */
@@ -11553,7 +11623,8 @@ function kbVerarbeiten(R, vorgabe){
         if (f.N > KB.zeilen.length)
           for (let i = KB.zeilen.length; i < f.N; i++) KB.zeilen.push(kbZeileLeer(i));
         else
-          while (KB.zeilen.length > f.N && KB.zeilen[KB.zeilen.length - 1].status === "vermutet") KB.zeilen.pop();
+          while (KB.zeilen.length > f.N && KB.zeilen[KB.zeilen.length - 1].status === "vermutet"
+                 && !kbFest(KB.zeilen[KB.zeilen.length - 1])) KB.zeilen.pop();
         KB.wandel = null;
       }
     } else KB.wandel = null;
@@ -11567,11 +11638,12 @@ function kbVerarbeiten(R, vorgabe){
       const zahlen = R.gesamtZahlen || (gleich && KB.gesamt ? KB.gesamt.zahlen : null);
       for (const r of R.gesamtRauten) r.gruppe = kbRauteGruppe(r.v);
       KB.gesamt = {rauten: R.gesamtRauten, zahlen: zahlen || []};
+      kbRautenOrdnen();
     }
     KB.erste = f.erste; KB.sichtbar = f.sichtbar; KB.karten = R.karten;
     R.karten.forEach((k, j) => {
       const z = KB.zeilen[KB.erste + j];
-      if (z && z.status !== "erfasst"){
+      if (z && z.status !== "erfasst" && !kbFest(z)){
         z.seite = k.seite === "US" ? 0 : k.seite === "GE" ? 1 : k.seite === "SU" ? 2 : z.seite;
         z.eigen = k.seite === "gelb";
         const k2 = R.karten[j];
@@ -11588,19 +11660,33 @@ function kbVerarbeiten(R, vorgabe){
   if (R.einheit){
     const e = unitsZeileAus(R);
     if (!R.leiste && KB.N === 0){ KB.zeilen = [kbZeileLeer(0)]; KB.N = 1; }
-    const da = kbSchonDa(e);
-    /* Two units may carry the same tag and name (rare, but it happens). A
-       reading that matches a line OUTSIDE the visible window, while the
-       window still holds an unread place, is such a twin, not a repeat. */
     const kand = kbAuswahlIndex(R, vorgabe);
-    const imFenster = i => i >= KB.erste && i < KB.erste + Math.max(1, KB.sichtbar);
-    const zwilling = da && kand !== null && !imFenster(da.i) && imFenster(kand);
-    if (da && !zwilling){
-      KB.status = `${e.tag || e.name} is already on the sheet (line ${da.i + 1}).`;
+    const da = kbSchonDa(e);
+    if (kand === null || !KB.zeilen[kand]){
+      /* ONLY THE UNIT THE BAR HAS CERTAINLY PICKED gets written. Without a
+         picked card there is no line this reading could belong to, and a
+         guess would land on somebody else's line. */
+      KB.status = e.tag || e.name
+        ? `${e.tag || e.name} read, but no unit is certainly picked in the bar — drag the frame onto it.`
+        : "No unit is certainly picked in the bar.";
     } else {
-      let i = kand;
-      if (i === null){ i = KB.zeilen.length; KB.zeilen.push(kbZeileLeer(i)); KB.N = KB.zeilen.length; }
+      /* THE SAME UNIT MOVES, IT DOES NOT DOUBLE. Standing on another line
+         already, that line is cleared; standing on this one, it is simply
+         written over. So a second click on a unit corrects any misreading,
+         and nothing has to be typed by hand. */
+      const zwilling = null;
+      if (da && da.i !== kand && !kbFest(da)){ kbZeileLeeren(da); KB.status = `${e.tag || e.name} moved from line ${da.i + 1}.`; }
+      const i = kand;
       const z = KB.zeilen[i];
+      if (kbFest(z)){
+        /* LOCKED. Only a note, never a change. */
+        const anders = kbAbweichungMerken(z, e);
+        KB.status = anders
+          ? `Line ${i + 1} is locked — read as ${e.tag || e.name}, not taken over.`
+          : `Line ${i + 1} is locked and reads the same.`;
+        kbZeichnen();
+        return;
+      }
       if (!z.typ){ const k2 = R.karten[i - KB.erste]; const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
       /* The composition is a second witness: the strength diamonds carry
          the crew maxima, and those fit exactly one type often enough. It
@@ -11677,12 +11763,90 @@ function kbRautenBuchAb(){
     localStorage.setItem(KB_RAUTEN_SPEICHER, JSON.stringify(roh));
   } catch(e){}
 }
-/* Every group of men and machines the game data knows, in one list - that
-   is what a diamond can be named after. */
+/* THE EIGHTEEN GROUPS, IN THE GAME'S OWN ORDER - derived from the data,
+   not listed by hand. A crew entry ["Tank Crew", 14] and a cost entry
+   {tank_crew: 14} of the same assault team name the same thing, and the
+   resource table carries the order the game shows them in (ord 0..17).
+   Seventeen pairs fall out of that at once, in an unbroken run 0 to 16;
+   the eighteenth is the only name left over and the only resource left
+   over, so they belong together. */
+let kbGruppenFolge = null, kbGruppenOrd = {};
 function kbGruppenNamen(){
-  const n = new Set();
-  for (const a of (MAP.at || [])) for (const c of (a.crew || [])) n.add(c[0]);
-  return [...n].sort();
+  if (kbGruppenFolge) return kbGruppenFolge;
+  const ordn = {};
+  for (const r of (MAP.res || [])) ordn[r.k] = r.ord;
+  const paar = {};
+  for (const a of (MAP.at || [])){
+    const cost = a.cost || {}, werte = (a.crew || []).map(c => c[1]);
+    for (const [name, mx] of (a.crew || [])){
+      const tr = Object.keys(cost).filter(k => cost[k] === mx);
+      if (tr.length === 1 && werte.filter(v => v === mx).length === 1) paar[name] = tr[0];
+    }
+  }
+  const namen = new Set();
+  for (const a of (MAP.at || [])) for (const c of (a.crew || [])) namen.add(c[0]);
+  const belegt = new Set(Object.values(paar));
+  const offenN = [...namen].filter(n => paar[n] === undefined);
+  const offenR = Object.keys(ordn).filter(k => !belegt.has(k));
+  if (offenN.length === 1 && offenR.length === 1) paar[offenN[0]] = offenR[0];
+  kbGruppenOrd = {};
+  for (const n of namen) kbGruppenOrd[n] = paar[n] !== undefined ? ordn[paar[n]] : 99;
+  kbGruppenFolge = [...namen].sort((a, b) => kbGruppenOrd[a] - kbGruppenOrd[b]);
+  return kbGruppenFolge;
+}
+/* Which groups can stand at this place at all, given the ones already
+   named to its left and right. The row keeps the game's order, so a named
+   neighbour fences the place in from that side. */
+function kbRauteKandidaten(i){
+  const G = KB && KB.gesamt;
+  if (!G || !G.rauten[i]) return kbGruppenNamen();
+  kbGruppenNamen();
+  const n = G.rauten.length;
+  let lo = i, hi = 17 - (n - 1 - i);
+  for (let j = i - 1; j >= 0; j--)
+    if (G.rauten[j].gruppe){ lo = Math.max(lo, kbGruppenOrd[G.rauten[j].gruppe] + (i - j)); break; }
+  for (let j = i + 1; j < n; j++)
+    if (G.rauten[j].gruppe){ hi = Math.min(hi, kbGruppenOrd[G.rauten[j].gruppe] - (j - i)); break; }
+  const da = new Set(G.rauten.map((r, k) => k === i ? null : r.gruppe).filter(Boolean));
+  const eng = kbGruppenFolge.filter(g => kbGruppenOrd[g] >= lo && kbGruppenOrd[g] <= hi && !da.has(g));
+  return eng.length ? eng : kbGruppenFolge;
+}
+/* THE ROW STANDS IN THAT SAME ORDER. Measured against the resource table
+   and confirmed at the bar: the diamonds run left to right in the game's
+   order, with the groups a town does not hold simply left out. A named
+   diamond therefore fences in its neighbours - everything to its left
+   carries a smaller number, everything to its right a bigger one, and each
+   unnamed one in between is squeezed from both sides. Where exactly one
+   possibility is left, the diamond names itself, and its picture is filed
+   so it is known in the next town as well. */
+function kbRautenOrdnen(){
+  const G = KB && KB.gesamt;
+  if (!G || !G.rauten || !G.rauten.length) return 0;
+  kbGruppenNamen();
+  const n = G.rauten.length;
+  const hat = () => new Set(G.rauten.map(r => r.gruppe).filter(Boolean));
+  let gesetzt = 0, wieder = true;
+  while (wieder){
+    wieder = false;
+    for (let i = 0; i < n; i++){
+      if (G.rauten[i].gruppe) continue;
+      let lo = i, hi = 17 - (n - 1 - i);
+      for (let j = i - 1; j >= 0; j--)
+        if (G.rauten[j].gruppe){ lo = Math.max(lo, kbGruppenOrd[G.rauten[j].gruppe] + (i - j)); break; }
+      for (let j = i + 1; j < n; j++)
+        if (G.rauten[j].gruppe){ hi = Math.min(hi, kbGruppenOrd[G.rauten[j].gruppe] - (j - i)); break; }
+      const da = hat();
+      const kand = kbGruppenFolge.filter(g => kbGruppenOrd[g] >= lo && kbGruppenOrd[g] <= hi && !da.has(g));
+      if (kand.length === 1){
+        G.rauten[i].gruppe = kand[0];
+        const buch = kbRautenBuchAuf();
+        if (!buch[kand[0]]) buch[kand[0]] = {v: G.rauten[i].v.slice(), n: 1, bild: G.rauten[i].bild};
+        gesetzt++; wieder = true;
+      }
+    }
+  }
+  if (gesetzt) kbRautenBuchAb();
+  return gesetzt;
 }
 /* Which group a diamond of the town's line means. MEASURED on Plauen,
    Colmar and Wetzlar: the same diamond in another town comes out at 0.97
@@ -11715,6 +11879,8 @@ function kbRauteTaufen(i, gruppe){
   }
   kbRautenBuchAb();
   for (const r of G.rauten) if (!r.gruppe) r.gruppe = kbRauteGruppe(r.v);
+  const dazu = kbRautenOrdnen();
+  if (dazu) KB.status = `${gruppe} noted — ${dazu} further diamond${dazu > 1 ? "s" : ""} followed from the game's own order.`;
   kbZeichnen();
 }
 /* WHAT THE TOWN CAN HOLD. Careful on purpose: a type only falls away when
@@ -11817,9 +11983,18 @@ async function kbEinreihen(F, G){
   let bmp;
   try { bmp = await createImageBitmap(F.c, sx, sy, sw, sh); } catch(e){ return; }
   if (!KB){ if (bmp.close) bmp.close(); return; }
-  /* the line is bound NOW - this is the unit that stood in the box when the
-     picture was taken, whatever is clicked next */
+  if (KB.zeilen[ziel] === undefined){ if (bmp.close) bmp.close(); return; }
+  /* THE LINE IS BOUND NOW - this is the unit that stood in the box when
+     the picture was taken, whatever is clicked next. Without a certainly
+     picked card there is no line to bind, and then the picture is not
+     worth keeping: the text recognition would run for a reading that
+     could not be written anywhere. */
   const ziel = kbWahl();
+  if (ziel === null || ziel === undefined){
+    KB.status = "A unit stands in the box, but no card in the bar is certainly picked — drag the frame onto it.";
+    kbZeichnen();
+    return;
+  }
   KB.warte.push({bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel});
   if (ziel !== null && KB.zeilen[ziel] && KB.zeilen[ziel].status === "vermutet")
     KB.zeilen[ziel].status = "wartet";
@@ -11950,6 +12125,12 @@ function kbZeichnen(){
   /* while the frame is being dragged the strip must not be rebuilt under
      the finger - the element would be replaced and the drag would break */
   if (KB.handZieht) return;
+  /* AND NOT UNDER AN OPEN MENU EITHER. The room redraws about seven times
+     a second and sets its whole panel anew; an open drop-down or a field
+     being typed in goes with it. While the hand is in one, the drawing
+     waits - it picks up again the moment the field is left. */
+  const af = document.activeElement;
+  if (af && af.closest && af.closest("#kabine") && /^(SELECT|INPUT|TEXTAREA)$/.test(af.tagName)) return;
   const kopf = document.getElementById("kb-kopf"), links = document.getElementById("kb-links"),
         streifen = document.getElementById("kb-streifen"), blatt = document.getElementById("kb-blatt");
   const erfasst = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen).length;
@@ -12040,15 +12221,15 @@ function kbZeichnen(){
   const gz = document.getElementById("kb-gesamt");
   if (gz){
     const G = KB.gesamt;
-    const namen = kbGruppenNamen();
+    kbGruppenNamen();
     gz.innerHTML = (G && G.rauten.length)
       ? `<span class="t">Town holds</span>` + G.rauten.map((r, i) => {
           const n = G.zahlen && G.zahlen[i];
           return `<span class="g"><img src="${r.bild}" alt="" title="Pick the group this diamond stands for">` +
                  `<b>${n ? n.n.toLocaleString("en") : "…"}</b>` +
-                 `<select data-r="${i}" title="What this diamond means - named once, it holds in every town">` +
+                 `<select data-r="${i}" title="What this diamond means - named once, it holds in every town. The list is cut to what can stand at this place: the row keeps the game's own order.">` +
                  `<option value="">name it …</option>` +
-                 namen.map(g => `<option value="${kbEsc(g)}"${g === r.gruppe ? " selected" : ""}>${kbEsc(g)}</option>`).join("") +
+                 kbRauteKandidaten(i).map(g => `<option value="${kbEsc(g)}"${g === r.gruppe ? " selected" : ""}>${kbEsc(g)}</option>`).join("") +
                  `</select></span>`;
         }).join("") + kbGesamtSatz()
       : "";
@@ -12089,7 +12270,7 @@ function kbZeichnen(){
   };
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Town ?"}${KB.linie ? ` · attack line ${kbEsc(KB.linie)}` : ""} · ${new Date().toLocaleDateString()}</div>
     <div class="kb-z kopfz"><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Side</div><div></div></div>
-    ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""}" data-i="${z.i}">
+    ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${z.fest ? "fest" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""}" data-i="${z.i}">
       <div>${z.i + 1}</div>
       <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set"}">${z.typ ? "" : "?"}</span></div>
       <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${z.status === "erfasst" ? zeig(z, "tag", z.tag) + (z.zwilling ? " ²" : "") : "<i>?</i>"}</div>
@@ -12099,7 +12280,12 @@ function kbZeichnen(){
         : (KB.schreibt && KB.schreibt.i === z.i) ? zeig(z, "hp", (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  "))
         : kbStaerkeHTML(z)}</div>
       <div class="f" data-f="seite" title="click to change">${z.eigen ? "own" : kbSeiteName(z.seite)}</div>
-      <div>${z.gespeichert ? `<span title="recorded" style="color:#4f7a3a">✓</span>` : `<button class="weg" data-i="${z.i}" title="remove this line">×</button>`}</div>
+      <div class="kb-schluss">${
+        z.abweichung ? `<button class="kb-nehmen" data-i="${z.i}" title="Read as &quot;${kbEsc(z.abweichung.tag)} ${kbEsc(z.abweichung.name)} — ${kbEsc(z.abweichung.besitzer)}&quot; — click to take that over">!</button>` : ""
+      }<button class="kb-fest ${z.fest ? "zu" : ""} ${z.abweichung ? "warnt" : ""}" data-i="${z.i}" title="${
+        z.fest ? "Locked — the tool will not change this line. Click to open it." : "Lock this line so the tool cannot change it"
+      }">${z.fest ? "🔒" : "🔓"}</button>${
+        z.gespeichert ? `<span title="recorded" style="color:#4f7a3a">✓</span>` : `<button class="weg" data-i="${z.i}" title="remove this line">×</button>`}</div>
     </div>`).join("")}
     ${KB.N ? "" : `<div class="kb-hinweis">Nothing on the sheet yet.</div>`}`;
   blatt.querySelectorAll(".kb-z[data-i] .sym").forEach(el => {
@@ -12130,13 +12316,23 @@ function kbPult(){
 /* ---- editing the sheet ---------------------------------------------------- */
 function kbBearbeiten(ev){
   const f = ev.target.closest("[data-f]"); const zel = ev.target.closest(".kb-z[data-i]");
+  /* the lock, and the note a locked line has collected */
+  const schloss = ev.target.closest(".kb-fest");
+  if (schloss){ kbFrieren(+schloss.dataset.i); return; }
+  const nehmen = ev.target.closest(".kb-nehmen");
+  if (nehmen){ kbAbweichungNehmen(+nehmen.dataset.i); return; }
   if (ev.target.closest(".weg")){
     const i = +ev.target.closest(".weg").dataset.i;
+    if (kbFest(KB.zeilen[i])){ KB.status = `Line ${i + 1} is locked — open the lock first.`; kbZeichnen(); return; }
     KB.zeilen.splice(i, 1); KB.zeilen.forEach((z, k) => z.i = k); KB.N = KB.zeilen.length;
     KB.status = "Line removed."; kbZeichnen(); return;
   }
   if (!f || !zel || f.querySelector("input,select")) return;
   const z = KB.zeilen[+zel.dataset.i]; if (!z) return;
+  /* A LOCKED LINE IS THE KOMMODORE'S. Correcting it by hand stays open -
+     that is his doing, not the tool's - so only say what the lock means and
+     let the field open anyway. */
+  if (z.fest && KB.status.indexOf("locked") < 0) KB.status = `Line ${z.i + 1} is locked — the tool leaves it alone; your own corrections still apply.`;
   const feld = f.dataset.f;
   let el;
   if (feld === "seite"){
@@ -30550,7 +30746,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 592d73fc64</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 1bf93478ae</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -30692,7 +30888,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "592d73fc64";
+const BAU = "1bf93478ae";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
