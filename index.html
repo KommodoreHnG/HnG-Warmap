@@ -10987,7 +10987,10 @@ async function kbTick(){
 }
 function kbLiveStart(){
   if (!KB || KB.live) return;
-  KB.live = setInterval(kbTick, 900);
+  /* Four looks a second: a state must hold for two looks (half a second)
+     before it is read, and a look that overlaps a running one is skipped
+     (KB.laeuft) - so the rate costs nothing while a reading is under way. */
+  KB.live = setInterval(kbTick, 250);
   KB.status = "Live - click the units in the game's detail bar, left to right.";
   kbRauschenAn(); kbZeichnen(); kbTick();
 }
@@ -28655,7 +28658,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5a5f24e182</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 46c12d6625</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28797,7 +28800,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "5a5f24e182";
+const BAU = "46c12d6625";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
