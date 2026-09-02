@@ -1584,7 +1584,6 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-cl-deploy" data-clantab="deploy" title="Where the clan's teams stand">In the field</button>
       <button class="btn" id="b-cl-req"    data-clantab="req"    title="Calls for help">Requests</button>
       <button class="btn" id="b-cl-people" data-clantab="people" title="Members and their roles">Roles</button>
-      <button class="btn" id="b-cl-clans"  data-clantab="clans"  title="The other clans">Other clans</button>
       <button class="btn" id="b-cl-arsenal" title="What the whole clan can field, and where the gaps are">Clan arsenal</button>
       <button class="btn" id="b-arms">Arsenal</button>
       <button class="btn" id="b-mydepot" title="Your assault teams — the column on the right (D)">Depot</button>
@@ -12133,6 +12132,22 @@ function kbArbeitsRahmen(job){
 }
 async function kbEinreihen(F, G){
   if (!KB || KB.warte.length >= 24) return;
+  /* THE LINE IS BOUND FIRST - this is the unit that stood in the box when
+     the picture was taken, whatever is clicked next. Without a certainly
+     picked card there is no line to bind, and then the picture is not
+     worth taking at all: the text recognition would run for a reading that
+     could not be written anywhere.
+     AND IT STANDS HERE, BEFORE THE PICTURE. It used to be asked for after
+     the cut-out, while a guard two lines above already read it - a
+     variable used before its own declaration. Every look that found a box
+     threw "Cannot access 'ziel' before initialization", the beat caught
+     it, and the room stopped itself. */
+  const ziel = kbWahl();
+  if (ziel === null || ziel === undefined || !KB.zeilen[ziel]){
+    KB.status = "A unit stands in the box, but no card in the bar is certainly picked — drag the frame onto it.";
+    kbZeichnen();
+    return;
+  }
   const oben = G.kastenOben;
   const sx = KB_KASTEN_AUS.x, sw = KB_KASTEN_AUS.w;
   const sy = Math.max(0, oben - KB_KASTEN_AUS.hoch);
@@ -12140,18 +12155,6 @@ async function kbEinreihen(F, G){
   let bmp;
   try { bmp = await createImageBitmap(F.c, sx, sy, sw, sh); } catch(e){ return; }
   if (!KB){ if (bmp.close) bmp.close(); return; }
-  if (KB.zeilen[ziel] === undefined){ if (bmp.close) bmp.close(); return; }
-  /* THE LINE IS BOUND NOW - this is the unit that stood in the box when
-     the picture was taken, whatever is clicked next. Without a certainly
-     picked card there is no line to bind, and then the picture is not
-     worth keeping: the text recognition would run for a reading that
-     could not be written anywhere. */
-  const ziel = kbWahl();
-  if (ziel === null || ziel === undefined){
-    KB.status = "A unit stands in the box, but no card in the bar is certainly picked — drag the frame onto it.";
-    kbZeichnen();
-    return;
-  }
   KB.warte.push({bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel});
   if (ziel !== null && KB.zeilen[ziel] && KB.zeilen[ziel].status === "vermutet")
     KB.zeilen[ziel].status = "wartet";
@@ -25777,21 +25780,24 @@ const MENUES = [
   /* "Personal": what is yours alone - your soldiers, your depot, your
      notebook. The clan group keeps what is really clan-wide. */
   {id:"pers",  titel:"Personal",  knoepfe:["b-arms","b-mydepot","b-note"]},
-  {id:"clan",  titel:"Clan",      knoepfe:["b-cl-card","b-cl-depot","b-cl-over","b-cl-deploy","b-cl-req","b-cl-people","b-cl-clans","b-cl-arsenal"]},
+  {id:"clan",  titel:"Clan",      knoepfe:["b-cl-card","b-cl-depot","b-cl-over","b-cl-deploy","b-cl-req","b-cl-people","b-cl-arsenal"]},
   /* "Situation" musste erklaert werden - dann ist der Name falsch. Was hier
      steckt, meldet man oder sieht man nach: Gegner, Schlacht, Brett. */
   /* The board stays in the top bar itself - its "new" badge must be seen
      without opening a menu first. */
-  {id:"lage",  titel:"Reports",  knoepfe:["b-intel","b-front"]},
-  /* "War": the war's own settings and the reset. The reset button is shown
-     to those who may press it today (the admin); whether a clan leader
-     should have it instead is a rights question and stays open. */
-  {id:"krieg", titel:"War",      knoepfe:["b-war","b-reset"]},
+  {id:"lage",  titel:"Reports",  knoepfe:["b-intel"]},
+  /* "War" IS THE WAR, not its settings. What one looks at under that name
+     is how the front moved; the settings and the cut belong to whoever
+     administers the war, so they sit under Admin. The settings button
+     carries no rights lock and stays clickable for everybody from there -
+     that a plain member should see them as a VIEW only is a rights
+     question and is written down, not built here. */
+  {id:"krieg", titel:"War",      knoepfe:["b-front"]},
   {id:"sicht", titel:"View",     werkzeuge:true},
   /* Hilfe darf jeder - sie hat unter "Admin" nichts verloren. Solange sie
      dort stand, bekam die Gruppe fuer JEDEN einen Titel, und ein einfaches
      Mitglied sah "ADMIN" in der Leiste. */
-  {id:"verw",  titel:"Admin",    knoepfe:["b-members", "b-frisch"]},
+  {id:"verw",  titel:"Admin",    knoepfe:["b-war", "b-reset", "b-members", "b-frisch"]},
 ];
 let menuOffen = null;
 function menueSchliessen(){
@@ -29547,7 +29553,6 @@ function clanDialog(tab){
 
       <button data-tab="req"    aria-pressed="false">Requests${anfragen.length?` ${anfragen.length}`:""}</button>
       <button data-tab="people" aria-pressed="false">Roles</button>
-      <button data-tab="clans"  aria-pressed="false">Other clans</button>
     </div>
     <div class="dlg-b">
 
@@ -29609,6 +29614,12 @@ function clanDialog(tab){
             the side of new teams.${leiter?"":" The leader sets it."}${
             verw?"":" The clan's name is changed by the admin — the leader asks on the board."}</div>`;
         })()}
+        <!-- THE NEIGHBOURHOOD BELONGS ON THE CARD. Under its own heading it
+             read as though other clans were to be found there, when what it
+             shows is who else stands on this map. -->
+        <h3 style="margin:18px 0 6px;font-size:11px;letter-spacing:.12em;
+                   text-transform:uppercase;color:var(--dim2)">Other clans on the map</h3>
+        <div id="cl-clans"><div class="empty">Loading …</div></div>
       </div>
 
       <div class="tabp" data-tab="over">
@@ -29772,8 +29783,6 @@ function clanDialog(tab){
       <div class="tabp" data-tab="people"><div id="cl-people">
         <div class="empty">Loading …</div></div></div>
 
-      <div class="tabp" data-tab="clans"><div id="cl-clans">
-        <div class="empty">Loading …</div></div></div>
     </div>
     <div class="dlg-f">
       ${leute.length ? `<button class="btn" id="cl-copy">Copy as table</button>` : ""}
@@ -30899,7 +30908,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 229e2787ef</span></p></div>
+         installation. <span style="color:var(--dim2)">· build d9209c1603</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -31041,7 +31050,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "229e2787ef";
+const BAU = "d9209c1603";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
