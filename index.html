@@ -1429,12 +1429,20 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
         </button>
         <button class="btn" id="b-units" title="Read the units of a town from the game's detail bar">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
-            <!-- a soldier's head: helmet dome with rim, face, shoulders -->
-            <path d="M5.4 10.8 C5.4 6.4 8.4 3.6 12 3.6 C15.6 3.6 18.6 6.4 18.6 10.8"/>
-            <path d="M3.2 10.8 C3.2 10.2 3.7 9.8 4.4 9.8 H19.6 C20.3 9.8 20.8 10.2 20.8 10.8 C20.8 11.8 20 12.4 19 12.4 H5 C4 12.4 3.2 11.8 3.2 10.8 Z"/>
-            <path d="M7.8 12.4 C7.8 15.6 9.4 18.2 12 18.6 C14.6 18.2 16.2 15.6 16.2 12.4"/>
-            <path d="M8.2 7.6 C9 6 10.4 5.2 12 5.1"/>
-            <path d="M3 22 C5.2 19.8 8 18.9 9.8 18.7 M21 22 C18.8 19.8 16 18.9 14.2 18.7"/>
+            <!-- A soldier under a steel helmet. The dome and the rim are
+                 FILLED: the parachute next door is an open arc over a line,
+                 and an outlined helmet was the same silhouette. A closed
+                 mass is a different shape at any size, and the face, the
+                 eyes and the chin strap carry the detail up close. -->
+            <path d="M4.9 11.4 C4.9 6.6 8.1 3.7 12 3.7 C15.9 3.7 19.1 6.6 19.1 11.4 Z"
+                  fill="currentColor" stroke="none"/>
+            <path d="M3.1 11.4 H20.9 C20.9 12.7 19.9 13.4 18.6 13.4 H5.4 C4.1 13.4 3.1 12.7 3.1 11.4 Z"
+                  fill="currentColor" stroke="none"/>
+            <path d="M8.1 13.4 V15.4 C8.1 17.4 9.8 18.9 12 18.9 C14.2 18.9 15.9 17.4 15.9 15.4 V13.4"/>
+            <circle cx="10" cy="15.6" r="0.85" fill="currentColor" stroke="none"/>
+            <circle cx="14" cy="15.6" r="0.85" fill="currentColor" stroke="none"/>
+            <path d="M8.4 14.6 C7.2 15.6 7.4 17.4 8.8 18.2 M15.6 14.6 C16.8 15.6 16.6 17.4 15.2 18.2"/>
+            <path d="M8.8 18.2 H15.2"/>
           </svg><span class="txt">Units</span>
         </button>
         <button class="btn" id="b-spieler" title="Read the players of a battle from the war map">
@@ -29687,7 +29695,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 49b010ccca</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 6979e3be64</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -29829,7 +29837,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "49b010ccca";
+const BAU = "6979e3be64";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
