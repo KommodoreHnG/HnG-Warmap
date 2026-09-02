@@ -798,6 +798,19 @@ body.meld-modus{cursor:help}
 body.kb-zieht .kb-rahmen{transition:none}
 body.kb-zieht{user-select:none}
 /* the note under the strip while the hand leads */
+/* the town's own strength line, as the game shows it under the bar */
+.kb-gesamt{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin:0 0 12px}
+.kb-gesamt .g{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:44px}
+.kb-gesamt .g img{width:30px;height:30px;image-rendering:auto;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+.kb-gesamt .g b{font-size:13px;color:#e8d9a8;font-weight:700;line-height:1}
+.kb-gesamt .g select{font:10px system-ui;background:#15181d;color:#b9a98a;border:1px solid #2a2e36;
+  border-radius:3px;max-width:96px;padding:1px 2px;cursor:pointer}
+.kb-gesamt .g select:hover{border-color:#6a5a2c;color:#e8d9a8}
+.kb-gsatz{flex-basis:100%;font-size:11px;color:#8b929b;margin-top:2px}
+.kb-gsatz.gut{color:#b9a98a}
+.kb-gesamt .t{font:600 9px/1 system-ui;letter-spacing:.12em;text-transform:uppercase;
+  color:#8b929b;align-self:center;margin-right:2px}
 .kb-schiene{min-height:15px;margin:-8px 0 12px;font-size:11px;color:#8b929b}
 .kb-schiene.an{color:#f0b13a}
 .kb-schiene button{background:none;border:1px solid #6a5a2c;color:#f0b13a;border-radius:3px;
@@ -1691,6 +1704,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   <aside class="rd-links kb-links" id="kb-links"></aside>
   <div class="kb-schirm" id="kb-schirm">
     <div class="kb-streifen" id="kb-streifen"></div>
+    <div class="kb-gesamt" id="kb-gesamt"></div>
     <div class="kb-schiene" id="kb-schiene"></div>
     <div class="kb-blatt" id="kb-blatt"></div>
   </div>
@@ -10663,15 +10677,17 @@ function unitsTypVon(c, x0, fy){
     let q = 0;
     for (let j = 0; j < v.length; j++){ v[j] -= m; q += v[j]*v[j]; }
     q = Math.sqrt(q) || 1;
-    let b1 = null, b2 = null;
+    /* the WHOLE ranking of this shift, not just its winner: when the town
+       cannot hold the best sign, the best one it can hold counts */
+    const rang = [];
     for (const t of vorl){
       let k = 0;
       for (let j = 0; j < v.length; j++) k += v[j]*t.v[j];
-      k /= q;
-      if (!b1 || k > b1.k){ b2 = b1; b1 = {key: t.k, k}; }
-      else if (!b2 || k > b2.k) b2 = {key: t.k, k};
+      rang.push({key: t.k, k: k/q});
     }
-    return b1 ? {key: b1.key, k: b1.k, zweit: b2 ? b2.k : 0, dx, dy} : null;
+    rang.sort((a, b) => b.k - a.k);
+    return rang.length ? {key: rang[0].key, k: rang[0].k, zweit: rang.length > 1 ? rang[1].k : 0,
+                          liste: rang.slice(0, 6), dx, dy} : null;
   };
   let best = null;
   for (const dy of [-2, 0, 2]) for (const dx of [-2, 0, 2]){
@@ -10692,7 +10708,8 @@ function unitsTypVon(c, x0, fy){
      that is in no template (a wingless parachute) came out at 0.78 and is
      honestly unknown */
   const schwelle = unitsTypB === 62 ? 0.85 : 0.6;
-  return {typ: best.key, korr: best.k, abstand, sicher: abstand >= 0.05 && best.k >= schwelle};
+  return {typ: best.key, korr: best.k, abstand, liste: best.liste,
+          schwelle, sicher: abstand >= 0.05 && best.k >= schwelle};
 }
 
 /* The coloured disc with the town's symbol, left of the name. */
@@ -10776,6 +10793,70 @@ function unitsForm(d){
   for (const [form, oben] of UNITS_BAENDER)
     if (plaus(unitsStaerkeBloecke(d, oben, oben+UNITS_BAND).rauten).length) return {form, oben};
   return null;
+}
+/* THE TOWN'S OWN STRENGTH LINE, under the bar: one diamond per group of
+   men or machines the town holds, and the number under each. Measured on
+   five pictures: the band runs y 1976..2044, the white core of a diamond
+   is 64 wide, centre to centre 96 - and 126 where a four-digit number
+   needs the room. The numbers stand BELOW, not beside, in y 2074..2132.
+   The finder for the head box does not work here: it cuts the line into
+   runs of columns holding any dark point, and the map under the bar is
+   dark everywhere - one diamond 1500 points wide. So here the WHITE CORE
+   counts: very bright, colourless points inside the band. */
+const G_BAND = [1976, 2044], G_ZIFFERN = [2074, 2132];
+const G_SUCH = [1300, 2800];
+function unitsGesamtRauten(d){
+  const r = []; let s = null;
+  for (let x = G_SUCH[0]; x < G_SUCH[1]; x++){
+    let n = 0;
+    for (let y = G_BAND[0]; y < G_BAND[1]; y++){
+      const p = (y*UNITS_W + x)*4;
+      if (unitsMax(d,p) > 205 && unitsMax(d,p) - unitsMin(d,p) < 40) n++;
+    }
+    if (n > 6){ if (s === null) s = x; }
+    else if (s !== null){ if (x-s >= 40 && x-s <= 90) r.push({x0: s, x1: x, mitte: (s+x)/2}); s = null; }
+  }
+  return r;
+}
+/* The picture of one diamond, brought to 32 x 32 and to mean zero, so that
+   two of them can be held against each other whatever the ground behind. */
+let gRasterC = null, gRasterG = null;
+function unitsRauteBild(c, x0, x1, y0, y1){
+  if (!gRasterC){
+    gRasterC = document.createElement("canvas"); gRasterC.width = 32; gRasterC.height = 32;
+    gRasterG = gRasterC.getContext("2d", {willReadFrequently:true});
+    gRasterG.imageSmoothingEnabled = true; gRasterG.imageSmoothingQuality = "high";
+  }
+  gRasterG.drawImage(c, x0, y0, x1-x0, y1-y0, 0, 0, 32, 32);
+  const px = gRasterG.getImageData(0, 0, 32, 32).data;
+  const v = new Float32Array(1024);
+  let m = 0;
+  for (let i = 0, j = 0; j < 1024; i += 4, j++){ v[j] = (299*px[i] + 587*px[i+1] + 114*px[i+2])/255000; m += v[j]; }
+  m /= 1024;
+  let q = 0;
+  for (let j = 0; j < 1024; j++){ v[j] -= m; q += v[j]*v[j]; }
+  q = Math.sqrt(q) || 1;
+  for (let j = 0; j < 1024; j++) v[j] /= q;
+  return {v, bild: gRasterC.toDataURL("image/png")};
+}
+const unitsRauteAehnlich = (a, b) => { let k = 0; for (let j = 0; j < 1024; j++) k += a[j]*b[j]; return k; };
+/* The numbers under the diamonds. The box is as wide as half the way to
+   the neighbour allows, at most 46 - wider and "371" swallowed the "1" of
+   its neighbour and read 3711. Plain threshold: the strip is a pale band
+   over the map, and the local-contrast path takes the black digits for
+   background there. */
+async function unitsGesamtZahlen(c, rt, melde){
+  const z = [];
+  for (let i = 0; i < rt.length; i++){
+    const m = rt[i].mitte;
+    const l = i ? m - rt[i-1].mitte : 96, g = i < rt.length-1 ? rt[i+1].mitte - m : 96;
+    const hb = Math.max(28, Math.min(46, Math.min(l, g)/2 - 4));
+    const feld = unitsSchlicht(c, {x: Math.round(m-hb), y: G_ZIFFERN[0], w: Math.round(2*hb), h: G_ZIFFERN[1]-G_ZIFFERN[0]});
+    const t = await ocrMitZuv(feld, 7, melde || (()=>{}), "0123456789");
+    const roh = (t.text || "").replace(/\D/g, "");
+    z.push(roh ? {n: +roh, zuv: t.zuv} : null);
+  }
+  return z;
 }
 /* The strength line: diamonds and digits side by side. The diamonds are
    outlines, so the line is cut into runs of columns carrying any dark
@@ -10983,7 +11064,8 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       const seite = u.klasse !== "-" ? u.klasse : unitsBlass(unitsRing(d, x0, x1, rimOben));
       const t = unitsTypVon(c, x0-9, rimOben);
       return {x0: x0-9, x1: x1+9, seite, rand: unitsPlattenRand(d, x0-9, plattenOben), q: unitsQuotient(d, x0-9, plattenOben),
-              typ: t && t.sicher ? t.typ : null, typKorr: t ? t.korr : null, typAbstand: t ? t.abstand : null};
+              typ: t && t.sicher ? t.typ : null, typKorr: t ? t.korr : null, typAbstand: t ? t.abstand : null,
+              typListe: t ? t.liste : null, typSchwelle: t ? t.schwelle : null};
     });
     /* which of the visible cards is picked - the one plate darker than the
        band above it */
@@ -11012,8 +11094,15 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
                    : (R.karten.length ? Math.min(R.karten[0].x0 - 20, 1700) : 1700);
       /* the fingerprint of the card row: where the cards stand, and how
          far the bar is rolled */
+      /* the town's own strength line, found with the picture - the numbers
+         under it are read by the slow half */
+      R.gesamtRauten = unitsGesamtRauten(d).map(r => {
+        const b = unitsRauteBild(c, r.x0-8, r.x1+8, G_BAND[0]-6, G_BAND[1]+6);
+        return {x0: r.x0, x1: r.x1, mitte: r.mitte, v: b.v, bild: b.bild};
+      });
       R.reiheKennung = R.karten.map(k => Math.round(k.x0/4)).join(",")
-        + "|" + (R.roll ? Math.round(R.roll.x0/4) + ":" + Math.round(R.roll.breite/4) : "-");
+        + "|" + (R.roll ? Math.round(R.roll.x0/4) + ":" + Math.round(R.roll.breite/4) : "-")
+        + "|" + R.gesamtRauten.length;
       if (art === "bild" || (letzteReihe && letzteReihe === R.reiheKennung)){
         R.ortGespart = true;
         R.stadt = null; R.linie = null;
@@ -11033,6 +11122,10 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       }
       R.ortText = ort.text; R.ortZuv = ort.zuv;
       R.stadt = stadt;
+      if (R.gesamtRauten && R.gesamtRauten.length){
+        sag("Reading the town's strength …");
+        R.gesamtZahlen = await unitsGesamtZahlen(c, R.gesamtRauten, null);
+      }
       /* "BAD LOBENSTEIN - C": the letter names the attack line (A to E) the
          units stand on. They are not in the town - they are attacking it
          from that line. Kept, because it says where they are. */
@@ -11242,7 +11335,7 @@ function kbOrtSetzen(i, linie){
     KB.zeilen = []; KB.N = 0; KB.erste = 0; KB.sichtbar = 0; KB.karten = []; KB.reiheKennung = null;
     KB.auswahl = null; KB.wandel = null; KB.hatteBahn = false;
     KB.handAn = false; KB.handWahl = null; KB.handZieht = false;
-    kbSchlangeLeeren(); KB.kastenLetzte = null;
+    kbSchlangeLeeren(); KB.kastenLetzte = null; KB.gesamt = null;
     KB.letzte = null; KB.vorige = null; KB.schreibt = null;
     if (offen) toast(`${offen} unit${offen === 1 ? "" : "s"} kept — new sheet for ${MAP.n[i][0]}`);
   }
@@ -11308,6 +11401,7 @@ function kbNeu(){
           auswahl: null, wandel: null, gemeldet: null, scan: false, reiheKennung: null,
           handAn: false, handWahl: null, handZieht: false,
           warte: [], werkt: false, arbeit: null, kastenLetzte: null, dauerMittel: 850,
+          gesamt: null,
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null};
 }
 /* Which card is picked. Until the measurement gives a rule for a single
@@ -11436,13 +11530,24 @@ function kbVerarbeiten(R, vorgabe){
       }
     } else KB.wandel = null;
     KB.N = KB.zeilen.length;
+    /* the town's strength line. The pictures come with every quick look,
+       the numbers only with a slow one - so the numbers already read are
+       kept when a quick look brings the same diamonds again. */
+    if (R.gesamtRauten){
+      const gleich = KB.gesamt && KB.gesamt.rauten.length === R.gesamtRauten.length
+        && KB.gesamt.rauten.every((a, i) => Math.abs(a.mitte - R.gesamtRauten[i].mitte) < 6);
+      const zahlen = R.gesamtZahlen || (gleich && KB.gesamt ? KB.gesamt.zahlen : null);
+      for (const r of R.gesamtRauten) r.gruppe = kbRauteGruppe(r.v);
+      KB.gesamt = {rauten: R.gesamtRauten, zahlen: zahlen || []};
+    }
     KB.erste = f.erste; KB.sichtbar = f.sichtbar; KB.karten = R.karten;
     R.karten.forEach((k, j) => {
       const z = KB.zeilen[KB.erste + j];
       if (z && z.status !== "erfasst"){
         z.seite = k.seite === "US" ? 0 : k.seite === "GE" ? 1 : k.seite === "SU" ? 2 : z.seite;
         z.eigen = k.seite === "gelb";
-        const t = kbTypVon(R, KB.erste + j); if (t) z.typ = t;
+        const k2 = R.karten[j];
+        const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t;
       }
     });
     /* the picked card: the finder frame steps over to it, with a clack */
@@ -11468,7 +11573,7 @@ function kbVerarbeiten(R, vorgabe){
       let i = kand;
       if (i === null){ i = KB.zeilen.length; KB.zeilen.push(kbZeileLeer(i)); KB.N = KB.zeilen.length; }
       const z = KB.zeilen[i];
-      if (!z.typ){ const t = kbTypVon(R, i); if (t) z.typ = t; }
+      if (!z.typ){ const k2 = R.karten[i - KB.erste]; const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
       /* The composition is a second witness: the strength diamonds carry
          the crew maxima, and those fit exactly one type often enough. It
          only fills a gap - a read symbol is never overruled. */
@@ -11504,6 +11609,134 @@ function kbSchreiben(z){
     if (p >= 1){ KB.schreibt = null; clearInterval(takt); KB.status = `${z.tag || z.name} is on the sheet - click the next unit.`; }
     kbZeichnen();
   }, 60);
+}
+
+/* ---- what the diamonds mean -------------------------------------------
+   Not guessed: learnt. A unit whose type the card sign names for certain
+   carries in its head box exactly the diamonds of its own crew groups, in
+   the order the game data keeps them. Each one is filed under its group's
+   name, and the town's own strength line is then held against that. */
+const KB_RAUTEN_SPEICHER = "units_rauten";
+let kbRautenBuch = null;
+function kbRautenBuchAuf(){
+  if (kbRautenBuch) return kbRautenBuch;
+  kbRautenBuch = {};
+  try {
+    const roh = JSON.parse(localStorage.getItem(KB_RAUTEN_SPEICHER) || "{}");
+    for (const [g, e] of Object.entries(roh)){
+      if (!e || !e.v || e.v.length !== 1024) continue;
+      const v = new Float32Array(1024);
+      for (let j = 0; j < 1024; j++) v[j] = (parseInt(e.v[j], 16) - 7.5) / 7.5;
+      let q = 0; for (let j = 0; j < 1024; j++) q += v[j]*v[j];
+      q = Math.sqrt(q) || 1;
+      for (let j = 0; j < 1024; j++) v[j] /= q;
+      kbRautenBuch[g] = {v, n: e.n || 1, bild: e.bild || null};
+    }
+  } catch(e){}
+  return kbRautenBuch;
+}
+function kbRautenBuchAb(){
+  try {
+    const roh = {};
+    for (const [g, e] of Object.entries(kbRautenBuch || {})){
+      let lo = Infinity, hi = -Infinity;
+      for (let j = 0; j < 1024; j++){ if (e.v[j] < lo) lo = e.v[j]; if (e.v[j] > hi) hi = e.v[j]; }
+      const sp = (hi - lo) || 1;
+      let str = "";
+      for (let j = 0; j < 1024; j++) str += "0123456789abcdef"[Math.min(15, Math.floor((e.v[j]-lo)/sp*15.999))];
+      roh[g] = {v: str, n: e.n, bild: e.bild};
+    }
+    localStorage.setItem(KB_RAUTEN_SPEICHER, JSON.stringify(roh));
+  } catch(e){}
+}
+/* Every group of men and machines the game data knows, in one list - that
+   is what a diamond can be named after. */
+function kbGruppenNamen(){
+  const n = new Set();
+  for (const a of (MAP.at || [])) for (const c of (a.crew || [])) n.add(c[0]);
+  return [...n].sort();
+}
+/* Which group a diamond of the town's line means. MEASURED on Plauen,
+   Colmar and Wetzlar: the same diamond in another town comes out at 0.97
+   to 0.98, a different one at 0.88 at the most. So the bar stands high. */
+function kbRauteGruppe(v){
+  const buch = kbRautenBuchAuf();
+  let b1 = null, b2 = null;
+  for (const [g, e] of Object.entries(buch)){
+    const k = unitsRauteAehnlich(v, e.v);
+    if (!b1 || k > b1.k){ b2 = b1; b1 = {g, k}; }
+    else if (!b2 || k > b2.k) b2 = {g, k};
+  }
+  if (!b1 || b1.k < 0.94) return null;
+  if (b2 && b1.k - b2.k < 0.04) return null;
+  return b1.g;
+}
+/* Naming one by hand: the picture is filed under the name and holds from
+   then on, in every town. */
+function kbRauteTaufen(i, gruppe){
+  const G = KB && KB.gesamt;
+  if (!G || !G.rauten[i]) return;
+  const buch = kbRautenBuchAuf();
+  if (!gruppe){
+    const alt = G.rauten[i].gruppe;
+    if (alt && buch[alt]) delete buch[alt];
+    G.rauten[i].gruppe = null;
+  } else {
+    buch[gruppe] = {v: G.rauten[i].v.slice(), n: 1, bild: G.rauten[i].bild};
+    G.rauten[i].gruppe = gruppe;
+  }
+  kbRautenBuchAb();
+  for (const r of G.rauten) if (!r.gruppe) r.gruppe = kbRauteGruppe(r.v);
+  kbZeichnen();
+}
+/* WHAT THE TOWN CAN HOLD. Careful on purpose: a type only falls away when
+   every one of its groups has been learnt at some point, no diamond of the
+   line was left without a name, and at least one of its groups is missing
+   from the town. Otherwise "not learnt yet" would mean the same as "not
+   there", and that is wrong. */
+function kbMoeglicheTypen(){
+  const G = KB && KB.gesamt;
+  if (!G || !G.rauten || !G.rauten.length) return null;
+  const buch = kbRautenBuchAuf();
+  const da = new Set(), offen = G.rauten.filter(r => !r.gruppe).length;
+  for (const r of G.rauten) if (r.gruppe) da.add(r.gruppe);
+  if (!da.size || offen) return null;
+  const moeglich = new Set();
+  for (const a of MAP.at){
+    /* a group never named cannot say anything - such a type stays possible */
+    if (!a.crew.every(c => buch[c[0]])){ moeglich.add(a.k); continue; }
+    if (a.crew.every(c => da.has(c[0]))) moeglich.add(a.k);
+  }
+  return moeglich;
+}
+/* What the naming buys: the types this town cannot hold. */
+function kbGesamtSatz(){
+  const G = KB && KB.gesamt;
+  const offen = G ? G.rauten.filter(r => !r.gruppe).length : 0;
+  if (offen) return `<span class="kb-gsatz">${offen} diamond${offen > 1 ? "s" : ""} still unnamed. Name each one once - it then holds in every town, and the tool can rule out the units a town cannot hold.</span>`;
+  const m = kbMoeglicheTypen();
+  if (!m) return `<span class="kb-gsatz">Nothing to go on yet.</span>`;
+  const raus = (MAP.at || []).filter(a => !m.has(a.k));
+  if (raus.length) return `<span class="kb-gsatz gut">Not possible here: ${raus.map(a => kbEsc(a.name || a.k)).join(", ")}.</span>`;
+  /* nothing ruled out - is that because everything fits, or because too
+     few groups have a name yet? Say which. */
+  const buch = kbRautenBuchAuf(), fehlt = kbGruppenNamen().filter(g => !buch[g]).length;
+  return fehlt
+    ? `<span class="kb-gsatz">Nothing ruled out yet - ${fehlt} of ${kbGruppenNamen().length} groups have never been named.</span>`
+    : `<span class="kb-gsatz gut">Every kind of unit is possible here.</span>`;
+}
+/* The type of a card, with the town taken into account. */
+function kbTypAusListe(k){
+  if (!k) return null;
+  const moeglich = kbMoeglicheTypen();
+  const liste = k.typListe;
+  if (!liste || !liste.length) return k.typ;
+  const schwelle = k.typSchwelle || 0.85;
+  const passt = moeglich ? liste.filter(e => moeglich.has(e.key)) : liste;
+  if (!passt.length) return k.typ;
+  const rest = (moeglich ? liste.filter(e => moeglich.has(e.key)) : liste).slice(1);
+  const abstand = passt[0].k - (rest.length ? rest[0].k : 0);
+  return (passt[0].k >= schwelle && abstand >= 0.05) ? passt[0].key : null;
 }
 
 /* ---- taking the picture now, reading it afterwards ---------------------
@@ -11774,6 +12007,26 @@ function kbZeichnen(){
       streifen.appendChild(r);
       kbSpangeVerdrahten(r, streifen);
     }
+  }
+  /* the town's strength line, straight off the game's own bar */
+  const gz = document.getElementById("kb-gesamt");
+  if (gz){
+    const G = KB.gesamt;
+    const namen = kbGruppenNamen();
+    gz.innerHTML = (G && G.rauten.length)
+      ? `<span class="t">Town holds</span>` + G.rauten.map((r, i) => {
+          const n = G.zahlen && G.zahlen[i];
+          return `<span class="g"><img src="${r.bild}" alt="" title="Pick the group this diamond stands for">` +
+                 `<b>${n ? n.n.toLocaleString("en") : "…"}</b>` +
+                 `<select data-r="${i}" title="What this diamond means - named once, it holds in every town">` +
+                 `<option value="">name it …</option>` +
+                 namen.map(g => `<option value="${kbEsc(g)}"${g === r.gruppe ? " selected" : ""}>${kbEsc(g)}</option>`).join("") +
+                 `</select></span>`;
+        }).join("") + kbGesamtSatz()
+      : "";
+    gz.querySelectorAll("select[data-r]").forEach(sel => {
+      sel.onchange = () => kbRauteTaufen(+sel.dataset.r, sel.value || null);
+    });
   }
   /* the note under the strip */
   const schiene = document.getElementById("kb-schiene");
@@ -30118,7 +30371,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 235342acc9</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 1cd229fede</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -30260,7 +30513,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "235342acc9";
+const BAU = "1cd229fede";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
