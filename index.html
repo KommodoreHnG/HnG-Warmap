@@ -4881,8 +4881,23 @@ const joinOf = id => Object.keys(S.join)
    the map. TEMPO_KAL is the scale - map units per minute at speed 1 - and
    comes from one measurement in the game; until it is set, the window shows
    the path and the team type but no minutes. */
-let TEMPO_KAL = null;
+/* The scale, measured in the game on 02.09.2026: a motorised guard
+   (speed 1.8) from Villingen-Schwenningen to Albstadt (neighbours, 21.27
+   map units) took about 9 s, of which about 2 s were the start. Pure
+   travel 7 s -> 21.27 / (1.8 * 7) = 1.688 map units per second at speed 1.
+   Every town passed through costs about 2 s more. Airborne and air force
+   teams fly straight from start to target, without transits. */
+let TEMPO_KAL = 1.688;
+const SAMMEL_INIT_S = 2, SAMMEL_TRANSIT_S = 2;
 const SAMMEL_UMWEG_MIN = 60;
+const fliegt = k => !!(AT[k] && (AT[k].branch === "airforce" || AT[k].branch === "airborne"));
+/* travel time in seconds for one team type along a found path */
+function reiseZeit(k, weg, luftlinie){
+  const tempo = AT[k] && AT[k].speed;
+  if (!tempo || !TEMPO_KAL) return null;
+  if (fliegt(k)) return SAMMEL_INIT_S + luftlinie / (tempo * TEMPO_KAL);
+  return SAMMEL_INIT_S + weg.laenge / (tempo * TEMPO_KAL) + SAMMEL_TRANSIT_S * Math.max(0, weg.hops - 1);
+}
 let kantenFeld = null;
 function kantenVon(i){
   if (!kantenFeld){
@@ -4929,29 +4944,38 @@ function sammelzeit(a){
   let weg = wegSuche(starts, ziel, ruhig);
   if (!weg){ umweg = true; weg = wegSuche(starts, ziel, () => true); }
   if (!weg) return null;
-  /* the slowest team type among the committed players' deployed teams */
-  let tempo = Infinity, typ = "";
-  for (const m of joinOf(a.id))
-    for (const k of Object.keys(deployedBy(m.who)))
-      if (AT[k] && AT[k].speed && AT[k].speed < tempo){ tempo = AT[k].speed; typ = k; }
+  /* every team type the committed players have on the map; the one that
+     takes longest sets the gathering time */
+  const arten = new Set();
+  for (const m of joinOf(a.id)) for (const k of Object.keys(deployedBy(m.who))) if (AT[k]) arten.add(k);
   let geraten = false;
-  if (!isFinite(tempo)){
+  if (!arten.size){
     geraten = true;
-    for (const t of MAP.at) if (t.speed && t.speed < tempo){ tempo = t.speed; typ = t.k; }
+    let langsam = null;
+    for (const t of MAP.at) if (t.speed && !fliegt(t.k) && (!langsam || t.speed < langsam.speed)) langsam = t;
+    if (langsam) arten.add(langsam.k);
   }
-  const minuten = (TEMPO_KAL && isFinite(tempo) && tempo > 0)
-    ? weg.laenge / (tempo * TEMPO_KAL) + (umweg ? SAMMEL_UMWEG_MIN : 0) : null;
-  return {...weg, umweg, tempo, typ, geraten, minuten, fremdeHauptstadt: !eigene.length};
+  const luftlinie = Math.hypot(MAP.n[weg.von][1] - MAP.n[ziel][1], MAP.n[weg.von][2] - MAP.n[ziel][2]);
+  let sekunden = null, typ = "";
+  for (const k of arten){
+    const t = reiseZeit(k, weg, luftlinie);
+    if (t !== null && (sekunden === null || t > sekunden)){ sekunden = t; typ = k; }
+  }
+  if (sekunden !== null && umweg) sekunden += SAMMEL_UMWEG_MIN * 60;
+  const tempo = AT[typ] ? AT[typ].speed : null;
+  return {...weg, umweg, tempo, typ, geraten, sekunden, minuten: sekunden === null ? null : sekunden / 60,
+          fremdeHauptstadt: !eigene.length, luft: fliegt(typ)};
 }
 function sammelText(a){
   const z = sammelzeit(a);
   if (!z) return `<span style="color:var(--dim)">Gathering: no supply path from a capital to ${esc(MAP.n[a.from][0])}.</span>`;
-  const dauer = z.minuten === null ? "" : (() => { const m = Math.round(z.minuten); return `<b>≥ ${Math.floor(m/60)} h ${String(m%60).padStart(2,"0")} min</b> `; })();
+  const dauer = z.sekunden === null ? "" : (() => {
+    const sek = Math.round(z.sekunden), h = Math.floor(sek/3600), m = Math.floor(sek%3600/60), r = sek%60;
+    return `<b>≥ ${h ? h + " h " : ""}${m} min ${String(r).padStart(2,"0")} s</b> `; })();
   return `<span style="color:var(--dim)">Gathering: </span>${dauer}<span style="color:var(--dim)">from ${esc(MAP.n[z.von][0])}${
-    z.fremdeHauptstadt ? " (no capital of this side yet)" : ""} — ${z.hops} hop${z.hops === 1 ? "" : "s"}, ${
-    z.umweg ? `<b>no uncontested path</b>, +${SAMMEL_UMWEG_MIN} min` : "uncontested"}; slowest team ${esc(atName(z.typ))}${
-    z.geraten ? " (nobody committed with teams on the map — slowest type assumed)" : ""}${
-    z.minuten === null ? "; minutes once the scale is measured" : ""}.</span>`;
+    z.fremdeHauptstadt ? " (no capital of this side yet)" : ""} — ${z.luft ? "straight flight" : `${z.hops} hop${z.hops === 1 ? "" : "s"}`}, ${
+    z.umweg ? `<b>no uncontested path</b>, +${SAMMEL_UMWEG_MIN} min` : "uncontested"}; slowest ${esc(atName(z.typ))}${
+    z.geraten ? " (nobody committed with teams on the map — slowest type assumed)" : ""}.</span>`;
 }
 
 /* WIE GROSS IST EIN ORT AUF DER KARTE? der Auftrag: "Bitte alle Kreise
@@ -28709,7 +28733,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 84650ef5af</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 64171fa989</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28844,7 +28868,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "84650ef5af";
+const BAU = "64171fa989";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
