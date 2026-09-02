@@ -211,9 +211,14 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
    rollte die ganze Leiste, und auf einem 1366x768-Schirm fiel genau dieser
    Teil unten heraus: 97 Bildpunkte Ueberhang, gemessen. */
 /* the tools fall into as many columns as the width allows */
+/* The scrollbar belongs on the bar's edge, not somewhere inside it. The
+   bar keeps six points of air on the right; the scrolling box reaches
+   through it with a negative margin and takes the same six back as inner
+   padding - so the bar stands at the border and the tools keep their
+   distance from it. */
 #toolwrap{flex:1 1 auto;min-height:0;overflow-y:auto;display:grid;
   grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:2px 3px;align-content:space-evenly;
-  scrollbar-width:thin}
+  margin-right:-6px;padding-right:6px;scrollbar-width:thin;scrollbar-gutter:stable}
 /* the tools spread over the height they get and grow with the bar's width */
 #toolwrap .tool{padding:9px 3px 8px;gap:4px}
 #toolwrap .tool svg{width:clamp(22px,calc(var(--bar-w,96px)/5),30px);height:clamp(22px,calc(var(--bar-w,96px)/5),30px)}
@@ -251,8 +256,14 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
 .tool.row svg{width:15px;height:15px;stroke-width:calc(var(--ico-strich)*24/15)}
 /* Zweispaltig: auf einem breiten Schirm ist die Leiste sonst eine lange
    Kolonne, bei der man bis zum letzten Werkzeug scrollen muss. */
-#bar.zwei{display:grid;grid-template-columns:1fr 1fr;width:var(--bar-w,180px);align-content:start}
-#bar.zwei .bar-h,#bar.zwei #factions{grid-column:1/-1}
+/* "TWO COLUMNS" MEANS THE TOOLS, NOT THE BAR. It used to turn the whole
+   bar into a two-column grid, in which the heading and the faction list
+   spanned both columns but the tool area did not - so the tools sat in the
+   left column at half the bar's width, their scrollbar landed in the
+   middle of the bar, and the right half stayed empty. The bar is a column
+   from top to bottom in both cases now; the switch only says how many
+   columns the tool area itself gets. */
+#bar.zwei{width:var(--bar-w,180px)}
 #bar.zwei .tool.row{flex-direction:column;gap:3px;padding:7px 3px 6px;justify-content:center}
 #bar.zwei .tool.row svg{width:19px;height:19px}
 .fac{display:flex;align-items:center;gap:7px;padding:5px 7px;cursor:pointer;background:transparent;
@@ -30882,7 +30893,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build afc32c8ff7</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c6072e9a00</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -31024,7 +31035,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "afc32c8ff7";
+const BAU = "c6072e9a00";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
