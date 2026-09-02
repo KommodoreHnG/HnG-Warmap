@@ -1169,13 +1169,24 @@ body.kb-zieht{user-select:none}
   18%{transform:translateX(-7px)}36%{transform:translateX(7px)}
   54%{transform:translateX(-4px)}72%{transform:translateX(4px)}}
 .dlg.ruettelt{animation:ruettel .3s ease}
+/* A WINDOW MUST NOT GROW PAST THE SCREEN. The cap was there - 88vh - but
+   the magnification (zoom, a few rules up) works AFTER it: 88vh is 88
+   percent of the window height in the UNMAGNIFIED space, so at 1,4 the
+   window stands 123 percent tall on screen. Its tabs and its cross were
+   then outside, and scrolling did not help, because what scrolls is the
+   CONTENT, not the window. Dividing the cap by the magnification keeps it
+   at 88 percent on screen at every setting - in every window, which is
+   where this showed up: Intel/Supply and Clan/Roles alike. */
 .dlg{position:relative;background:linear-gradient(180deg,#211b14,#181309);border:1px solid var(--accent-dk);
-  border-radius:3px;max-width:620px;width:100%;
-  max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
-.dlg.wide{max-width:860px}
-.dlg.xwide{max-width:1120px}
+  border-radius:3px;width:100%;
+  --dlg-zoom:calc(var(--ui,1) * var(--f-dlg,1));
+  max-width:min(620px, calc(96vw / var(--dlg-zoom)));
+  max-height:calc(88vh / var(--dlg-zoom));
+  overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.dlg.wide{max-width:min(860px, calc(96vw / var(--dlg-zoom)))}
+.dlg.xwide{max-width:min(1120px, calc(96vw / var(--dlg-zoom)))}
 /* text tabs do not need the wide window - the tables do */
-.dlg.xwide:has(.tabp.schmal.on){max-width:780px}
+.dlg.xwide:has(.tabp.schmal.on){max-width:min(780px, calc(96vw / var(--dlg-zoom)))}
 .dlg.dropbereit{outline:2px dashed var(--accent);outline-offset:-6px}
 .dlg.dropbereit .dlg-b{background:rgba(226,172,72,.06)}
 /* Tabs — the two big windows carry several views each, and a row of tabs
@@ -1843,7 +1854,13 @@ function flugplaetzeNach(ziel, weite, nurFraktion){
   return raus;
 }
 const isCap  = i => MAP.n[i][4] !== 0;
-const isObj  = i => OBJ_TYPES.has(MAP.n[i][3]) || isCap(i);
+/* A TARGET IS WHAT SOMEBODY MARKED. It used to mean "important by its kind,
+   or a capital", which put every factory and every airfield on the map
+   whether anyone cared about it or not. Now it means the mark set by hand,
+   and that holds everywhere the question is asked: the pin on the map, the
+   name that stays up, the search list, the size on the radar, and the
+   weighting of a route. */
+const isObj  = i => starAt(i);
 const capHome= i => { const v = MAP.n[i][4]; return v > 0 ? FACTIONS[v-1] : null; };
 
 /* Taktikzeichen der Assault Teams.
@@ -8375,19 +8392,22 @@ const ICO_CAPTURE = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
   <path d="M3.5 8.2 h4.2 l1.9-2.7 h4.8 l1.9 2.7 h4.2 v10.6 h-17 z"/>
   <circle cx="12" cy="13.3" r="3.3"/></svg>`;
 
+/* ONLY WHAT THE TOOL SAW ITSELF. Uploading a screenshot by hand is gone,
+   and with it the two quieter ways in - pasting with Ctrl+V and dropping a
+   file into the window. A picture that came from somewhere else cannot be
+   told apart from one the tool took, and everything downstream is measured
+   against the game's own screen. */
 function bildQuelleHTML(id){
   return `<div class="row" style="flex-wrap:wrap;align-items:center">
-      <input type="file" id="${id}" accept="image/png,image/jpeg" style="flex:1;min-width:170px">
       ${bildAufnahmeMoeglich()
         ? `<button class="btn mit-ico" data-bild="grab">${ICO_CAPTURE}Capture the game …</button>`
         : ""}
     </div>
-    <div class="hint" data-bild="hint">Or press <kbd>Ctrl</kbd>+<kbd>V</kbd> to paste a screenshot
-      straight from the clipboard, or drop an image anywhere in this window.${
+    <div class="hint" data-bild="hint">${
       bildAufnahmeMoeglich()
-        ? ` <b>Capture</b> asks which window it may see — pick the Heroes &amp; Generals window.`
-        : ` Capturing a window needs the page to run over https; on a local file the
-            browser does not allow it.`}</div>`;
+        ? `<b>Capture</b> asks which window it may see — pick the Heroes &amp; Generals window.`
+        : `Capturing a window needs the page to run over https; on a local file the
+           browser does not allow it.`}</div>`;
 }
 
 /* Ein Bild aus der laufenden Freigabe. Beim ersten Mal fragt der Browser, was
@@ -8447,29 +8467,8 @@ function bildQuelle(id, beiBild){
      hochgeladenen Datei genauso aus wie eine aus einer Live-Aufnahme. */
   const nimm = (f, q) => { if (f && /^image\//.test(f.type || "")) beiBild(f, q); };
 
-  document.getElementById(id)?.addEventListener("change",
-    ev => nimm(ev.target.files[0], "file"));
-
-  const einfuegen = ev => {
-    const daten = ev.clipboardData || window.clipboardData;
-    for (const eintrag of (daten && daten.items) || []){
-      if (eintrag.kind === "file" && /^image\//.test(eintrag.type || "")){
-        const f = eintrag.getAsFile();
-        if (f){ ev.preventDefault(); nimm(f, "paste"); return; }
-      }
-    }
-  };
-  const ueber  = ev => { ev.preventDefault(); dlg.classList.add("dropbereit"); };
-  const weg    = () => dlg.classList.remove("dropbereit");
-  const fallen = ev => {
-    ev.preventDefault(); weg();
-    nimm([...((ev.dataTransfer && ev.dataTransfer.files) || [])]
-         .find(f => /^image\//.test(f.type || "")), "drop");
-  };
-  document.addEventListener("paste", einfuegen);
-  dlg.addEventListener("dragover", ueber);
-  dlg.addEventListener("dragleave", weg);
-  dlg.addEventListener("drop", fallen);
+  /* The three ways in from outside - file, paste, drop - are gone. Only
+     the capture remains. */
 
   dlg.querySelectorAll('[data-bild="grab"]').forEach(b => b.addEventListener("click", async ()=>{
     const alt = b.textContent;
@@ -30017,12 +30016,8 @@ function arsenalDialog(tab){
          across ${mitglieder()} member${mitglieder() === 1 ? "" : "s"}${
          anonLeute ? `, ${anonLeute} of them anonymous` : ""}.`
          : "Nothing recorded yet. Enter your own soldiers and what they carry — as much or as little as you want to show."}</p></div>
-    <div class="tabs">
-      <button data-tab="mine" aria-pressed="true">Your soldiers</button>
-      <button data-tab="clan" aria-pressed="false">Clan arsenal</button>
-    </div>
     <div class="dlg-b">
-      <div class="tabp on" data-tab="mine">
+      <div class="tabp ${tab === "clan" ? "" : "on"}" data-tab="mine">
         <div id="sold-liste" style="display:flex;flex-direction:column;gap:7px">
           ${meine.length ? meine.map(soldatKarte).join("")
             : `<div class="empty">No soldiers yet.</div>`}
@@ -30041,7 +30036,7 @@ function arsenalDialog(tab){
           not who has what.</div>
       </div>
 
-      <div class="tabp" data-tab="clan">
+      <div class="tabp ${tab === "clan" ? "on" : ""}" data-tab="clan">
         ${(() => {
           /* Die eigentliche Deckenfrage: Command Points der Offiziere gegen
              das, was die Teams im Depot kosten. Mehr Teams als Punkte heisst,
@@ -30793,7 +30788,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 2c317551dd</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 87de2cf587</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -30935,7 +30930,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "2c317551dd";
+const BAU = "87de2cf587";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
