@@ -696,7 +696,15 @@ body.meld-modus{cursor:help}
   background:radial-gradient(ellipse at 50% 30%, #15171c 0%, #0b0c10 75%)}
 /* the strip: one box per unit in town, in the side's colour, a question mark
    until the type is known, binoculars once the unit is on the sheet */
-.kb-streifen{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;min-height:34px}
+.kb-streifen{position:relative;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;min-height:34px}
+/* the finder frame over the picked card - corner rails, notched movement */
+.kb-rahmen{position:absolute;box-sizing:border-box;border:2px solid #cbb98a;border-radius:2px;
+  pointer-events:none;z-index:3;box-shadow:inset 0 0 0 1px rgba(0,0,0,.55),0 0 10px rgba(232,217,168,.3);
+  transition:left .16s steps(4),top .16s steps(4)}
+.kb-rahmen::before,.kb-rahmen::after{content:"";position:absolute;left:-4px;right:-4px;height:3px;
+  background:#cbb98a;border-radius:1px}
+.kb-rahmen::before{top:-5px}
+.kb-rahmen::after{bottom:-5px}
 .kb-k{position:relative;width:38px;height:28px;border:2px solid #4a4f58;border-radius:3px;
   background:#1a1d23;color:#8b929b;display:flex;align-items:center;justify-content:center;
   font-size:15px;font-weight:700;cursor:default;transition:box-shadow .15s}
@@ -716,7 +724,7 @@ body.meld-modus{cursor:help}
   font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive;font-size:15px;line-height:28px}
 .kb-blatt .kb-titel{font-family:var(--schmal);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
   color:#7a6a48;border-bottom:1px solid #b9ab8a;margin-bottom:6px}
-.kb-z{display:grid;grid-template-columns:34px 44px 1.1fr 2fr 1.4fr 1fr 56px 24px;gap:8px;align-items:center;
+.kb-z{display:grid;grid-template-columns:34px 44px 1.05fr 1.8fr 1.25fr 1.5fr 56px 24px;gap:8px;align-items:center;
   border-bottom:1px dotted rgba(90,70,40,.25)}
 .kb-z.kopfz{font-family:var(--schmal);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#7a6a48;
   border-bottom:1px solid #b9ab8a}
@@ -731,6 +739,12 @@ body.meld-modus{cursor:help}
   align-items:center;justify-content:center;font-weight:700;color:#7a6a48;background:#f6efdc}
 .kb-z .sym.us{border-color:#2fa458}.kb-z .sym.ge{border-color:#6f5fd6}.kb-z .sym.su{border-color:#c33a30}.kb-z .sym.eigen{border-color:#c8942a}
 .kb-z .sym canvas{width:26px;height:18px}
+.kb-z .f.hp{white-space:normal;display:flex;flex-wrap:wrap;gap:2px 10px;align-items:center}
+.kb-z .hpg{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.kb-raute{width:15px;height:15px;flex:none;stroke:#5c5137;fill:none;stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round}
+.kb-z.vermutet .kb-raute{stroke:#93855f}
+.rd-kf.ort .kb-ortname{font-weight:700;letter-spacing:.02em;color:#eaf6e4}
 .kb-z.schreibt .f{color:#1a3a8a}
 .kb-tinte{display:inline-block;border-right:2px solid #1a3a8a;animation:kbTinte .7s steps(1) infinite}
 @keyframes kbTinte{50%{border-color:transparent}}
@@ -10616,6 +10630,66 @@ function kbRauschenAn(){
     kbRauschen = {src, g};
   } catch(e){}
 }
+/* The heavy clack of an old selector switch as the finder frame steps to
+   the next card: a short noise burst through a low filter, plus a thump. */
+function kbKlack(){
+  if (!kbTon || !kbKlangAuf()) return;
+  try {
+    const t = kbKlang.currentTime + 0.005, sr = kbKlang.sampleRate;
+    const n = Math.round(sr*0.05), buf = kbKlang.createBuffer(1, n, sr), ch = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) ch[i] = (Math.random()*2 - 1) * Math.pow(1 - i/n, 5);
+    const src = kbKlang.createBufferSource(); src.buffer = buf;
+    const lp = kbKlang.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2200; lp.Q.value = 0.7;
+    const g = kbKlang.createGain(); g.gain.value = 0.22;
+    src.connect(lp); lp.connect(g); g.connect(kbKlang.destination); src.start(t);
+    const o = kbKlang.createOscillator(), og = kbKlang.createGain();
+    o.type = "triangle"; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(58, t + 0.06);
+    og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.13, t + 0.004);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    o.connect(og); og.connect(kbKlang.destination); o.start(t); o.stop(t + 0.1);
+  } catch(e){}
+}
+/* Two tones, the way a station calls before an announcement. */
+function kbGong(){
+  if (!kbTon || !kbKlangAuf()) return;
+  try {
+    let t = kbKlang.currentTime + 0.02;
+    for (const hz of [784, 523]){
+      const o = kbKlang.createOscillator(), g = kbKlang.createGain();
+      o.type = "sine"; o.frequency.value = hz;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+      o.connect(g); g.connect(kbKlang.destination); o.start(t); o.stop(t + 0.36);
+      t += 0.2;
+    }
+  } catch(e){}
+}
+/* The town, said out loud when it is first recognised. A Russian voice if
+   the machine has one - it is the operator's own tongue here - otherwise
+   the two tones. Nothing is downloaded: the voice is the system's. */
+function kbOrtMelden(name){
+  if (!kbTon || !name) return;
+  try {
+    const sy = window.speechSynthesis;
+    if (sy){
+      const st = sy.getVoices() || [];
+      const ru = st.find(v => /^ru/i.test(v.lang || ""));
+      if (ru){
+        const u = new SpeechSynthesisUtterance(String(name));
+        u.voice = ru; u.lang = ru.lang; u.rate = 0.95; u.pitch = 0.9; u.volume = 0.9;
+        sy.cancel(); sy.speak(u); return;
+      }
+    }
+  } catch(e){}
+  kbGong();
+}
+/* One place where the town is set, so the announcement cannot be forgotten. */
+function kbOrtSetzen(i, linie){
+  if (i === null || i === undefined) return;
+  const neu = i !== KB.ort;
+  KB.ort = i; if (linie !== undefined) KB.linie = linie;
+  if (neu || KB.gemeldet !== i){ KB.gemeldet = i; kbOrtMelden(MAP.n[i] && MAP.n[i][0]); }
+}
 function kbRauschenAus(){
   if (!kbRauschen) return;
   try { kbRauschen.src.stop(); } catch(e){}
@@ -10670,6 +10744,7 @@ function kbNeu(){
   return {live: null, laeuft: false, letzte: null, vorige: null, hatteBahn: false,
           ort: null, linie: null, ziel: null, halter: null, merk: null,
           N: 0, erste: 0, sichtbar: 0, karten: [], zeilen: [],
+          auswahl: null, schrumpf: null, gemeldet: null,
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null};
 }
 /* Which card is picked. Until the measurement gives a rule for a single
@@ -10731,28 +10806,38 @@ function kbSchonDa(e){
 function kbVerarbeiten(R){
   KB.frame = R.gross; KB.hell = R.hell; KB.gain = R.gain;
   if (R.dialog){
-    if (R.stadt){ KB.merk = {stadt: R.stadt.i, linie: R.linie || null}; KB.ort = R.stadt.i; KB.linie = R.linie || null; }
+    if (R.stadt){ KB.merk = {stadt: R.stadt.i, linie: R.linie || null}; kbOrtSetzen(R.stadt.i, R.linie || null); }
     KB.status = R.stadt ? `Battle window: ${MAP.n[R.stadt.i][0]}${R.linie ? " - line " + R.linie : ""}. Now click the units.`
                         : "Battle window seen, but no town read from it.";
     kbZeichnen(); return;
   }
   if (R.leiste){
-    if (R.stadt){ KB.ort = R.stadt.i; KB.linie = R.linie || null; }
-    else if (KB.merk && KB.ort === null){ KB.ort = KB.merk.stadt; KB.linie = KB.merk.linie; }
+    if (R.stadt){ kbOrtSetzen(R.stadt.i, R.linie || null); }
+    else if (KB.merk && KB.ort === null){ kbOrtSetzen(KB.merk.stadt, KB.merk.linie); }
     KB.halter = R.seite;
     /* a frame without the thumb (it blinks too) must not turn a scrolled
        town into a short one - keep the total once a track has been seen */
     if (R.roll && R.roll.anteil) KB.hatteBahn = true;
     const f = (!R.roll && KB.hatteBahn && KB.N) ? {N: KB.N, erste: KB.erste, sichtbar: KB.sichtbar} : kbFenster(R);
-    /* a changed total keeps what is on the sheet and grows or trims the guesses */
-    if (f.N !== KB.N){
-      const alt = KB.zeilen;
-      KB.zeilen = [];
-      for (let i = 0; i < f.N; i++) KB.zeilen.push(alt[i] && alt[i].status === "erfasst" ? alt[i] : kbZeileLeer(i));
-      for (let i = f.N; i < alt.length; i++) if (alt[i] && alt[i].status === "erfasst") KB.zeilen.push(alt[i]);
-      KB.zeilen.forEach((z, i) => z.i = i);
-      KB.N = KB.zeilen.length;
-    }
+    /* THE PLACES STAY WHERE THEY ARE. The thumb's geometry gives a card
+       more or less as the bar is dragged, and rebuilding the list renumbered
+       everything: a unit read at place 15 turned up at place 10, the strip
+       no longer matched the sheet, and scrolling back threw away what had
+       just been read. Now: growing appends empty places; shrinking has to
+       hold for eight readings (two seconds), because a unit that really
+       leaves changes the bar for good; and a place that was read is never
+       dropped - the sheet then simply holds more than the bar shows. */
+    if (f.N > KB.zeilen.length){
+      for (let i = KB.zeilen.length; i < f.N; i++) KB.zeilen.push(kbZeileLeer(i));
+      KB.schrumpf = null;
+    } else if (f.N < KB.zeilen.length){
+      KB.schrumpf = (KB.schrumpf && KB.schrumpf.N === f.N) ? {N: f.N, n: KB.schrumpf.n + 1} : {N: f.N, n: 1};
+      if (KB.schrumpf.n >= 8){
+        while (KB.zeilen.length > f.N && KB.zeilen[KB.zeilen.length - 1].status !== "erfasst") KB.zeilen.pop();
+        KB.schrumpf = null;
+      }
+    } else KB.schrumpf = null;
+    KB.N = KB.zeilen.length;
     KB.erste = f.erste; KB.sichtbar = f.sichtbar; KB.karten = R.karten;
     R.karten.forEach((k, j) => {
       const z = KB.zeilen[KB.erste + j];
@@ -10762,6 +10847,9 @@ function kbVerarbeiten(R){
         const t = kbTypVon(R, KB.erste + j); if (t) z.typ = t;
       }
     });
+    /* the picked card: the finder frame steps over to it, with a clack */
+    const wahl = (R.auswahl !== null && R.auswahl !== undefined) ? KB.erste + R.auswahl : null;
+    if (wahl !== KB.auswahl){ KB.auswahl = wahl; if (wahl !== null) kbKlack(); }
   } else if (!R.form){
     KB.status = "No detail bar in the picture.";
   }
@@ -10783,10 +10871,20 @@ function kbVerarbeiten(R){
       if (i === null){ i = KB.zeilen.length; KB.zeilen.push(kbZeileLeer(i)); KB.N = KB.zeilen.length; }
       const z = KB.zeilen[i];
       if (!z.typ){ const t = kbTypVon(R, i); if (t) z.typ = t; }
+      /* The composition is a second witness: the strength diamonds carry
+         the crew maxima, and those fit exactly one type often enough. It
+         only fills a gap - a read symbol is never overruled. */
+      if (!z.typ){ const kand = kbTypKandidaten(e.hp); if (kand.length === 1) z.typ = kand[0]; }
       Object.assign(z, {status: "erfasst", tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp, nameZuv: e.nameZuv,
                         eigen: !!e.eigen, seite: e.seite !== null && e.seite !== undefined ? e.seite : z.seite,
                         zwilling: zwilling ? da.i + 1 : null});
-      if (KB.ort === null && e.stadt !== null && e.stadt !== undefined) KB.ort = e.stadt;
+      /* the side, if the picture did not give it: what we already know
+         about this player counts for more than nothing */
+      if ((z.seite === null || z.seite === undefined) && z.besitzer){
+        const e2 = S.roster[spielerKey(z.besitzer)];
+        if (e2 && e2.v && e2.v.f !== null && e2.v.f !== undefined) z.seite = e2.v.f;
+      }
+      if (KB.ort === null && e.stadt !== null && e.stadt !== undefined) kbOrtSetzen(e.stadt);
       KB.status = `Writing down ${e.tag || ""} ${e.name} …`;
       kbSchreiben(z);
     }
@@ -10818,10 +10916,14 @@ function kbZeichnen(){
   const erfasst = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen).length;
   const ortName = KB.ort !== null && KB.ort !== undefined ? MAP.n[KB.ort][0] : null;
   kopf.innerHTML = `
-    <div class="rd-kf weit"><div class="t">Town</div>
-      <div class="v">${ortName ? kbEsc(ortName) : "<small>not read - type it on the left</small>"}${
+    <div class="rd-kf weit ${ortName ? "ort" : ""}"><div class="t">Town</div>
+      <div class="v">${ortName ? `<b class="kb-ortname">${kbEsc(ortName)}</b>` : "<small>not read - type it on the left</small>"}${
         KB.linie ? ` <small>line ${kbEsc(KB.linie)}${KB.ziel !== null ? " → " + kbEsc(MAP.n[KB.ziel][0]) : ""}</small>` : ""}</div></div>
     <div class="rd-kf"><div class="t">Held by</div><div class="v">${KB.halter !== null && KB.halter !== undefined ? kbSeiteName(KB.halter) : "?"}</div></div>
+    ${(() => { const g = kbGesamtStaerke();
+      return `<div class="rd-kf"><div class="t">Strength read</div>
+        <div class="v">${g.max ? `${g.ist}<small>/${g.max}</small>` : "—"}</div>
+        <div class="bar"><i style="width:${g.max ? Math.round(100*g.ist/g.max) : 0}%"></i></div></div>`; })()}
     <div class="rd-kf ${KB.N && erfasst >= KB.N ? "gut" : ""}"><div class="t">Units on the sheet</div>
       <div class="v">${erfasst}<small> of ${KB.N || "?"}</small></div>
       <div class="bar"><i style="width:${KB.N ? Math.round(100*erfasst/KB.N) : 0}%"></i></div></div>
@@ -10851,6 +10953,17 @@ function kbZeichnen(){
     const z = KB.zeilen[+el.dataset.i];
     if (z && z.typ){ const c = kbSymbol(z.typ); if (c) el.insertBefore(c, el.firstChild); }
   });
+  /* The finder frame sits over the card the game has picked and steps over
+     to the next one - notched, not gliding, like the switch it sounds. */
+  if (KB.auswahl !== null && KB.auswahl !== undefined){
+    const ziel = streifen.querySelector(`.kb-k[data-i="${KB.auswahl}"]`);
+    if (ziel){
+      const r = document.createElement("div"); r.className = "kb-rahmen";
+      r.style.left = ziel.offsetLeft + "px"; r.style.top = ziel.offsetTop + "px";
+      r.style.width = ziel.offsetWidth + "px"; r.style.height = ziel.offsetHeight + "px";
+      streifen.appendChild(r);
+    }
+  }
   /* the sheet */
   const p = KB.schreibt ? Math.max(0, Math.min(1, (jetzt() - KB.schreibt.ab) / KB.schreibt.dauer)) : 1;
   const zeig = (z, feld, txt) => {
@@ -10872,7 +10985,9 @@ function kbZeichnen(){
       <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${z.status === "erfasst" ? zeig(z, "tag", z.tag) + (z.zwilling ? " ²" : "") : "<i>?</i>"}</div>
       <div class="f" data-f="name" title="click to correct" style="${z.nameZuv && z.nameZuv < 60 ? "color:#9b3b2e" : ""}">${z.status === "erfasst" ? zeig(z, "name", z.name) : ""}</div>
       <div class="f" data-f="besitzer" title="click to correct">${z.status === "erfasst" ? zeig(z, "besitzer", z.besitzer || "") : ""}</div>
-      <div class="f" data-f="hp" title="click to correct">${z.status === "erfasst" ? zeig(z, "hp", (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  ")) : ""}</div>
+      <div class="f hp" data-f="hp" title="click to correct">${z.status !== "erfasst" ? ""
+        : (KB.schreibt && KB.schreibt.i === z.i) ? zeig(z, "hp", (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  "))
+        : kbStaerkeHTML(z)}</div>
       <div class="f" data-f="seite" title="click to change">${z.eigen ? "own" : kbSeiteName(z.seite)}</div>
       <div>${z.gespeichert ? `<span title="recorded" style="color:#4f7a3a">✓</span>` : `<button class="weg" data-i="${z.i}" title="remove this line">×</button>`}</div>
     </div>`).join("")}
@@ -11011,6 +11126,52 @@ async function kbBild(datei){ if (!KB) return; const R = await unitsLesen(datei,
 /* Which types the strength maxima allow: 45/90 alone means a 90-man team
    without vehicles; 45/90 0/30 a 90-man team with 30 vehicles. Often one
    type, sometimes three. */
+/* The diamonds of the game's strength display, one per crew group. The
+   group's name says what stands there - men, motorcycles, vehicles,
+   armour, planes. Order matters: "Infantry Support Vehicles" is a vehicle,
+   "Tank Crew" is men. */
+function kbRaute(gruppe){
+  const g = String(gruppe || "");
+  let inhalt;
+  if (/motorcycle/i.test(g))
+    inhalt = '<circle cx="8.7" cy="14.6" r="1.9"/><circle cx="15.3" cy="14.6" r="1.9"/><path d="M8.7 14.6 L11.4 11.4 H13.9 M12.3 11.4 L15.3 14.6"/>';
+  else if (/vehicle|\bcar\b/i.test(g))
+    inhalt = '<path d="M7 14.2 H17 M7.8 14.2 V12.3 H10.1 L11.5 10.7 H14.5 L15.6 12.3 H16.9 V14.2"/><circle cx="9.6" cy="14.9" r="1.3"/><circle cx="14.9" cy="14.9" r="1.3"/>';
+  else if (/plane/i.test(g))
+    inhalt = '<path d="M12 7.2 V16.8 M6.3 12.2 H17.7 M9.5 16.2 H14.5"/>';
+  else if (/armor|armour|destroyer|tank(?! crew)/i.test(g))
+    inhalt = '<path d="M6.9 14.8 H17.1 V12.4 H6.9 Z M9.6 12.4 V10.6 H13.5 V12.4 M13.5 11.4 H17.1"/>';
+  else
+    inhalt = '<circle cx="12" cy="9.9" r="1.8"/><path d="M8.9 16.5 C9.3 13.5 10.5 12.3 12 12.3 C13.5 12.3 14.7 13.5 15.1 16.5"/>';
+  return `<svg class="kb-raute" viewBox="0 0 24 24" aria-hidden="true"><title>${kbEsc(g)}</title>
+    <path d="M12 2.4 L21.6 12 L12 21.6 L2.4 12 Z"/>${inhalt}</svg>`;
+}
+/* The crew groups behind a line's strength pairs - from the known type, or
+   from the one type the composition can belong to. */
+function kbCrewNamen(z){
+  let k = z.typ;
+  if (!k){ const kand = kbTypKandidaten(z.hp); if (kand.length === 1) k = kand[0]; }
+  return (k && AT[k] && AT[k].crew) ? AT[k].crew.map(c => c[0]) : [];
+}
+function kbStaerkeHTML(z){
+  const hp = z.hp || [];
+  if (!hp.length) return "";
+  const namen = kbCrewNamen(z);
+  return hp.map((h, j) => `<span class="hpg">${namen[j] ? kbRaute(namen[j]) : ""}${
+    h ? `${h[0]}/${h[1]}` : "?"}</span>`).join("");
+}
+/* What all the read lines add up to - the town's strength as far as the
+   sheet knows it. */
+function kbGesamtStaerke(){
+  let ist = 0, max = 0, n = 0;
+  for (const z of KB.zeilen){
+    if (z.status !== "erfasst" || z.eigen || !z.hp) continue;
+    let hat = false;
+    for (const h of z.hp) if (h){ ist += +h[0] || 0; max += +h[1] || 0; hat = true; }
+    if (hat) n++;
+  }
+  return {ist, max, n};
+}
 function kbTypKandidaten(hp){
   if (!hp || !hp.length) return [];
   const maxima = hp.map(h => h && +h[1]).filter(Boolean);
@@ -28658,7 +28819,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 46c12d6625</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 378606fa55</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28800,7 +28961,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "46c12d6625";
+const BAU = "378606fa55";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
