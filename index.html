@@ -11122,7 +11122,12 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
     sag("Reading the battle window …");
     const B = dlg.breite;
     const kopf = await unitsText(c, dlg.x0 + Math.round(B*0.07), dlg.y0 + Math.round(B*0.03), Math.round(B*0.48), Math.round(B*0.035));
-    const m = /\bBEI\b\s*(.+)$/i.exec(kopf.text);
+    /* The heading names the town after a small word - BEI on a German
+       client, AT on an English one. Without a hit the whole heading goes to
+       the town search, which still finds the name in it, so this is a
+       shortcut and not a crutch; the usual words of the other languages are
+       in it all the same. */
+    const m = /\b(?:BEI|AT|IN|A|\u00c0|EN|\u0412|\u041d\u0410)\b\s*(.+)$/i.exec(kopf.text);
     const rest = (m ? m[1] : kopf.text).trim();
     R.dialog = true; R.dialogText = kopf.text; R.dialogZuv = kopf.zuv;
     R.stadt = unitsStadt(rest);
@@ -11253,7 +11258,18 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
     const roh = name.text.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ")
                          .replace(/^[^\p{L}\p{N}]+/u, "");
     const t = roh.split(AT_TRENNER);
-    const bm = /^\s*BESITZER\s*[:;.]?\s*(.*)$/i.exec((bes.text || "") + (bes2 && bes2.text ? " " + bes2.text : ""));
+    /* THE OWNER LINE CARRIES A LABEL, AND THE LABEL IS TRANSLATED. It reads
+       BESITZER on a German client and OWNER on an English one; this used to
+       hang on the German word alone, so on any other client the owner came
+       back as NOTHING - not wrong, simply absent, with no error anywhere to
+       show it. Three steps now: the known words first; failing that, a word
+       in capitals at the start counts as a label as long as something
+       follows it; failing that, the whole line stands. It only comes back
+       empty when the line really is. */
+    const bzRoh = ((bes.text || "") + (bes2 && bes2.text ? " " + bes2.text : "")).trim();
+    const bm = /^\s*(?:BESITZER|OWNER|PROPRIETARIO|PROPRIETAIRE|PROPRI\u00c9TAIRE|PROPIETARIO|W\u0141A\u015aCICIEL|\u0412\u041b\u0410\u0414\u0415\u041b\u0415\u0426)\s*[:;.\-]?\s*(.*)$/iu.exec(bzRoh)
+      || /^\s*[\p{Lu}\p{Lo}]{4,14}\s*[:;.\-]\s*(.+)$/u.exec(bzRoh)
+      || (bzRoh ? [bzRoh, bzRoh] : null);
     R.einheit = {
       schrift: name.schrift || bes.schrift || null,
       tag: t.length > 1 ? t[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "",
@@ -11335,7 +11351,9 @@ function kbRauschenAn(){
         kbFunk = new Audio(KB_FUNK);
         kbFunk.loop = true; kbFunk.preload = "auto";
       }
-      kbFunk.volume = 0.32;
+      /* Quieter than it was: it is a room noise, not a broadcast. The
+         Kommodore asked for it in both rooms but a touch further back. */
+      kbFunk.volume = 0.18;
       const p = kbFunk.play();
       if (p && p.catch) p.catch(() => {});   // the browser may want a click first
       kbRauschen = {funk: true};
@@ -30788,7 +30806,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 87de2cf587</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 5a35e3f9bd</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -30930,7 +30948,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "87de2cf587";
+const BAU = "5a35e3f9bd";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
