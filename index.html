@@ -1414,7 +1414,6 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-mydepot" title="Your assault teams — the column on the right (D)">Depot</button>
       <button class="btn" id="b-note" title="Encrypted — nobody else can read it">Notebook</button>
       <button class="btn" id="b-intel">Intel</button>
-      <button class="btn" id="b-battle">Battle</button>
       <button class="btn" id="b-front" title="Slide the map back through the war">Front replay</button>
       <button class="btn" id="b-view">View</button>
       <button class="btn" id="b-war">War settings …</button>
@@ -19938,156 +19937,11 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
 
 
 /* ---- Das Fenster zur Schlachtanalyse --------------------------------- */
-document.getElementById("b-battle").addEventListener("click", ()=>battleDialog(sel));
-function battleDialog(ort){
-  const c = light() ? "#1a2029" : "#e9e2d5";
-  const i = (ort === null || ort === undefined) ? null : +ort;
-  const stand = i !== null ? (battleStand(i) || {}) : {};
-  const wirF = clanFaktion();
-  const vorrat = {wir: stand.wir || {}, sie: stand.sie || {}};
-  const art = stand.art || "assault";
-  const gruppen = ["army", "armor", "air"].filter(g => resListe().some(r => r.grp === g));
-  const wirKann = ausRessourcen(vorrat.wir), sieKann = ausRessourcen(vorrat.sie);
-  const urteil = schlachtUrteil(wirKann, sieKann);
-  /* Wer dort schon gesehen wurde - die Karte weiss es ohnehin. */
-  const gesehen = [];
-  if (i !== null){
-    for (const k of Object.keys(S.spot)){
-      if (+k.slice(0, k.indexOf(":")) !== i) continue;
-      const e = S.spot[k];
-      if (!e || !Array.isArray(e.v) || !imKrieg(e)) continue;
-      for (const u of e.v) if (u && u.owner) gesehen.push({name: u.owner, f: u.f, n: u.n, t: e.t});
-    }
-  }
-  const nameZuKey = new Map();
-  for (const g of gesehen) nameZuKey.set(g.name, spielerKey(g.name));
-  const eigene = i !== null ? unitsAt(i).filter(g=>g.mine).flatMap(g=>g.list) : [];
-  const eigMen = eigene.reduce((s,u)=>s + u.s*atMen(u.k), 0);
-  const eigVeh = eigene.reduce((s,u)=>s + u.s*atVeh(u.k), 0);
-  const zwName = z => (ZWEIGE.find(x=>x.k===z)||{name:z}).name;
-  const feld = (seite, r) => `<input type="number" min="0" data-vr="${seite}:${esc(r.k)}"
-      value="${+(vorrat[seite][r.k] || 0) || ""}" placeholder="0"
-      style="width:78px;padding:2px 4px;font-size:11px">`;
-  /* Die Auswertung fuer sich, damit sie beim Tippen neu gerechnet werden kann,
-     ohne dass die Eingabefelder verschwinden und der Fokus wegspringt. */
-  const auswertung = () => {
-    const kw = ausRessourcen(vorrat.wir), ks = ausRessourcen(vorrat.sie);
-    const u = schlachtUrteil(kw, ks);
-    return `<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:9px;
-           display:flex;gap:16px;flex-wrap:wrap">
-        <div style="flex:1;min-width:250px">
-          <div style="font-size:11px;color:var(--dim);margin-bottom:4px">What you could field</div>
-          ${kannListe(kw)}
-          ${eigene.length ? `<div style="font-size:11px;color:var(--dim2);margin-top:6px">
-            Standing there now: <b>${eigene.reduce((s,x)=>s+x.s,0)}</b> of your teams ·
-            ${eigMen.toLocaleString("en")} men${eigVeh?` · ${eigVeh} vehicles`:""}</div>` : ""}
-        </div>
-        <div style="flex:1;min-width:250px">
-          <div style="font-size:11px;color:var(--dim);margin-bottom:4px">What they could field</div>
-          ${kannListe(ks)}
-        </div>
-      </div>
-      ${(u.fehlt.length || u.droht.length || u.stark.length) ? `
-      <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:9px;
-           display:flex;flex-direction:column;gap:4px">
-        ${u.fehlt.map(s=>`<div style="font-size:12px;color:#e03b32"><b>✕</b> ${esc(s)}</div>`).join("")}
-        ${u.droht.map(s=>`<div style="font-size:12px;color:var(--accent)"><b>!</b> ${esc(s)}</div>`).join("")}
-        ${u.stark.map(s=>`<div style="font-size:12px;color:var(--dim)"><b>✓</b> ${esc(s)}</div>`).join("")}
-      </div>` : ""}`;
-  };
-  const kannListe = liste => {
-    const m = zweigStaerke(liste);
-    const zs = ZWEIGE.filter(z => m.has(z.k));
-    if (!zs.length) return `<div style="font-size:11px;color:var(--dim2)">Nothing — no resources entered.</div>`;
-    return zs.map(z=>{
-      const d = m.get(z.k);
-      const top = d.typen.sort((a,b)=>b.n-a.n).slice(0,3);
-      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-        <span style="font-size:11px;color:var(--dim);width:74px">${esc(z.name)}</span>
-        <b style="width:44px;text-align:right">${d.best}</b>
-        <span style="flex:1;display:flex;gap:5px;flex-wrap:wrap">${top.map(x=>
-          `<span title="${esc(atName(x.k))}" style="display:inline-flex;align-items:center;gap:2px">
-            ${symbolSVG(x.k, c, 18, 12)}<small style="color:var(--dim2)">${x.n}</small></span>`).join("")}</span>
-      </div>`;}).join("");
-  };
-  openDlg(`
-    <div class="dlg-h"><h2>Battle analysis</h2>
-      <p>${i !== null ? `<b>${esc(MAP.n[i][0])}</b> · ${esc(MAP.typen[MAP.n[i][3]])}${
-          isCap(i)?" · capital":""} · held by ${ownerOf(i)>=0?`<b style="color:${col(FACTIONS[ownerOf(i)])}"
-          >${FACTIONS[ownerOf(i)].tag}</b>`:"nobody"}`
-        : "Pick a town on the map first, then open this window."}</p></div>
-    <div class="dlg-b">
-      ${i === null ? `<div class="empty">Click a town, then press <b>Battle</b>.</div>` : `
-      <div class="row" style="align-items:center;gap:8px">
-        <span style="font-size:12px;color:var(--dim);width:74px">Battle</span>
-        <div class="own4" style="flex:1">
-          ${[["assault","Assault"],["encounter","Encounter"],["skirmish","Skirmish"]].map(([k,n])=>
-            `<button data-art="${k}" aria-pressed="${art===k}">${n}</button>`).join("")}
-        </div>
-      </div>
-      <div class="note" style="font-size:11px">Type in the resource grid the game shows for this
-        battle — <b>${gruppen.map(g=>RES_GRP[g]).join("</b>, <b>")}</b>. From those and the cost of
-        each team type the map works out what either side can actually field.</div>
-      <div class="tw" style="margin-top:6px"><table>
-        <thead><tr><th style="text-align:left">Resource</th><th>Yours</th><th>Theirs</th></tr></thead>
-        <tbody>${gruppen.map(g=>`
-          <tr><td colspan="3" style="text-align:left;padding-top:7px;color:var(--accent);
-            font-size:10px;letter-spacing:.7px;text-transform:uppercase">${RES_GRP[g]}</td></tr>
-          ${resListe().filter(r=>r.grp===g).sort((a,b)=>a.ord-b.ord).map(r=>`
-            <tr><td style="text-align:left">${esc(resName(r.k))}</td>
-              <td>${feld("wir", r)}</td><td>${feld("sie", r)}</td></tr>`).join("")}
-        `).join("")}</tbody></table></div>
+/* The old battle calculator is gone - it was a stock ledger kept by hand.
+   The battle analysis takes its place as a room of its own, reading the
+   strengths and the players straight off the war map's battle view. The
+   pot btl and its two accessors stay: the room will fill them. */
 
-      <div id="btl-erg">${auswertung()}</div>
-
-      ${gesehen.length ? `
-      <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:9px">
-        <div style="font-size:11px;color:var(--dim);margin-bottom:4px">Seen here</div>
-        ${gesehen.slice(0,12).map(g=>{
-          const key = nameZuKey.get(g.name);
-          const rollen = key ? feindRollen(key) : [];
-          const dep = key ? atEcht(feindDepot(key)).length : 0;
-          /* Wer inzwischen bei uns spielt, darf hier nicht als Gegner
-             stehen - sonst plant jemand eine Schlacht gegen das eigene
-             Mitglied. Die alte Sichtung bleibt, sie wird nur umgedeutet. */
-          const unser = key ? uebergelaufen(key) : false;
-          return `<div style="display:flex;align-items:center;gap:7px;font-size:11px;margin-bottom:2px${
-            unser ? ";opacity:.65" : ""}">
-            <span style="flex:1" dir="auto">${esc(g.name)}</span>
-            ${unser ? `<em style="color:var(--accent);font-style:normal">ours now</em>`
-                    : (g.f != null ? fBadge(g.f) : "")}
-            <span style="color:var(--dim2)">${g.n} team${g.n===1?"":"s"}</span>
-            ${dep && !unser ? `<span style="color:var(--dim2)">${dep} known</span>` : ""}
-            ${rollen.length ? `<span style="color:var(--accent)">${esc(rollen.join(", "))}</span>` : ""}
-          </div>`;}).join("")}
-      </div>` : ""}
-      <div class="note">Everyone in the clan sees the same figures for this town — a battle is
-        prepared together. Reading the grid straight from a screenshot comes next; until then it
-        is typed in.</div>`}
-    </div>
-    <div class="dlg-f"><button class="btn" id="d-close">Close</button></div>`, true);
-  document.getElementById("d-close").addEventListener("click", closeDlg);
-  if (i === null) return;
-  const sichern = () => {
-    setBattle(i, {art, wir: vorrat.wir, sie: vorrat.sie});
-  };
-  document.querySelectorAll("#dlg [data-vr]").forEach(inp => {
-    /* Beim Tippen nur speichern und die Auswertung neu rechnen - das Fenster
-       bleibt stehen, sonst waeren sechsunddreissig Felder nicht zu fuellen. */
-    inp.addEventListener("input", ()=>{
-      const [seite, k] = inp.dataset.vr.split(":");
-      const n = Math.max(0, +inp.value || 0);
-      if (n) vorrat[seite][k] = n; else delete vorrat[seite][k];
-      sichern();
-      const ziel = document.getElementById("btl-erg");
-      if (ziel) ziel.innerHTML = auswertung();
-    });
-  });
-  document.querySelectorAll("#dlg [data-art]").forEach(b => b.addEventListener("click", ()=>{
-    setBattle(i, {art: b.dataset.art, wir: vorrat.wir, sie: vorrat.sie});
-    battleDialog(i);
-  }));
-}
 /* ---- the text recogniser ---------------------------------------------
    Tesseract expects dark letters on a light ground and about 30 px of line
    height. A game screenshot is the exact opposite: small light letters on a
@@ -23873,7 +23727,7 @@ const MENUES = [
      steckt, meldet man oder sieht man nach: Gegner, Schlacht, Brett. */
   /* The board stays in the top bar itself - its "new" badge must be seen
      without opening a menu first. */
-  {id:"lage",  titel:"Reports",  knoepfe:["b-intel","b-battle","b-front"]},
+  {id:"lage",  titel:"Reports",  knoepfe:["b-intel","b-front"]},
   /* "War": the war's own settings and the reset. The reset button is shown
      to those who may press it today (the admin); whether a clan leader
      should have it instead is a rights question and stays open. */
@@ -28955,7 +28809,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 31f689438b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build ddd9799461</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -29097,7 +28951,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "31f689438b";
+const BAU = "ddd9799461";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
