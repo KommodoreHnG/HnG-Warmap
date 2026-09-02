@@ -11407,6 +11407,50 @@ function kbKlack(){
     o.connect(og); og.connect(kbKlang.destination); o.start(t); o.stop(t + 0.1);
   } catch(e){}
 }
+/* THE SHUTTER OF A PLATE CAMERA: the picture is in the box, click on.
+   It fires when the head box has been SET ASIDE, not when its text has been
+   read - that is the whole point of the queue, and it is the moment the
+   next unit may be clicked.
+   It must not be a second clack. The finder frame already clacks when it
+   steps to another card, and the Morse key runs while a line is being
+   written; a third noise of the same kind would not be told apart. So the
+   shutter sits higher and is shorter: a snap through a high pass, and the
+   spring behind it as a bright tone, fifty thousandths together. Quiet,
+   because at twenty-eight units it is heard twenty-eight times.
+   AND A SECOND WORD, free of charge: when the queue grows long because the
+   clicking outruns the reading, a low tone hangs on behind. It does not say
+   "stop", it says "I am behind". From eight waiting pictures on. */
+function kbVerschluss(warten){
+  if (!kbTon || !kbKlangAuf()) return;
+  try {
+    const t = kbKlang.currentTime + 0.004, sr = kbKlang.sampleRate;
+    /* the snap: a very short burst, high passed */
+    const n = Math.round(sr*0.022), buf = kbKlang.createBuffer(1, n, sr), ch = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) ch[i] = (Math.random()*2 - 1) * Math.pow(1 - i/n, 9);
+    const src = kbKlang.createBufferSource(); src.buffer = buf;
+    const hp = kbKlang.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1800; hp.Q.value = 0.8;
+    const g = kbKlang.createGain(); g.gain.value = 0.10;
+    src.connect(hp); hp.connect(g); g.connect(kbKlang.destination); src.start(t);
+    /* the spring: a short bright tone falling back */
+    const o = kbKlang.createOscillator(), og = kbKlang.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(2050, t + 0.012);
+    o.frequency.exponentialRampToValueAtTime(1500, t + 0.052);
+    og.gain.setValueAtTime(0.0001, t + 0.012);
+    og.gain.exponentialRampToValueAtTime(0.055, t + 0.020);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.056);
+    o.connect(og); og.connect(kbKlang.destination); o.start(t + 0.012); o.stop(t + 0.06);
+    /* the reader is falling behind */
+    if (warten >= 8){
+      const l = kbKlang.createOscillator(), lg = kbKlang.createGain();
+      l.type = "sine"; l.frequency.setValueAtTime(320, t + 0.07);
+      lg.gain.setValueAtTime(0.0001, t + 0.07);
+      lg.gain.exponentialRampToValueAtTime(0.05, t + 0.085);
+      lg.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      l.connect(lg); lg.connect(kbKlang.destination); l.start(t + 0.07); l.stop(t + 0.19);
+    }
+  } catch(e){}
+}
 /* Two tones, the way a station calls before an announcement. */
 function kbGong(){
   if (!kbTon || !kbKlangAuf()) return;
@@ -12156,6 +12200,9 @@ async function kbEinreihen(F, G){
   try { bmp = await createImageBitmap(F.c, sx, sy, sw, sh); } catch(e){ return false; }
   if (!KB){ if (bmp.close) bmp.close(); return false; }
   KB.warte.push({bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel});
+  /* THE PICTURE IS IN. This is the moment the next unit may be clicked, and
+     the only moment worth a sound of its own. */
+  kbVerschluss(KB.warte.length);
   if (ziel !== null && KB.zeilen[ziel] && KB.zeilen[ziel].status === "vermutet")
     KB.zeilen[ziel].status = "wartet";
   kbZeichnen();
@@ -30914,7 +30961,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build bbfb0b9034</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 97151719fd</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -31056,7 +31103,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "bbfb0b9034";
+const BAU = "97151719fd";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
