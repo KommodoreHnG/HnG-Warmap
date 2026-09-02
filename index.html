@@ -10801,7 +10801,12 @@ async function unitsStaerke(c, d, oben, melde){
 
 /* One picture -> what the bar says. Every field that could not be read is
    null, never guessed. */
-async function unitsLesen(quelle, melde){
+/* Reading the town costs one to two passes of the text recogniser, and it
+   is the same town for as long as the card row stands still. The caller
+   hands in the fingerprint of the row it last read a town for; if the row
+   is unchanged, the pass is skipped. Scrolling or a different town changes
+   the row, and then the name is read again. */
+async function unitsLesen(quelle, melde, letzteReihe){
   const sag = melde || (()=>{});
   const {c, d, quer, gross, hell, gain} = await unitsRahmen(quelle);
   const R = {gross, quer, hell, gain, karten: [], stadt: null, seite: null, roll: null, form: null, einheit: null};
@@ -10869,6 +10874,14 @@ async function unitsLesen(quelle, melde){
          not found, and the field must not swallow the pale cards */
       const rechts = (R.roll && R.roll.bahnLinks) ? R.roll.bahnLinks - 8
                    : (R.karten.length ? Math.min(R.karten[0].x0 - 20, 1700) : 1700);
+      /* the fingerprint of the card row: where the cards stand, and how
+         far the bar is rolled */
+      R.reiheKennung = R.karten.map(k => Math.round(k.x0/4)).join(",")
+        + "|" + (R.roll ? Math.round(R.roll.x0/4) + ":" + Math.round(R.roll.breite/4) : "-");
+      if (letzteReihe && letzteReihe === R.reiheKennung){
+        R.ortGespart = true;
+        R.stadt = null; R.linie = null;
+      } else {
       sag("Reading the town name …");
       /* Both preparations. The plain threshold reads the PNGs best, but the
          bar is translucent: zoomed far out, a dense net of lines and dots
@@ -10889,6 +10902,7 @@ async function unitsLesen(quelle, melde){
          from that line. Kept, because it says where they are. */
       const lm = /[-–]\s*([A-E])\s*$/.exec(ort.text.trim());
       R.linie = lm ? lm[1] : null;
+      }
     }
   }
   const kasten = unitsForm(d);
@@ -10899,8 +10913,13 @@ async function unitsLesen(quelle, melde){
     /* both preparations, the more confident one counts: the tool's
        local-contrast path reads the PNGs well, the plain threshold held up
        better on a dark, blurred capture */
+    /* NOT ALWAYS BOTH. A reading of eighty out of a hundred is not going to
+       be beaten by the other path - on the sample pictures the owner line
+       came out right 85 times in 90 that way. The second pass now only runs
+       when the first leaves a doubt, and that is half of what a unit costs. */
     const besser = async (x, y, w, hh) => {
       const a = await unitsText(c, x, y, w, hh);
+      if (a.zuv >= 80) return unitsTextSchriften(c, x, y, w, hh, a, sag);
       const b = await unitsText(c, x, y, w, hh, null, "schlicht");
       return unitsTextSchriften(c, x, y, w, hh, b.zuv > a.zuv + 5 ? b : a, sag);
     };
@@ -11070,7 +11089,7 @@ function kbOrtSetzen(i, linie){
     const offen = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen && !z.gespeichert).length;
     if (offen) kbBehalten();
     const live = KB.live, ton = kbTon;
-    KB.zeilen = []; KB.N = 0; KB.erste = 0; KB.sichtbar = 0; KB.karten = [];
+    KB.zeilen = []; KB.N = 0; KB.erste = 0; KB.sichtbar = 0; KB.karten = []; KB.reiheKennung = null;
     KB.auswahl = null; KB.wandel = null; KB.hatteBahn = false;
     KB.letzte = null; KB.vorige = null; KB.schreibt = null;
     if (offen) toast(`${offen} unit${offen === 1 ? "" : "s"} kept — new sheet for ${MAP.n[i][0]}`);
@@ -11134,7 +11153,7 @@ function kbNeu(){
   return {live: null, laeuft: false, letzte: null, vorige: null, hatteBahn: false,
           ort: null, linie: null, ziel: null, halter: null, merk: null,
           N: 0, erste: 0, sichtbar: 0, karten: [], zeilen: [],
-          auswahl: null, wandel: null, gemeldet: null, scan: false,
+          auswahl: null, wandel: null, gemeldet: null, scan: false, reiheKennung: null,
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null};
 }
 /* Which card is picked. Until the measurement gives a rule for a single
@@ -11495,9 +11514,10 @@ async function kbTick(){
     if (kn !== KB.letzte && (kn === KB.vorige || KB.letzte === null)){
       KB.letzte = kn;
       KB.scan = true; kbZeichnen();
-      const R = await unitsLesen(c, t => { if (KB) KB.status = t; });
+      const R = await unitsLesen(c, t => { if (KB) KB.status = t; }, KB.reiheKennung);
       if (!KB) return;
       KB.scan = false;
+      if (R.reiheKennung) KB.reiheKennung = R.reiheKennung;
       kbVerarbeiten(R);
     } else if (kn !== KB.vorige){ kbZeichnen(); }
     KB.vorige = kn;
@@ -11523,7 +11543,7 @@ function kbLiveStop(){
   kbRauschenAus(); kbZeichnen();
 }
 /* one picture, for checks without the game */
-async function kbBild(datei){ if (!KB) return; const R = await unitsLesen(datei, t => { if (KB) KB.status = t; }); if (KB) kbVerarbeiten(R); return R; }
+async function kbBild(datei){ if (!KB) return; const R = await unitsLesen(datei, t => { if (KB) KB.status = t; }, KB.reiheKennung); if (KB && R.reiheKennung) KB.reiheKennung = R.reiheKennung; if (KB) kbVerarbeiten(R); return R; }
 
 /* ---- keeping: into the clan's records ----------------------------------
    The same three pots the battle-screen reader and the sighting tool
@@ -29667,7 +29687,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 6928762d27</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 49b010ccca</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -29809,7 +29829,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "6928762d27";
+const BAU = "49b010ccca";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
