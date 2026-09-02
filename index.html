@@ -680,6 +680,34 @@ body.meld-modus{cursor:help}
 /* ---- The signals cabin: same grid as the radar, its own screen. The room is
    dark metal like the radar; the sheet in the middle is paper, because that
    is what a signals clerk writes on. */
+#spieler{position:fixed;inset:0;z-index:120;display:none;background:#0b0c10;
+  grid-template-columns:260px 1fr 300px;grid-template-rows:auto 1fr;
+  grid-template-areas:"kopf kopf kopf" "links schirm pult";color:#cfd6dd}
+#spieler.an{display:grid}
+#spieler .rd-kopf{grid-area:kopf;background:#101216;border-bottom-color:#22252c}
+#spieler .rd-pult{grid-area:pult}
+#spieler .kb-links{grid-area:links}
+#spieler .kb-schirm{grid-area:schirm}
+#spieler .rd-pult .kb-abstand{height:14px}
+/* the player sheet: two or three columns of names side by side */
+.sp-listen{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+/* on a narrow screen the lists stack instead of squeezing to nothing */
+.sp-liste{flex:1 1 200px;min-width:170px}
+.sp-liste h4{margin:0 0 6px;font-family:var(--schmal);font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:#7a6a48;display:flex;align-items:center;gap:6px}
+.sp-liste h4 b{color:#2b2416;font-size:13px;letter-spacing:0}
+.sp-n{margin-left:auto;font-size:11px;color:#8a7a52}
+.sp-z{display:grid;grid-template-columns:26px 1fr 20px;gap:6px;align-items:center;
+  border-top:1px solid rgba(122,106,72,.28);padding:3px 0;font-size:13px;min-height:24px}
+.sp-z.leer{color:#a2937012}
+.sp-z .nr{font-size:10px;color:#8a7a52;text-align:right}
+.sp-z .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text}
+.sp-z .nm:hover{background:rgba(255,255,255,.35)}
+.sp-z .nm.unsicher{color:#9b3b2e}
+.sp-z .nm input{width:100%;font:inherit;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 4px}
+.sp-z.wartet .nm{color:#9a8a63;font-style:italic}
+.sp-z .ok{color:#4f7a3a;font-size:12px}
+.sp-fahne{width:16px;height:11px;border:1px solid rgba(0,0,0,.35);flex:none}
 #kabine{position:fixed;inset:0;z-index:120;display:none;background:#0b0c10;
   grid-template-columns:auto 1fr auto;grid-template-rows:auto 1fr;
   grid-template-areas:"kopf kopf kopf" "links schirm pult";
@@ -1390,6 +1418,16 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
             <path d="M3 22 C5.2 19.8 8 18.9 9.8 18.7 M21 22 C18.8 19.8 16 18.9 14.2 18.7"/>
           </svg><span class="txt">Units</span>
         </button>
+        <button class="btn" id="b-spieler" title="Read the players of a battle from the war map">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+            <!-- a soldier in profile: helmet, tilted brim, face, shoulders -->
+            <path d="M5.2 11.6 C5.2 6.4 8.6 3.4 12.4 3.4 C16.2 3.4 19.0 6.2 19.2 10.4"/>
+            <path d="M3.6 12.6 C3.2 11.2 4.4 10.5 5.8 10.4 L19.2 9.4 C20.7 9.3 21.1 10.7 20.0 11.5 L6.4 13.5 C5.0 13.7 4.0 13.4 3.6 12.6 Z"/>
+            <path d="M18.8 11.6 C19.2 13.0 18.8 13.6 18.3 14.0 L19.6 15.2 L17.8 15.7 C18.0 17.2 16.8 18.4 14.8 18.6 L14.9 20.4"/>
+            <path d="M9.0 13.8 C8.8 16.6 10.4 18.2 12.4 18.6 L12.3 20.4"/>
+            <path d="M3.8 22.8 C5.4 21.0 8.4 20.4 12.3 20.4 M20.6 22.8 C19.4 21.2 17.2 20.6 14.9 20.4"/>
+          </svg><span class="txt">Players</span>
+        </button>
         <button class="btn" id="b-board" title="Clan board — notes, requests, sightings">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
             <!-- pin board with two notes -->
@@ -1585,6 +1623,15 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   </div>
   <aside class="rd-pult" id="kb-pult"></aside>
   <button class="rd-zu" id="kb-zu" title="Close">&times;</button>
+</div>
+<div id="spieler" data-fest>
+  <div class="rd-kopf" id="sp-kopf"></div>
+  <aside class="rd-links kb-links" id="sp-links"></aside>
+  <div class="kb-schirm" id="sp-schirm">
+    <div class="kb-blatt" id="sp-blatt"></div>
+  </div>
+  <aside class="rd-pult" id="sp-pult"></aside>
+  <button class="rd-zu" id="sp-zu" title="Close">&times;</button>
 </div>
 <div id="txt-bar" data-fest><span>Editing labels — click any wording to change it.</span>
   <button class="btn primary" id="txt-fertig">Done</button></div>
@@ -11598,6 +11645,432 @@ function kbBehalten(){
 
 /* ---- open and close ---------------------------------------------------------- */
 let kbOffen = false;
+/* ================= THE WAR MAP'S BATTLE VIEW =========================
+   Every number below was measured on thirteen screenshots at 3840x2160
+   and checked by three readers afterwards, who corrected the cap height
+   and the antialiasing of the track; the load-bearing parts held to the
+   pixel.
+
+     frame        white line, core one pixel: x 31 and 2620, y 271 and 1828
+     counter row  two sides y 965-1048, three sides y 1052-1136; three
+                  places on a 510 grid, emblem centres 107,5 / 617,5 / 1127,5
+     lists        top edge y 1155 - fixed, it does NOT move with the table -
+                  height 501, column anchors x 60 / 570 / 1080, row pitch 42
+     track        x 1087-1108, y 1156-1648; thumb white x 1093-1102;
+                  N = 5880 / (thumb height + 12), proved on seven pictures;
+                  both columns scroll together
+
+   There is no drawn box around the lists: the names stand bare on the
+   dialog's ground. The "box" is arithmetic, which is why the numbers above
+   have to be right. */
+const GF_RAHMEN = {x1: 31, x2: 2620};
+const GF_SPALTE = [60, 570, 1080], GF_BREIT = 500;
+const GF_FENSTER = {y: 1155, h: 501};
+const GF_ZEILE = 42;
+const GF_BAHN = {y0: 1156, y1: 1648, mitte: 1097, links: 1085};
+const GF_ZBAND = [{y0: 965, y1: 1048}, {y0: 1052, y1: 1136}];
+const GF_MITTE = [107.5, 617.5, 1127.5];
+
+const gfHell = (d, x, y) => { const p = ((y|0)*UNITS_W + (x|0))*4; return (d[p] + d[p+1] + d[p+2])/3; };
+const gfBreit = (d, x, y) => Math.max(gfHell(d, x-1, y), gfHell(d, x, y), gfHell(d, x+1, y));
+
+/* Is the battle window open? The two upright white lines carry it - a
+   capture scaled from another resolution blurs them, so three columns are
+   sampled and a generous threshold used. */
+function gfRahmenDa(d){
+  let n = 0, m = 0;
+  for (let y = 420; y <= 1680; y += 20){
+    m++;
+    if (gfBreit(d, GF_RAHMEN.x1, y) > 140 && gfBreit(d, GF_RAHMEN.x2, y) > 140) n++;
+  }
+  return m > 0 && n >= m*0.7;
+}
+/* How much ink stands in the digit box beside the emblem at this place.
+   The player count is one or two figures and covers a few hundred points;
+   a place that is not taking part has none at all. */
+function gfZifferTinte(d, platz, y0){
+  const ax = GF_SPALTE[platz];
+  let n = 0;
+  for (let y = y0 + 21; y <= y0 + 58; y++)
+    for (let x = ax + 110; x <= ax + 230; x++) if (gfHell(d, x, y) > 150) n++;
+  return n;
+}
+const gfZifferDa = n => n >= 120 && n <= 900;
+/* Two sides or three? The counter row sits lower when three factions have a
+   place in the table. Counting ink over the whole band picked the wrong one:
+   with three factions the strength table reaches down to y 1000 and is
+   denser than the counter row below it (measured 4212 against 1212). The
+   digits decide instead - the band in which more of the three digit boxes
+   hold a plausible number is the counter row. */
+function gfZaehlerBand(d){
+  let best = null;
+  for (const b of GF_ZBAND){
+    let n = 0;
+    for (let p = 0; p < 3; p++) if (gfZifferDa(gfZifferTinte(d, p, b.y0))) n++;
+    if (!best || n > best.n) best = {n, y0: b.y0, y1: b.y1};
+  }
+  return best;
+}
+/* Which side stands at this place - by the colour of its emblem: the red
+   star, the gold ring, the white cross. Counted, not averaged: the red star
+   averages out to (145,106,90) and looked gold that way, while counting
+   gives 2260 red points against 170 gold. Whether the place takes part at
+   all is decided by its digit, not by the emblem - the greyed-out US ring
+   still counts 2416 gold points. */
+function gfSeiteVon(d, mx, band, platz){
+  if (!gfZifferDa(gfZifferTinte(d, platz, band.y0))) return null;
+  const cy = (band.y0 + band.y1)/2;
+  let rot = 0, gold = 0, weiss = 0;
+  for (let y = -42; y <= 42; y++) for (let x = -46; x <= 46; x++){
+    const p = (((cy + y)|0)*UNITS_W + ((mx + x)|0))*4;
+    const r = d[p], g = d[p+1], b = d[p+2];
+    if ((r + g + b)/3 < 40) continue;
+    if (r > 90 && r > g*1.8 && r > b*1.8) rot++;
+    else if (r > 100 && g > 70 && b < g*0.62) gold++;
+    else if (Math.min(r,g,b) > 100 && Math.max(r,g,b) - Math.min(r,g,b) < 45) weiss++;
+  }
+  const m = Math.max(rot, gold, weiss);
+  if (m < 200) return null;
+  return m === rot ? 2 : m === gold ? 0 : 1;
+}
+/* The track tells how long the list is and how far it has been rolled.
+   N = 5880 / (thumb + 12) held on all seven pictures that have a track;
+   the travel of the thumb maps linearly onto N*42 - 501 pixels of list. */
+function gfBahnLesen(d){
+  let y0 = null, y1 = null;
+  for (let y = GF_BAHN.y0 - 3; y <= GF_BAHN.y1 + 3; y++){
+    if (gfHell(d, GF_BAHN.mitte, y) > 185){ if (y0 === null) y0 = y; y1 = y; }
+  }
+  if (y0 === null || (y1 - y0) < 10) return null;
+  const kern = y1 - y0 + 1;
+  const N = Math.round(5880 / (kern + 12));
+  if (!(N >= 2 && N <= 60)) return null;
+  const spur = (GF_BAHN.y1 - GF_BAHN.y0 + 1) - 12 - kern;
+  const oben = Math.max(0, y0 - (GF_BAHN.y0 + 6));
+  const weg = Math.max(0, N*GF_ZEILE - GF_FENSTER.h);
+  const versatz = spur > 0 ? Math.round(Math.min(1, oben/spur) * weg) : 0;
+  return {N, versatz, erste: Math.floor(versatz/GF_ZEILE),
+          anker: GF_FENSTER.y - (versatz % GF_ZEILE)};
+}
+/* A cheap fingerprint of the window - enough to notice that something
+   moved, without reading anything. */
+function gfKennung(d){
+  let h = 0;
+  for (let y = 300; y <= 1660; y += 17)
+    for (let x = 62; x <= 1780; x += 23) h = (h*31 + (gfHell(d, x, y) > 110 ? 1 : 0)) >>> 0;
+  return h;
+}
+/* One look at the picture: geometry only, no text. Reading the names costs
+   a second each and happens one row at a time, in the room's own beat. */
+async function gfLesen(quelle){
+  const {c, d, gross, hell, gain} = await unitsRahmen(quelle);
+  const R = {c, d, gross, hell, gain, da: false, seiten: [], N: 0, erste: 0,
+             anker: GF_FENSTER.y, sichtbar: 0, kennung: 0};
+  if (!gfRahmenDa(d)) return R;
+  R.da = true;
+  R.kennung = gfKennung(d);
+  const band = gfZaehlerBand(d);
+  R.band = band;
+  for (let p = 0; p < 3; p++){
+    const f = gfSeiteVon(d, GF_MITTE[p], band, p);
+    if (f !== null) R.seiten.push({platz: p, f, spalte: GF_SPALTE[p]});
+  }
+  const roll = gfBahnLesen(d);
+  if (roll){ R.N = roll.N; R.erste = roll.erste; R.anker = roll.anker; R.roll = true; }
+  R.sichtbar = Math.floor((GF_FENSTER.y + GF_FENSTER.h - R.anker) / GF_ZEILE);
+  return R;
+}
+/* Is there a name on this line at all? Measured on 1.png, left column: the
+   nine taken lines carry between 997 and 2740 bright points, the empty ones
+   exactly none. Two hundred is a wide berth on both sides.
+   This takes the place of reading the player count beside the emblem: a
+   single figure in a large box is beyond the text reader - three attempts,
+   two boxes, both preparations, all of them "" or "oo" at zero confidence -
+   and counting the taken lines says the same thing more surely. */
+const GF_TINTE_MIN = 200;
+function gfZeileTinte(d, spalte, ay){
+  const y0 = Math.max(GF_FENSTER.y, ay), y1 = Math.min(GF_FENSTER.y + GF_FENSTER.h, ay + 32);
+  const bis = spalte === GF_SPALTE[2] ? GF_BAHN.links : spalte + GF_BREIT;
+  let n = 0;
+  for (let y = y0; y <= y1; y++)
+    for (let x = spalte; x <= bis; x++) if (gfHell(d, x, y) > 120) n++;
+  return n;
+}
+/* The town of the battle, from the head band over the table. */
+async function gfStadt(c){
+  const t = await unitsText(c, 60, 330, 1340, 126, null, "schlicht");
+  return unitsStadt(t.text || "");
+}
+/* One name. The safe frame around a row is anchor-4 to anchor+34; at the
+   bottom stop the first row is clipped, so the frame is held inside the
+   window. The third column ends where the track begins. */
+async function gfName(c, spalte, ay){
+  const y0 = Math.max(GF_FENSTER.y, ay - 4);
+  const y1 = Math.min(GF_FENSTER.y + GF_FENSTER.h, ay + 34);
+  if (y1 - y0 < 16) return null;
+  const breit = spalte === GF_SPALTE[2] ? GF_BAHN.links - spalte : GF_BREIT;
+  const t = await unitsText(c, spalte, y0, breit, y1 - y0, null);
+  let name = (t.text || "").trim().replace(/\s+/g, " ");
+  /* the reader sometimes hangs a stray mark on a short name */
+  name = name.replace(/^[^\w\[]+|[^\w\]]+$/g, "");
+  /* and it likes to open a gap at an underscore: "Filthy_French" came back
+     as "Filthy _French" */
+  name = name.replace(/\s*_\s*/g, "_");
+  return name.length >= 2 ? {name, zuv: t.zuv} : null;
+}
+
+/* ================= THE PLAYERS' ROOM ================================ */
+let PG = null, pgOffen = false;
+function pgNeu(){
+  return {live: null, laeuft: false, letzte: null, vorige: null,
+          stadt: null, seiten: [], ende: {}, N: 0, erste: 0, anker: GF_FENSTER.y,
+          sichtbar: 0, namen: new Map(), leer: new Set(), liest: null,
+          frame: null, hell: null, gain: 1, status: "Waiting for the game window …"};
+}
+const pgKey = (p, i) => p + ":" + i;
+function pgVerarbeiten(R){
+  PG.frame = R.gross; PG.hell = R.hell; PG.gain = R.gain;
+  if (!R.da){ PG.status = "No battle window in the picture — open a battle on the war map."; return; }
+  PG.seiten = R.seiten; PG.band = R.band;
+  PG.erste = R.erste; PG.anker = R.anker; PG.sichtbar = R.sichtbar;
+  if (R.N) PG.N = Math.max(PG.N, R.N);
+  /* Where a side's list ends: the first empty line after the taken ones.
+     With a track the total comes from there; without one the lists fit on
+     the screen and the ink alone says everything. */
+  for (const s of R.seiten){
+    for (let k = 0; k < R.sichtbar; k++){
+      const i = R.erste + k, key = pgKey(s.platz, i);
+      if (gfZeileTinte(R.d, s.spalte, R.anker + k*GF_ZEILE) >= GF_TINTE_MIN){
+        PG.ende[s.platz] = Math.max(PG.ende[s.platz] || 0, i + 1);
+        PG.leer.delete(key);
+      } else { PG.leer.add(key); break; }
+    }
+  }
+  PG.N = Math.max(PG.N, ...Object.values(PG.ende).map(v => v || 0));
+}
+/* One beat: look, and read at most one line - so the sheet fills up before
+   your eyes and the room stays answerable. */
+async function pgTick(){
+  if (!PG || !PG.live || PG.laeuft) return;
+  PG.laeuft = true;
+  try {
+    const f = await bildAufnehmen();
+    if (!PG || !PG.live) return;
+    const R = await gfLesen(f);
+    if (!PG || !PG.live) return;
+    pgVerarbeiten(R);
+    if (!R.da){ pgZeichnen(); return; }
+    /* the town, once per battle */
+    if (R.kennung !== PG.letzte && R.kennung === PG.vorige){
+      PG.letzte = R.kennung;
+      if (PG.stadt === null){
+        const st = await gfStadt(R.c);
+        if (!PG) return;
+        if (st) PG.stadt = st.i;
+      }
+    }
+    PG.vorige = R.kennung;
+    /* one unread visible line that actually carries a name */
+    let ziel = null;
+    for (const s of R.seiten){
+      for (let k = 0; k < R.sichtbar; k++){
+        const i = R.erste + k, key = pgKey(s.platz, i);
+        if (PG.namen.has(key) || PG.leer.has(key)) continue;
+        if (gfZeileTinte(R.d, s.spalte, R.anker + k*GF_ZEILE) < GF_TINTE_MIN){ PG.leer.add(key); continue; }
+        ziel = {s, i, k}; break;
+      }
+      if (ziel) break;
+    }
+    if (ziel){
+      const ay = R.anker + ziel.k*GF_ZEILE;
+      PG.liest = pgKey(ziel.s.platz, ziel.i);
+      PG.status = `Reading line ${ziel.i + 1} …`;
+      pgZeichnen();
+      const g = await gfName(R.c, ziel.s.spalte, ay);
+      if (!PG) return;
+      PG.liest = null;
+      if (g) PG.namen.set(pgKey(ziel.s.platz, ziel.i), {name: g.name, zuv: g.zuv, f: ziel.s.f});
+      PG.status = g ? `${g.name} written down.` : "That line could not be read — scroll a little.";
+    } else {
+      PG.status = PG.N && PG.namen.size >= PG.N
+        ? "Every name on the sheet — keep it, or scroll for more."
+        : "Scroll the list in the game; the rest is picked up as it comes into view.";
+    }
+  } catch(e){
+    if (!PG) return;
+    PG.status = /denied|Permission/i.test(String(e.message || e))
+      ? "Screen sharing was declined." : "Capture: " + (e.message || e);
+    pgLiveStop();
+  } finally { if (PG) PG.laeuft = false; }
+  pgZeichnen();
+}
+function pgLiveStart(){
+  if (!PG || PG.live) return;
+  PG.live = setInterval(pgTick, 250);
+  PG.status = "Live — open a battle on the war map and scroll its player lists.";
+  kbRauschenAn(); pgZeichnen(); pgTick();
+}
+function pgLiveStop(){
+  if (!PG || !PG.live) return;
+  clearInterval(PG.live); PG.live = null;
+  kbRauschenAus(); pgZeichnen();
+}
+async function pgBild(datei){
+  if (!PG) return;
+  const R = await gfLesen(datei);
+  if (!PG) return;
+  pgVerarbeiten(R);
+  if (R.da){
+    if (PG.stadt === null){ const st = await gfStadt(R.c); if (st) PG.stadt = st.i; }
+    for (const s of R.seiten){
+      for (let k = 0; k < R.sichtbar; k++){
+        const i = R.erste + k, key = pgKey(s.platz, i);
+        if (PG.namen.has(key) || PG.leer.has(key)) continue;
+        if (gfZeileTinte(R.d, s.spalte, R.anker + k*GF_ZEILE) < GF_TINTE_MIN){ PG.leer.add(key); break; }
+        const g = await gfName(R.c, s.spalte, R.anker + k*GF_ZEILE);
+        if (!PG) return;
+        if (g) PG.namen.set(key, {name: g.name, zuv: g.zuv, f: s.f});
+        pgZeichnen();
+      }
+    }
+    PG.status = `${PG.namen.size} name${PG.namen.size === 1 ? "" : "s"} read.`;
+  }
+  pgZeichnen();
+  return R;
+}
+/* Into the register. A name goes in with the side it fought on - that is
+   the whole point of reading them here. */
+function pgBehalten(){
+  if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return; }
+  let n = 0, schon = 0;
+  for (const [k, v] of PG.namen){
+    if (v.gespeichert){ schon++; continue; }
+    if (merkeSpieler(v.name, v.f)){ v.gespeichert = true; n++; }
+  }
+  if (PG.stadt !== null && n) boardZahl();
+  toast(n ? `${n} player${n === 1 ? "" : "s"} on record${schon ? `, ${schon} were already` : ""}`
+          : schon ? "All of them are already on record" : "Nothing to keep yet");
+  pgZeichnen();
+}
+function pgZeichnen(){
+  if (!PG) return;
+  const kopf = document.getElementById("sp-kopf"), links = document.getElementById("sp-links"),
+        blatt = document.getElementById("sp-blatt");
+  const ortName = PG.stadt !== null && PG.stadt !== undefined ? MAP.n[PG.stadt][0] : null;
+  const gelesen = PG.namen.size;
+  const soll = Object.values(PG.ende).reduce((a, b) => a + (b || 0), 0);
+  kopf.innerHTML = `
+    <div class="rd-kf weit ${ortName ? "ort" : ""}"><div class="t">Battle at</div>
+      <div class="v">${ortName ? `<b class="kb-ortname">${kbEsc(ortName)}</b>`
+        : "<small>not read yet</small>"}</div></div>
+    ${PG.seiten.map(s => `<div class="rd-kf"><div class="t">${kbEsc(kbSeiteName(s.f))}</div>
+      <div class="v">${PG.ende[s.platz] || "—"}<small> players</small></div></div>`).join("")}
+    <div class="rd-kf ${soll && gelesen >= soll ? "gut" : ""}"><div class="t">Names read</div>
+      <div class="v">${gelesen}<small> of ${soll || "?"}</small></div>
+      <div class="bar"><i style="width:${soll ? Math.round(100*Math.min(1, gelesen/soll)) : 0}%"></i></div></div>
+    <div class="rd-kf"><div class="t">Capture</div>
+      <div class="v"><small>${PG.frame ? `${PG.frame.w}×${PG.frame.h}, brightness ${PG.hell}${
+        PG.gain > 1 ? `, ×${PG.gain.toFixed(1)}` : ""}` : "—"}</small></div></div>`;
+  links.innerHTML = `
+    <h3>Now</h3>
+    <div class="kb-jetzt">${kbEsc(PG.status)}</div>
+    <h3>Set</h3>
+    <div class="kb-geraet">${kbFunkgeraetSVG()}</div>
+    <h3 style="margin-top:14px">How it works</h3>
+    Open a battle on the war map — the window with both player lists. The room reads one
+    name per beat. Roll the list down in the game and the rest follows; a name already on
+    the sheet is not read twice. <b>Keep the sheet</b> writes every name into the register
+    with the side it fought on.`;
+  blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Battle"} · ${
+    new Date().toLocaleDateString()}</div>
+    ${PG.seiten.length ? `<div class="sp-listen">${PG.seiten.map(s => {
+      const n = Math.max(PG.ende[s.platz] || 0, PG.N || 0);
+      const zeilen = [];
+      for (let i = 0; i < n; i++){
+        const k = pgKey(s.platz, i), v = PG.namen.get(k);
+        const imFenster = i >= PG.erste && i < PG.erste + PG.sichtbar;
+        zeilen.push(`<div class="sp-z ${v ? "" : imFenster ? "wartet" : "leer"} ${
+          PG.liest === k ? "schreibt" : ""}" data-k="${k}">
+          <div class="nr">${i + 1}</div>
+          <div class="nm ${v && v.zuv < 60 ? "unsicher" : ""}" data-k="${k}"
+            title="${v && v.zuv < 60 ? "read with only " + v.zuv + " of 100 — click to correct" : "click to correct"}">${
+            v ? kbEsc(v.name) : PG.leer.has(k) ? "" : imFenster ? "reading …" : "—"}</div>
+          <div class="ok">${v && v.gespeichert ? "✓" : ""}</div></div>`);
+      }
+      return `<div class="sp-liste"><h4>${kbEsc(kbSeiteName(s.f))}
+        <span class="sp-n">${[...PG.namen.values()].filter(v => v.f === s.f).length} of ${n || "?"}</span></h4>
+        ${zeilen.join("")}</div>`;
+    }).join("")}</div>` : `<div class="kb-hinweis">No battle window seen yet.</div>`}`;
+  pgPult();
+}
+function pgPult(){
+  const pult = document.getElementById("sp-pult");
+  const live = !!PG.live;
+  pult.innerHTML = `
+    <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="sp-kraft">${ICO_CAPTURE}${
+      live ? "Capture running" : "Capture the game"}</button>
+    <div class="kb-abstand"></div>
+    <button class="rd-schalter ${kbTon ? "an" : ""}" id="sp-ton">${kbTon ? "Sound on" : "Sound off"}</button>
+    <div class="kb-abstand"></div>
+    <button class="rd-schalter" id="sp-keep" ${[...PG.namen.values()].some(v => !v.gespeichert) ? "" : "disabled"}>Keep the sheet</button>
+    <div class="kb-abstand"></div>
+    <button class="rd-schalter" id="sp-leer">New sheet</button>
+    <div class="kb-abstand"></div>
+    <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run
+      borderless or windowed. Names go into the register with their side; nothing else is kept.</div>`;
+  document.getElementById("sp-kraft").addEventListener("click", () => { PG.live ? pgLiveStop() : pgLiveStart(); });
+  document.getElementById("sp-ton").addEventListener("click", () => {
+    kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); pgPult(); });
+  document.getElementById("sp-keep").addEventListener("click", pgBehalten);
+  document.getElementById("sp-leer").addEventListener("click", () => {
+    const live = PG.live; pgLiveStop(); PG = pgNeu(); if (live) pgLiveStart(); pgZeichnen(); });
+}
+/* Correcting a name by hand - the reader is good, not infallible. */
+function pgBearbeiten(ev){
+  const feld = ev.target.closest(".nm[data-k]");
+  if (!feld || feld.querySelector("input")) return;
+  const k = feld.dataset.k, v = PG.namen.get(k);
+  const alt = v ? v.name : "";
+  feld.innerHTML = `<input type="text" value="${kbEsc(alt)}" dir="auto" spellcheck="false">`;
+  const el = feld.querySelector("input");
+  el.focus(); el.select();
+  const fertig = () => {
+    const neu = el.value.trim();
+    const s = PG.seiten.find(x => x.platz === +k.split(":")[0]);
+    if (neu.length >= 2) PG.namen.set(k, {name: neu, zuv: 100, f: s ? s.f : null, gespeichert: false});
+    else PG.namen.delete(k);
+    pgZeichnen();
+  };
+  el.addEventListener("blur", fertig);
+  el.addEventListener("keydown", e => {
+    if (e.key === "Enter"){ e.preventDefault(); el.blur(); }
+    if (e.key === "Escape"){ el.removeEventListener("blur", fertig); pgZeichnen(); }
+  });
+}
+async function spielerraumAuf(){
+  if (pgOffen) return;
+  pgOffen = true;
+  PG = pgNeu();
+  document.getElementById("spieler").classList.add("an");
+  pgZeichnen();
+  if (kannTeilen() && darf("aufklaerung")) pgLiveStart();
+  else if (!darf("aufklaerung")) PG.status = rechtSatz("aufklaerung");
+  else PG.status = "This browser cannot share a window here.";
+  pgZeichnen();
+}
+function spielerraumZu(){
+  if (!pgOffen) return;
+  pgOffen = false;
+  pgLiveStop(); kbRauschenAus();
+  document.getElementById("spieler").classList.remove("an");
+  PG = null;
+  unitsFremdSchliessen();
+}
+document.getElementById("b-spieler").addEventListener("click", spielerraumAuf);
+document.getElementById("sp-zu").addEventListener("click", spielerraumZu);
+document.getElementById("sp-blatt").addEventListener("click", ev => { if (PG) pgBearbeiten(ev); });
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && pgOffen) spielerraumZu(); });
+
 async function kabineAuf(){
   if (kbOffen) return;
   kbOffen = true;
@@ -29078,7 +29551,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 362f35d23f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 430f546f57</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -29220,7 +29693,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "362f35d23f";
+const BAU = "430f546f57";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
