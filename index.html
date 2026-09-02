@@ -1441,6 +1441,9 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="tool row" id="b-names" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M4.4 7.6V5.2h15.2v2.4"/><path d="M12 5.2v13.6"/><path d="M8.9 18.8h6.2"/></svg>
         <span class="lbl" data-txt="view.names">Labels</span></button>
+      <button class="tool row" id="b-entwurf" aria-pressed="false" title="New orders stay private until you publish them">
+        <svg viewBox="0 0 24 24"><path d="M4.5 19.5l3.2-.7 10.4-10.4-2.5-2.5L5.2 16.3z"/><path d="M14.2 7.3l2.5 2.5"/></svg>
+        <span class="lbl" data-txt="view.entwurf">Drafts</span></button>
     </nav>
 
     <div id="mapwrap">
@@ -3331,7 +3334,8 @@ const fightAt   = i => !!(imKrieg(S.fight[i]) && imZeit(S.fight[i]) && S.fight[i
 const starAt    = i => !!(imKrieg(S.star[i]) && S.star[i].v);
 const lebt      = (id, e) => imKrieg(e) && e.v && !(S.gone[id] && S.gone[id].t >= (e.t||0));
 const liveArrows= () => S.arrows.filter(a => a && MAP.n[a.from] && MAP.n[a.to]
-  && (a.t||0) >= epoche() && imZeit(a) && !(S.gone[a.id] && S.gone[a.id].t >= (a.t||0)));
+  && (a.t||0) >= epoche() && imZeit(a) && !(S.gone[a.id] && S.gone[a.id].t >= (a.t||0)))
+  .concat(ENTWUERFE.filter(a => a && MAP.n[a.from] && MAP.n[a.to] && imZeit(a)));
 /* WIEVIEL EINE PERSON AUF DER KARTE HABEN DARF.
    Der gemeldete Fall: "Ein User sollte garnicht in der Lage sein, 500 Pfeile zu
    setzen." Das ist KEINE Rechtefrage - auch wer Befehle geben darf, soll
@@ -3349,6 +3353,34 @@ const liveArrows= () => S.arrows.filter(a => a && MAP.n[a.from] && MAP.n[a.to]
    einem Griff zu aendern sind. Langfristig soll sie der Clan-Leader
    setzen, wie die Abkuehlzeiten. */
 const MARKEN_GRENZE = { arrow: 40, line: 15, area: 10 };
+/* Drafts: orders only their author sees. They live in this browser and
+   never reach the server until published - a mere client-side filter would
+   still send them to everyone. */
+const ENTWURF_STORE = "warmap.entwuerfe";
+let ENTWUERFE = [];
+try { ENTWUERFE = JSON.parse(lies(ENTWURF_STORE, "[]") || "[]") || []; } catch (e){ ENTWUERFE = []; }
+if (!Array.isArray(ENTWUERFE)) ENTWUERFE = [];
+const entwuerfeSpeichern = () => schreib(ENTWURF_STORE, JSON.stringify(ENTWUERFE));
+let entwurfModus = false;
+const pfeilId = () => Math.random().toString(36).slice(2,10);
+/* one arrow changed - a draft is kept here, a shared one goes to the sync */
+function pfeilGeaendert(a){
+  if (a.entwurf){ entwuerfeSpeichern(); return; }
+  a.t = jetzt(); dirty.add(`arrow:${a.id}`);
+}
+function pfeilFreigeben(a){
+  const k = ENTWUERFE.indexOf(a);
+  if (k >= 0) ENTWUERFE.splice(k, 1);
+  delete a.entwurf; a.t = jetzt();
+  S.arrows.push(a); dirty.add(`arrow:${a.id}`);
+  entwuerfeSpeichern();
+}
+function pfeilAnlegen(von, bis){
+  const a = {from:von, to:bis, f:faction, label:"", art:artNeu(), t:jetzt(), by:S.me, id:pfeilId()};
+  if (entwurfModus){ a.entwurf = 1; ENTWUERFE.push(a); entwuerfeSpeichern(); save(); return a; }
+  S.arrows.push(a); dirty.add(`arrow:${a.id}`); save();
+  return a;
+}
 /* Staedte in EINEM Para-Zug. Kein Gesamtdeckel: der Block haengt an der
    Stadt, nicht an der Person. */
 const PARA_ZUG_MAX = 40;
@@ -4772,7 +4804,7 @@ function drawArrow(a){
   /* Ein Vorschlag sieht aus wie einer: blass, gestrichelt umrandet. Wer ueber
      die Karte schaut, soll auf einen Blick sehen, was gilt und was jemand
      gern haette. */
-  const vor = !istBefehl(a.id, a);
+  const vor = !istBefehl(a.id, a) || !!a.entwurf;   // a draft looks like a proposal
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 1.5;
   ctx.globalAlpha = vor ? .32 : .9; ctx.fillStyle = f; ctx.fill(pfad);
@@ -4820,6 +4852,19 @@ function drawArrow(a){
     ctx.strokeText(txt, tx0, 0);
     ctx.fillStyle = fb || (light() ? "#1a1409" : "#f4ead9");
     ctx.fillText(txt, tx0, 0);
+    ctx.restore();
+  }
+  /* the number in a chain (or a D for a draft) as a small plate at the start */
+  if (a.folge || a.entwurf){
+    const gr = Math.max(9, Math.min(13, 7*Math.sqrt(view.z)))*uiScale;
+    const hell = light() ? "#ffffff" : "#1a1409", farb = fb || f;
+    ctx.save();
+    ctx.font = `700 ${gr}px ${SCHMAL}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.beginPath(); ctx.arc(x1, y1, gr*0.85, 0, 6.284);
+    ctx.fillStyle = a.entwurf ? hell : farb; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = a.entwurf ? farb : hell; ctx.stroke();
+    ctx.fillStyle = a.entwurf ? farb : hell;
+    ctx.fillText(a.folge ? String(a.folge) : "D", x1, y1 + 0.5);
     ctx.restore();
   }
 }
@@ -5202,7 +5247,11 @@ addEventListener("visibilitychange", ()=>{ if (document.visibilityState === "hid
 addEventListener("pagehide", ()=>{ if (sparOffen) saveSofort(); });
 function setOwner(i, f){ stamp("owner", i, f); save(); }
 function setFight(i, an){ stamp("fight", i, an ? 1 : null); save(); }
-function dropArrow(id){ S.gone[id] = {t:jetzt(), by:S.me}; dirty.add(`gone:${id}`); }
+function dropArrow(id){
+  const k = ENTWUERFE.findIndex(a => a && a.id === id);
+  if (k >= 0){ ENTWUERFE.splice(k, 1); entwuerfeSpeichern(); return; }   // a draft: just forget it
+  S.gone[id] = {t:jetzt(), by:S.me}; dirty.add(`gone:${id}`);
+}
 function setMyUnits(i, list){
   /* Unser eigenes Bild aktuell halten ist auch Arbeit - nur eben ohne
      Risiko. Wird gezaehlt, aber nie mit der Feindaufklaerung verrechnet. */
@@ -5982,11 +6031,8 @@ window.addEventListener("mouseup", e => {
   if (zieh.art === "arrow"){
     const bis = hitTest(x, y);
     if (bis !== null && bis !== zieh.von && darfIchNochMalen("arrow")){
-      const id = Math.random().toString(36).slice(2,10);
-      S.arrows.push({from:zieh.von, to:bis, f:faction, label:"", art:artNeu(),
-                     t:jetzt(), by:S.me, id});
-      dirty.add(`arrow:${id}`); save();
-      toast(`${MAP.n[zieh.von][0]} → ${MAP.n[bis][0]}`);
+      pfeilAnlegen(zieh.von, bis);
+      toast(`${MAP.n[zieh.von][0]} → ${MAP.n[bis][0]}${entwurfModus ? " (draft)" : ""}`);
     }
   } else if (zieh.art === "brush"){
     const l = zieh.pts.slice(0, PINSEL_ZUG_MAX);
@@ -6056,10 +6102,7 @@ cv.addEventListener("click", e => {
   } else if (tool === "arrow"){
     if (arrowFrom === null) arrowFrom = i;
     else if (arrowFrom !== i && darfIchNochMalen("arrow")){
-      const id = Math.random().toString(36).slice(2,10);
-      S.arrows.push({from:arrowFrom, to:i, f:faction, label:"", art:artNeu(),
-                     t:jetzt(), by:S.me, id});
-      dirty.add(`arrow:${id}`); arrowFrom = null; save();
+      pfeilAnlegen(arrowFrom, i); arrowFrom = null;
     }
   } else if (tool === "line"){
     if (!lineDraft) lineDraft = {pts:[], f:faction};
@@ -6270,7 +6313,7 @@ function tips(){
     inspect:"<b>Inspect</b> — click a town, arrow or line. Your own get handles.",
     owner:  `<b>Control</b> — click sets the town to <b>${p}</b>, again releases.`,
     unit:   `<b>Unit</b> — click a town, or drag teams from your depot.`,
-    arrow:  `<b>Move</b> — drag from origin to target. For <b>${p}</b>.`,
+    arrow:  `<b>Move</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
     line:   `<b>Defence</b> — drag across the towns. For <b>${p}</b>.`,
     para:   `<b>Para</b> — drag across the towns. Hold <kbd>P</kbd> for planned only.`,
     brush:  `<b>Paint</b> — drag over the map; every town under the brush goes to <b>${FACTIONS[faction].name}</b>. Up to ${PINSEL_ZUG_MAX} per stroke, undo under Tools – War.`,
@@ -6367,6 +6410,13 @@ function sichtDialog(){
   });
   document.getElementById("d-close").addEventListener("click", closeDlg);
 }
+document.getElementById("b-entwurf").addEventListener("click", function(){
+  entwurfModus = !entwurfModus;
+  this.setAttribute("aria-pressed", String(entwurfModus));
+  tips();
+  toast(entwurfModus ? "Draft mode: new orders stay with you until you publish them"
+                     : "Draft mode off: new orders go to the clan at once");
+});
 document.getElementById("b-names").addEventListener("click", function(){
   showNames = !showNames; this.setAttribute("aria-pressed", String(showNames)); draw();
 });
@@ -7505,6 +7555,19 @@ function arrowDialog(a){
         <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
         <input type="number" id="a-soll" min="0" max="999" value="${+a.soll || ""}" placeholder="—" style="width:70px">
       </div>
+      ${a.by === S.me ? `<div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Chain after</span>
+        <select id="a-kette" class="mini" style="width:190px">
+          <option value="">—</option>
+          ${liveArrows().filter(x => x.by === S.me && x.id !== a.id).map(x => `<option value="${esc(x.id)}"${a.vor === x.id ? " selected" : ""}>${
+            x.folge ? "#" + x.folge + " " : ""}${esc(x.label || (MAP.n[x.from][0] + " → " + MAP.n[x.to][0]))}${x.entwurf ? " (draft)" : ""}</option>`).join("")}
+        </select>
+      </div>
+      <div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Draft <small>(only you see it)</small></span>
+        <label class="toggle"><input type="checkbox" id="a-entwurf" ${a.entwurf ? "checked" : ""}><span></span></label>
+      </div>` : ""}
+      ${a.folge ? `<div class="note">Step <b>${a.folge}</b> of its operation${a.entwurf ? " — still a draft" : ""}.</div>` : ""}
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Unit sign</span>
         <select id="a-sym" class="mini" style="width:170px">
@@ -7523,7 +7586,9 @@ function arrowDialog(a){
     </div>
     <div class="dlg-f">
       ${darfWeg(a) ? `<button class="btn danger" id="a-del">Delete arrow</button>` : ""}
-      ${okKnopf(a.id, a)}
+      ${a.op && ENTWUERFE.some(x => x.op === a.op) ? `<button class="btn" id="a-kette-frei"
+        title="Publish every draft of this operation">Publish chain</button>` : ""}
+      ${a.entwurf ? "" : okKnopf(a.id, a)}
       <span style="flex:1"></span>
       <button class="btn primary" id="d-close">Close</button>
     </div>`);
@@ -7533,8 +7598,13 @@ function arrowDialog(a){
     document.getElementById("a-farbe").value = b.dataset.farbe;
     document.querySelectorAll("#dlg .pf-farben button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
   }));
+  document.getElementById("a-kette-frei")?.addEventListener("click", ()=>{
+    const liste = ENTWUERFE.filter(x => x.op === a.op);
+    for (const x of liste) pfeilFreigeben(x);
+    save(); closeDlg(); draw(); toast(`${liste.length} order${liste.length === 1 ? "" : "s"} published`);
+  });
   document.getElementById("a-join").addEventListener("click", ()=>{
-    setJoin(a.id, Math.max(0, Math.min(99, +document.getElementById("a-n").value || 0)));
+    if (!a.entwurf) setJoin(a.id, Math.max(0, Math.min(99, +document.getElementById("a-n").value || 0)));
     const lbl = document.getElementById("a-lbl").value.trim();
     const soll = Math.max(0, Math.min(999, +document.getElementById("a-soll").value || 0));
     const farbe = document.getElementById("a-farbe").value;
@@ -7544,7 +7614,31 @@ function arrowDialog(a){
     if (farbe !== (a.farbe||"")){ a.farbe = farbe || undefined; neu = true; }
     const sym = document.getElementById("a-sym").value;
     if (sym !== (a.sym||"")){ a.sym = sym || undefined; neu = true; }
-    if (neu){ a.t = jetzt(); dirty.add(`arrow:${a.id}`); save(); }
+    /* chain: take the predecessor's operation and the next number */
+    const ketteEl = document.getElementById("a-kette");
+    if (ketteEl && ketteEl.value !== (a.vor || "")){
+      if (ketteEl.value){
+        const vor = liveArrows().find(x => x.id === ketteEl.value);
+        if (vor){
+          if (!vor.op){ vor.op = "op" + pfeilId(); vor.folge = vor.folge || 1; pfeilGeaendert(vor); }
+          a.op = vor.op; a.vor = vor.id;
+          a.folge = Math.max(0, ...liveArrows().filter(x => x.op === vor.op && x.id !== a.id).map(x => x.folge || 0)) + 1;
+        }
+      } else { a.op = undefined; a.vor = undefined; a.folge = undefined; }
+      neu = true;
+    }
+    if (neu) pfeilGeaendert(a);
+    /* draft <-> shared: a shared arrow that becomes a draft vanishes for the
+       others (tombstone) and gets a fresh id; a published draft joins S.arrows */
+    const entwEl = document.getElementById("a-entwurf");
+    if (entwEl && entwEl.checked !== !!a.entwurf){
+      if (entwEl.checked){
+        const k = S.arrows.indexOf(a);
+        if (k >= 0){ S.arrows.splice(k, 1); dropArrow(a.id); }
+        a.entwurf = 1; a.id = pfeilId(); ENTWUERFE.push(a); entwuerfeSpeichern();
+      } else pfeilFreigeben(a);
+    }
+    if (neu || entwEl) save();
     closeDlg(); draw(); toast("Saved");
   });
   document.getElementById("a-del")?.addEventListener("click", ()=>{
@@ -28532,7 +28626,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 3e9705ca44</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b23bedcfb2</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28667,7 +28761,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "3e9705ca44";
+const BAU = "b23bedcfb2";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
