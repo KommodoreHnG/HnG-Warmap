@@ -1410,6 +1410,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-cl-req"    data-clantab="req"    title="Calls for help">Requests</button>
       <button class="btn" id="b-cl-people" data-clantab="people" title="Members and their roles">Roles</button>
       <button class="btn" id="b-cl-clans"  data-clantab="clans"  title="The other clans">Other clans</button>
+      <button class="btn" id="b-cl-arsenal" title="What the whole clan can field, and where the gaps are">Clan arsenal</button>
       <button class="btn" id="b-arms">Arsenal</button>
       <button class="btn" id="b-mydepot" title="Your assault teams — the column on the right (D)">Depot</button>
       <button class="btn" id="b-note" title="Encrypted — nobody else can read it">Notebook</button>
@@ -23736,7 +23737,7 @@ const MENUES = [
   /* "Personal": what is yours alone - your soldiers, your depot, your
      notebook. The clan group keeps what is really clan-wide. */
   {id:"pers",  titel:"Personal",  knoepfe:["b-arms","b-mydepot","b-note"]},
-  {id:"clan",  titel:"Clan",      knoepfe:["b-cl-card","b-cl-depot","b-cl-over","b-cl-deploy","b-cl-req","b-cl-people","b-cl-clans"]},
+  {id:"clan",  titel:"Clan",      knoepfe:["b-cl-card","b-cl-depot","b-cl-over","b-cl-deploy","b-cl-req","b-cl-people","b-cl-clans","b-cl-arsenal"]},
   /* "Situation" musste erklaert werden - dann ist der Name falsch. Was hier
      steckt, meldet man oder sieht man nach: Gegner, Schlacht, Brett. */
   /* The board stays in the top bar itself - its "new" badge must be seen
@@ -27004,6 +27005,7 @@ const RANGLISTEN = [
 
 document.getElementById("b-clan").addEventListener("click", ()=>clanDialog());
 document.querySelectorAll("[data-clantab]").forEach(b => b.addEventListener("click", ()=>clanDialog(b.dataset.clantab)));
+document.getElementById("b-cl-arsenal").addEventListener("click", ()=>arsenalDialog("clan"));
 /* ---- Was einer im naechsten Krieg machen will ----
    Die einzige Angabe im ganzen Werkzeug, die von unten nach oben laeuft.
    Wer weiss, dass drei Leute Panzer grinden wollen, teilt anders ein als
@@ -28084,8 +28086,7 @@ function arsenalDialog(tab){
          : "Nothing recorded yet. Enter your own soldiers and what they carry — as much or as little as you want to show."}</p></div>
     <div class="tabs">
       <button data-tab="mine" aria-pressed="true">Your soldiers</button>
-      <button data-tab="clan" aria-pressed="false">What the clan can do</button>
-      <button data-tab="who"  aria-pressed="false">The clan's kit</button>
+      <button data-tab="clan" aria-pressed="false">Clan arsenal</button>
     </div>
     <div class="dlg-b">
       <div class="tabp on" data-tab="mine">
@@ -28130,6 +28131,27 @@ function arsenalDialog(tab){
             <b>${brauchtCP - habenCP} command points short</b> for everything in the depot.</div>`
             : ""}`;
         })()}
+        ${(() => {
+          /* THE GAPS FIRST - that is the question this page is opened with.
+             A capability nobody has is a hole; one that hangs on a single
+             member is nearly one, because that member is not always on. */
+          if (!leute.length) return "";
+          const zahlVon = f => leute.reduce((n, p) => n + (p.koennen.get(f.k) || 0), 0);
+          const traegerVon = f => leute.filter(p => p.koennen.has(f.k)).length;
+          const fehlt = FAEHIG.filter(f => zahlVon(f) === 0);
+          const duenn = FAEHIG.filter(f => zahlVon(f) > 0 && traegerVon(f) === 1);
+          if (!fehlt.length && !duenn.length)
+            return `<div class="note" style="border-left:3px solid var(--accent);padding-left:9px">
+              <b>No gaps.</b> Every capability is on the list, and none of them rests on a single member.</div>`;
+          const band = (titel, liste, farbe, satz) => !liste.length ? "" :
+            `<div class="note" style="border-left:3px solid ${farbe};padding-left:9px">
+               <b>${titel}</b> ${satz}<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">
+               ${liste.map(f => `<span class="kchip" title="${esc(f.warum)}">${esc(f.name)}${
+                 traegerVon(f) ? ` <b style="color:var(--accent)">1</b>` : ""}</span>`).join("")}</div></div>`;
+          return band(`${fehlt.length} missing`, fehlt, "var(--su)", "— nobody in the clan can do this.")
+               + band(`${duenn.length} on one pair of shoulders`, duenn, "var(--accent)",
+                      "— exactly one member brings this.");
+        })()}
         ${zeigeFaehig.length ? `
         <div class="lead">${zeigeFaehig.map(f => {
           const wer = leute.filter(p => p.koennen.has(f.k))
@@ -28159,10 +28181,9 @@ function arsenalDialog(tab){
         ` : `<div class="${alle.length ? "note" : "empty"}">${alle.length
           ? "Nobody has entered a weapon or a vehicle yet — the capability overview fills up as soon as somebody does."
           : "Nobody has recorded a soldier yet."}</div>`}
-      </div>
-
-      <div class="tabp" data-tab="who">
-        ${alle.length ? `<div class="tw"><table>
+        ${alle.length ? `<details style="margin-top:4px">
+          <summary style="cursor:pointer;font-size:12px;color:var(--dim)">Every soldier on record (${alle.length})</summary>
+          <div style="margin-top:8px"><div class="tw"><table>
           <thead><tr><th>Class</th><th>Rank</th>
             <th title="Command points this soldier brings">CP</th>
             <th>Weapons</th><th>Vehicles</th></tr></thead>
@@ -28183,7 +28204,7 @@ function arsenalDialog(tab){
                     + (zusatz.length ? ` <small style="color:var(--dim2)">(${esc(zusatz.join(", "))})</small>` : "");
                 }).join(", ") || "—"}</td>
             </tr>`).join("")}</tbody>
-        </table></div>` : `<div class="empty">Nothing recorded yet.</div>`}
+        </table></div></div></details>` : ""}
       </div>
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
@@ -28839,7 +28860,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d9be9fa773</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 4dbb73db87</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28981,7 +29002,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d9be9fa773";
+const BAU = "4dbb73db87";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
