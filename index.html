@@ -203,11 +203,16 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
    Teil unten heraus: 97 Bildpunkte Ueberhang, gemessen. */
 /* the tools fall into as many columns as the width allows */
 #toolwrap{flex:1 1 auto;min-height:0;overflow-y:auto;display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:2px 3px;align-content:start;
+  grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:2px 3px;align-content:space-evenly;
   scrollbar-width:thin}
+/* the tools spread over the height they get and grow with the bar's width */
+#toolwrap .tool{padding:9px 3px 8px;gap:4px}
+#toolwrap .tool svg{width:clamp(22px,calc(var(--bar-w,96px)/5),30px);height:clamp(22px,calc(var(--bar-w,96px)/5),30px)}
+#toolwrap .tool .lbl{font-size:12px}
+#toolwrap .tool .kb{font-size:10.5px}
 #toolwrap > .bar-h{grid-column:1/-1}
 #bar > .bar-h, #bar > #factions{flex:0 0 auto}
-#bar.zwei #toolwrap{display:grid;grid-template-columns:1fr 1fr;gap:3px;align-content:start}
+#bar.zwei #toolwrap{display:grid;grid-template-columns:1fr 1fr;gap:3px;align-content:space-evenly}
 .bar-h{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim2);padding:8px 3px 3px}
 .tool{display:flex;flex-direction:column;align-items:center;gap:3px;background:transparent;
   border:1px solid transparent;border-radius:var(--r);padding:7px 3px 6px;cursor:pointer;text-align:center}
@@ -998,11 +1003,13 @@ body.meld-modus{cursor:help}
   18%{transform:translateX(-7px)}36%{transform:translateX(7px)}
   54%{transform:translateX(-4px)}72%{transform:translateX(4px)}}
 .dlg.ruettelt{animation:ruettel .3s ease}
-.dlg{background:linear-gradient(180deg,#211b14,#181309);border:1px solid var(--accent-dk);
+.dlg{position:relative;background:linear-gradient(180deg,#211b14,#181309);border:1px solid var(--accent-dk);
   border-radius:3px;max-width:620px;width:100%;
   max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .dlg.wide{max-width:860px}
 .dlg.xwide{max-width:1120px}
+/* text tabs do not need the wide window - the tables do */
+.dlg.xwide:has(.tabp.schmal.on){max-width:780px}
 .dlg.dropbereit{outline:2px dashed var(--accent);outline-offset:-6px}
 .dlg.dropbereit .dlg-b{background:rgba(226,172,72,.06)}
 /* Tabs — the two big windows carry several views each, and a row of tabs
@@ -1079,7 +1086,11 @@ tr.fac-row:hover td{background:color-mix(in srgb,var(--f) 14%,transparent)}
 .leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 .dlg-h{padding:13px 16px 10px;border-bottom:1px solid var(--accent-dk);
   background:linear-gradient(180deg,#2a221a,transparent)}
-.dlg-h h2{font-size:16px;font-weight:600;color:var(--accent)}
+.dlg-h h2{font-size:16px;font-weight:600;color:var(--accent);padding-right:36px}
+.dlg-x{position:absolute;right:8px;top:8px;width:28px;height:28px;z-index:2;
+  border:1px solid var(--line);border-radius:3px;background:var(--panel2);color:var(--text);
+  font:inherit;font-size:18px;line-height:1;cursor:pointer}
+.dlg-x:hover{border-color:var(--accent);color:var(--accent)}
 .dlg-h p{font-size:12px;color:var(--dim);margin-top:3px}
 .dlg-b{padding:14px 16px;display:flex;flex-direction:column;gap:11px}
 .dlg-f{padding:11px 16px;border-top:1px solid var(--line);display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}
@@ -19100,7 +19111,7 @@ function intelDialog(tab, seite){
       <button data-tab="scout"   aria-pressed="false">Scouts</button>
     </div>
     <div class="dlg-b">
-      <div class="tabp" data-tab="supply">
+      <div class="tabp schmal" data-tab="supply">
         <p style="font-size:12.5px;color:var(--dim);line-height:1.5;margin:0 0 12px">
           A town can only be reinforced from a neighbour of the same side that is
           <b>not fighting</b>. <b>${nsBesetzt}</b> of ${MAP.n.length} towns have a known owner.
@@ -19270,7 +19281,7 @@ function intelDialog(tab, seite){
           Missing is the difference.</div>
       </div>
 
-      <div class="tabp" data-tab="when">
+      <div class="tabp schmal" data-tab="when">
         <div class="row" style="align-items:center;gap:6px">
           <select id="ak-f" style="width:110px">
             ${FACTIONS.map(q=>`<option value="${q.id}">${q.tag}</option>`).join("")}
@@ -28733,7 +28744,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 64171fa989</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 8a15374150</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28811,6 +28822,13 @@ function openDlg(html, breit, pflicht){
   d.className = "dlg" + (breit === true ? " wide" : breit ? " " + breit : "");
   d.innerHTML = html;
   dlgPflicht = !!pflicht;
+  if (!pflicht){
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "dlg-x"; x.title = "Close"; x.setAttribute("aria-label", "Close");
+    x.innerHTML = "&times;";
+    x.addEventListener("click", closeDlg);
+    d.prepend(x);
+  }
   document.getElementById("veil").classList.add("on");
 }
 /* Sichtbar machen, dass das Absicht ist. Ein Fenster, das auf einen Klick
@@ -28850,10 +28868,11 @@ function closeDlg(){
     if (v && !v.classList.contains("on")) document.getElementById("dlg").innerHTML = "";
   }, 0);
 }
+/* A click beside the window closes nothing any more - only the X in the
+   corner does (and Escape, which is no slip of the mouse). */
 document.getElementById("veil").addEventListener("click", e => {
   if (e.target.id !== "veil") return;
-  if (dlgPflicht){ dlgRuetteln(); return; }
-  closeDlg();
+  if (dlgPflicht) dlgRuetteln();
 });
 let toastT;
 function toast(t){
@@ -28868,7 +28887,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "64171fa989";
+const BAU = "8a15374150";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
