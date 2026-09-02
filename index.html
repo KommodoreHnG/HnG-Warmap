@@ -10982,7 +10982,16 @@ function unitsRauteMerkmale(grau){
     if (n >= 9) striche++;
     if (x >= 19) rechts += n;
   }
-  return {striche, rechts};
+  /* THE TRIANGLE, POINT UPWARDS - that is what marks a tank destroyer.
+     Counted in the two rows straight above the oval, in the middle
+     columns: Light Armor 0, Medium Armor 0, Heavy Armor 2, Tank Destroyers
+     4, Heavy Tank Destroyers 8 - the ink grows downwards because the
+     triangle widens. In the town bar it is plainer still: Colmar's light
+     tank 0, its tank destroyer 10. */
+  let dreieck = 0;
+  for (let y = 9; y < 11; y++)
+    for (let x = 11; x < 22; x++) if (grau[y*32 + x] < 100) dreieck++;
+  return {striche, rechts, dreieck};
 }
 /* The numbers under the diamonds. The box is as wide as half the way to
    the neighbour allows, at most 46 - wider and "371" swallowed the "1" of
@@ -11276,7 +11285,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
         const b = unitsRauteBild(c, Math.round(r.mitte-40), Math.round(r.mitte+40),
                                  G_BAND[0]-6, G_BAND[1]+6);
         return {x0: r.x0, x1: r.x1, mitte: r.mitte, v: b.v, bild: b.bild,
-                striche: b.striche, rechts: b.rechts};
+                striche: b.striche, rechts: b.rechts, dreieck: b.dreieck};
       });
       R.reiheKennung = R.karten.map(k => Math.round(k.x0/4)).join(",")
         + "|" + (R.roll ? Math.round(R.roll.x0/4) + ":" + Math.round(R.roll.breite/4) : "-")
@@ -11820,15 +11829,17 @@ function kbZeileLeeren(z){
    position reader says WHICH line is meant, the text reader says WHAT
    stands in the box, and the two are held against each other before
    anything is written. He lets through only what both carry. */
-function kbTuersteher(e, ziel){
+function kbTuersteher(e, ziel, ohneLeiste){
   const z = KB.zeilen[ziel];
   if (!z) return {ok: false, grund: "there is no such line"};
   /* 1 something must actually have been read */
   const tagDa = kbTagDa(e.tag), nameDa = String(e.name || "").trim().length >= 2;
   if (!tagDa && !nameDa) return {ok: false, grund: "nothing readable in the box"};
   /* 2 a line that already holds a unit is not overwritten by another one.
-     Only the hand may do that, by setting the frame itself. */
-  if (z.status === "erfasst" && !KB.handAn){
+     Only the hand may do that, by setting the frame itself - and the case
+     without a bar, where the line was found by the tag and is therefore
+     the right one by construction. */
+  if (z.status === "erfasst" && !KB.handAn && !ohneLeiste){
     const gleich = (kbTagDa(z.tag) && tagDa) ? namKey(z.tag) === namKey(e.tag)
                  : namKey(z.name || "") === namKey(e.name || "");
     if (!gleich)
@@ -11933,9 +11944,19 @@ function kbVerarbeiten(R, vorgabe){
   KB.ziel = (KB.ort !== null && KB.linie) ? linieZiel(KB.ort, KB.linie) : null;
   if (R.einheit){
     const e = unitsZeileAus(R);
-    if (!R.leiste && KB.N === 0){ KB.zeilen = [kbZeileLeer(0)]; KB.N = 1; }
-    const kand = kbAuswahlIndex(R, vorgabe);
+    if (!R.leiste && KB.N === 0 && vorgabe !== KB_OHNE_LEISTE){ KB.zeilen = [kbZeileLeer(0)]; KB.N = 1; }
     const da = kbSchonDa(e);
+    /* Without a bar the tag names the line: is the unit already on the
+       sheet it is corrected, otherwise a line is added for it. */
+    let kand;
+    if (vorgabe === KB_OHNE_LEISTE){
+      if (da) kand = da.i;
+      else {
+        kand = KB.zeilen.length;
+        KB.zeilen.push(kbZeileLeer(kand));
+        KB.N = KB.zeilen.length;
+      }
+    } else kand = kbAuswahlIndex(R, vorgabe);
     if (kand === null || !KB.zeilen[kand]){
       /* ONLY THE UNIT THE BAR HAS CERTAINLY PICKED gets written. Without a
          picked card there is no line this reading could belong to, and a
@@ -11952,7 +11973,7 @@ function kbVerarbeiten(R, vorgabe){
       if (da && da.i !== kand && !kbFest(da)){ kbZeileLeeren(da); KB.status = `${e.tag || e.name} moved from line ${da.i + 1}.`; }
       const i = kand;
       const z = KB.zeilen[i];
-      const tuer = kbTuersteher(e, i);
+      const tuer = kbTuersteher(e, i, vorgabe === KB_OHNE_LEISTE);
       if (!tuer.ok && !kbFest(z)){
         if (tuer.vermerken) kbAbweichungMerken(z, e);
         KB.status = `Not written: ${tuer.grund}.`;
@@ -12152,12 +12173,19 @@ function kbRautenZuordnen(){
      enough to separate the five armour groups, whose plain likeness lies
      within a few hundredths of each other, and far too little to overturn
      a clear likeness anywhere else. */
+  /* THE BARS AND THE TRIANGLE DECIDE WHERE THE PICTURE CANNOT - but only
+     among the armour, whose five diamonds carry the same oval and differ
+     by a thin line and a small wedge. Anywhere else the shapes are plainly
+     different and these terms would only add noise, so they are not
+     applied there at all. */
+  const panzer = g => kbGruppenOrd[g] >= 9 && kbGruppenOrd[g] <= 13;
   const S = G.rauten.map(r => folge.map(g => {
     let k = unitsRauteAehnlich(r.v, buch[g].v);
+    if (!panzer(g)) return k;
     if (r.striche !== undefined && buch[g].striche !== undefined)
       k -= 0.25 * Math.abs(r.striche - buch[g].striche);
-    if (r.rechts !== undefined && buch[g].rechts !== undefined)
-      k -= 0.20 * ((r.rechts >= 21) !== (buch[g].rechts >= 21) ? 1 : 0);
+    if (r.dreieck !== undefined && buch[g].dreieck !== undefined)
+      k -= 0.30 * ((r.dreieck >= 3) !== (buch[g].dreieck >= 3) ? 1 : 0);
     return k;
   }));
   const NEG = -1e9, dp = [], vor = [];
@@ -12351,8 +12379,10 @@ async function kbEinreihen(F, G){
      variable used before its own declaration. Every look that found a box
      threw "Cannot access 'ziel' before initialization", the beat caught
      it, and the room stopped itself. */
-  const ziel = kbWahl();
-  if (ziel === null || ziel === undefined || !KB.zeilen[ziel]){
+  /* With no bar in the picture there is no card to pick - and none to get
+     wrong either. The reading is then bound to the box, not to a place. */
+  const ziel = G.leiste ? kbWahl() : KB_OHNE_LEISTE;
+  if (ziel === null || ziel === undefined || (ziel !== KB_OHNE_LEISTE && !KB.zeilen[ziel])){
     KB.status = "A unit stands in the box, but no card in the bar is certainly picked — drag the frame onto it.";
     kbZeichnen();
     return false;
@@ -12368,7 +12398,7 @@ async function kbEinreihen(F, G){
   /* THE PICTURE IS IN. This is the moment the next unit may be clicked, and
      the only moment worth a sound of its own. */
   kbVerschluss(KB.warte.length);
-  if (ziel !== null && KB.zeilen[ziel] && KB.zeilen[ziel].status === "vermutet")
+  if (ziel >= 0 && KB.zeilen[ziel] && KB.zeilen[ziel].status === "vermutet")
     KB.zeilen[ziel].status = "wartet";
   kbZeichnen();
   kbSchlange();
@@ -13310,6 +13340,13 @@ function pgNeu(){
           fehl: new Map(), tippt: false,
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …"};
 }
+/* NO BAR, NO POSITION - AND NOTHING TO CONFUSE. A town with one or two
+   units shows no card strip at all, only the floating box with the unit's
+   name. The rule that only a certainly picked CARD may be written was made
+   against guessing among twenty-eight of them; where there is no card
+   there is nothing to guess, and what stands in the box IS the unit. This
+   marker says so, and the line is then found by its tag. */
+const KB_OHNE_LEISTE = -1;
 const pgKey = (p, i) => p + ":" + i;
 /* How often a line is tried before it is set aside for typing by hand. */
 const PG_VERSUCHE = 3;
@@ -31128,7 +31165,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 570fe8c08f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build fdd740f9f7</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -31270,7 +31307,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "570fe8c08f";
+const BAU = "fdd740f9f7";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
