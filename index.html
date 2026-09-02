@@ -725,6 +725,9 @@ body.meld-modus{cursor:help}
 .sp-z.wartet .nm{color:#9a8a63;font-style:italic}
 .sp-z .ok{color:#4f7a3a;font-size:12px}
 .sp-fahne{width:16px;height:11px;border:1px solid rgba(0,0,0,.35);flex:none}
+/* a line that two models read differently - one click swaps the reading */
+.sp-tausch{cursor:pointer;color:#b98a2c;font-size:12px;padding:0 3px;border-radius:2px}
+.sp-tausch:hover{background:#3a2b12;color:#f0b13a}
 #kabine{position:fixed;inset:0;z-index:120;display:none;background:#0b0c10;
   grid-template-columns:auto 1fr auto;grid-template-rows:auto 1fr;
   grid-template-areas:"kopf kopf kopf" "links schirm pult";
@@ -10934,6 +10937,31 @@ async function unitsFremdWorker(sprache){
 async function unitsFremdSchliessen(){
   for (const k of Object.keys(unitsFremd)){ try { await unitsFremd[k].terminate(); } catch(e){} delete unitsFremd[k]; }
 }
+/* LOOK-ALIKE LETTERS. Cyrillic and Greek carry a twin for many Latin
+   letters: М for M, о for o, п for n, б for b, е for e. Folding the twins
+   together turns a Cyrillic reading back into the Latin shapes it was read
+   from, and two readings of the SAME shapes then stand side by side. */
+const ZWILLING = {
+  "А":"A","В":"B","Е":"E","К":"K","М":"M","Н":"H","О":"O","Р":"P","С":"C","Т":"T",
+  "У":"Y","Х":"X","Б":"B","Г":"r","Д":"D","Ж":"X","З":"3","И":"N","Й":"N","Л":"N",
+  "П":"N","Ф":"O","Ц":"U","Ч":"4","Ш":"W","Щ":"W","Ъ":"b","Ы":"b","Ь":"b","Э":"E","Ю":"IO","Я":"R",
+  "а":"a","в":"B","е":"e","к":"k","м":"m","н":"h","о":"o","р":"p","с":"c","т":"t",
+  "у":"y","х":"x","б":"b","г":"r","д":"a","ж":"x","з":"3","и":"u","й":"u","л":"n",
+  "м":"m","п":"n","ф":"o","ц":"u","ч":"4","ш":"w","щ":"w","ъ":"b","ы":"b","ь":"b","э":"e","ю":"io","я":"r",
+  "Α":"A","Β":"B","Ε":"E","Ζ":"Z","Η":"H","Ι":"I","Κ":"K","Μ":"M","Ν":"N","Ο":"O",
+  "Ρ":"P","Τ":"T","Υ":"Y","Χ":"X","α":"a","ο":"o","ρ":"p","υ":"u","χ":"x","ν":"v","κ":"k","ι":"i"
+};
+const unitsFalten = t => [...String(t || "")].map(z => ZWILLING[z] || z).join("")
+  .toLowerCase().replace(/[^a-z0-9]/g, "");
+/* Do the two readings show the same shapes? */
+function unitsGleicheFormen(fremd, latein){
+  const a = unitsFalten(fremd), b = unitsFalten(latein);
+  if (!a || !b) return false;
+  const d = levenshtein(a, b);
+  return d <= Math.max(1, Math.round(0.35 * Math.max(a.length, b.length)));
+}
+/* Does this text carry letters outside the Latin alphabet at all? */
+const unitsHatFremde = t => /[^\u0000-\u024F\u2000-\u206F\s]/.test(String(t || ""));
 async function unitsTextSchriften(c, x, y, w, h, beste, melde){
   /* a middling Latin read is still Latin: only a low confidence together
      with few Latin letters calls the other models (a 68 percent "SANTAS
@@ -12624,19 +12652,75 @@ async function gfStadt(c){
 /* One name. The safe frame around a row is anchor-4 to anchor+34; at the
    bottom stop the first row is clipped, so the frame is held inside the
    window. The third column ends where the track begins. */
-async function gfName(c, spalte, ay){
+async function gfName(c, spalte, ay, melde){
   const y0 = Math.max(GF_FENSTER.y, ay - 4);
   const y1 = Math.min(GF_FENSTER.y + GF_FENSTER.h, ay + 34);
   if (y1 - y0 < 16) return null;
-  const breit = spalte === GF_SPALTE[2] ? GF_BAHN.links - spalte : GF_BREIT;
-  const t = await unitsText(c, spalte, y0, breit, y1 - y0, null);
+  /* six points of air to the left: a mark sitting hard against the column
+     edge - a leading dot, a bracket - was being cut off by the crop. The
+     next column is five hundred points away, so nothing else can get in. */
+  const x0 = Math.max(GF_RAHMEN.x1 + 2, spalte - 6);
+  const breit = (spalte === GF_SPALTE[2] ? GF_BAHN.links : spalte + GF_BREIT) - x0;
+  /* ONE LATIN PASS. Measured on a name row: the tool's own preparation
+     takes 323 ms, the plain threshold 1016 - three times as long - and it
+     read worse (59 against 74 of 100). A name field is five hundred points
+     wide; in the cabin the fields are small, which is why the second pass
+     pays off there and not here. */
+  const beste = await unitsText(c, x0, y0, breit, y1 - y0, null);
+  /* THE OTHER ALPHABETS. Without this pass only the Latin model ever ran,
+     and a Latin model cannot return anything but Latin letters - a Cyrillic
+     name came back transliterated, every time. The pass costs nothing on a
+     confident Latin reading; it only starts below seventy.
+     BUT IT DOES NOT DECIDE ALONE. Measured on the sample picture: the pass
+     turned a weak "NTWb64" (21 of 100) into a clean "NTW64" (89, Japanese
+     model) - and in the same run it turned "NonSen97" into "Мопбеп9 7" (83,
+     Russian model), a Latin name written out in look-alike Cyrillic
+     letters. That is not a fault in the wiring but the thing itself: the
+     confidence figures of two different models are not comparable, and on a
+     poorly readable line the choice of alphabet is a coin toss. Both
+     directions are equally wrong. So the Latin reading keeps the field
+     unless the foreign one is clearly better AND the Latin one is really
+     weak - and the other reading is carried along either way, one click
+     away. */
+  const fremd = await unitsTextSchriften(c, x0, y0, breit, y1 - y0, beste, melde || null);
+  /* WHICH ONE STANDS. Not decidable from the confidence figures - decidable
+     from the SHAPES. A foreign reading that carries no foreign letters is
+     no question of alphabet at all: then the more confident one simply
+     wins, which is how a Japanese model's clean "NTW64" beat a Latin
+     reading of 2. A foreign reading that DOES carry foreign letters is
+     folded onto its Latin twins and held against the Latin reading: if the
+     two stand close, both models read the same shapes, and the Latin model
+     is the specialist for Latin shapes - it keeps the field. Only when the
+     two readings are far apart is the line really written in another
+     alphabet, and then the foreign model has it. */
+  let nimmFremd = false;
+  if (fremd.schrift && fremd.text){
+    if (!unitsHatFremde(fremd.text)) nimmFremd = fremd.zuv > beste.zuv + 5;
+    else nimmFremd = !unitsGleicheFormen(fremd.text, beste.text);
+  }
+  const t = nimmFremd ? fremd : beste;
+  const andere = (fremd.schrift && fremd.text && fremd.text !== beste.text)
+    ? (nimmFremd ? {text: beste.text, zuv: beste.zuv, schrift: null}
+                 : {text: fremd.text, zuv: fremd.zuv, schrift: fremd.schrift})
+    : null;
   let name = (t.text || "").trim().replace(/\s+/g, " ");
-  /* the reader sometimes hangs a stray mark on a short name */
-  name = name.replace(/^[^\w\[]+|[^\w\]]+$/g, "");
+  /* ONLY REAL SCRIBBLE GOES. The old trim used "\w", which is ASCII: it
+     threw away a leading dot, and it ate the first letter of every
+     Cyrillic, Greek, Korean or Arabic name as well, because those are not
+     "\w" either. Dots, brackets, bars, stars - everything that belongs in
+     a player's tag - now stays. */
+  name = name.replace(/^[\s"'`´,;]+|[\s"'`´,;]+$/g, "");
   /* and it likes to open a gap at an underscore: "Filthy_French" came back
      as "Filthy _French" */
   name = name.replace(/\s*_\s*/g, "_");
-  return name.length >= 2 ? {name, zuv: t.zuv} : null;
+  if (name.length < 2) return null;
+  let zweit = null;
+  if (andere){
+    const n2 = (andere.text || "").trim().replace(/\s+/g, " ")
+      .replace(/^[\s"'`´,;]+|[\s"'`´,;]+$/g, "").replace(/\s*_\s*/g, "_");
+    if (n2.length >= 2 && n2 !== name) zweit = {name: n2, zuv: andere.zuv, schrift: andere.schrift};
+  }
+  return {name, zuv: t.zuv, schrift: t.schrift || null, zweit};
 }
 
 /* ================= THE PLAYERS' ROOM ================================ */
@@ -12651,6 +12735,35 @@ function pgNeu(){
 const pgKey = (p, i) => p + ":" + i;
 /* How often a line is tried before it is set aside for typing by hand. */
 const PG_VERSUCHE = 3;
+/* The other reading takes the field. Which alphabet a poorly readable line
+   is written in cannot be decided from the confidence figures - so the
+   choice is one click wide. */
+function pgSchriftTauschen(k){
+  const v = PG && PG.namen.get(k);
+  if (!v || !v.zweit) return;
+  const alt = {name: v.name, zuv: v.zuv, schrift: v.schrift || null};
+  pgDoppelWeg(v.zweit.name, v.f, k);
+  PG.namen.set(k, {name: v.zweit.name, zuv: v.zweit.zuv, f: v.f,
+                   schrift: v.zweit.schrift || null, zweit: alt, gespeichert: false});
+  PG.status = `Line now reads ${v.zweit.name}.`;
+  pgZeichnen();
+}
+/* THE SAME PERSON, ONE LINE ONLY. A line is filed under its PLACE in the
+   list. Somebody joining while the list is being scrolled pushes every
+   name below down by one, so the same player turns up at a new place and
+   is read a second time - two places, two keys, two lines on the sheet.
+   The name decides: an older line of the same side carrying the same name
+   gives way to the new place, which is where the player stands now. */
+function pgDoppelWeg(name, seite, ausser){
+  const nk = namKey(name || "");
+  if (!nk) return 0;
+  let weg = 0;
+  for (const [k, v] of [...PG.namen])
+    if (k !== ausser && v.f === seite && namKey(v.name || "") === nk){
+      PG.namen.delete(k); PG.fehl.delete(k); weg++;
+    }
+  return weg;
+}
 function pgVerarbeiten(R){
   PG.frame = R.gross; PG.hell = R.hell; PG.gain = R.gain;
   if (!R.da){ PG.status = "No battle window in the picture — open a battle on the war map."; return; }
@@ -12711,12 +12824,14 @@ async function pgTick(){
       PG.liest = pgKey(ziel.s.platz, ziel.i);
       PG.status = `Reading line ${ziel.i + 1} …`;
       pgZeichnen();
-      const g = await gfName(R.c, ziel.s.spalte, ay);
+      const g = await gfName(R.c, ziel.s.spalte, ay, t => { if (PG) PG.status = t; });
       if (!PG) return;
       PG.liest = null;
       const zk = pgKey(ziel.s.platz, ziel.i);
       if (g){
-        PG.namen.set(zk, {name: g.name, zuv: g.zuv, f: ziel.s.f});
+        pgDoppelWeg(g.name, ziel.s.f, zk);
+        PG.namen.set(zk, {name: g.name, zuv: g.zuv, f: ziel.s.f,
+                          schrift: g.schrift || null, zweit: g.zweit || null});
         PG.fehl.delete(zk);
         PG.status = `${g.name} written down.`;
       } else {
@@ -12847,7 +12962,10 @@ function pgZeichnen(){
               : PG.leer.has(k) ? ""
               : PG.liest === k ? "reading …"
               : imFenster ? "not read yet" : "—"}</div>
-          <div class="ok">${v && v.gespeichert ? "✓" : ""}</div></div>`);
+          <div class="ok">${
+            v && v.zweit ? `<span class="sp-tausch" data-k="${k}" title="Also read as &quot;${kbEsc(v.zweit.name)}&quot;${
+              v.zweit.schrift ? " (" + kbEsc(v.zweit.schrift) + ")" : " (Latin)"} — click to use that one">⇄</span>` : ""
+            }${v && v.gespeichert ? "✓" : ""}</div></div>`);
       }
       return `<div class="sp-liste"><h4>${kbEsc(kbSeiteName(s.f))}
         <span class="sp-n">${[...PG.namen.values()].filter(v => v.f === s.f).length} of ${n || "?"}</span></h4>
@@ -12879,6 +12997,8 @@ function pgPult(){
 }
 /* Correcting a name by hand - the reader is good, not infallible. */
 function pgBearbeiten(ev){
+  const tausch = ev.target.closest(".sp-tausch[data-k]");
+  if (tausch){ ev.stopPropagation(); pgSchriftTauschen(tausch.dataset.k); return; }
   const feld = ev.target.closest(".nm[data-k]");
   if (!feld || feld.querySelector("input")) return;
   const k = feld.dataset.k, v = PG.namen.get(k);
@@ -12892,6 +13012,7 @@ function pgBearbeiten(ev){
     const neu = el.value.trim();
     const s = PG.seiten.find(x => x.platz === +k.split(":")[0]);
     if (neu.length >= 2){
+      pgDoppelWeg(neu, s ? s.f : null, k);
       PG.namen.set(k, {name: neu, zuv: 100, f: s ? s.f : null, gespeichert: false});
       PG.fehl.delete(k); PG.leer.delete(k);
     } else PG.namen.delete(k);
@@ -30429,7 +30550,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 88a61bce7b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 592d73fc64</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -30571,7 +30692,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "88a61bce7b";
+const BAU = "592d73fc64";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
