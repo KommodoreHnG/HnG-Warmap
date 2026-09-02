@@ -899,15 +899,22 @@ body.kb-zieht{user-select:none}
 .kb-z.vermutet .kb-raute{stroke:#93855f}
 /* the lock on a line, and the note a locked line collects */
 .kb-schluss{display:flex;align-items:center;gap:3px;justify-content:flex-end}
-.kb-fest{background:none;border:none;cursor:pointer;font-size:11px;line-height:1;padding:1px 2px;
-  border-radius:3px;opacity:.45;filter:grayscale(1)}
-.kb-fest:hover{opacity:1;background:rgba(0,0,0,.08)}
-.kb-fest.zu{opacity:1;filter:none}
-.kb-fest.warnt{background:#f0b13a;opacity:1}
+/* THE LOCK IS A BUTTON, not a hint. It used to be a pale eleven-point
+   glyph at the end of the line and was easy to miss; it now carries its
+   own frame, stands out at every size and takes on colour when it is
+   shut. */
+.kb-fest{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;
+  font-size:13px;line-height:1;padding:3px 6px;border-radius:3px;
+  box-shadow:0 1px 0 rgba(80,60,30,.18)}
+.kb-fest:hover{background:#e2d4b0;border-color:#8a7a56}
+.kb-fest.zu{background:#4a6b3a;border-color:#3a5530;color:#f2f6ee;
+  box-shadow:0 0 0 1px rgba(74,107,58,.35)}
+.kb-fest.warnt{background:#f0b13a;border-color:#b3801f;color:#241d16}
+.kb-z.fest .kb-fest{outline:none}
 .kb-nehmen{background:#9b3b2e;color:#f4ead9;border:none;border-radius:3px;cursor:pointer;
   font:700 10px/1 system-ui;padding:2px 5px}
 .kb-nehmen:hover{background:#b8452f}
-.kb-z.fest{background:rgba(80,60,30,.07)}
+.kb-z.fest{background:rgba(74,107,58,.10);box-shadow:inset 3px 0 0 #4a6b3a}
 .kb-z.fest .f{cursor:default}
 .rd-kf.ort .kb-ortname{font-weight:700;letter-spacing:.02em;color:#eaf6e4}
 .kb-z.schreibt .f{color:#1a3a8a}
@@ -10882,18 +10889,54 @@ function unitsForm(d){
    counts: very bright, colourless points inside the band. */
 const G_BAND = [1976, 2044], G_ZIFFERN = [2074, 2132];
 const G_SUCH = [1300, 2800];
+const G_KERN = 63, G_SCHRITT = 96, G_SCHRITT_WEIT = 126;
+/* THE ROW OF DIAMONDS. Two things had to be learnt the hard way here.
+   GAPS. The finder wanted an unbroken run of bright columns. On a diamond
+   with a big black oval the oval fills single columns completely, the
+   bright core breaks, the run falls into pieces - and the pieces were too
+   narrow and were thrown away. Colmar therefore showed five diamonds
+   instead of SIX, Bad Lobenstein the same. The missing sixth at Colmar is
+   the tank destroyer - exactly the group the unit read there demands with
+   its strengths of 12 and 10. What looked like a contradiction was a
+   diamond that was never found.
+   THE GRID. A diamond cut short at one end has its middle in the wrong
+   place. Once the whole ones are known the step is known too - 96 points,
+   and 126 where a four-digit number needs the room - so a short one is
+   hung on its left neighbour's grid. Measured on five towns the middles
+   then stand exactly on it. */
 function unitsGesamtRauten(d){
-  const r = []; let s = null;
+  const hoehe = new Uint8Array(UNITS_W);
   for (let x = G_SUCH[0]; x < G_SUCH[1]; x++){
     let n = 0;
     for (let y = G_BAND[0]; y < G_BAND[1]; y++){
       const p = (y*UNITS_W + x)*4;
       if (unitsMax(d,p) > 205 && unitsMax(d,p) - unitsMin(d,p) < 40) n++;
     }
-    if (n > 6){ if (s === null) s = x; }
-    else if (s !== null){ if (x-s >= 40 && x-s <= 90) r.push({x0: s, x1: x, mitte: (s+x)/2}); s = null; }
+    hoehe[x] = n;
   }
-  return r;
+  const roh = []; let s = null, leer = 0;
+  const nimm = (a, b) => { if (b-a >= 30 && b-a <= 92) roh.push([a, b]); };
+  for (let x = G_SUCH[0]; x < G_SUCH[1]; x++){
+    if (hoehe[x] > 6){ if (s === null) s = x; leer = 0; }
+    else if (s !== null){
+      if (++leer >= 14){ nimm(s, x-leer); s = null; leer = 0; }
+    }
+  }
+  if (s !== null) nimm(s, G_SUCH[1]-leer);
+  const mitten = [];
+  for (const [a, b] of roh){
+    if (b-a >= 58){ mitten.push((a+b)/2); continue; }
+    const links = mitten.filter(x => x < a);
+    let gesetzt = false;
+    if (links.length){
+      for (const schritt of [G_SCHRITT, G_SCHRITT_WEIT, G_SCHRITT*2]){
+        const k = links[links.length-1] + schritt;
+        if (k >= a - 20 && k <= b + 20){ mitten.push(k); gesetzt = true; break; }
+      }
+    }
+    if (!gesetzt) mitten.push((a+b)/2);
+  }
+  return mitten.map(m => ({x0: Math.round(m - G_KERN/2), x1: Math.round(m + G_KERN/2), mitte: m}));
 }
 /* The picture of one diamond, brought to 32 x 32 and to mean zero, so that
    two of them can be held against each other whatever the ground behind. */
@@ -10906,17 +10949,41 @@ function unitsRauteBild(c, x0, x1, y0, y1){
   }
   gRasterG.drawImage(c, x0, y0, x1-x0, y1-y0, 0, 0, 32, 32);
   const px = gRasterG.getImageData(0, 0, 32, 32).data;
-  const v = new Float32Array(1024);
+  const v = new Float32Array(1024), grau = new Float32Array(1024);
   let m = 0;
-  for (let i = 0, j = 0; j < 1024; i += 4, j++){ v[j] = (299*px[i] + 587*px[i+1] + 114*px[i+2])/255000; m += v[j]; }
+  for (let i = 0, j = 0; j < 1024; i += 4, j++){
+    grau[j] = (299*px[i] + 587*px[i+1] + 114*px[i+2])/1000;
+    v[j] = grau[j]/255; m += v[j];
+  }
   m /= 1024;
   let q = 0;
   for (let j = 0; j < 1024; j++){ v[j] -= m; q += v[j]*v[j]; }
   q = Math.sqrt(q) || 1;
   for (let j = 0; j < 1024; j++) v[j] /= q;
-  return {v, bild: gRasterC.toDataURL("image/png")};
+  return {v, bild: gRasterC.toDataURL("image/png"), ...unitsRauteMerkmale(grau)};
 }
 const unitsRauteAehnlich = (a, b) => { let k = 0; for (let j = 0; j < 1024; j++) k += a[j]*b[j]; return k; };
+/* THE VERTICAL STROKES. The armour diamonds all show the same oval and
+   differ only by the bars drawn through it - a thin line that barely
+   counts among a thousand picture values, which is why the plain
+   comparison kept confusing them. Counted on the templates:
+     Light Armor            0 bars, right-hand ink 16
+     Medium Armor           1 bar,  right-hand ink 16
+     Heavy Armor            2 bars, right-hand ink 16
+     Tank Destroyers        1 bar,  right-hand ink 26
+     Heavy Tank Destroyers  2 bars, right-hand ink 26
+   Two numbers, five groups, cleanly apart: the bars say light, medium or
+   heavy, the ink on the right says gun tank or tank destroyer. */
+function unitsRauteMerkmale(grau){
+  let striche = 0, rechts = 0;
+  for (let x = 9; x < 24; x++){
+    let n = 0;
+    for (let y = 10; y < 23; y++) if (grau[y*32 + x] < 100) n++;
+    if (n >= 9) striche++;
+    if (x >= 19) rechts += n;
+  }
+  return {striche, rechts};
+}
 /* The numbers under the diamonds. The box is as wide as half the way to
    the neighbour allows, at most 46 - wider and "371" swallowed the "1" of
    its neighbour and read 3711. Plain threshold: the strip is a pale band
@@ -11204,8 +11271,12 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       /* the town's own strength line, found with the picture - the numbers
          under it are read by the slow half */
       R.gesamtRauten = unitsGesamtRauten(d).map(r => {
-        const b = unitsRauteBild(c, r.x0-8, r.x1+8, G_BAND[0]-6, G_BAND[1]+6);
-        return {x0: r.x0, x1: r.x1, mitte: r.mitte, v: b.v, bild: b.bild};
+        /* a fixed window around the middle, not around the found run - a
+           diamond cut short would otherwise be cropped off centre */
+        const b = unitsRauteBild(c, Math.round(r.mitte-40), Math.round(r.mitte+40),
+                                 G_BAND[0]-6, G_BAND[1]+6);
+        return {x0: r.x0, x1: r.x1, mitte: r.mitte, v: b.v, bild: b.bild,
+                striche: b.striche, rechts: b.rechts};
       });
       R.reiheKennung = R.karten.map(k => Math.round(k.x0/4)).join(",")
         + "|" + (R.roll ? Math.round(R.roll.x0/4) + ":" + Math.round(R.roll.breite/4) : "-")
@@ -11517,18 +11588,48 @@ const KB_MORSE = {A:".-",B:"-...",C:"-.-.",D:"-..",E:".",F:"..-.",G:"--.",H:"...
   N:"-.",O:"---",P:".--.",Q:"--.-",R:".-.",S:"...",T:"-",U:"..-",V:"...-",W:".--",X:"-..-",Y:"-.--",Z:"--..",
   "0":"-----","1":".----","2":"..---","3":"...--","4":"....-","5":".....","6":"-....","7":"--...","8":"---..","9":"----."};
 /* The tag in Morse, capped to six characters - a signal, not a lecture. */
-function kbMorse(text){
+/* THE MORSE CALL MUST FIT THE WRITING, and it must be interruptible.
+   Reckoned: a dot lasted 0,05 seconds, a dash 0,15, plus the pauses -
+   six characters came to about three seconds, while writing a line takes
+   between 0,9 and 2,2. The next call therefore began before the last had
+   finished, and since the tones were laid straight into the sound clock
+   and remembered nowhere, nothing could stop the earlier one. With a queue
+   writing one unit after another, three or four calls lay on top of each
+   other.
+   Now the dot is chosen so that the whole call fits the time the clerk
+   takes (between 0,022 and 0,055 seconds), a new call stops any that is
+   still running, and keeping the sheet, starting a new one or closing the
+   room stop it too. */
+let kbMorseOsz = [];
+function kbMorseStopp(){
+  for (const o of kbMorseOsz){ try { o.stop(); } catch(e){} }
+  kbMorseOsz = [];
+}
+function kbMorse(text, platz){
+  kbMorseStopp();
   if (!kbTon || !kbKlangAuf()) return 0;
-  const dit = 0.05; let t = kbKlang.currentTime + 0.05;
+  const zeichen = String(text || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+  /* how many dot-lengths the whole call needs */
+  let punkte = 0;
+  for (const ch of zeichen){
+    for (const z of (KB_MORSE[ch] || "")) punkte += (z === "." ? 1 : 3) + 1;
+    punkte += 2;
+  }
+  if (!punkte) return 0;
+  const raum = Math.max(0.35, (platz || 1.4) - 0.15);
+  const dit = Math.max(0.022, Math.min(0.055, raum / punkte));
+  let t = kbKlang.currentTime + 0.05;
   try {
-    for (const ch of String(text || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6)){
+    for (const ch of zeichen){
       for (const z of (KB_MORSE[ch] || "")){
         const dauer = z === "." ? dit : 3*dit;
         const o = kbKlang.createOscillator(), g = kbKlang.createGain();
         o.type = "sine"; o.frequency.value = 640;
-        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.006);
-        g.gain.setValueAtTime(0.05, t + dauer - 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dauer);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + Math.min(0.006, dauer/3));
+        g.gain.setValueAtTime(0.05, t + dauer - Math.min(0.006, dauer/3));
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dauer);
         o.connect(g); g.connect(kbKlang.destination); o.start(t); o.stop(t + dauer + 0.01);
+        kbMorseOsz.push(o);
         t += dauer + dit;
       }
       t += 2*dit;
@@ -11690,16 +11791,22 @@ function kbSchluessel(z){ return namKey((z.tag || "") + " " + (z.name || "")); }
    comparison only stands in where a tag is missing - there the name,
    owner and strength have to carry it alone. */
 const kbTagDa = t => /[0-9]/.test(String(t || "")) && String(t).trim().length >= 3;
+/* THE TAG, AND NOTHING ELSE. There used to be a way round it: same owner,
+   same strength, and tag plus name within a quarter of the letters counted
+   as the SAME unit, and the older line was emptied. Two infantry lines of
+   one player with the same strength meet that by definition - which is why
+   lines 13 and 14 at Bonn could only ever be written one at a time, each
+   wiping the other.
+   That way round was needed while the target line was guessed. Since the
+   line is bound to a particular card when the picture is taken, it is not:
+   the same card leads to the same line and overwrites it, and two
+   different cards are two different units. A line is only moved now when
+   the tag matches to the letter. */
 function kbSchonDa(e){
-  const ke = kbSchluessel(e);
   return KB.zeilen.find(u => {
     if (u.status !== "erfasst") return false;
-    if (u.tag === e.tag && u.name === e.name && u.besitzer === e.besitzer) return true;
-    /* both tags read and different -> two different units, full stop */
     if (kbTagDa(u.tag) && kbTagDa(e.tag)) return namKey(u.tag) === namKey(e.tag);
-    return namKey(u.besitzer || "") === namKey(e.besitzer || "")
-      && JSON.stringify(u.hp || []) === JSON.stringify(e.hp || [])
-      && levenshtein(kbSchluessel(u), ke) <= Math.max(2, Math.round(0.25*Math.max(kbSchluessel(u).length, ke.length)));
+    return u.tag === e.tag && u.name === e.name && u.besitzer === e.besitzer;
   });
 }
 /* A line back to empty - the type and the side stay, they come from the
@@ -11707,6 +11814,37 @@ function kbSchonDa(e){
 function kbZeileLeeren(z){
   Object.assign(z, {status: "vermutet", tag: "", name: "", besitzer: "", hp: null,
                     nameZuv: 0, zwilling: null, gespeichert: false});
+}
+
+/* THE DOORMAN. Nothing reaches the sheet on the word of one witness. The
+   position reader says WHICH line is meant, the text reader says WHAT
+   stands in the box, and the two are held against each other before
+   anything is written. He lets through only what both carry. */
+function kbTuersteher(e, ziel){
+  const z = KB.zeilen[ziel];
+  if (!z) return {ok: false, grund: "there is no such line"};
+  /* 1 something must actually have been read */
+  const tagDa = kbTagDa(e.tag), nameDa = String(e.name || "").trim().length >= 2;
+  if (!tagDa && !nameDa) return {ok: false, grund: "nothing readable in the box"};
+  /* 2 a line that already holds a unit is not overwritten by another one.
+     Only the hand may do that, by setting the frame itself. */
+  if (z.status === "erfasst" && !KB.handAn){
+    const gleich = (kbTagDa(z.tag) && tagDa) ? namKey(z.tag) === namKey(e.tag)
+                 : namKey(z.name || "") === namKey(e.name || "");
+    if (!gleich)
+      return {ok: false, vermerken: true,
+              grund: `line ${ziel + 1} already holds ${z.tag || z.name}`};
+  }
+  /* 3 the strengths must fit the sign on the card. The card says what kind
+     of unit it is, the strengths say which crew it has - if no type can be
+     both, one of the two witnesses is wrong and nothing is written. */
+  if (z.typ && e.hp && e.hp.length){
+    const kand = kbTypKandidaten(e.hp);
+    if (kand.length && kand.indexOf(z.typ) < 0)
+      return {ok: false, vermerken: true,
+              grund: `the strengths do not fit ${atName(z.typ)}`};
+  }
+  return {ok: true};
 }
 
 /* One reading -> the sheet. */
@@ -11743,7 +11881,12 @@ function kbVerarbeiten(R, vorgabe){
     if (f.N !== KB.zeilen.length){
       const sofort = KB.zeilen.length === 0;
       KB.wandel = (KB.wandel && KB.wandel.N === f.N) ? {N: f.N, n: KB.wandel.n + 1} : {N: f.N, n: 1};
-      if (sofort || KB.wandel.n >= 3){
+      /* EIGHT LOOKS, not three. At seven looks a second three of them are
+         barely half a second - the count jumped about with no reason the
+         Kommodore could see. And a new count may never fall below what is
+         plainly visible in the bar. */
+      const sichtbarMin = KB.erste + (R.karten ? R.karten.length : 0);
+      if (sofort || (KB.wandel.n >= 8 && f.N >= sichtbarMin)){
         if (f.N > KB.zeilen.length)
           for (let i = KB.zeilen.length; i < f.N; i++) KB.zeilen.push(kbZeileLeer(i));
         else
@@ -11809,6 +11952,13 @@ function kbVerarbeiten(R, vorgabe){
       if (da && da.i !== kand && !kbFest(da)){ kbZeileLeeren(da); KB.status = `${e.tag || e.name} moved from line ${da.i + 1}.`; }
       const i = kand;
       const z = KB.zeilen[i];
+      const tuer = kbTuersteher(e, i);
+      if (!tuer.ok && !kbFest(z)){
+        if (tuer.vermerken) kbAbweichungMerken(z, e);
+        KB.status = `Not written: ${tuer.grund}.`;
+        kbZeichnen();
+        return;
+      }
       if (kbFest(z)){
         /* LOCKED. Only a note, never a change. */
         const anders = kbAbweichungMerken(z, e);
@@ -11847,7 +11997,7 @@ function kbSchreiben(z){
   const gesamt = text.join("").length || 1;
   const dauer = Math.max(900, Math.min(2200, 35*gesamt));
   KB.schreibt = {i: z.i, ab: jetzt(), dauer};
-  kbMorse(z.tag);
+  kbMorse(z.tag, dauer/1000);
   const takt = setInterval(() => {
     if (!KB || !KB.schreibt || KB.schreibt.i !== z.i){ clearInterval(takt); return; }
     const p = (jetzt() - KB.schreibt.ab) / KB.schreibt.dauer;
@@ -11884,7 +12034,10 @@ function kbRautenBuchAuf(){
       for (let j = 0; j < 1024; j++){ v[j] -= m; q += v[j]*v[j]; }
       q = Math.sqrt(q) || 1;
       for (let j = 0; j < 1024; j++) v[j] /= q;
-      kbRautenBuch[g] = {v, n: 1, bild: null, ausKarte: true};
+      /* the templates carry their own bar count, measured the same way */
+      const grau = new Float32Array(1024);
+      for (let j = 0; j < 1024; j++) grau[j] = parseInt(str[j], 16) / 15 * 255;
+      kbRautenBuch[g] = {v, n: 1, bild: null, ausKarte: true, ...unitsRauteMerkmale(grau)};
     }
   }
   try {
@@ -11994,7 +12147,19 @@ function kbRautenZuordnen(){
     for (const r of G.rauten) if (!r.hand && !r.gruppe){ r.gruppe = kbRauteGruppe(r.v); if (r.gruppe) k++; }
     return k;
   }
-  const S = G.rauten.map(r => folge.map(g => unitsRauteAehnlich(r.v, buch[g].v)));
+  /* THE BARS DECIDE WHERE THE PICTURE CANNOT. A difference of one bar
+     costs a quarter of a point, a wrong side of the ink threshold a fifth -
+     enough to separate the five armour groups, whose plain likeness lies
+     within a few hundredths of each other, and far too little to overturn
+     a clear likeness anywhere else. */
+  const S = G.rauten.map(r => folge.map(g => {
+    let k = unitsRauteAehnlich(r.v, buch[g].v);
+    if (r.striche !== undefined && buch[g].striche !== undefined)
+      k -= 0.25 * Math.abs(r.striche - buch[g].striche);
+    if (r.rechts !== undefined && buch[g].rechts !== undefined)
+      k -= 0.20 * ((r.rechts >= 21) !== (buch[g].rechts >= 21) ? 1 : 0);
+    return k;
+  }));
   const NEG = -1e9, dp = [], vor = [];
   for (let i = 0; i < n; i++){ dp.push(new Float64Array(m).fill(NEG)); vor.push(new Int32Array(m).fill(-1)); }
   for (let g = 0; g < m; g++) dp[0][g] = S[0][g];
@@ -12657,6 +12822,7 @@ function kbLiveStart(){
   kbRauschenAn(); kbZeichnen(); kbTick();
 }
 function kbLiveStop(){
+  kbMorseStopp();
   if (!KB || !KB.live) return;
   clearInterval(KB.live); KB.live = null;
   kbRauschenAus(); kbZeichnen();
@@ -12850,6 +13016,7 @@ function kbTypKandidaten(hp){
   return MAP.at.filter(a => a.crew.length === maxima.length && a.crew.every((c, i) => c[1] === maxima[i])).map(a => a.k);
 }
 function kbBehalten(){
+  kbMorseStopp();
   const ortFeld = document.getElementById("kb-ort");
   const f = ortFeld && ortFeld.value ? unitsStadt(ortFeld.value) : null;
   const ort = f ? f.i : KB.ort;
@@ -30961,7 +31128,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 97151719fd</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 570fe8c08f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -31103,7 +31270,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "97151719fd";
+const BAU = "570fe8c08f";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
