@@ -4872,6 +4872,88 @@ const joinOf = id => Object.keys(S.join)
   .filter(k => k.startsWith(id + ":") && imKrieg(S.join[k]) && S.join[k].v)
   .map(k => ({who: k.slice(id.length+1), n: S.join[k].v, name: S.join[k].n || "", mine: k.endsWith(":"+S.me)}));
 
+/* ---------------- gathering time ----------------
+   How long until the teams for an order can stand at its origin: the
+   shortest supply-line path from the side's nearest capital, walked only
+   through towns that are not the enemy's and not fighting; if no such path
+   exists, the shortest path of all plus one hour (they would run into a
+   battle). Speed is the slowest team type the committed players have on
+   the map. TEMPO_KAL is the scale - map units per minute at speed 1 - and
+   comes from one measurement in the game; until it is set, the window shows
+   the path and the team type but no minutes. */
+let TEMPO_KAL = null;
+const SAMMEL_UMWEG_MIN = 60;
+let kantenFeld = null;
+function kantenVon(i){
+  if (!kantenFeld){
+    kantenFeld = MAP.n.map(() => []);
+    for (const [a, b] of (MAP.e || [])){
+      if (!MAP.n[a] || !MAP.n[b]) continue;
+      const l = Math.hypot(MAP.n[a][1] - MAP.n[b][1], MAP.n[a][2] - MAP.n[b][2]);
+      kantenFeld[a].push([b, l]); kantenFeld[b].push([a, l]);
+    }
+  }
+  return kantenFeld[i] || [];
+}
+/* Dijkstra from several starts at once; passierbar(i) says which towns may
+   be walked through (start and target always may). */
+function wegSuche(starts, ziel, passierbar){
+  const n = MAP.n.length, dist = new Float64Array(n).fill(Infinity), her = new Int32Array(n).fill(-1);
+  const offen = new Set();
+  for (const st of starts){ dist[st] = 0; offen.add(st); }
+  while (offen.size){
+    let u = -1, best = Infinity;
+    for (const k of offen) if (dist[k] < best){ best = dist[k]; u = k; }
+    offen.delete(u);
+    if (u === ziel) break;
+    for (const [v, l] of kantenVon(u)){
+      if (v !== ziel && !passierbar(v)) continue;
+      const d = dist[u] + l;
+      if (d < dist[v]){ dist[v] = d; her[v] = u; offen.add(v); }
+    }
+  }
+  if (!isFinite(dist[ziel])) return null;
+  const weg = []; for (let k = ziel; k >= 0; k = her[k]) weg.push(k);
+  weg.reverse();
+  return {laenge: dist[ziel], hops: weg.length - 1, weg, von: weg[0]};
+}
+function sammelzeit(a){
+  const f = a.f, ziel = a.from;
+  const hauptst = MAP.n.map((n, i) => i).filter(i => MAP.n[i][4] && i !== ziel);
+  const eigene = hauptst.filter(i => ownerOf(i) === f);
+  const starts = eigene.length ? eigene : hauptst;
+  if (!starts.length) return null;
+  const frei = i => ownerOf(i) === f || ownerOf(i) < 0;
+  const ruhig = i => frei(i) && !fightAt(i);
+  let umweg = false;
+  let weg = wegSuche(starts, ziel, ruhig);
+  if (!weg){ umweg = true; weg = wegSuche(starts, ziel, () => true); }
+  if (!weg) return null;
+  /* the slowest team type among the committed players' deployed teams */
+  let tempo = Infinity, typ = "";
+  for (const m of joinOf(a.id))
+    for (const k of Object.keys(deployedBy(m.who)))
+      if (AT[k] && AT[k].speed && AT[k].speed < tempo){ tempo = AT[k].speed; typ = k; }
+  let geraten = false;
+  if (!isFinite(tempo)){
+    geraten = true;
+    for (const t of MAP.at) if (t.speed && t.speed < tempo){ tempo = t.speed; typ = t.k; }
+  }
+  const minuten = (TEMPO_KAL && isFinite(tempo) && tempo > 0)
+    ? weg.laenge / (tempo * TEMPO_KAL) + (umweg ? SAMMEL_UMWEG_MIN : 0) : null;
+  return {...weg, umweg, tempo, typ, geraten, minuten, fremdeHauptstadt: !eigene.length};
+}
+function sammelText(a){
+  const z = sammelzeit(a);
+  if (!z) return `<span style="color:var(--dim)">Gathering: no supply path from a capital to ${esc(MAP.n[a.from][0])}.</span>`;
+  const dauer = z.minuten === null ? "" : (() => { const m = Math.round(z.minuten); return `<b>≥ ${Math.floor(m/60)} h ${String(m%60).padStart(2,"0")} min</b> `; })();
+  return `<span style="color:var(--dim)">Gathering: </span>${dauer}<span style="color:var(--dim)">from ${esc(MAP.n[z.von][0])}${
+    z.fremdeHauptstadt ? " (no capital of this side yet)" : ""} — ${z.hops} hop${z.hops === 1 ? "" : "s"}, ${
+    z.umweg ? `<b>no uncontested path</b>, +${SAMMEL_UMWEG_MIN} min` : "uncontested"}; slowest team ${esc(atName(z.typ))}${
+    z.geraten ? " (nobody committed with teams on the map — slowest type assumed)" : ""}${
+    z.minuten === null ? "; minutes once the scale is measured" : ""}.</span>`;
+}
+
 /* WIE GROSS IST EIN ORT AUF DER KARTE? der Auftrag: "Bitte alle Kreise
    der Staedte in gleicher Groesse, versuche am besten dich an den
    Screenshots aus dem Spiel zu orientieren."
@@ -7537,7 +7619,8 @@ function arrowDialog(a){
     <div class="dlg-h"><h2>${esc(MAP.n[a.from][0])} → ${esc(MAP.n[a.to][0])}</h2>
       <p>${standText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>
       <p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
-          <b>${gesamt}</b> assault teams.` : "Nobody has committed to this move yet."}</p></div>
+          <b>${gesamt}</b> assault teams.` : "Nobody has committed to this move yet."}</p>
+      <p>${sammelText(a)}</p></div>
     <div class="dlg-b">
       ${mit.length ? `<div class="tw"><table><thead><tr><th>Player</th><th>Teams</th></tr></thead>
         <tbody>${mit.map(m=>`<tr${m.mine?' class="me"':''}><td>${esc(m.name||m.who)}${m.mine?" <em>you</em>":""}</td>
@@ -28626,7 +28709,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b23bedcfb2</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 84650ef5af</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28761,7 +28844,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b23bedcfb2";
+const BAU = "84650ef5af";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
