@@ -12133,7 +12133,7 @@ function kbBearbeiten(ev){
     kbZeichnen();
   };
   el.addEventListener("blur", fertig);
-  el.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); el.blur(); } if (e.key === "Escape"){ el.removeEventListener("blur", fertig); kbZeichnen(); } });
+  el.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); el.blur(); } if (e.key === "Escape"){ e.stopPropagation(); el.removeEventListener("blur", fertig); kbZeichnen(); } });
   f.innerHTML = ""; f.appendChild(el); el.focus();
   if (el.select) el.select();
 }
@@ -12645,9 +12645,12 @@ function pgNeu(){
   return {live: null, laeuft: false, letzte: null, vorige: null,
           stadt: null, seiten: [], ende: {}, N: 0, erste: 0, anker: GF_FENSTER.y,
           sichtbar: 0, namen: new Map(), leer: new Set(), liest: null,
+          fehl: new Map(), tippt: false,
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …"};
 }
 const pgKey = (p, i) => p + ":" + i;
+/* How often a line is tried before it is set aside for typing by hand. */
+const PG_VERSUCHE = 3;
 function pgVerarbeiten(R){
   PG.frame = R.gross; PG.hell = R.hell; PG.gain = R.gain;
   if (!R.da){ PG.status = "No battle window in the picture — open a battle on the war map."; return; }
@@ -12662,7 +12665,9 @@ function pgVerarbeiten(R){
       const i = R.erste + k, key = pgKey(s.platz, i);
       if (gfZeileTinte(R.d, s.spalte, R.anker + k*GF_ZEILE) >= GF_TINTE_MIN){
         PG.ende[s.platz] = Math.max(PG.ende[s.platz] || 0, i + 1);
-        PG.leer.delete(key);
+        /* a line with ink is not empty - but one already set aside after
+           three failed tries stays set aside, or the dead end comes back */
+        if ((PG.fehl.get(key) || 0) < PG_VERSUCHE) PG.leer.delete(key);
       } else { PG.leer.add(key); break; }
     }
   }
@@ -12709,8 +12714,28 @@ async function pgTick(){
       const g = await gfName(R.c, ziel.s.spalte, ay);
       if (!PG) return;
       PG.liest = null;
-      if (g) PG.namen.set(pgKey(ziel.s.platz, ziel.i), {name: g.name, zuv: g.zuv, f: ziel.s.f});
-      PG.status = g ? `${g.name} written down.` : "That line could not be read — scroll a little.";
+      const zk = pgKey(ziel.s.platz, ziel.i);
+      if (g){
+        PG.namen.set(zk, {name: g.name, zuv: g.zuv, f: ziel.s.f});
+        PG.fehl.delete(zk);
+        PG.status = `${g.name} written down.`;
+      } else {
+        /* NOT AGAIN AND AGAIN. A line the recogniser cannot read passed the
+           ink test - it HAS text, only unreadable - so it never landed in
+           the empty list, and the next look picked the very same line. With
+           "if (ziel) break;" above, that held up every other column too: the
+           room went on capturing four times a second and wrote nothing down
+           at all. After three tries the line is set aside; it can still be
+           typed in by hand, which is what the click is for. */
+        const n = (PG.fehl.get(zk) || 0) + 1;
+        PG.fehl.set(zk, n);
+        if (n >= PG_VERSUCHE){
+          PG.leer.add(zk);
+          PG.status = `Line ${ziel.i + 1} could not be read in ${PG_VERSUCHE} tries — skipped. Click it to type the name.`;
+        } else {
+          PG.status = `Line ${ziel.i + 1} could not be read — try ${n} of ${PG_VERSUCHE}.`;
+        }
+      }
     } else {
       PG.status = PG.N && PG.namen.size >= PG.N
         ? "Every name on the sheet — keep it, or scroll for more."
@@ -12774,6 +12799,9 @@ function pgBehalten(){
 }
 function pgZeichnen(){
   if (!PG) return;
+  /* while a name is being typed the sheet must not be rebuilt under the
+     hand - the input would be thrown away on the next look */
+  if (PG.tippt) return;
   const kopf = document.getElementById("sp-kopf"), links = document.getElementById("sp-links"),
         blatt = document.getElementById("sp-blatt");
   const ortName = PG.stadt !== null && PG.stadt !== undefined ? MAP.n[PG.stadt][0] : null;
@@ -12814,7 +12842,11 @@ function pgZeichnen(){
           <div class="nr">${i + 1}</div>
           <div class="nm ${v && v.zuv < 60 ? "unsicher" : ""}" data-k="${k}"
             title="${v && v.zuv < 60 ? "read with only " + v.zuv + " of 100 — click to correct" : "click to correct"}">${
-            v ? kbEsc(v.name) : PG.leer.has(k) ? "" : imFenster ? "reading …" : "—"}</div>
+            v ? kbEsc(v.name)
+              : (PG.fehl.get(k) || 0) >= PG_VERSUCHE ? "?"
+              : PG.leer.has(k) ? ""
+              : PG.liest === k ? "reading …"
+              : imFenster ? "not read yet" : "—"}</div>
           <div class="ok">${v && v.gespeichert ? "✓" : ""}</div></div>`);
       }
       return `<div class="sp-liste"><h4>${kbEsc(kbSeiteName(s.f))}
@@ -12854,21 +12886,32 @@ function pgBearbeiten(ev){
   feld.innerHTML = `<input type="text" value="${kbEsc(alt)}" dir="auto" spellcheck="false">`;
   const el = feld.querySelector("input");
   el.focus(); el.select();
+  PG.tippt = true;
   const fertig = () => {
+    PG.tippt = false;
     const neu = el.value.trim();
     const s = PG.seiten.find(x => x.platz === +k.split(":")[0]);
-    if (neu.length >= 2) PG.namen.set(k, {name: neu, zuv: 100, f: s ? s.f : null, gespeichert: false});
-    else PG.namen.delete(k);
+    if (neu.length >= 2){
+      PG.namen.set(k, {name: neu, zuv: 100, f: s ? s.f : null, gespeichert: false});
+      PG.fehl.delete(k); PG.leer.delete(k);
+    } else PG.namen.delete(k);
     pgZeichnen();
   };
   el.addEventListener("blur", fertig);
   el.addEventListener("keydown", e => {
     if (e.key === "Enter"){ e.preventDefault(); el.blur(); }
-    if (e.key === "Escape"){ el.removeEventListener("blur", fertig); pgZeichnen(); }
+    if (e.key === "Escape"){
+      /* IN THE FIELD, NOT IN THE ROOM. The document also listens for Escape
+         and closed the whole room, sheet and all. */
+      e.stopPropagation();
+      el.removeEventListener("blur", fertig);
+      PG.tippt = false; pgZeichnen();
+    }
   });
 }
 async function spielerraumAuf(){
   if (pgOffen) return;
+  raeumeSchliessen("spieler");
   pgOffen = true;
   PG = pgNeu();
   document.getElementById("spieler").classList.add("an");
@@ -12893,6 +12936,7 @@ document.addEventListener("keydown", ev => { if (ev.key === "Escape" && pgOffen)
 
 async function kabineAuf(){
   if (kbOffen) return;
+  raeumeSchliessen("kabine");
   kbOffen = true;
   KB = kbNeu();
   document.getElementById("kabine").classList.add("an");
@@ -12919,6 +12963,19 @@ document.getElementById("kb-links").addEventListener("change", ev => {
   if (ev.target && ev.target.id === "kb-ort" && KB){ const f = unitsStadt(ev.target.value); if (f){ KB.ort = f.i; KB.ziel = KB.linie ? linieZiel(KB.ort, KB.linie) : null; kbZeichnen(); } }
 });
 document.addEventListener("keydown", ev => { if (ev.key === "Escape" && kbOffen) kabineZu(); });
+
+/* ONE ROOM AT A TIME. All three full-screen rooms sit on the same
+   position:fixed inset:0 z-index:120, and none of them asked after the
+   others: two open rooms lay exactly on top of each other, the later one in
+   the HTML hiding the earlier one completely. On top of that three Escape
+   handlers hang on the document, so one press closed every open room at
+   once. Whoever opens a room now closes the other two, and then only one of
+   the three "open" flags can be true. */
+function raeumeSchliessen(ausser){
+  if (ausser !== "radar"   && typeof radarOffen !== "undefined" && radarOffen) radarZu();
+  if (ausser !== "kabine"  && typeof kbOffen    !== "undefined" && kbOffen)    kabineZu();
+  if (ausser !== "spieler" && typeof pgOffen    !== "undefined" && pgOffen)    spielerraumZu();
+}
 
 /* 'Read screenshot' is gone - the radar room does that job, live. */
 
@@ -17326,6 +17383,7 @@ function radarWerte(){
 
 async function radarAuf(){
   if (radarOffen) return;
+  raeumeSchliessen("radar");
   radarOffen = true;
   document.getElementById("radar").classList.add("an");
   if (radarZiel === null) zielZiehen();
@@ -30371,7 +30429,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 1cd229fede</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 88a61bce7b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -30513,7 +30571,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "1cd229fede";
+const BAU = "88a61bce7b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
