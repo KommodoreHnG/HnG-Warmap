@@ -234,12 +234,21 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
 .tool:disabled:hover{background:transparent}
 .tool[aria-pressed="true"]{background:linear-gradient(180deg,#3a2f1c,#2a2114);
   border-color:var(--accent);color:var(--accent);box-shadow:inset 0 0 12px rgba(226,172,72,.14)}
-.tool svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6;
+/* ONE STROKE FOR EVERY SIGN. stroke-width stood eight times over, each
+   next to its own display size - and the stroke that actually shows is
+   stroke-width times size divided by 24. It ranged from 0,850 px on the
+   waste basket to 1,467 px in the head bar, a factor of 1,73 between signs
+   sitting in the same window; the gear at 1,063 stood directly beside the
+   capture buttons at 1,467, thirty-eight percent apart. Now every rule
+   converts this one figure into its own size, so a single value sets the
+   stroke of the whole surface. */
+:root{--ico-strich:1.00px}
+.tool svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:calc(var(--ico-strich)*24/19);
   stroke-linecap:round;stroke-linejoin:round}
 .tool .lbl{font-size:10.5px;line-height:1.15}
 .tool .kb{font-size:10px;color:var(--dim2);font-family:ui-monospace,Consolas,monospace}
 .tool.row{flex-direction:row;gap:6px;justify-content:flex-start;padding-left:7px}
-.tool.row svg{width:15px;height:15px}
+.tool.row svg{width:15px;height:15px;stroke-width:calc(var(--ico-strich)*24/15)}
 /* Zweispaltig: auf einem breiten Schirm ist die Leiste sonst eine lange
    Kolonne, bei der man bis zum letzten Werkzeug scrollen muss. */
 #bar.zwei{display:grid;grid-template-columns:1fr 1fr;width:var(--bar-w,180px);align-content:start}
@@ -408,7 +417,7 @@ body.zieht #mapwrap canvas{pointer-events:none}
   opacity:.45;line-height:0}
 .dep:hover .weg{opacity:1}
 .dep .weg:hover{color:var(--su)}
-.dep .weg svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.7;
+.dep .weg svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:calc(var(--ico-strich)*24/12);
   stroke-linecap:round;stroke-linejoin:round;display:block}
 .sympick{display:flex;align-items:center;justify-content:space-between;gap:6px;flex:1;min-width:0;
   background:var(--panel2);border:1px solid var(--line);border-radius:2px;padding:3px 6px;cursor:pointer}
@@ -553,15 +562,15 @@ body.txt-modus{cursor:text}
 /* Ein Mass fuer alle Zeichen in der Kopfleiste, damit sie nebeneinander
    ruhig stehen. stroke-linejoin:round nimmt den Spitzen die Haerte. */
 .btn .ico{width:15px;height:15px;display:block;flex:0 0 auto;stroke:currentColor;
-  fill:none;stroke-width:1.7;stroke-linejoin:round;stroke-linecap:round}
+  fill:none;stroke-width:calc(var(--ico-strich)*24/15);stroke-linejoin:round;stroke-linecap:round}
 #b-radar,#b-units{display:flex;align-items:center;gap:5px}
 /* the three at the very left: a touch bigger than the menu titles */
 #top-capture{display:flex;gap:6px;align-items:center;order:-1;margin-right:8px}
 #top-capture .btn{display:flex;align-items:center;gap:8px;font-size:14px;padding:10px 15px}
-#top-capture .btn .ico{width:22px;height:22px;stroke-width:1.6}
+#top-capture .btn .ico{width:22px;height:22px;stroke-width:calc(var(--ico-strich)*24/22)}
 /* every capture button carries the same camera sign */
 .mit-ico{display:inline-flex;align-items:center;justify-content:center;gap:6px}
-.mit-ico .ico{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;
+.mit-ico .ico{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;stroke-width:calc(var(--ico-strich)*24/15);
   stroke-linecap:round;stroke-linejoin:round}
 /* the small counter on the board button */
 .btn .marke{display:inline-block;min-width:16px;height:16px;padding:0 4px;margin-left:5px;border-radius:8px;
@@ -609,7 +618,7 @@ body.txt-modus{cursor:text}
 .sp-filter button[aria-pressed="true"]{background:var(--accent-dk);color:#f6ecd8;border-color:var(--accent-dk)}
 .sp-filter b{font-weight:700;margin-left:3px;color:var(--text)}
 #b-gear{padding:4px 7px;line-height:1}
-#b-gear svg{width:15px;height:15px;display:block;stroke:currentColor;fill:none;stroke-width:1.7;
+#b-gear svg{width:15px;height:15px;display:block;stroke:currentColor;fill:none;stroke-width:calc(var(--ico-strich)*24/15);
   stroke-linecap:round;stroke-linejoin:round}
 #zahnrad{position:fixed;top:0;right:0;z-index:76;width:292px;max-height:100vh;overflow-y:auto;
   background:var(--panel);border-left:1px solid var(--accent-dk);
@@ -868,7 +877,7 @@ body.kb-zieht{user-select:none}
 .kb-z .sym canvas{width:36px;height:25px}
 .kb-z .f.hp{white-space:normal;display:flex;flex-wrap:wrap;gap:2px 10px;align-items:center}
 .kb-z .hpg{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
-.kb-raute{width:15px;height:15px;flex:none;stroke:#5c5137;fill:none;stroke-width:1.5;
+.kb-raute{width:15px;height:15px;flex:none;stroke:#5c5137;fill:none;stroke-width:calc(var(--ico-strich)*24/15);
   stroke-linecap:round;stroke-linejoin:round}
 .kb-z.vermutet .kb-raute{stroke:#93855f}
 /* the lock on a line, and the note a locked line collects */
@@ -1511,11 +1520,11 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
             <path d="M9.6 2.9 L13.4 5.9 M13.4 2.9 L9.6 5.9"
                   stroke="var(--panel2,#241d16)" stroke-width="1.5"/>
             <rect x="7.0" y="11.4" width="13.4" height="7.9" rx="0.6"
-                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.5"/>
+                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.1"/>
             <rect x="5.1" y="9.2" width="13.4" height="7.9" rx="0.6"
-                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.5"/>
+                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.1"/>
             <rect x="3.2" y="7.0" width="13.4" height="7.9" rx="0.6"
-                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.5"/>
+                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.1"/>
           </svg><span class="txt">Units</span>
         </button>
         <button class="btn" id="b-spieler" title="Read the players of a battle from the war map">
@@ -1868,7 +1877,17 @@ const SYM = {
 };
 function symbolSVG(key, farbe, w=26, h=18){
   const teile = (SYM[key] || "X").split(" "), hat = t => teile.includes(t);
-  const W = 100, H = 69, R = 6, I = 4.4;
+  const W = 100, H = 69, R = 6;
+  /* THE INNER STROKE, EVENED OUT. This is the largest family of signs in
+     the tool - twenty-five places call it, at sizes from 14 to 48 points -
+     and its inner stroke ran from 0,62 to 2,11 points, a spread of 3,43,
+     twice as wide as the 1,73 of the button icons. At 14 points the inner
+     drawing and the frame both smeared to grey.
+     ONLY THE INNER STROKE. R is not just a width, it is geometry: the ends
+     of the crosses are figured from it, so making R depend on the size
+     would change the shape from size to size. Capped both ways, the spread
+     falls from 3,43 to 1,90 and no shape moves. */
+  const I = 4.4 * Math.min(1.35, Math.max(0.75, 26/w));
   const L = R, Re = W - R, O = R, U = H - R;
   const p = [], g = [], voll = [];        // Rahmen, Strich, Flaeche
 
@@ -1982,7 +2001,7 @@ function fraktionSVG(f, gr = 15){
     return `<polygon points="${p.join(" ")}" fill="${c}"/>`;
   };
   const inner = f === 0
-    ? `<circle cx="12" cy="12" r="10.3" fill="none" stroke="${c}" stroke-width="2.3"/>${stern(12,12,7.2)}`
+    ? `<circle cx="12" cy="12" r="10.3" fill="none" stroke="${c}" stroke-width="1.6"/>${stern(12,12,7.2)}`
     : f === 1
     ? `<polygon fill="${c}" points="9.4,2 14.6,2 14.6,9.4 22,9.4 22,14.6 14.6,14.6 14.6,22 9.4,22 9.4,14.6 2,14.6 2,9.4 9.4,9.4"/>`
     : stern(12,12,10.4);
@@ -4217,6 +4236,9 @@ function ortSetzen(v){
 
 /* ---------------- canvas ---------------- */
 const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+/* Also here, not only in resize: the very first paint happens before the
+   first resize, and drew at the coarse setting. */
+ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
 let img = new Image(), imgOk = false, view = {x:0,y:0,z:1}, dpr = 1, lastMouse = null;
 /* Wahr, sobald fit() die Karte einmal auf eine ECHTE Flaeche eingepasst hat.
    view.z taugt dafuer nicht: es startet auf 1 und sieht damit immer schon
@@ -4236,6 +4258,15 @@ function resize(){
   if (r.width < 20 || r.height < 20) return;
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   cv.width = Math.round(r.width*dpr); cv.height = Math.round(r.height*dpr);
+  /* THE ONE SURFACE ANYBODY LOOKS AT was the only one smoothing at the
+     coarse setting: fourteen other canvases set this to "high" by name,
+     the map did not. Zoomed out the map image is squeezed 2,9 to 1, and
+     the default single bilinear sample simply skips source points at that
+     rate - that is the shimmer along coasts and roads.
+     IT BELONGS HERE, not at getContext: writing cv.width resets the
+     context, and this line runs on every resize. */
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   draw();
   /* Der Radarpult haengt an der Fensterhoehe, nicht nur am Regler. */
   if (typeof radarMassHalten === "function") radarMassHalten();
@@ -4666,10 +4697,15 @@ function draw(){
       if (stufe){
         const fr = Math.max(1.5, r*0.30), fx = x - r*0.72, fy = y + r*0.72;
         ctx.strokeStyle = stufe.f;
-        ctx.lineWidth = Math.max(0.9, r*0.11);
+        /* THE TWO CIRCLES OVERLAPPED. They sat at 0,95 of their own radius
+           left and right of the middle, so their centres were 1,90 radii
+           apart - less than the two radii it takes for them to clear each
+           other. That is true at every zoom and has nothing to do with the
+           stroke; with this stroke on top it read as a blot. */
+        ctx.lineWidth = Math.max(0.9, r*0.075);
         ctx.globalAlpha = aOrt * 0.92;
-        ctx.beginPath(); ctx.arc(fx - fr*0.95, fy, fr, 0, 6.284); ctx.stroke();
-        ctx.beginPath(); ctx.arc(fx + fr*0.95, fy, fr, 0, 6.284); ctx.stroke();
+        ctx.beginPath(); ctx.arc(fx - fr*1.22, fy, fr, 0, 6.284); ctx.stroke();
+        ctx.beginPath(); ctx.arc(fx + fr*1.22, fy, fr, 0, 6.284); ctx.stroke();
         /* Der Steg zwischen den Glaesern - er macht aus zwei Kreisen
            erst ein Fernglas. */
         ctx.beginPath();
@@ -4817,7 +4853,12 @@ function draw(){
          nicht auf der Kante sitzt. Bei gewoehnlichen Orten und mittlerem
          Zoom gewinnt das Spielmass, bei Hauptstaedten der Boden. */
       const dy = Math.max(1.03*ortRadius(), rAussen(i) + 2) + gr*0.62;
-      ctx.lineWidth = Math.max(2, gr*0.22);
+      /* A stroke sits centred on the outline, so it eats 0,11 of the type
+         size into the letter FROM EACH SIDE - more than the counter of an
+         e, an a or an o is wide. And the corner style leaked in from the
+         line drawing, which leaves it set without save/restore. */
+      ctx.lineJoin = "round"; ctx.miterLimit = 2;
+      ctx.lineWidth = Math.max(1.4, gr*0.13);
       ctx.strokeText(n[0], x, y+dy); ctx.fillText(n[0], x, y+dy);
       ctx.globalAlpha = 1;
     }
@@ -5024,7 +5065,11 @@ function piktoBergstadt(ctx, x, y, r, farbe, halle, spalt){
     ctx.lineTo(0.50, 0.30); ctx.closePath();
   }
   if (fein && spalt){
-    ctx.strokeStyle = spalt; ctx.lineWidth = 0.045; ctx.lineJoin = "miter"; ctx.stroke();
+    /* the only stroke width in this whole block without a floor - and half
+       of it is covered again by the fill right after, so what stayed
+       visible at r = 14 was three tenths of a point */
+    ctx.strokeStyle = spalt; ctx.lineWidth = Math.max(0.045, 2.0/(r*dpr));
+    ctx.lineJoin = "miter"; ctx.stroke();
   }
   ctx.fillStyle = farbe; ctx.fill();
   ctx.restore();
@@ -5323,7 +5368,9 @@ function drawArrow(a){
     }
     ctx.textAlign = "left";
     const tx0 = links + bw + (bw ? gr*0.4 : 0);
-    ctx.lineJoin = "round"; ctx.lineWidth = Math.max(2.5, gr*0.28);
+    /* 0,28 was the worst value on the whole map - the outline closed the
+       letters from both sides at once. */
+    ctx.lineJoin = "round"; ctx.miterLimit = 2; ctx.lineWidth = Math.max(1.6, gr*0.15);
     ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(10,7,4,.92)";
     ctx.strokeText(txt, tx0, 0);
     ctx.fillStyle = fb || (light() ? "#1a1409" : "#f4ead9");
@@ -24747,12 +24794,12 @@ function sbNamenHTML(r){
         style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:3px 0;
         border-bottom:1px solid var(--line)">
       <input type="checkbox" ${setzen ? "checked" : ""} style="flex:0 0 auto">
-      <img src="${p.nameBild}" alt="" style="height:19px;image-rendering:pixelated;
+      <img src="${p.nameBild}" alt="" style="height:19px;image-rendering:auto;
         background:#000;border-radius:2px;flex:0 0 auto">
       <input type="text" class="sb-nam" value="${sicher ? esc(b.name) : ""}"
         placeholder="type the name" style="flex:1;min-width:120px;font-size:12px">
       ${p.truppBild ? `<img src="${p.truppBild}" alt="" style="height:19px;
-        image-rendering:pixelated;background:#000;border-radius:2px;flex:0 0 auto">` : ""}
+        image-rendering:auto;background:#000;border-radius:2px;flex:0 0 auto">` : ""}
       <input type="text" class="sb-clan" placeholder="unit / clan"
         style="width:120px;font-size:12px">
       <span style="flex-basis:100%;font-size:10.5px;color:var(--dim2);padding-left:26px">
@@ -30746,7 +30793,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 1bf93478ae</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 2c317551dd</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -30888,7 +30935,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "1bf93478ae";
+const BAU = "2c317551dd";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
