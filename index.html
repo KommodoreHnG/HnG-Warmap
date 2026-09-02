@@ -692,6 +692,32 @@ body.meld-modus{cursor:help}
 .kb-links h3{margin:0 0 6px;font-size:10px;letter-spacing:.14em;color:#6d7680;text-transform:uppercase}
 .kb-links .kb-jetzt{background:#15181d;border:1px solid #2a2e36;border-radius:3px;padding:10px 12px;margin-bottom:14px}
 .kb-links .kb-jetzt b{color:#e8d9a8;font-size:15px}
+/* the field set */
+.kb-geraet{background:#12151a;border:1px solid #2a2e36;border-radius:4px;padding:8px 8px 6px}
+.kb-funk{display:block;width:100%;height:auto;stroke:#6b7480;fill:none;stroke-width:1.6;
+  stroke-linecap:round;stroke-linejoin:round}
+.kb-funk .niet circle{fill:#3a414b;stroke:none}
+.kb-funk .voll{fill:#6b7480;stroke:none}
+.kb-funk .zeiger{stroke:#c9a227;stroke-width:2}
+.kb-funk .arm{stroke:#8a939f;stroke-width:2.4}
+.kb-funk .knopf{fill:#2b3038;stroke:#8a939f;stroke-width:2}
+.kb-funk .lampe{fill:#3a2a12;stroke:#6b7480;transition:fill .12s linear}
+.kb-geraet.sendet .kb-funk .lampe{fill:#f0b13a}
+.kb-geraet.sendet .kb-funk .arm{transform:translateY(3px);transform-origin:56px 138px;transition:transform .1s}
+/* the morse tape */
+.kb-band{position:relative;margin-top:7px;height:26px;overflow:hidden;border-radius:2px;
+  background:repeating-linear-gradient(90deg,#e9dfc6 0 15px,#e2d7ba 15px 16px);
+  border:1px solid #3a414b;display:flex;align-items:center}
+.kb-band.leer{background:#171a20}
+.kb-bandtext{position:absolute;left:6px;top:1px;font-family:var(--schmal);font-size:9px;
+  letter-spacing:.16em;color:#8a7a52;text-transform:uppercase;z-index:2}
+.kb-band.leer .kb-bandtext{color:#4e565f}
+.kb-marken{display:flex;align-items:center;gap:3px;padding-left:8px;animation:kbBand 2.4s linear infinite}
+.kb-marken i{display:block;height:7px;background:#2b2416;border-radius:1px}
+.kb-marken i.pt{width:7px}
+.kb-marken i.st{width:19px}
+.kb-marken i.lu{width:8px;background:transparent}
+@keyframes kbBand{from{transform:translateX(24px)}to{transform:translateX(-24px)}}
 .kb-schirm{grid-area:schirm;position:relative;overflow:auto;padding:16px 18px;
   background:radial-gradient(ellipse at 50% 30%, #15171c 0%, #0b0c10 75%)}
 /* the strip: one box per unit in town, in the side's colour, a question mark
@@ -10937,6 +10963,8 @@ function kbZeichnen(){
     <h3>Town</h3>
     <input id="kb-ort" list="units-orte" value="${ortName ? kbEsc(ortName) : ""}" placeholder="read from the bar, or type it" style="width:100%;background:#15181d;border:1px solid #2a2e36;color:#e8d9a8;padding:6px 8px;border-radius:3px">
     <datalist id="units-orte">${MAP.n.map(n => `<option value="${kbEsc(n[0])}">`).join("")}</datalist>
+    <h3 style="margin-top:14px">Set</h3>
+    <div class="kb-geraet ${KB.schreibt ? "sendet" : ""}">${kbFunkgeraetSVG()}${kbMorseBand()}</div>
     <h3 style="margin-top:14px">How it works</h3>
     Open a town with several units in the game and click its units one after another, <b>left to right</b>.
     Each one is written down as it appears. A unit already on the sheet is not written twice.
@@ -11152,6 +11180,58 @@ function kbCrewNamen(z){
   let k = z.typ;
   if (!k){ const kand = kbTypKandidaten(z.hp); if (kand.length === 1) k = kand[0]; }
   return (k && AT[k] && AT[k].crew) ? AT[k].crew.map(c => c[0]) : [];
+}
+/* The set on the left wall, drawn after the build of a Soviet field
+   station of the forties: riveted case, two tuning dials with a needle, a
+   frequency window, two toggles, a signal lamp, and the telegraph key on
+   its base. Lines only - no photograph is used. */
+function kbFunkgeraetSVG(){
+  const nieten = [];
+  for (let x = 14; x <= 178; x += 23.4) nieten.push(`<circle cx="${x.toFixed(1)}" cy="11" r="1.7"/><circle cx="${x.toFixed(1)}" cy="101" r="1.7"/>`);
+  const skala = (cx, cy, r) => {
+    let t = "";
+    for (let i = 0; i < 12; i++){
+      const a = -Math.PI*1.25 + i*(Math.PI*1.5/11);
+      t += `<path d="M${(cx + Math.cos(a)*(r-1)).toFixed(1)} ${(cy + Math.sin(a)*(r-1)).toFixed(1)}
+             L${(cx + Math.cos(a)*(r-4.6)).toFixed(1)} ${(cy + Math.sin(a)*(r-4.6)).toFixed(1)}"/>`;
+    }
+    return `<circle cx="${cx}" cy="${cy}" r="${r}"/><circle cx="${cx}" cy="${cy}" r="${r-7}"/>${t}
+      <circle cx="${cx}" cy="${cy}" r="2.4" class="voll"/>`;
+  };
+  return `<svg class="kb-funk" viewBox="0 0 192 152" role="img" aria-label="field radio set">
+    <rect x="4" y="4" width="184" height="104" rx="5"/>
+    <rect x="11.5" y="11.5" width="169" height="89" rx="3"/>
+    <g class="niet">${nieten.join("")}</g>
+    ${skala(48, 52, 24)}
+    <path d="M48 52 L62 38" class="zeiger"/>
+    ${skala(112, 52, 18)}
+    <path d="M112 52 L101 41" class="zeiger"/>
+    <rect x="140" y="28" width="34" height="17" rx="2"/>
+    <path d="M144 36.5 h26 M147 32 v9 M153 32 v9 M159 32 v9 M165 32 v9"/>
+    <rect x="140" y="56" width="12" height="22" rx="5"/><path d="M146 61 v-6"/>
+    <rect x="160" y="56" width="12" height="22" rx="5"/><path d="M166 73 v6"/>
+    <circle cx="86" cy="86" r="6" class="lampe"/><circle cx="86" cy="86" r="9"/>
+    <path d="M24 84 h40 M24 90 h40 M108 84 h30 M108 90 h30"/>
+    <rect x="30" y="116" width="132" height="30" rx="3"/>
+    <path d="M46 138 h100" />
+    <path d="M56 138 L60 126 H128" class="arm"/>
+    <circle cx="132" cy="126" r="7" class="knopf"/>
+    <path d="M56 138 v6 M138 138 v6"/>
+    <path d="M70 130 v8 M96 130 v8"/>
+  </svg>`;
+}
+/* The tape: exactly what is being written, in Morse. */
+function kbMorseBand(){
+  const z = KB.schreibt !== null && KB.schreibt !== undefined ? KB.zeilen[KB.schreibt.i] : null;
+  const txt = String((z && (z.tag || z.name)) || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  if (!txt) return `<div class="kb-band leer"><span class="kb-bandtext">— idle —</span></div>`;
+  const marken = [];
+  for (const ch of txt){
+    for (const m of (KB_MORSE[ch] || "")) marken.push(`<i class="${m === "." ? "pt" : "st"}"></i>`);
+    marken.push(`<i class="lu"></i>`);
+  }
+  return `<div class="kb-band"><span class="kb-bandtext">${kbEsc(txt)}</span>
+    <div class="kb-marken">${marken.join("")}</div></div>`;
 }
 function kbStaerkeHTML(z){
   const hp = z.hp || [];
@@ -28819,7 +28899,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 378606fa55</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0e6022f169</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28961,7 +29041,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "378606fa55";
+const BAU = "0e6022f169";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
