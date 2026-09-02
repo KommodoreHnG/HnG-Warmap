@@ -1342,12 +1342,12 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
         </button>
         <button class="btn" id="b-units" title="Read the units of a town from the game's detail bar">
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
-            <!-- steel helmet: dome, rim, chin strap -->
-            <path d="M4.6 12.4 C4.6 7.2 8 4.2 12 4.2 C16 4.2 19.4 7.2 19.4 12.4 Z"/>
-            <path d="M2.4 12.4 H21.6 L20.4 14.6 H3.6 Z"/>
-            <path d="M6.9 10.6 C7.3 8.3 9.3 6.6 12 6.4"/>
-            <path d="M8.2 14.6 L9.6 18.8 H14.4 L15.8 14.6"/>
-            <path d="M11.1 18.8 V20.4 H12.9 V18.8"/>
+            <!-- a soldier's head: helmet dome with rim, face, shoulders -->
+            <path d="M5.4 10.8 C5.4 6.4 8.4 3.6 12 3.6 C15.6 3.6 18.6 6.4 18.6 10.8"/>
+            <path d="M3.2 10.8 C3.2 10.2 3.7 9.8 4.4 9.8 H19.6 C20.3 9.8 20.8 10.2 20.8 10.8 C20.8 11.8 20 12.4 19 12.4 H5 C4 12.4 3.2 11.8 3.2 10.8 Z"/>
+            <path d="M7.8 12.4 C7.8 15.6 9.4 18.2 12 18.6 C14.6 18.2 16.2 15.6 16.2 12.4"/>
+            <path d="M8.2 7.6 C9 6 10.4 5.2 12 5.1"/>
+            <path d="M3 22 C5.2 19.8 8 18.9 9.8 18.7 M21 22 C18.8 19.8 16 18.9 14.2 18.7"/>
           </svg><span class="txt">Units</span>
         </button>
         <button class="btn" id="b-board" title="Clan board — notes, requests, sightings">
@@ -28655,7 +28655,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 389a1ce63b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 5a5f24e182</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28797,7 +28797,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "389a1ce63b";
+const BAU = "5a5f24e182";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
