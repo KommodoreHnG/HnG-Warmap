@@ -576,7 +576,7 @@ body.txt-modus{cursor:text}
   fill:none;stroke-width:calc(var(--ico-strich)*24/15);stroke-linejoin:round;stroke-linecap:round}
 #b-radar,#b-units{display:flex;align-items:center;gap:5px}
 /* the three at the very left: a touch bigger than the menu titles */
-#top-capture{display:flex;gap:6px;align-items:center;order:-1;margin-right:8px}
+#top-capture{display:flex;gap:6px;align-items:center;margin-right:10px;flex:0 0 auto}
 #top-capture .btn{display:flex;align-items:center;gap:8px;font-size:14px;padding:10px 15px}
 #top-capture .btn .ico{width:22px;height:22px;stroke-width:calc(var(--ico-strich)*24/22)}
 /* every capture button carries the same camera sign */
@@ -1526,66 +1526,69 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 <div id="app">
   <header id="top">
     <div id="brand"><b id="clan-name">War Map</b><span id="war-label">Heroes &amp; Generals</span></div>
+    <!-- THE CAPTURE ROOMS AND THE BOARD STAND AT THE LEFT EDGE. They used
+         to sit inside #top-right, whose margin-left:auto pushes that whole
+         box to the right-hand side - an order:-1 then only sorted them to
+         the front of a box that already stood on the right, which from the
+         left changes nothing at all. -->
+    <div id="top-capture">
+      <button class="btn" id="b-radar" title="Watch the war map — reads towns as you play">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.3"/><circle cx="12" cy="12" r="4.7"/>
+          <path d="M12 12 L18.6 5.4"/>
+          <circle cx="16.4" cy="8.2" r="1.3" fill="currentColor" stroke="none"/>
+        </svg><span class="txt">Radar</span>
+      </button>
+      <button class="btn" id="b-units" title="Read the units of a town from the game's detail bar">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+          <!-- THE UNIT STACK OFF THE WAR MAP, the sign that stands over a
+               town holding units. Measured on the map at six times size:
+               a black plate 55 x 19 carrying the white tactical sign, and
+               under it three cards 43 x 25 with a faction rim and a cream
+               field, each stepped six points right and down - the front
+               one at the upper left, the two behind showing only their
+               edges. The cards are filled and their edges dark, so the
+               stack stays one closed mass and still reads as a stack at
+               the twenty-two points of a button. -->
+          <rect x="3.0" y="1.5" width="17.0" height="5.8" rx="0.5"
+                fill="currentColor" stroke="none"/>
+          <path d="M9.6 2.9 L13.4 5.9 M13.4 2.9 L9.6 5.9"
+                stroke="var(--panel2,#241d16)" stroke-width="1.5"/>
+          <rect x="7.0" y="11.4" width="13.4" height="7.9" rx="0.6"
+                fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.1"/>
+          <rect x="5.1" y="9.2" width="13.4" height="7.9" rx="0.6"
+                fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.1"/>
+          <rect x="3.2" y="7.0" width="13.4" height="7.9" rx="0.6"
+                fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.1"/>
+        </svg><span class="txt">Units</span>
+      </button>
+      <button class="btn" id="b-spieler" title="Read the players of a battle from the war map">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+          <!-- a soldier in profile: helmet, tilted brim, face, shoulders -->
+          <path d="M5.2 11.6 C5.2 6.4 8.6 3.4 12.4 3.4 C16.2 3.4 19.0 6.2 19.2 10.4"/>
+          <path d="M3.6 12.6 C3.2 11.2 4.4 10.5 5.8 10.4 L19.2 9.4 C20.7 9.3 21.1 10.7 20.0 11.5 L6.4 13.5 C5.0 13.7 4.0 13.4 3.6 12.6 Z"/>
+          <path d="M18.8 11.6 C19.2 13.0 18.8 13.6 18.3 14.0 L19.6 15.2 L17.8 15.7 C18.0 17.2 16.8 18.4 14.8 18.6 L14.9 20.4"/>
+          <path d="M9.0 13.8 C8.8 16.6 10.4 18.2 12.4 18.6 L12.3 20.4"/>
+          <path d="M3.8 22.8 C5.4 21.0 8.4 20.4 12.3 20.4 M20.6 22.8 C19.4 21.2 17.2 20.6 14.9 20.4"/>
+        </svg><span class="txt">Players</span>
+      </button>
+      <button class="btn" id="b-board" title="Clan board — notes, requests, sightings">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+          <!-- pin board with two notes -->
+          <rect x="3" y="4" width="18" height="15" rx="1.2"/>
+          <rect x="5.8" y="7" width="5.4" height="6"/>
+          <rect x="13" y="8.5" width="5.2" height="7.5"/>
+          <circle cx="8.5" cy="7" r="1.1" fill="currentColor" stroke="none"/>
+          <circle cx="15.6" cy="8.5" r="1.1" fill="currentColor" stroke="none"/>
+        </svg><span class="txt">Board</span><span class="marke" hidden></span>
+      </button>
+    </div>
     <div id="tally"></div>
     <div id="me-tile"></div>
     <div id="forces" title="Your clan's forces — click for the depot"></div>
     <div id="zieher-o" role="separator" aria-orientation="horizontal" tabindex="0"
          title="Drag to resize the top bar — double-click to reset"></div>
     <div id="top-right">
-      <!-- The capture rooms and the board come first, in their own box: the
-           remembered button order cannot push them to the back. -->
-      <div id="top-capture">
-        <button class="btn" id="b-radar" title="Watch the war map — reads towns as you play">
-          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9.3"/><circle cx="12" cy="12" r="4.7"/>
-            <path d="M12 12 L18.6 5.4"/>
-            <circle cx="16.4" cy="8.2" r="1.3" fill="currentColor" stroke="none"/>
-          </svg><span class="txt">Radar</span>
-        </button>
-        <button class="btn" id="b-units" title="Read the units of a town from the game's detail bar">
-          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
-            <!-- THE UNIT STACK OFF THE WAR MAP, the sign that stands over a
-                 town holding units. Measured on the map at six times size:
-                 a black plate 55 x 19 carrying the white tactical sign, and
-                 under it three cards 43 x 25 with a faction rim and a cream
-                 field, each stepped six points right and down - the front
-                 one at the upper left, the two behind showing only their
-                 edges. The cards are filled and their edges dark, so the
-                 stack stays one closed mass and still reads as a stack at
-                 the twenty-two points of a button. -->
-            <rect x="3.0" y="1.5" width="17.0" height="5.8" rx="0.5"
-                  fill="currentColor" stroke="none"/>
-            <path d="M9.6 2.9 L13.4 5.9 M13.4 2.9 L9.6 5.9"
-                  stroke="var(--panel2,#241d16)" stroke-width="1.5"/>
-            <rect x="7.0" y="11.4" width="13.4" height="7.9" rx="0.6"
-                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.1"/>
-            <rect x="5.1" y="9.2" width="13.4" height="7.9" rx="0.6"
-                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.1"/>
-            <rect x="3.2" y="7.0" width="13.4" height="7.9" rx="0.6"
-                  fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.1"/>
-          </svg><span class="txt">Units</span>
-        </button>
-        <button class="btn" id="b-spieler" title="Read the players of a battle from the war map">
-          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
-            <!-- a soldier in profile: helmet, tilted brim, face, shoulders -->
-            <path d="M5.2 11.6 C5.2 6.4 8.6 3.4 12.4 3.4 C16.2 3.4 19.0 6.2 19.2 10.4"/>
-            <path d="M3.6 12.6 C3.2 11.2 4.4 10.5 5.8 10.4 L19.2 9.4 C20.7 9.3 21.1 10.7 20.0 11.5 L6.4 13.5 C5.0 13.7 4.0 13.4 3.6 12.6 Z"/>
-            <path d="M18.8 11.6 C19.2 13.0 18.8 13.6 18.3 14.0 L19.6 15.2 L17.8 15.7 C18.0 17.2 16.8 18.4 14.8 18.6 L14.9 20.4"/>
-            <path d="M9.0 13.8 C8.8 16.6 10.4 18.2 12.4 18.6 L12.3 20.4"/>
-            <path d="M3.8 22.8 C5.4 21.0 8.4 20.4 12.3 20.4 M20.6 22.8 C19.4 21.2 17.2 20.6 14.9 20.4"/>
-          </svg><span class="txt">Players</span>
-        </button>
-        <button class="btn" id="b-board" title="Clan board — notes, requests, sightings">
-          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
-            <!-- pin board with two notes -->
-            <rect x="3" y="4" width="18" height="15" rx="1.2"/>
-            <rect x="5.8" y="7" width="5.4" height="6"/>
-            <rect x="13" y="8.5" width="5.2" height="7.5"/>
-            <circle cx="8.5" cy="7" r="1.1" fill="currentColor" stroke="none"/>
-            <circle cx="15.6" cy="8.5" r="1.1" fill="currentColor" stroke="none"/>
-          </svg><span class="txt">Board</span><span class="marke" hidden></span>
-        </button>
-      </div>
       <button class="btn" id="b-clan" style="display:none">Manage</button>
       <!-- the clan window's tabs as menu entries (menueBauen moves them) -->
       <button class="btn" id="b-cl-card"   data-clantab="clan"   title="Name, side, standing orders">Card</button>
@@ -2377,7 +2380,20 @@ const AUSBAU_MAX   = 1, MUNITION_MAX = 1;
    game itself sets - a number no real player reaches, which is what a
    guard against damage should be. */
 const TEAM_MAX = 300;
-const SOLDAT_NAME_MAX = 24, TEAM_NAME_MAX = 20;
+const SOLDAT_NAME_MAX = 24, TEAM_NAME_MAX = 20, TEAM_TAG_MAX = 10;
+/* THE GAME'S OWN LIMIT, ON EVERY WAY IN. A unit's name holds at most
+   twenty characters, and that is a rule of the game - it binds a name
+   typed by hand exactly as it binds one the tool builds itself. A longer
+   one describes a unit that cannot exist, and the next comparison against
+   a screenshot would not find it again: the tool would then be saying
+   something about the war that is not so.
+   The trailing dots belong here as well. The war map cuts long names and
+   writes "AT034 - Kommo…"; that is not a name, it is the beginning of
+   one, and stored as it stands it matches nothing afterwards. */
+const atNameSauber = t => String(t == null ? "" : t)
+  .replace(/\s*(\u2026|\.\.\.)\s*$/, "").trim().slice(0, TEAM_NAME_MAX).trim();
+const atTagSauber = t => String(t == null ? "" : t)
+  .replace(/\s*(\u2026|\.\.\.)\s*$/, "").trim().toUpperCase().slice(0, TEAM_TAG_MAX).trim();
 
 function soldatNorm(s){
   if (!s || typeof s !== "object") return null;
@@ -3925,6 +3941,16 @@ const istBefehl  = (id, v) => !v || v.art !== 0 || bestaetigt(id);
 const artNeu     = () => darf("befehl") ? 1 : 0;
 function setBestaetigt(id, an){
   if (!darf("bestaetigen")) return darfNicht("bestaetigen");
+  /* NOT A QUESTION OF RIGHTS, a condition on the order itself: a drop out
+     of an airfield that is not ours does not go active, whoever is
+     standing in front of it. */
+  if (an){
+    const a = liveArrows().find(q => q.id === id);
+    if (a && luftGesperrt(a)){
+      toast(`${MAP.n[a.from][0]} is not ours yet — take the airfield first.`);
+      return;
+    }
+  }
   stamp("ok", id, an ? 1 : null, {n: S.name || ""});
   save(); draw();
   toast(an ? "Confirmed — it stands as an order now" : "Back to a proposal");
@@ -5324,13 +5350,19 @@ function pfeilForm(x1,y1,cx,cy,x2,y2,breite){
   const Bs = t => { const dx = 2*(1-t)*(cx-x1) + 2*t*(x2-cx),
                           dy = 2*(1-t)*(cy-y1) + 2*t*(y2-cy);
                     const l = Math.hypot(dx,dy)||1; return [dx/l, dy/l]; };
-  const kopf = 0.80, N = 20, links = [], rechts = [];
+  /* THE HEAD IS WHAT THE EYE FINDS FIRST. It used to sit at two and a half
+     widths a side and start at eight tenths of the way; on a map full of
+     lines that reads as a line with a nick in it. Now it starts at
+     seventy-four hundredths and measures three and four tenths of a width
+     to each side, and the shaft runs harder into it - the shape of the
+     thing it is modelled on. */
+  const kopf = 0.74, N = 20, links = [], rechts = [];
   for (let i=0;i<=N;i++){
-    const t = kopf*i/N, [px,py] = B(t), [ux,uy] = Bs(t), w = breite*(1 - 0.28*t);
+    const t = kopf*i/N, [px,py] = B(t), [ux,uy] = Bs(t), w = breite*(1 - 0.34*t);
     links.push([px - uy*w, py + ux*w]);
     rechts.push([px + uy*w, py - ux*w]);
   }
-  const [hx,hy] = B(kopf), [hux,huy] = Bs(kopf), kb = breite*2.5;
+  const [hx,hy] = B(kopf), [hux,huy] = Bs(kopf), kb = breite*3.4;
   const p = new Path2D();
   p.moveTo(links[0][0], links[0][1]);
   for (const q of links) p.lineTo(q[0], q[1]);
@@ -5340,6 +5372,56 @@ function pfeilForm(x1,y1,cx,cy,x2,y2,breite){
   for (let i=rechts.length-1;i>=0;i--) p.lineTo(rechts[i][0], rechts[i][1]);
   p.closePath();
   return p;
+}
+/* ---- THE AIRBORNE ORDER -------------------------------------------------
+   A drop is not an advance. Its start must be an airfield, its target may
+   be anywhere, it has no belly - troops in the air do not walk round from
+   the north - and it reaches exactly as far as the game lets it.
+   THE RANGE IS NOT INVENTED: it stands in the game's own data, and the
+   scale is the one the tool has always drawn its red strike circles with -
+   the figure divided by eight. Paratroopers 1850, Pathfinders 1950, so 231
+   and 244 map units. An order that names a unit sign is measured by that
+   sign; otherwise by the plain paratroopers. */
+const LUFT_ZWEIG = "airborne";
+/* How far the flight bows out. Larger than any belly on the ground, so a
+   drop is told from an advance at a glance. */
+const LUFT_BOGEN = 0.30;
+const luftTypen = () => MAP.at.filter(t => t.branch === LUFT_ZWEIG);
+function luftReichweite(a){
+  const t = a && a.sym ? MAP.at.find(x => x.k === a.sym && x.branch === LUFT_ZWEIG) : null;
+  if (t) return atRadius(t.k) / 8;
+  const p = MAP.at.find(x => x.k === "paratroopers") || luftTypen()[0];
+  return p ? atRadius(p.k) / 8 : 0;
+}
+/* May this arrow be an airborne order? Two questions, both answerable from
+   the map alone - who holds the airfield is a third and is asked later,
+   because a drop MAY be planned out of enemy land. */
+function luftPruefen(a, von, bis){
+  if (!istFlugplatz(von))
+    return {ok: false, grund: `${MAP.n[von][0]} is no airfield — a drop starts where the planes stand.`};
+  const w = ortAbstand(von, bis), r = luftReichweite(a);
+  if (r && w > r)
+    return {ok: false, grund: `Too far: ${Math.round(w)} map units, and the drop reaches ${Math.round(r)}.`};
+  return {ok: true, weite: w, reichweite: r};
+}
+/* Does the start airfield stand in enemy land? Then the drop may be
+   planned, but it does not become an order until the field is taken. */
+const luftGesperrt = a => !!(a && a.luft && ownerOf(a.from) !== a.f);
+/* How far an arrow bows out, as a share of the straight line between its
+   two towns. Sixteen hundredths is what every arrow used to have. */
+const PFEIL_BAUCH = 0.16, PFEIL_BAUCH_MAX = 0.62;
+const pfeilBauch = a => {
+  const b = a && a.bauch;
+  return (typeof b === "number" && isFinite(b))
+    ? Math.max(-PFEIL_BAUCH_MAX, Math.min(PFEIL_BAUCH_MAX, b)) : PFEIL_BAUCH;
+};
+/* The control point sits at twice the bulge, so what the hand points at is
+   halved on the way in. */
+function bauchAusZeiger(x1, y1, x2, y2, px, py){
+  const dx = x2-x1, dy = y2-y1, len = Math.hypot(dx, dy) || 1;
+  const mx = (x1+x2)/2, my = (y1+y2)/2;
+  const b = 2 * ((px-mx)*(-dy/len) + (py-my)*(dx/len)) / len;
+  return Math.max(-PFEIL_BAUCH_MAX, Math.min(PFEIL_BAUCH_MAX, b));
 }
 function drawArrow(a){
   const A = MAP.n[a.from], B = MAP.n[a.to];
@@ -5352,7 +5434,24 @@ function drawArrow(a){
   const ux = dx/len, uy = dy/len;
   const rand = Math.max(4, 3.4*Math.sqrt(view.z))*uiScale;   // nicht im Stadtsymbol ansetzen
   x1 += ux*rand; y1 += uy*rand; x2 -= ux*rand*1.25; y2 -= uy*rand*1.25;
-  const cx = (x1+x2)/2 - dy/len*len*.16, cy = (y1+y2)/2 + dx/len*len*.16;
+  /* THE BELLY IS THE ARROW'S OWN. It stood fixed at sixteen hundredths of
+     the chord, to the same side, so every arrow on the map bent alike -
+     and the bend is information: it says whether the troops come round
+     from the north or from the south. While its handle is being dragged
+     the arrow bends along with the hand. */
+  let bauch = pfeilBauch(a);
+  if (editing && editing.art === "arrow" && editing.id === a.id
+      && editing.kind === "bauch" && lastMouse)
+    bauch = bauchAusZeiger(x1, y1, x2, y2, lastMouse[0], lastMouse[1]);
+  /* A DROP HAS NO BELLY. Men in the air do not come round from the north,
+     and the bow it does carry is a different one: it rises off the ground,
+     straight up the screen, because the thing flies. */
+  /* THE BOW STANDS ACROSS THE FLIGHT, not up the screen. Lifting the
+     control point straight upwards looked like a bow only for an arrow
+     running east to west; one running north to south simply leant over.
+     Across the line it reads the same whichever way the drop goes. */
+  if (a.luft) bauch = LUFT_BOGEN;
+  const cx = (x1+x2)/2 - dy*bauch, cy = (y1+y2)/2 + dx*bauch;
 
   const mit = joinOf(a.id), staerke = mit.reduce((s,j)=>s+j.n, 0);
   const breite = Math.max(2.2, (2.2 + Math.min(staerke,24)*0.42)*Math.sqrt(view.z))*uiScale;
@@ -5369,13 +5468,27 @@ function drawArrow(a){
      die Karte schaut, soll auf einen Blick sehen, was gilt und was jemand
      gern haette. */
   const vor = !istBefehl(a.id, a) || !!a.entwurf;   // a draft looks like a proposal
+  /* FLAT ON THE GROUND OF THE MAP. The arrow used to cast a shadow and so
+     hovered above the terrain like a sticker. No shadow now; the dark rim
+     alone sets it into the ground, and the body carries a little more
+     colour to make up for what the shadow was doing. */
+  /* THE ONE THING THAT MAY CAST A SHADOW. Everything on this map lies on
+     the ground; a drop does not, and its shadow on the ground below is
+     what says so at a glance. It is drawn flat, along the straight line,
+     where the shadow of a flying thing would fall. */
+  if (a.luft){
+    const flach = pfeilForm(x1, y1, (x1+x2)/2, (y1+y2)/2, x2, y2, breite*0.72);
+    ctx.save();
+    ctx.globalAlpha = vor ? .14 : .32; ctx.fillStyle = "#000";
+    ctx.translate(0, Math.max(4, len*0.05)); ctx.fill(flach);
+    ctx.restore();
+  }
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 1.5;
-  ctx.globalAlpha = vor ? .32 : .9; ctx.fillStyle = f; ctx.fill(pfad);
+  ctx.globalAlpha = vor ? .34 : .94; ctx.fillStyle = f; ctx.fill(pfad);
   ctx.restore();
   const fb = pfeilFarbe(a.farbe);          // chosen outline colour, if any
-  ctx.strokeStyle = vor ? f : (fb || "rgba(0,0,0,.5)");
-  ctx.lineWidth = vor ? 1.6*uiScale : (fb ? 2*uiScale : 1.1);
+  ctx.strokeStyle = vor ? f : (fb || "rgba(0,0,0,.62)");
+  ctx.lineWidth = vor ? 1.6*uiScale : (fb ? 2*uiScale : 1.4*uiScale);
   if (vor) ctx.setLineDash([5,4]);
   ctx.stroke(pfad);
   ctx.setLineDash([]);
@@ -5398,7 +5511,12 @@ function drawArrow(a){
     /* the curve bulges to one side of the chord; put the text on the outer
        side of the bulge so it does not sit on the body */
     const aussen = ((cx - mx)*nx + (cy - my)*ny) > 0 ? -1 : 1;
-    const ab = (breite/2 + gr*0.75) * aussen;
+    /* THE CORE DATA STANDS INSIDE THE ORDER. Where the body is tall enough
+       to hold the letters, they sit on the arrow itself; a thin arrow -
+       one with no strength committed - would only hide its own text, and
+       there they step outside as before. */
+    const drin = !vor && breite*2 >= gr*1.25;
+    const ab = drin ? 0 : (breite/2 + gr*0.75) * aussen;
     ctx.save();
     ctx.translate(mx + nx*ab, my + ny*ab); ctx.rotate(ang);
     const bild = a.sym ? pfeilSymbolBild(a.sym, fb || (light() ? "#1a1409" : "#f4ead9")) : null;
@@ -5414,10 +5532,39 @@ function drawArrow(a){
     /* 0,28 was the worst value on the whole map - the outline closed the
        letters from both sides at once. */
     ctx.lineJoin = "round"; ctx.miterLimit = 2; ctx.lineWidth = Math.max(1.6, gr*0.15);
-    ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(10,7,4,.92)";
+    /* inside the body the rim is the body's own colour, so the letters look
+       cut out of it rather than laid on top */
+    ctx.strokeStyle = drin ? f : (light() ? "rgba(255,255,255,.92)" : "rgba(10,7,4,.92)");
     ctx.strokeText(txt, tx0, 0);
-    ctx.fillStyle = fb || (light() ? "#1a1409" : "#f4ead9");
+    ctx.fillStyle = drin ? (light() ? "#f6efe0" : "#12100c") : (fb || (light() ? "#1a1409" : "#f4ead9"));
     ctx.fillText(txt, tx0, 0);
+    ctx.restore();
+  }
+  /* THE CANOPY OVER THE DROP POINT. An arc alone is still an arrow; what
+     says "these men come out of the sky" is the parachute, and it stands
+     where they land. Dome, chord and load, the same shape the para tool
+     carries in the tool bar. */
+  if (a.luft){
+    const gr = Math.max(9, Math.min(26, 6.6*Math.sqrt(view.z)))*uiScale;
+    const px = x2, py = y2 - gr*1.6;
+    const schirm = () => {
+      ctx.beginPath();
+      ctx.arc(px, py, gr, Math.PI, 0);                       // the canopy
+      ctx.moveTo(px - gr, py); ctx.lineTo(px + gr, py);      // its chord
+      ctx.moveTo(px - gr*0.62, py); ctx.lineTo(px, py + gr*1.15);
+      ctx.lineTo(px + gr*0.62, py);                          // the load beneath
+      ctx.stroke();
+    };
+    ctx.save();
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    /* dark rim first, light line on top - the same order the map's writing
+       uses, and the only one that holds on both grounds */
+    ctx.lineWidth = Math.max(2.4, gr*0.30);
+    ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(10,7,4,.9)";
+    schirm();
+    ctx.lineWidth = Math.max(1.3, gr*0.15);
+    ctx.strokeStyle = fb || (light() ? "#1a1409" : "#f4ead9");
+    schirm();
     ctx.restore();
   }
   /* the number in a chain (or a D for a draft) as a small plate at the start */
@@ -5674,6 +5821,14 @@ function griffeListe(ziel){
     const [x1,y1] = toScr(MAP.n[a.from][1], MAP.n[a.from][2]);
     const [x2,y2] = toScr(MAP.n[a.to][1],   MAP.n[a.to][2]);
     raus.push({x:x1, y:y1, kind:"from", idx:0}, {x:x2, y:y2, kind:"to", idx:1});
+    /* THE THIRD HANDLE, in the middle of the curve: it sets the belly, and
+       with it whether the troops come round from the north or the south.
+       It sits where the curve actually runs, not on the chord, so the hand
+       finds it on the arrow itself. */
+    if (!a.luft){
+      const dx = x2-x1, dy = y2-y1, b = pfeilBauch(a);
+      raus.push({x: (x1+x2)/2 - dy*b*0.5, y: (y1+y2)/2 + dx*b*0.5, kind:"bauch", idx:2});
+    }
   } else {
     const e = S.line[ziel.id];
     if (!e || !e.v) return [];
@@ -5756,6 +5911,16 @@ function griffLoslassen(x, y){
   if (ed.art === "arrow"){
     const a = liveArrows().find(q => q.id === ed.id);
     if (!a) return;
+    if (ed.kind === "bauch"){
+      const [ax,ay] = toScr(MAP.n[a.from][1], MAP.n[a.from][2]);
+      const [bx,by] = toScr(MAP.n[a.to][1],   MAP.n[a.to][2]);
+      const b = bauchAusZeiger(ax, ay, bx, by, x, y);
+      if (Math.abs(b - pfeilBauch(a)) < 0.005) return;
+      a.bauch = Math.round(b*1000)/1000; a.t = jetzt();
+      dirty.add(`arrow:${a.id}`); save();
+      toast(`Belly ${a.bauch > 0 ? "south" : a.bauch < 0 ? "north" : "straight"} — ${Math.abs(Math.round(a.bauch*100))} %`);
+      return;
+    }
     if (ziel === null){ toast("Drop the end of an arrow on a town."); return; }
     const von = ed.kind === "from" ? ziel : a.from;
     const bis = ed.kind === "to"   ? ziel : a.to;
@@ -7416,7 +7581,7 @@ function depotZeichnen(){
         <span>${symbolSVG(d.k, c, 24, 17)}</span>
         <span class="n">
           <span class="zeile2"><input class="tname" data-id="${esc(d.id)}" value="${esc(d.name||"")}"
-              placeholder="${esc(atName(d.k))}" spellcheck="false"
+              placeholder="${esc(atName(d.k))}" spellcheck="false" maxlength="${TEAM_NAME_MAX}"
               ${d.name ? 'readonly title="Double-click to rename"' : ""}>
             <input class="ttag" data-id="${esc(d.id)}" value="${esc(d.tag||"")}"
               placeholder="TAG" spellcheck="false" maxlength="10"
@@ -7457,7 +7622,10 @@ function depotZeichnen(){
          Tastatur. */
       if (inp.readOnly){ inp.value = inp.defaultValue; return; }
       const feld = inp.classList.contains("ttag") ? "tag" : "name";
-      const wert = feld === "tag" ? inp.value.trim().toUpperCase() : inp.value.trim();
+      /* the bolt sits on the way in, not on the keyboard - a value may
+         reach here from anywhere */
+      const wert = feld === "tag" ? atTagSauber(inp.value) : atNameSauber(inp.value);
+      if (inp.value !== wert) inp.value = wert;
       const alt = (myDepot().find(d => d.id === inp.dataset.id) || {})[feld] || "";
       if (alt === wert) return;
       setMyDepot(myDepot().map(d => d.id === inp.dataset.id ? {...d, [feld]: wert} : d));
@@ -8298,6 +8466,24 @@ function arrowDialog(a){
         <label class="toggle"><input type="checkbox" id="a-entwurf" ${a.entwurf ? "checked" : ""}><span></span></label>
       </div>` : ""}
       ${a.folge ? `<div class="note">Step <b>${a.folge}</b> of its operation${a.entwurf ? " — still a draft" : ""}.</div>` : ""}
+      ${(() => {
+        /* THE ORDER'S OWN KIND. Switching it on asks the two questions the
+           map can answer: is the start an airfield, and is the target
+           within reach. Who holds the airfield is asked afterwards - a
+           drop out of enemy land may be PLANNED, it just does not become
+           an order until the field is taken. */
+        const p = luftPruefen(a, a.from, a.to);
+        const g = a.luft && luftGesperrt(a);
+        return `<div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Airborne drop
+          <small>${Math.round(luftReichweite(a))} map units${p.weite !== undefined ? `, this one is ${Math.round(p.weite)}` : ""}</small></span>
+        <label class="toggle"><input type="checkbox" id="a-luft" ${a.luft ? "checked" : ""}
+          ${p.ok || a.luft ? "" : "disabled"} title="${esc(p.ok ? "" : p.grund)}"><span></span></label>
+      </div>
+      ${a.luft && !p.ok ? `<div class="note">${esc(p.grund)}</div>` : ""}
+      ${g ? `<div class="note">${esc(MAP.n[a.from][0])} is not ours. The drop can be planned,
+        but it does not become an order until the airfield is taken — the request is on the board.</div>` : ""}`;
+      })()}
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Unit sign</span>
         <select id="a-sym" class="mini" style="width:170px">
@@ -8342,6 +8528,14 @@ function arrowDialog(a){
     if (lbl !== (a.label||"")){ a.label = lbl; neu = true; }
     if (soll !== (+a.soll || 0)){ a.soll = soll || undefined; neu = true; }
     if (farbe !== (a.farbe||"")){ a.farbe = farbe || undefined; neu = true; }
+    const luftAn = !!document.getElementById("a-luft")?.checked;
+    if (luftAn !== !!a.luft){
+      if (luftAn){
+        const p = luftPruefen(a, a.from, a.to);
+        if (!p.ok) toast(p.grund);
+        else { a.luft = 1; neu = true; luftBoardAnfordern(a); }
+      } else { delete a.luft; neu = true; }
+    }
     const sym = document.getElementById("a-sym").value;
     if (sym !== (a.sym||"")){ a.sym = sym || undefined; neu = true; }
     /* chain: take the predecessor's operation and the next number */
@@ -11988,7 +12182,7 @@ function kbNeu(){
           ort: null, linie: null, ziel: null, halter: null, merk: null,
           N: 0, erste: 0, sichtbar: 0, karten: [], zeilen: [],
           auswahl: null, wandel: null, gemeldet: null, scan: false, reiheKennung: null,
-          handAn: false, handWahl: null, handZieht: false, ortKennung: null, blick: 0, ortLaeuft: false,
+          handAn: false, handWahl: null, handZieht: false, ortKennung: null, blick: 0, ortLaeuft: false, ortHand: false,
           warte: [], werkt: false, arbeit: null, kastenLetzte: null, dauerMittel: 850,
           gesamt: null,
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null};
@@ -12970,20 +13164,57 @@ function kbZeichnen(){
     <div class="rd-kf ${KB.scan ? "scannt" : ""}"><div class="t">${KB.scan ? "Reading" : "Capture"}</div>
       <div class="v"><small>${KB.frame ? `${KB.frame.w}×${KB.frame.h}, brightness ${KB.hell}${KB.gain > 1 ? `, ×${KB.gain.toFixed(1)}` : ""}` : "—"}</small></div>
       ${KB.scan ? `<div class="kb-scan"><i></i></div>` : `<div class="bar"></div>`}</div>`;
-  /* left: what is being written now, and the town field */
+  /* LEFT: BUILT ONCE, THEN ONLY WHAT CHANGES. The whole wall used to be
+     written afresh out of one string on every look - fourteen times a
+     second now - and everything in it started over each time: the morse
+     strip never got past its first mark, the set was drawn anew, and the
+     town field was replaced under the hand that was typing in it. */
   const sz = KB.schreibt !== null && KB.schreibt !== undefined ? KB.zeilen[KB.schreibt.i] : null;
-  links.innerHTML = `
+  if (links.dataset.gebaut !== "1"){
+    links.innerHTML = `
     <h3>Now</h3>
-    <div class="kb-jetzt">${sz ? `<b>${kbEsc(sz.tag)}</b><br>${kbEsc(sz.name)}<br>${kbEsc(sz.besitzer)}` : kbEsc(KB.status)}</div>
+    <div class="kb-jetzt"></div>
     <h3>Town</h3>
-    <input id="kb-ort" list="units-orte" value="${ortName ? kbEsc(ortName) : ""}" placeholder="read from the bar, or type it" style="width:100%;background:#15181d;border:1px solid #2a2e36;color:#e8d9a8;padding:6px 8px;border-radius:3px">
+    <input id="kb-ort" list="units-orte" placeholder="read from the bar, or type it" style="width:100%;background:#15181d;border:1px solid #2a2e36;color:#e8d9a8;padding:6px 8px;border-radius:3px">
     <datalist id="units-orte">${MAP.n.map(n => `<option value="${kbEsc(n[0])}">`).join("")}</datalist>
     <h3 style="margin-top:14px">Set</h3>
-    <div class="kb-geraet ${KB.schreibt ? "sendet" : ""} ${KB.scan ? "scannt" : ""}">${kbFunkgeraetSVG()}${kbMorseBand()}</div>
+    <div class="kb-geraet">${kbFunkgeraetSVG()}<span class="kb-bandhalter"></span></div>
     <h3 style="margin-top:14px">How it works</h3>
     Open a town with several units in the game and click its units one after another, <b>left to right</b>.
     Each one is written down as it appears. A unit already on the sheet is not written twice.
     On an attack line without a name, click the battle first - its window names town and line.`;
+    links.dataset.gebaut = "1";
+    /* THE FIELD SAYS SO ITSELF when a hand lies in it. document.activeElement
+       is no reliable witness here: with the window not in front it names the
+       body instead of the field, and the town somebody was typing was
+       overwritten a tenth of a second later. */
+    const nf = links.querySelector("#kb-ort");
+    if (nf){
+      nf.addEventListener("focus", ()=>{ if (KB) KB.ortHand = true; });
+      nf.addEventListener("blur",  ()=>{ if (KB) KB.ortHand = false; });
+      nf.addEventListener("input", ()=>{ if (KB) KB.ortHand = true; });
+    }
+  }
+  const jetztSoll = sz ? `<b>${kbEsc(sz.tag)}</b><br>${kbEsc(sz.name)}<br>${kbEsc(sz.besitzer)}` : kbEsc(KB.status);
+  const jetzt = links.querySelector(".kb-jetzt");
+  if (jetzt && jetzt.innerHTML !== jetztSoll) jetzt.innerHTML = jetztSoll;
+  const geraet = links.querySelector(".kb-geraet");
+  if (geraet){
+    geraet.classList.toggle("sendet", !!KB.schreibt);
+    geraet.classList.toggle("scannt", !!KB.scan);
+  }
+  const halter = links.querySelector(".kb-bandhalter");
+  const bandTxt = kbMorseBandText();
+  if (halter && halter.dataset.txt !== bandTxt){
+    halter.dataset.txt = bandTxt;
+    halter.innerHTML = kbMorseBand();
+  }
+  /* the field is only set from outside while no hand lies in it */
+  const ortFeldLinks = links.querySelector("#kb-ort");
+  if (ortFeldLinks && !KB.ortHand && document.activeElement !== ortFeldLinks){
+    const soll = ortName || "";
+    if (ortFeldLinks.value !== soll) ortFeldLinks.value = soll;
+  }
   /* the strip */
   streifen.className = "kb-streifen" + (KB.N > 20 ? " gross" : "");
   streifen.innerHTML = KB.zeilen.map((z, i) => {
@@ -13461,9 +13692,14 @@ function kbOszAn(){
 }
 function kbOszAus(){ if (kbOszLauf){ cancelAnimationFrame(kbOszLauf); kbOszLauf = null; } }
 /* The tape: exactly what is being written, in Morse. */
-function kbMorseBand(){
+/* What is being sent right now - the strip is only rebuilt when this
+   changes, otherwise its marks would start over on every look. */
+function kbMorseBandText(){
   const z = KB.schreibt !== null && KB.schreibt !== undefined ? KB.zeilen[KB.schreibt.i] : null;
-  const txt = String((z && (z.tag || z.name)) || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  return String((z && (z.tag || z.name)) || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+}
+function kbMorseBand(){
+  const txt = kbMorseBandText();
   if (!txt) return `<div class="kb-band leer"><span class="kb-bandtext">— idle —</span></div>`;
   const marken = [];
   for (const ch of txt){
@@ -22686,7 +22922,7 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
       const k = z.querySelector("select.typ").value;
       const felder = z.querySelectorAll("input[type=text]");
       const id = Math.random().toString(36).slice(2,9);
-      liste.push({id, k, name: felder[0].value.trim(), tag: felder[1].value.trim().toUpperCase()});
+      liste.push({id, k, name: atNameSauber(felder[0].value), tag: atTagSauber(felder[1].value)});
       const tw = z.dataset.stadt;
       if (tw !== "") gestellt.push([id, +tw]);
       n++;
@@ -27721,6 +27957,23 @@ const TODO_ST  = ["open", "done", "not doing"];
 const meldungen = () => Object.entries(S.todo)
   .filter(([,e]) => e && e.v)
   .sort((a,b) => (a[1].v.st||0) - (b[1].v.st||0) || (b[1].t||0) - (a[1].t||0));
+/* THE REQUEST WRITES ITSELF. A drop planned out of a field that is not
+   ours needs that field taken first, and nobody should have to remember
+   to write that down - it goes on the board the moment the order is made
+   airborne, once, with the airfield named. */
+function luftBoardAnfordern(a){
+  if (!a || !a.luft || !luftGesperrt(a)) return;
+  if (a.boardId) return;                       // already asked for, once is enough
+  const ort = MAP.n[a.from][0], ziel = MAP.n[a.to][0];
+  try {
+    meldungSenden("plan",
+      `${ort} must be taken before the drop on ${ziel} can be set active.`
+      + ` The airborne order starts from that airfield${a.label ? ` (${a.label})` : ""}.`,
+      ort);
+    a.boardId = 1;
+    dirty.add(`arrow:${a.id}`);
+  } catch(e){}
+}
 function meldungSenden(art, text, wo){
   /* DIE KENNUNG GEHOERT IN DEN SCHLUESSEL. Bis zum 01.09.2026 hiess er
      todo:<zufall>, und die Serverregel stand deshalb auf blankem "true" -
@@ -31621,7 +31874,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 2598bbb2a0</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 40ffd2202f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -31763,7 +32016,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "2598bbb2a0";
+const BAU = "40ffd2202f";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
