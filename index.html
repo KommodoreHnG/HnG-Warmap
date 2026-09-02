@@ -4093,6 +4093,19 @@ function draw(){
     if (!light()){ ctx.fillStyle = "rgba(8,11,15,.30)"; ctx.fillRect(view.x, view.y, MAP.w*z, MAP.h*z); }
   }
 
+  /* --- the capitals' stars, under the supply lines as in the game --- */
+  {
+    const rS = ortRadius(), sr = sternRadius(rS);
+    for (let i = 0; i < MAP.n.length; i++){
+      if (!isCap(i)) continue;
+      const [x, y] = toScr(MAP.n[i][1], MAP.n[i][2]);
+      if (x < -sr-10 || y < -sr-10 || x > WW+sr+10 || y > HH+sr+10) continue;
+      ctx.globalAlpha = blassOrt(i) ? 0.22 : 1;
+      sternZeichnen(x, y, sr, col(factionOf(i)));
+    }
+    ctx.globalAlpha = 1;
+  }
+
   /* --- supply lines, coloured by who holds both ends (game style) --- */
   const front = [], angriff = [], begegnung = [];
   /* Einmal je Bild nachschlagen statt 2661 Mal zweimal. Der Zeichner fragte
@@ -4160,19 +4173,23 @@ function draw(){
     ctx.lineTo(px + uy*s*0.62 - ux*s*0.35, py - ux*s*0.62 - uy*s*0.35);
     ctx.closePath(); ctx.fill();
   }
-  /* Begegnungskaempfe: ein Kreuz auf der Mitte der Linie. Dort entscheidet
-     sich, wer danach angreift und wer verteidigt. */
+  /* Begegnungskaempfe auf der Mitte der Linie. Im Spiel steht dort kein
+     Kreuz, sondern ein Glutpunkt mit Verlauf: aussen dunkles Orange
+     (137,73,38), nach innen heller bis zu einem fast weissen Kern
+     (221,188,154). Kein Pulsieren - der Punkt steht ruhig. */
   if (begegnung.length){
-    ctx.strokeStyle = "#ff8a5c";
-    ctx.lineWidth = Math.max(1.6, 2.1*z);
-    const s = Math.max(3.5, Math.min(8, 3*z));
-    ctx.beginPath();
+    const s = Math.max(3.2, Math.min(14, 2.6*z));
     for (const [x1,y1,x2,y2] of begegnung){
       const mx = (x1+x2)/2, my = (y1+y2)/2;
-      ctx.moveTo(mx-s, my-s); ctx.lineTo(mx+s, my+s);
-      ctx.moveTo(mx+s, my-s); ctx.lineTo(mx-s, my+s);
+      const g = ctx.createRadialGradient(mx - s*0.16, my - s*0.16, s*0.06, mx, my, s);
+      g.addColorStop(0,    "rgba(255,242,218,.98)");
+      g.addColorStop(0.26, "rgba(221,188,154,.95)");
+      g.addColorStop(0.56, "rgba(214,120,52,.90)");
+      g.addColorStop(0.84, "rgba(137,73,38,.58)");
+      g.addColorStop(1,    "rgba(110,52,24,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(mx, my, s, 0, 6.284); ctx.fill();
     }
-    ctx.stroke();
   }
 
   /* --- free-hand areas: enemy concentrations, zones, anything you circle --- */
@@ -4342,19 +4359,13 @@ function draw(){
        FORM: die Hauptstadt im Stern, das Objective im zweiten Rand. */
     const r = r0;
 
-    /* Eine Hauptstadt ist ein Stern, keine dickere Scheibe. Aus der Ferne war
-       sie sonst von jeder anderen Stadt nicht zu unterscheiden - und genau aus
-       der Ferne will man wissen, wo die Hauptstadt liegt. */
-    if (cap){
-      sternPfad(x, y, r*STERN_RAGT);
-      ctx.fillStyle = f; ctx.fill();
-      ctx.lineWidth = Math.max(1, 1.15*Math.sqrt(z));
-      ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(5,8,12,.95)";
-      ctx.stroke();
-    } else {
+    /* EVERY town is a disc with its sign, the capital too - the star sits
+       behind it, drawn before the supply lines. It used to be the star
+       alone, and then a capital showed neither its kind nor its symbol. */
+    {
       ctx.beginPath(); ctx.arc(x, y, r, 0, 6.284);
       ctx.fillStyle = f; ctx.fill();
-      ctx.lineWidth = Math.max(.8, .9*Math.sqrt(z));
+      ctx.lineWidth = Math.max(.8, (cap ? 1.15 : .9)*Math.sqrt(z));
       ctx.strokeStyle = light() ? "rgba(255,255,255,.9)" : "rgba(5,8,12,.95)";
       ctx.stroke();
       /* Das Objective war frueher 1,35-mal so gross wie eine gewoehnliche
@@ -4676,6 +4687,47 @@ function draw(){
 }
 
 /* Fuenfzackiger Stern, Spitze nach oben. */
+/* The star's outer radius for a disc of radius r. Below eight points it
+   grows a touch faster, so a capital stays findable when zoomed out. */
+function sternRadius(r){ return r * STERN_RAGT * (r < 8 ? 1 + (8 - r)*0.045 : 1); }
+/* A colour, dimmed - the star's facets are darker shades of the town's own
+   colour (measured: lit 0,80, shaded 0,25). */
+function farbTon(farbe, f){
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(farbe).trim());
+  if (!m) return farbe;
+  const v = k => Math.max(0, Math.min(255, Math.round(parseInt(m[k], 16) * f)));
+  return `rgb(${v(1)},${v(2)},${v(3)})`;
+}
+/* The capital's star as the game draws it: a bevelled five-pointer, one
+   point up, every arm split along its axis into a lit and a shaded facet,
+   light from the upper left, on a soft shadow. */
+function sternZeichnen(x, y, aussen, farbe){
+  const innen = aussen*0.42;
+  const p = (k, rr) => { const w = -Math.PI/2 + k*Math.PI/5; return [x + Math.cos(w)*rr, y + Math.sin(w)*rr]; };
+  const hellF = farbTon(farbe, 0.80), dunkelF = farbTon(farbe, 0.26);
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,.5)";
+  ctx.shadowBlur = Math.max(2, aussen*0.09);
+  ctx.shadowOffsetY = Math.max(1, aussen*0.045);
+  sternPfad(x, y, aussen); ctx.fillStyle = dunkelF; ctx.fill();
+  ctx.restore();
+  if (aussen >= 7){
+    for (let a = 0; a < 5; a++){
+      const sp = p(2*a, aussen);
+      for (const k of [2*a - 1, 2*a + 1]){
+        const e = p(k, innen);
+        const mx = (x + sp[0] + e[0])/3 - x, my = (y + sp[1] + e[1])/3 - y;
+        const l = Math.hypot(mx, my) || 1;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(sp[0], sp[1]); ctx.lineTo(e[0], e[1]); ctx.closePath();
+        ctx.fillStyle = ((mx/l)*(-0.72) + (my/l)*(-0.69) > 0) ? hellF : dunkelF; ctx.fill();
+      }
+    }
+  }
+  sternPfad(x, y, aussen);
+  ctx.lineWidth = Math.max(1, aussen*0.05);
+  ctx.strokeStyle = light() ? "rgba(255,255,255,.85)" : "rgba(4,6,9,.95)";
+  ctx.stroke();
+}
 function sternPfad(x, y, aussen){
   const innen = aussen*0.42;
   ctx.beginPath();
@@ -5074,7 +5126,11 @@ function ortRadius(){
    dieselbe Flaeche wie die Scheibe - die Hauptstadt faellt durch ihre
    FORM auf, nicht durch ihre Groesse. Genau das war Gewuenscht: gleiche
    Kreise, Rang trotzdem erkennbar. */
-const STERN_RAGT = 1.5;
+/* How far the capital's star reaches beyond the disc. Measured in the game
+   at 2,44 to 2,64 disc radii on the sharpest picture (disc r 87, star 212
+   to 230 px); far out the star keeps a little more of its size so it stays
+   readable - that is the "scales slightly" of the order. */
+const STERN_RAGT = 2.6;
 function hitTest(sx, sy, alle){
   const [kx,ky] = toMap(sx,sy);
   /* Der Trefferkreis haengt am GEZEICHNETEN Radius, nicht mehr an einer
@@ -28899,7 +28955,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0e6022f169</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 31f689438b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -29041,7 +29097,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0e6022f169";
+const BAU = "31f689438b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
