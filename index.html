@@ -717,8 +717,14 @@ body.meld-modus{cursor:help}
 /* ---- The signals cabin: same grid as the radar, its own screen. The room is
    dark metal like the radar; the sheet in the middle is paper, because that
    is what a signals clerk writes on. */
+/* THE COLUMNS MEASURE THE WALLS, they do not prescribe them. The two side
+   walls carry the tool's magnification (zoom), so at 1,2 a wall asked for
+   260 points renders 301 - but a column written as "260px" reserves 260
+   and the surplus pushes the room past the screen: measured at 1280 points
+   of window, content 1345, and the right-hand desk was cut off. The
+   cabin next door has always used "auto" and comes out exactly even. */
 #spieler{position:fixed;inset:0;z-index:120;display:none;background:#0b0c10;
-  grid-template-columns:260px 1fr 300px;grid-template-rows:auto 1fr;
+  grid-template-columns:auto 1fr auto;grid-template-rows:auto 1fr;
   grid-template-areas:"kopf kopf kopf" "links schirm pult";color:#cfd6dd}
 #spieler.an{display:grid}
 #spieler .rd-kopf{grid-area:kopf;background:#101216;border-bottom-color:#22252c}
@@ -30893,7 +30899,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c6072e9a00</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 229e2787ef</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -31035,7 +31041,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "c6072e9a00";
+const BAU = "229e2787ef";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
