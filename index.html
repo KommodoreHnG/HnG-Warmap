@@ -2078,7 +2078,7 @@ const UPG_GRP = {1: "Medical", 2: "Supply crate", 3: "Ammunition",
    remember what their own loadout implies. */
 const FAEHIG = [
   {k:"at",     name:"Anti-tank",   warum:"can kill armour"},
-  {k:"aa",     name:"Anti-air",    warum:"can put up flak"},
+  {k:"aa",     name:"Anti-air",    warum:"flak vehicle or anti-tank rifle"},
   {k:"amph",   name:"Amphibious",  warum:"crosses water"},
   {k:"apc",    name:"APC",         warum:"half-track or truck the squad spawns from"},
   {k:"heavy",  name:"Heavy armour",warum:"heavy tank or heavy TD"},
@@ -2101,7 +2101,10 @@ const ZU_FUSS = new Set(["rifleman", "paratrooper", "recon"]);
 function faehigkeiten(s){
   const raus = new Set();
   if (!s || typeof s !== "object") return raus;
-  const zuFuss = ZU_FUSS.has(s.cls);
+  /* An entry with no class at all - imported, hand-edited, or read off a
+     screenshot - carried the machine gun mark before and would silently
+     lose it here. No class means no reason to take anything away. */
+  const zuFuss = !s.cls || ZU_FUSS.has(s.cls);
   for (const k of (Array.isArray(s.w) ? s.w : [])){
     const w = ARM[k];
     if (!w) continue;
@@ -2126,7 +2129,9 @@ function faehigkeiten(s){
        so the five carriers counted as armour until now. */
     const apc = v.res === "armored_personnel_carrier";
     if (apc) raus.add("apc");
-    if (/^heavy_/.test(v.res)) raus.add("heavy");
+    /* Only the two heavy ground categories: "heavy_fighter_plane" starts
+       the same way, and a P-38 pilot is not a heavy tanker. */
+    if (/^heavy_(armor|tank_destroyer)$/.test(v.res)) raus.add("heavy");
     if (!apc && /armor|tank_destroyer/.test(v.res)) raus.add("tank");
     if (/plane/.test(v.res)) raus.add("plane");
   }
@@ -2196,8 +2201,11 @@ const spielFrak = f => (f == null ? 0 : f + 1);
    Assault Teams er auf der Kriegskarte fuehren darf - NICHT darueber, welche
    Waffen und Fahrzeuge er kaufen kann. Das ist eine andere Achse, und die
    Verwechslung hatte hier schon einmal einen falschen Filter erzeugt.
-   Schwellen nach Angabe; die Generalsraenge spielen nur die
-   Strategieebene. */
+   Die Schwellen stehen in ShopCharacterPacks, Feld 8: die Startraenge der
+   Kaufpakete sind 0 (Soldat), 12 (Company Officer), 15 (Field Officer) und
+   18 (General) - und die drei Generalspakete (US 8, GE 28, SU 42) tragen
+   Klasse 7. General ist deshalb eine eigene Klasse, kein Rangband ueber
+   den Kampfklassen. */
 const RANG_MAX = 22;
 const RANG_OFFIZIER = 12, RANG_GENERAL = 18;
 /* Nicht "ein Team ab Rang 12, zwei ab 15" — das Spiel rechnet in COMMAND
@@ -2252,7 +2260,12 @@ function rangText(r){
    the number that decides how many assault teams they can lead. */
 function soldatCPText(so){
   const r = +((so || {}).rank) || 0;
-  const rang = r >= RANG_GENERAL ? "general" : r >= RANG_OFFIZIER ? "officer" : "shooter";
+  /* The word comes from the class: general IS a class, not a rank band.
+     Entries from before that class existed carry no cls and are still read
+     off the rank, so nothing already shown disappears. */
+  const cl = (so || {}).cls;
+  const rang = (cl === "general" || (!cl && r >= RANG_GENERAL)) ? "general"
+             : r >= RANG_OFFIZIER ? "officer" : "shooter";
   const cp = soldatCP(so), von = rangCP(r), bad = badgeCP((so || {}).kb);
   if (!cp) return `${rang} · 0 CP`;
   return bad ? `${rang} · ${cp} CP (${von} + ${bad})` : `${rang} · ${cp} CP`;
@@ -2295,6 +2308,12 @@ function setClanFaktion(f){
    das nicht sicher geklaert ist, wird damit nichts ausgeblendet. */
 function verfuegbar(d, frak, cls, lvl){
   if (!d) return false;
+  /* A general buys nothing. The game's purchase rows have none for class 7,
+     but the rows that say "any class" match all the same - a general was
+     offered knives, grenades, parachutes and a Panzerfaust. The nine items
+     with no purchase row at all fall through on faction alone, so the exit
+     has to sit ahead of both branches. */
+  if (cls === "general") return false;
   if (!Array.isArray(d.av) || !d.av.length){
     /* Kein Kaufeintrag in den Dateien. Bei Fahrzeugen entscheidet dann die
        Klasse, die im Spiel dieses Fahrzeug bemannt - aus den Teamkosten
@@ -2311,6 +2330,7 @@ function verfuegbar(d, frak, cls, lvl){
 /* Ab welcher Stufe - fuer den Hinweis am Eintrag. */
 function abStufe(d, frak, cls){
   if (!d || !Array.isArray(d.av) || !d.av.length) return null;
+  if (cls === "general") return null;   // same reason as in verfuegbar
   const fs = spielFrak(frak), cn = KLASSE_NR[cls] || 0;
   const passend = d.av.filter(z => (!z[0] || !fs || z[0] === fs) && (!z[1] || !cn || z[1] === cn));
   return passend.length ? Math.min(...passend.map(z => z[2])) : null;
@@ -26604,7 +26624,7 @@ const fuerSeite = (eintrag, f) => !eintrag.f || eintrag.f === f + 1;
    gaengige. So bildet sich eine gemeinsame Sprache statt fuenfzehn
    Schreibweisen fuer dasselbe. */
 const ROLLEN_START = ["good pilot", "good tanker", "good at gunner", "sniper",
-                      "medic", "squad leader", "recon", "cheater?"];
+                      "medic", "squad leader", "recon", "apc driver", "cheater?"];
 function rollenVorrat(){
   const z = new Map();
   for (const e of Object.values(S.edep || {}))
@@ -28062,11 +28082,14 @@ function arsenalDialog(tab){
       <div class="sold-z"><span class="sold-l">Weapons</span>
         <div class="kchips">${(s.w || []).map(k => chip(ARM[k] ? ARM[k].name : k, "w:" + k,
             ARM[k] ? `${rolleName(ARM[k].role)}${ARM[k].fam ? " · " + ARM[k].fam : ""}` : "")).join("")}
-          <button class="btn" data-add="w" style="padding:2px 8px;font-size:11px">+ weapon</button></div></div>
+          ${s.cls === "general" ? "" : `<button class="btn" data-add="w" style="padding:2px 8px;font-size:11px">+ weapon</button>`}</div></div>
       <div class="sold-z"><span class="sold-l">Vehicles</span>
         <div class="kchips" style="flex-direction:column;align-items:stretch">
           ${(s.v || []).map(fzZeile).join("")}
-          <div><button class="btn" data-add="v" style="padding:2px 8px;font-size:11px">+ vehicle</button></div>
+          ${s.cls === "general" ? `<div class="hint" style="font-size:10.5px">A general carries nothing —
+            the promotion is final in the game and moves the kit away. Anything still listed above is
+            left over from before and is not thrown away here.</div>`
+            : `<div><button class="btn" data-add="v" style="padding:2px 8px;font-size:11px">+ vehicle</button></div>`}
         </div></div>
       ${f.size ? `<div class="sold-z"><span class="sold-l">Can</span>
         <div class="kchips">${[...f].map(k => {
@@ -28340,7 +28363,7 @@ function kitWahl(host, art, ctx, beiWahl){
         if (!liste.length) continue;
         leer = false;
         html += `<div class="sw-h">${esc(r.name)}</div>` + liste.map(w =>
-          zeile(w.k, w.name, `${FT[w.f] || ""}${w.at ? " · AT" : ""}`,
+          zeile(w.k, w.name, `${FT[w.f] || ""}${w.at ? " · AT" : ""}${w.aa ? " · AA" : ""}`,
                 w.fam ? `${rolleName(w.role)} · ${w.fam}` : rolleName(w.role))).join("");
       }
     } else if (art === "v"){
@@ -28860,7 +28883,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 4dbb73db87</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 51b4c0fd85</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -29002,7 +29025,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "4dbb73db87";
+const BAU = "51b4c0fd85";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
