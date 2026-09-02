@@ -8192,7 +8192,7 @@ function side(){
    Was NICHT in der Liste steht, bleibt offen: Suchfelder, Reiter,
    Sortierung, alles Lesende. */
 const AUFKL_IM_FENSTER = [
-  "#en-add", "#en-bulk", "#en-ocr", "#bulk-go",       // Spieler eintragen
+  "#en-add", "#en-bulk", "#bulk-go",                  // Spieler eintragen
   "#cl-neu", "#cl-neu-unbek",                         // Clan anlegen
   "[data-fac]", "[data-clanwahl]", "[data-reg]",      // Fraktion, Clan und Region je Zeile
   "[data-clanname]", "[data-clanseite]", "[data-claneigen]", "[data-clanreg]",
@@ -8497,11 +8497,11 @@ function bildQuelle(id, beiBild){
     finally { b.disabled = false; b.textContent = alt; }
   }));
 
+  /* Nothing to unsubscribe any more - the three ways in from outside are
+     gone. This used to remove listeners that no longer exist, and since it
+     runs as the FIRST statement of every window, one look at a capture
+     window meant no window would open again at all. */
   bildAbmelden = () => {
-    document.removeEventListener("paste", einfuegen);
-    dlg.removeEventListener("dragover", ueber);
-    dlg.removeEventListener("dragleave", weg);
-    dlg.removeEventListener("drop", fallen);
     dlg.classList.remove("dropbereit");
     bildAbmelden = null;
   };
@@ -12146,20 +12146,21 @@ async function kbEinreihen(F, G){
   if (ziel === null || ziel === undefined || !KB.zeilen[ziel]){
     KB.status = "A unit stands in the box, but no card in the bar is certainly picked — drag the frame onto it.";
     kbZeichnen();
-    return;
+    return false;
   }
   const oben = G.kastenOben;
   const sx = KB_KASTEN_AUS.x, sw = KB_KASTEN_AUS.w;
   const sy = Math.max(0, oben - KB_KASTEN_AUS.hoch);
   const sh = Math.min(UNITS_H - sy, KB_KASTEN_AUS.hoch + UNITS_BAND + KB_KASTEN_AUS.tief);
   let bmp;
-  try { bmp = await createImageBitmap(F.c, sx, sy, sw, sh); } catch(e){ return; }
-  if (!KB){ if (bmp.close) bmp.close(); return; }
+  try { bmp = await createImageBitmap(F.c, sx, sy, sw, sh); } catch(e){ return false; }
+  if (!KB){ if (bmp.close) bmp.close(); return false; }
   KB.warte.push({bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel});
   if (ziel !== null && KB.zeilen[ziel] && KB.zeilen[ziel].status === "vermutet")
     KB.zeilen[ziel].status = "wartet";
   kbZeichnen();
   kbSchlange();
+  return true;
 }
 async function kbSchlange(){
   if (!KB || KB.werkt) return;
@@ -12229,6 +12230,8 @@ function kbHandSetzen(i, klack){
   if (i === null || i === undefined || i < 0 || i >= KB.N) return false;
   const anders = !KB.handAn || KB.handWahl !== i;
   KB.handAn = true; KB.handWahl = i;
+  /* the box in the head may now be taken after all - offer it again */
+  KB.kastenLetzte = null;
   if (anders && klack) kbKlack();
   return anders;
 }
@@ -12567,9 +12570,14 @@ async function kbTick(){
     if (G.form && G.kastenOben !== null && G.kastenOben !== undefined){
       const kk = kbKastenKennung(d, G.kastenOben, G.form);
       if (kk !== KB.kastenLetzte){
-        KB.kastenLetzte = kk;
-        await kbEinreihen(F, G);
+        /* ONLY REMEMBER WHAT WAS ACTUALLY TAKEN. This used to be marked
+           before the picture was set aside - and when that was refused for
+           want of a certainly picked card, the same box was never offered
+           again. Dragging the frame onto the card then did nothing at all,
+           because the tool believed it had already dealt with that box. */
+        const genommen = await kbEinreihen(F, G);
         if (!KB || !KB.live) return;
+        if (genommen) KB.kastenLetzte = kk;
       }
     } else KB.kastenLetzte = null;
     /* THE TOWN NAME, from a picture that stood still for two looks - the
@@ -21475,7 +21483,6 @@ function intelDialog(tab, seite){
         </div>
         <div class="row">
           <button class="btn" id="en-bulk" style="flex:1">Add many at once …</button>
-          <button class="btn" id="en-ocr" style="flex:1">Read a battle screenshot …</button>
         </div>
         ${liste.length ? `<div class="tw"><table>
           <thead><tr><th>Player</th><th>Clan</th><th>Fights for</th><th>Region</th><th>Known teams</th><th>Seen</th><th>Towns</th><th>What</th><th>Last</th></tr></thead>
@@ -21618,7 +21625,6 @@ function intelDialog(tab, seite){
     closeDlg(); toast(`${nm} recorded`);
   });
   document.getElementById("en-bulk").addEventListener("click", massenDialog);
-  document.getElementById("en-ocr").addEventListener("click", ocrDialog);
   document.querySelectorAll("[data-fac]").forEach(s => s.addEventListener("change", ev=>{
     ev.stopPropagation();
     const d = proSpieler.get(s.dataset.fac);
@@ -30908,7 +30914,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d9209c1603</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bbfb0b9034</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -31050,7 +31056,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d9209c1603";
+const BAU = "bbfb0b9034";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
