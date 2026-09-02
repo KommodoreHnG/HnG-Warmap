@@ -550,6 +550,16 @@ body.txt-modus{cursor:text}
   background:var(--accent);color:#1a1409;font-size:10.5px;font-weight:700;line-height:16px;text-align:center;
   vertical-align:middle}
 #b-board.neu{box-shadow:inset 0 0 0 1px var(--accent)}
+/* the front replay: a slider above the map */
+#front-zettel{position:absolute;left:50%;bottom:52px;transform:translateX(-50%);z-index:12;
+  display:flex;align-items:center;gap:10px;padding:7px 10px;font-size:12px;min-width:min(560px,92%);
+  background:var(--panel);color:var(--text);border:1px solid var(--accent);border-radius:3px;
+  box-shadow:0 4px 18px rgba(0,0,0,.4);white-space:nowrap}
+#front-zettel input[type=range]{flex:1;min-width:120px}
+#front-zettel b{min-width:150px;text-align:center}
+#front-zettel button{background:transparent;border:1px solid var(--line);border-radius:2px;color:var(--text);
+  font:inherit;font-size:12px;line-height:1;padding:3px 8px;cursor:pointer}
+#front-zettel button:hover{border-color:var(--accent)}
 .btn .marke[hidden]{display:none}
 .flagge{vertical-align:-2px;margin-right:4px;border:1px solid rgba(0,0,0,.35);border-radius:1px;flex:none}
 /* the outline colours of an order */
@@ -1332,6 +1342,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-note" title="Encrypted — nobody else can read it">Notebook</button>
       <button class="btn" id="b-intel">Intel</button>
       <button class="btn" id="b-battle">Battle</button>
+      <button class="btn" id="b-front" title="Slide the map back through the war">Front replay</button>
       <button class="btn" id="b-board" title="Clan board — notes, requests, sightings">Board<span class="marke" hidden></span></button>
       <button class="btn" id="b-view">View</button>
       <button class="btn" id="b-shot" hidden>Read screenshot</button>
@@ -3254,8 +3265,12 @@ function alterText(t){
    die werden ueber Kriege hinweg aufgebaut. */
 const epoche  = () => (S.meta.epoch && +S.meta.epoch.v) || 0;
 const imKrieg = e => !!e && (e.t || 0) >= epoche();
+/* Front replay: while a moment is chosen, only what was known by then is
+   shown - every row carries the time of its last change. */
+let zeitReise = null;
+const imZeit = e => !zeitReise || !e || (e.t || 0) <= zeitReise;
 
-const ownerOf   = i => (imKrieg(S.owner[i]) && S.owner[i].v != null) ? S.owner[i].v : -1;
+const ownerOf   = i => (imKrieg(S.owner[i]) && imZeit(S.owner[i]) && S.owner[i].v != null) ? S.owner[i].v : -1;
 /* WIRD DIESER ORT ZURUECKGENOMMEN, wenn der Objectives-Schalter an ist?
    An einer Stelle formuliert, weil sie zweimal gebraucht wird - fuer die
    Scheibe und fuer den Namen. Standen die beiden Bedingungen getrennt da,
@@ -3312,11 +3327,11 @@ function hebeZettel(){
 }
 const factionOf = i => { const o = ownerOf(i); return o >= 0 ? FACTIONS[o] : NEUTRAL; };
 const noteOf    = i => (imKrieg(S.notes[i]) && S.notes[i].v) || "";
-const fightAt   = i => !!(imKrieg(S.fight[i]) && S.fight[i].v);
+const fightAt   = i => !!(imKrieg(S.fight[i]) && imZeit(S.fight[i]) && S.fight[i].v);
 const starAt    = i => !!(imKrieg(S.star[i]) && S.star[i].v);
 const lebt      = (id, e) => imKrieg(e) && e.v && !(S.gone[id] && S.gone[id].t >= (e.t||0));
 const liveArrows= () => S.arrows.filter(a => a && MAP.n[a.from] && MAP.n[a.to]
-  && (a.t||0) >= epoche() && !(S.gone[a.id] && S.gone[a.id].t >= (a.t||0)));
+  && (a.t||0) >= epoche() && imZeit(a) && !(S.gone[a.id] && S.gone[a.id].t >= (a.t||0)));
 /* WIEVIEL EINE PERSON AUF DER KARTE HABEN DARF.
    Der gemeldete Fall: "Ein User sollte garnicht in der Lage sein, 500 Pfeile zu
    setzen." Das ist KEINE Rechtefrage - auch wer Befehle geben darf, soll
@@ -3381,7 +3396,7 @@ function spotsAt(i){
     const p = k.indexOf(":");
     if (+k.slice(0,p) !== i) continue;
     const e = S.spot[k];
-    if (imKrieg(e) && Array.isArray(e.v) && e.v.length)
+    if (imKrieg(e) && imZeit(e) && Array.isArray(e.v) && e.v.length)
       raus.push({who:k.slice(p+1), name:e.n||"", t:e.t, list:e.v, mine:k.endsWith(":"+S.me)});
   }
   return raus;
@@ -23448,7 +23463,7 @@ const MENUES = [
      steckt, meldet man oder sieht man nach: Gegner, Schlacht, Brett. */
   /* The board stays in the top bar itself - its "new" badge must be seen
      without opening a menu first. */
-  {id:"lage",  titel:"Reports",  knoepfe:["b-intel","b-battle"]},
+  {id:"lage",  titel:"Reports",  knoepfe:["b-intel","b-battle","b-front"]},
   /* "War": the war's own settings and the reset. The reset button is shown
      to those who may press it today (the admin); whether a clan leader
      should have it instead is a rights question and stays open. */
@@ -28236,6 +28251,49 @@ function neuenKriegStarten(){
 }
 document.getElementById("b-reset").addEventListener("click", neuenKriegStarten);
 
+/* ---------------- front replay ---------------- */
+function frontZu(){
+  const z = document.getElementById("front-zettel");
+  if (z){ if (z._lauf) clearInterval(z._lauf); z.remove(); }
+  if (zeitReise !== null){ zeitReise = null; draw(); tally(); if (sel !== null) side(); }
+}
+function frontAuf(){
+  if (document.getElementById("front-zettel")){ frontZu(); return; }
+  /* the span: from the war's start (or the earliest row) to now */
+  let von = epoche() || Infinity;
+  const alle = [...Object.values(S.owner), ...Object.values(S.spot), ...Object.values(S.fight), ...S.arrows];
+  for (const e of alle) if (e && e.t && imKrieg(e) && e.t < von) von = e.t;
+  const bis = jetzt();
+  if (!isFinite(von) || von >= bis) von = bis - 3600e3;
+  const z = document.createElement("div"); z.id = "front-zettel";
+  z.innerHTML = `<span>Front on</span><b id="front-zeit"></b>
+    <input type="range" id="front-regler" min="${von}" max="${bis}" step="60000" value="${bis}">
+    <button type="button" id="front-lauf" title="Play">&#9654;</button>
+    <button type="button" id="front-weg" title="Back to now">&times;</button>`;
+  (document.getElementById("mapwrap") || document.body).appendChild(z);
+  const regler = z.querySelector("#front-regler"), zeit = z.querySelector("#front-zeit");
+  const setzen = t => {
+    zeitReise = t >= bis ? null : t;
+    zeit.textContent = new Date(t).toLocaleString(undefined, {dateStyle:"medium", timeStyle:"short"});
+    draw(); tally(); if (sel !== null) side();
+  };
+  regler.addEventListener("input", () => setzen(+regler.value));
+  z.querySelector("#front-lauf").addEventListener("click", () => {
+    if (z._lauf){ clearInterval(z._lauf); z._lauf = null; z.querySelector("#front-lauf").innerHTML = "&#9654;"; return; }
+    if (+regler.value >= bis) regler.value = von;
+    const schritt = Math.max(60000, (bis - von) / 240);
+    z.querySelector("#front-lauf").innerHTML = "&#10074;&#10074;";
+    z._lauf = setInterval(() => {
+      const t = Math.min(bis, +regler.value + schritt);
+      regler.value = t; setzen(t);
+      if (t >= bis){ clearInterval(z._lauf); z._lauf = null; z.querySelector("#front-lauf").innerHTML = "&#9654;"; }
+    }, 100);
+  });
+  z.querySelector("#front-weg").addEventListener("click", frontZu);
+  setzen(bis);
+}
+document.getElementById("b-front").addEventListener("click", frontAuf);
+
 document.getElementById("b-war").addEventListener("click", ()=>{
   /* Kriegsname und Startstadt gehoeren dem Verwalter. Clanname und Seite
      stehen seit dem 02.09. unter Manage - Card, beim Leiter. */
@@ -28474,7 +28532,7 @@ document.getElementById("b-help").addEventListener("click", ()=>{
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 8b71ceba35</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 3e9705ca44</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -28609,7 +28667,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "8b71ceba35";
+const BAU = "3e9705ca44";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
