@@ -11418,6 +11418,40 @@ function unitsTypVorlagenBauen(){
    grey zone, two thirds of clearance to either side. A dead band of three
    tenths stays all the same: a half-covered sign or a clipped card lands
    in the middle, and there the comparer decides alone as before. */
+/* AND THE BARS AT THE LEFT, which say light, medium or heavy. Same trap as
+   the angle: measured over all 153 pairs of templates, light armour and
+   medium armour stand at 0,803 of a possible 1,00 - and the reader asks
+   for five hundredths of clearance. Two tenths is all that separates them,
+   and a shaky point eats that.
+   The column profile shows what the difference is, over the full height:
+     light_armor            ........+++.........   no bar
+     medium_armor           .....####++.........   one
+     heavy_armor            .....####++..#####..   two
+     medium_tank_destroyer  .....####+++++++++++   one, plus the V
+     heavy_tank_destroyer   ..#####++++#####++++   two, plus the V
+   Two windows are enough, in the same currency as the angle:
+     BAR 1, x 3..10           BAR 2, x 10..17
+       light        -0,13       light        -0,80
+       medium       -2,49       medium       -0,35
+       heavy        -2,04       heavy        -1,89
+       medium TD    -1,78       medium TD    -0,57
+       heavy TD     -1,82       heavy TD     -1,82
+   Bar 1 tells LIGHT from all the rest, bar 2 tells HEAVY from all the
+   rest; with the angle naming the tank destroyer, all five are named
+   uniquely. MEASURED ON REAL CARDS as well - Colmar carries two light
+   tanks at -0,40 and two medium tank destroyers at -2,16, so the witness
+   carries over from the templates to the screen. */
+const UNITS_BALKEN1 = {x0: 3, x1: 10, y0: 6, y1: 34};
+const UNITS_BALKEN2 = {x0: 10, x1: 17, y0: 6, y1: 34};
+const UNITS_B1_NEIN = -0.8, UNITS_B1_JA = -1.3;
+const UNITS_B2_NEIN = -1.0, UNITS_B2_JA = -1.5;
+const UNITS_PANZERBALKEN = {
+  light_armor:           [0, 0],
+  medium_armor:          [1, 0],
+  heavy_armor:           [1, 1],
+  medium_tank_destroyer: [1, 0],
+  heavy_tank_destroyer:  [1, 1]
+};
 const UNITS_SPITZE = {x0: 26, x1: 36, y0: 0, y1: 7};
 const UNITS_SPITZE_TOT = 0.3;
 const UNITS_PANZERART = {light_armor: 0, medium_armor: 0, heavy_armor: 0,
@@ -11447,14 +11481,19 @@ function unitsTypVon(c, x0, fy){
     let q = 0;
     for (let j = 0; j < v.length; j++){ v[j] -= m; q += v[j]*v[j]; }
     q = Math.sqrt(q) || 1;
-    /* the ink above the oval, on this card, at this shift */
-    let spitze = null;
+    /* the ink above the oval and in the two bar strips, on this card, at
+       this shift */
+    let spitze = null, balken1 = null, balken2 = null;
     if (unitsTypB === 62 && unitsTypH === 40){
-      const S = UNITS_SPITZE;
-      let sum = 0, n = 0;
-      for (let y = S.y0; y < S.y1; y++)
-        for (let x = S.x0; x < S.x1; x++){ sum += v[y*unitsTypB + x]; n++; }
-      if (n) spitze = (sum/n)/q*100;
+      const mittel = S => {
+        let sum = 0, n = 0;
+        for (let y = S.y0; y < S.y1; y++)
+          for (let x = S.x0; x < S.x1; x++){ sum += v[y*unitsTypB + x]; n++; }
+        return n ? (sum/n)/q*100 : null;
+      };
+      spitze  = mittel(UNITS_SPITZE);
+      balken1 = mittel(UNITS_BALKEN1);
+      balken2 = mittel(UNITS_BALKEN2);
     }
     /* the WHOLE ranking of this shift, not just its winner: when the town
        cannot hold the best sign, the best one it can hold counts */
@@ -11472,6 +11511,19 @@ function unitsTypVon(c, x0, fy){
       for (let i = rang.length - 1; i >= 0; i--){
         const art = UNITS_PANZERART[rang[i].key];
         if (art !== undefined && art !== jagd) rang.splice(i, 1);
+      }
+    }
+    /* the bars, the same way: only where the strip is clearly one thing or
+       the other. In between - a half-covered sign, a clipped card - the
+       comparer decides alone, as before. */
+    const bWert = (w, nein, ja) => w === null ? -1 : (w > nein ? 0 : (w < ja ? 1 : -1));
+    const b1 = bWert(balken1, UNITS_B1_NEIN, UNITS_B1_JA);
+    const b2 = bWert(balken2, UNITS_B2_NEIN, UNITS_B2_JA);
+    if (b1 >= 0 || b2 >= 0){
+      for (let i = rang.length - 1; i >= 0; i--){
+        const bb = UNITS_PANZERBALKEN[rang[i].key];
+        if (!bb) continue;
+        if ((b1 >= 0 && bb[0] !== b1) || (b2 >= 0 && bb[1] !== b2)) rang.splice(i, 1);
       }
     }
     rang.sort((a, b) => b.k - a.k);
@@ -14132,6 +14184,23 @@ function kbTypAusListe(k){
   const liste = k.typListe;
   if (!liste || !liste.length) return k.typ;
   const schwelle = k.typSchwelle || 0.85;
+  /* WHAT THE CARD SHOWS PLAINLY, THE TOWN CANNOT TALK AWAY. The town's
+     strength row names the crew groups standing there, and a type whose
+     people are missing is ruled out - which is right, and it is how the
+     scouts vanished from the Kommodore's Schweinfurt sheet: the row
+     carried no recon group, so all three recon types were struck from
+     EVERY card's ranking, and each of those cards was given the best of
+     what was left, which is a wrong one. One misnamed diamond wipes out a
+     whole branch, and silently.
+     That runs against the Kommodore's own rule - "the strengths may
+     support, they may not decide" - which he gave for the empty vehicles
+     and which holds just as well here. So a card that reads its sign
+     SURELY, over the threshold and clear of the next, keeps it even when
+     the town rules it out; the contradiction then points at the diamonds,
+     not at the card. Only where the card itself is unsure does the town
+     help sort out - and there it is supporting, which is what was meant. */
+  if (liste[0].k >= schwelle && liste[0].k - (liste[1] ? liste[1].k : 0) >= 0.05)
+    return liste[0].key;
   const passt = moeglich ? liste.filter(e => moeglich.has(e.key)) : liste;
   if (!passt.length) return k.typ;
   const rest = (moeglich ? liste.filter(e => moeglich.has(e.key)) : liste).slice(1);
@@ -33477,7 +33546,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 808c16dc69</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 648295dceb</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33619,7 +33688,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "808c16dc69";
+const BAU = "648295dceb";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
