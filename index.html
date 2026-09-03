@@ -6754,6 +6754,20 @@ async function kriegsschnittServer(){
     setMeta("epoch", jetzt());
     const stst = startStaedte();
     for (const f of [0,1,2]) if (stst[f] != null) stamp("owner", String(stst[f]), f);
+    /* THE SENDING FAILS SILENTLY, and that is where the capitals went.
+       syncPush begins with
+           if (!CFG || !dirty.size || pushing) return;
+           if (tauschLaeuft) return;
+       so while an exchange or another push is running it does NOTHING and
+       does not say so. At a war cut that is the rule, not the exception: a
+       large server call has just finished, so the exchange is very likely
+       in motion. The three towns were then stamped LOCALLY, the push
+       returned without sending anything, the local store was wiped and the
+       page reloaded - and the server had never seen them.
+       So: wait for the exchange to finish before sending. Six seconds at
+       most, then try anyway. */
+    for (let i = 0; i < 60 && (tauschLaeuft || pushing); i++)
+      await new Promise(ok => setTimeout(ok, 100));
     await syncPush();
     /* THE THREE START TOWNS ARE CHECKED BEFORE ANYTHING IS THROWN AWAY.
        Whether the push actually got them out was never asked - and if it
@@ -6766,11 +6780,20 @@ async function kriegsschnittServer(){
        local store stays where it is, nothing is reloaded, and what is
        missing is said out loud - then it can be tried again instead of
        staring at an empty map. */
-    const fehlen = [0,1,2].filter(f => stst[f] != null && ownerOf(stst[f]) !== f);
+    /* AND THE BOLT ASKS THE RIGHT QUESTION NOW. It used to ask ownerOf(),
+       and that only says what stands LOCALLY - where the three had just
+       been stamped and were therefore right. It let everything through
+       while nothing had gone out.
+       Whether a row REALLY left is written in the queue: syncPushInner
+       strikes out every row the server took. Is "owner:716" still in
+       there, it did not arrive - and then nothing is thrown away and
+       nothing is reloaded. */
+    const fehlen = [0,1,2].filter(f => stst[f] != null
+      && (dirty.has(`owner:${stst[f]}`) || ownerOf(stst[f]) !== f));
     if (fehlen.length){
       toast(`The war was cut, but ${fehlen.length} of the start towns did not `
-          + `take their side: ${fehlen.map(f => MAP.n[stst[f]][0]).join(", ")}. `
-          + `Nothing was thrown away - press "Start a new war" again.`);
+          + `reach the server: ${fehlen.map(f => MAP.n[stst[f]][0]).join(", ")}. `
+          + `Nothing was thrown away — press "Start a new war" again.`);
       return;
     }
     try { localStorage.removeItem(STORE); localStorage.removeItem(OFFEN_STORE); } catch(e){}
@@ -33800,7 +33823,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0511c059d3</span></p></div>
+         installation. <span style="color:var(--dim2)">· build d3fa93b3e9</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33942,7 +33965,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0511c059d3";
+const BAU = "d3fa93b3e9";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
