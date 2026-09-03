@@ -11645,8 +11645,27 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde){
      with few Latin letters calls the other models (a 68 percent "SANTAS
      ELVES" cost four extra readings) */
   const t = beste.text || "";
-  const lateinAnteil = t.length ? (t.match(/[A-Za-z0-9 _\-|.:]/g) || []).length / t.length : 0;
-  if (beste.zuv >= 70 || (beste.zuv >= 45 && lateinAnteil >= 0.8 && t.length >= 6)) return beste;
+  /* THE TAG IS LATIN BY BUILD, AND IT USED TO SPEAK FOR THE WHOLE LINE.
+     Only the part behind the dash is the unit's NAME, and only that part
+     can be in another script - so only that part may decide whether the
+     other models are asked. A line like "ROKA-03 - <korean>" carried a tag
+     of seven Latin characters, and they alone lifted the share of the whole
+     line high enough that Korean was never tried.
+     And the shortcut for a confident reading falls under the same rule: a
+     reading may be confident and still be confident nonsense, if what it
+     was given was never Latin to begin with. */
+  const tr = t.search(AT_TRENNER);
+  const rest = tr >= 0 ? t.slice(tr).replace(AT_TRENNER, "").trim() : t;
+  const zaehl = rest.length ? rest : t;
+  const lateinAnteil = zaehl.length ? (zaehl.match(/[A-Za-z0-9 _\-|.:]/g) || []).length / zaehl.length : 0;
+  /* AND THE MIDDLING READING GETS A HIGHER BAR. Forty-five was chosen so
+     that a 68-percent "SANTAS ELVES" would not cost four extra readings -
+     but a Korean name comes back as "Al|3N - X| 2 CF" at fifty, which
+     looks Latin enough to slip through and is not Latin at all. At sixty
+     the Spanish and German names still take the shortcut and the Korean
+     one does not. */
+  if ((beste.zuv >= 70 && lateinAnteil >= 0.8)
+      || (beste.zuv >= 60 && lateinAnteil >= 0.8 && t.length >= 6)) return beste;
   const feld = unitsSchlicht(c, {x, y, w, h}, 3);
   let top = beste;
   for (const sp of UNITS_SCHRIFTEN){
@@ -11656,7 +11675,11 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde){
       const r = await wk.recognize(feld);
       const zuv = Math.round((r.data && r.data.confidence) || 0);
       const text = ((r.data && r.data.text) || "").trim().replace(/\s+/g, " ");
-      if (text && zuv >= top.zuv + 10 && zuv > beste.zuv) top = {text, zuv, schrift: sp};
+      /* THE LATIN READING RIDES ALONG. A tag is Latin by build, and a
+         foreign model reads it badly - Korean turned "ROKA-03" into
+         "0#-03". Whoever calls this takes the tag from the Latin reading
+         and the name from the model that won. */
+      if (text && zuv >= top.zuv + 10 && zuv > beste.zuv) top = {text, zuv, schrift: sp, latein: beste.text};
       /* a model that reads the line well is the model - no need to ask the
          rest (a Korean line cost all five readings, twelve seconds a frame) */
       if (top.zuv >= 75) break;
@@ -12233,11 +12256,22 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
     /* the print of the name line, and whether its letters can be trusted */
     bildKennFeld = name.feld || null;
     const unlesbar = unitsUnlesbar(name.text, name.symbole, name.feld);
+    /* the tag from the Latin reading, whatever model won the line */
+    let tagRoh = t.length > 1 ? t[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "";
+    if (name.schrift && name.latein){
+      const lr = name.latein.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[–—]\s+/g, " - ")
+                            .replace(/^[^\p{L}\p{N}]+/u, "");
+      const lt = lr.split(AT_TRENNER);
+      if (lt.length > 1){
+        const kand = lt[0].replace(/^[^\p{L}\p{N}]+/u, "").trim();
+        if (kand.length >= 2) tagRoh = kand;
+      }
+    }
     R.einheit = {
       unlesbar: unlesbar || undefined,
       bild: unlesbar ? bildKennung(name.feld) : undefined,
       schrift: name.schrift || bes.schrift || null,
-      tag: t.length > 1 ? t[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "",
+      tag: tagRoh,
       name: nameText,
       nameZuv: name.zuv,
       besitzer: bm ? bm[1].trim() : null, besitzerRoh: bes.text, besitzerZuv: bes.zuv,
@@ -32576,7 +32610,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build bbfd08be4e</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b6ec5f9270</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32718,7 +32752,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "bbfd08be4e";
+const BAU = "b6ec5f9270";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
