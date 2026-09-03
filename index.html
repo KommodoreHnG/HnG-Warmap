@@ -11459,6 +11459,8 @@ function unitsAuswahl(quoten){
    against the whole template, frame and margin included, the same cards
    correlated at 0.1 instead of 0.96. */
 let unitsTypVorlagen = null, unitsTypB = 38, unitsTypH = 25;
+/* set by the tick from the stage the cabin is in - see kbStufe */
+let unitsTypenAn = true;
 /* what the signs were at each card position in the look before */
 let unitsTypAlt = {};
 function unitsTypVorlagenBauen(){
@@ -12809,7 +12811,14 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       const alt = unitsTypMerker[x0];
       /* a card cut off by the window's edge shows half a sign, and half a
          sign matches a whole wrong one - so it gets none */
-      const t = teil ? null : (alt || unitsTypVon(c, x0-9, rimOben));
+      /* THE SIGN IS ONLY MATCHED IN THE TYPES STAGE. Matching costs a
+         comparison against eighteen templates at seventeen shifts for
+         every card - by far the most expensive thing in a look. In the
+         town stage nobody needs it yet, and in the names stage the types
+         are settled: what was found stays, and nothing is worked out
+         afresh. */
+      const t = (teil || !unitsTypenAn) ? (alt || null)
+                                        : (alt || unitsTypVon(c, x0-9, rimOben));
       if (!teil) unitsTypNeu[x0] = t;
       return {x0: x0-9, x1: x1+9, seite, teil: !!teil,
               rand: unitsPlattenRand(d, x0-9, plattenOben), q: unitsQuotient(d, x0-9, plattenOben),
@@ -13484,6 +13493,7 @@ function kbNeu(){
           ort: null, linie: null, ziel: null, halter: null, merk: null,
           N: 0, erste: 0, sichtbar: 0, karten: [], zeilen: [],
           auswahl: null, wandel: null, gemeldet: null, scan: false, reiheKennung: null,
+          stufe: "ort", ortZuletzt: 0,
           handAn: false, handWahl: null, handZieht: false, ortKennung: null, blick: 0, ortLaeuft: false, ortHand: false,
           fehlschlaege: 0, letzterFehler: null,
           warte: [], werkt: false, arbeit: null, kastenLetzte: null, dauerMittel: 850,
@@ -15013,6 +15023,23 @@ function kbPult(){
     <div class="kb-abstand"></div>
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="kb-ton">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
+    ${(() => {
+      /* ONE BUTTON, SHOWING THE NEXT STEP. The cabin works in three
+         stages, and each one leaves out what is not needed yet - that is
+         what keeps the machine quiet. */
+      const st = KB.stufe || "ort";
+      const knopf = st === "ort"   ? ["kb-stufe", "Read AT types", "an"]
+                  : st === "typen" ? ["kb-stufe", "Types are right", "an"]
+                                   : ["kb-stufe", "Read the types again", ""];
+      const satz = st === "ort"
+        ? "Reading the town and how many units stand there. Types and names wait."
+        : st === "typen"
+        ? "Reading the unit signs. Click the units one after another — no names are read yet."
+        : "The types stand. Now the names are read; the bar is only watched.";
+      return `<button class="rd-schalter ${knopf[2]}" id="${knopf[0]}">${kbEsc(knopf[1])}</button>
+        <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:4px 2px 0">${kbEsc(satz)}</div>`;
+    })()}
+    <div class="kb-abstand"></div>
     <button class="rd-schalter" id="kb-keep" ${KB.zeilen.some(z => z.status === "erfasst" && !z.eigen) ? "" : "disabled"}>Keep the sheet</button>
     <div class="kb-abstand"></div>
     <button class="rd-schalter" id="kb-leer">New sheet</button>
@@ -15021,6 +15048,17 @@ function kbPult(){
   /* the user's own switch: off means off, sharing included */
   document.getElementById("kb-kraft").addEventListener("click", ()=>{ KB.live ? kbLiveStop(true) : kbLiveStart(); });
   document.getElementById("kb-ton").addEventListener("click", ()=>{ kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); kbPult(); });
+  document.getElementById("kb-stufe").addEventListener("click", ()=>{
+    const st = KB.stufe || "ort";
+    KB.stufe = st === "ort" ? "typen" : st === "typen" ? "namen" : "typen";
+    /* going back to the types means the signs may be worked out afresh -
+       the remembered ones would otherwise stand in the way */
+    if (KB.stufe === "typen") unitsTypAlt = {};
+    KB.status = KB.stufe === "typen"
+      ? "Types: click the units one after another."
+      : "Names: the types stand, the text reader is running.";
+    kbPult(); kbZeichnen();
+  });
   document.getElementById("kb-keep").addEventListener("click", kbBehalten);
   document.getElementById("kb-leer").addEventListener("click", ()=>{ const t = KB.ton; const live = KB.live; kbLiveStop(); KB = kbNeu(); if (live) kbLiveStart(); kbZeichnen(); });
 }
@@ -15214,6 +15252,9 @@ async function kbTick(){
        The whole geometry - cards, sides, signs, the picked one - is only
        worth its forty thousandths when something happened, or every fourth
        look so the strip stays fresh. */
+    /* WHICH STAGE ARE WE IN? The type matching only runs in the middle
+       one, and the text reader only in the last. */
+    unitsTypenAn = KB.stufe === "typen";
     const kasten = unitsForm(d);
     const kk = kasten ? kbKastenKennung(d, kasten.oben, kasten.form) : null;
     let neu = kk !== null && !kbKastenGleich(kk, KB.kastenLetzte);
@@ -15250,7 +15291,8 @@ async function kbTick(){
          reading. Only what was really taken is marked as dealt with - it
          used to be marked beforehand, and a box refused for want of a
          picked card was then never offered again. */
-      if (neu && G.form){
+      /* the text reader only wakes in the last stage */
+      if (neu && G.form && KB.stufe === "namen"){
         const genommen = await kbEinreihen(F, G);
         if (!KB || !KB.live) return;
         if (genommen){ KB.kastenLetzte = kk; KB.kastenAbgelehnt = null; }
@@ -15282,8 +15324,16 @@ async function kbTick(){
        is being read. The town does not run away; it is caught up as soon
        as there is quiet. */
     const ruhe = !(KB.warte && KB.warte.length) && !KB.arbeit && !KB.werkt;
-    if (ruhe && kn !== KB.letzte && (kn === KB.vorige || KB.letzte === null) && !KB.ortLaeuft){
-      KB.letzte = kn;
+    /* THE TOWN PASS IS NOT A PERMANENT JOB. In the first stage it is the
+       whole point and runs as soon as the bar settles. Afterwards it is
+       only a watchman - has the town changed under us? - and fifteen
+       seconds is often enough for that. Running it on every change of the
+       bar is exactly the flicker between "Reading the town's name" and
+       "strength" that the Kommodore sees, and every one of those costs a
+       full picture. */
+    const ortFaellig = KB.stufe === "ort" || jetzt() - (KB.ortZuletzt || 0) > 15000;
+    if (ortFaellig && ruhe && kn !== KB.letzte && (kn === KB.vorige || KB.letzte === null) && !KB.ortLaeuft){
+      KB.letzte = kn; KB.ortZuletzt = jetzt();
       const V = await unitsRahmen(f);
       if (!KB || !KB.live) return;
       kbOrtArbeit(V);
@@ -33938,7 +33988,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 01871db394</span></p></div>
+         installation. <span style="color:var(--dim2)">· build d8c9a46914</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34080,7 +34130,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "01871db394";
+const BAU = "d8c9a46914";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
