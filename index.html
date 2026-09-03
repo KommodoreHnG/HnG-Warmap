@@ -1604,8 +1604,12 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-clan" style="display:none">Manage</button>
       <!-- the clan window's tabs as menu entries (menueBauen moves them) -->
       <button class="btn" id="b-cl-card"   data-clantab="clan"   title="Name, side, standing orders">Card</button>
-      <button class="btn" id="b-cl-depot"  data-clantab="depot"  title="All depots of the clan">Depot</button>
-      <button class="btn" id="b-cl-over"   data-clantab="over"   title="Who owns which teams">Team owners</button>
+      <!-- the tab names are the window's own: over IS the depot, who IS the
+           list of owners. "depot" was never a tab, and tabsAktiv falls back
+           to the first one - so this entry used to open the clan card. -->
+      <button class="btn" id="b-cl-depot"  data-clantab="over"   title="All depots of the clan">Depot</button>
+      <button class="btn" id="b-cl-growth" data-clantab="growth" title="How the clan has grown">Growth</button>
+      <button class="btn" id="b-cl-over"   data-clantab="who"    title="Who owns which teams">Team owners</button>
       <button class="btn" id="b-cl-deploy" data-clantab="deploy" title="Where the clan's teams stand">In the field</button>
       <button class="btn" id="b-cl-req"    data-clantab="req"    title="Calls for help">Requests</button>
       <button class="btn" id="b-cl-people" data-clantab="people" title="Members and their roles">Roles</button>
@@ -27852,7 +27856,7 @@ const MENUES = [
   /* "Personal": what is yours alone - your soldiers, your depot, your
      notebook. The clan group keeps what is really clan-wide. */
   {id:"pers",  titel:"Personal",  knoepfe:["b-arms","b-mydepot","b-note"]},
-  {id:"clan",  titel:"Clan",      knoepfe:["b-cl-card","b-cl-depot","b-cl-over","b-cl-deploy","b-cl-req","b-cl-people","b-cl-arsenal"]},
+  {id:"clan",  titel:"Clan",      knoepfe:["b-cl-card","b-cl-depot","b-cl-growth","b-cl-over","b-cl-deploy","b-cl-req","b-cl-people","b-cl-arsenal"]},
   /* "Situation" musste erklaert werden - dann ist der Name falsch. Was hier
      steckt, meldet man oder sieht man nach: Gegner, Schlacht, Brett. */
   /* The board stays in the top bar itself - its "new" badge must be seen
@@ -32760,11 +32764,14 @@ document.getElementById("b-front").addEventListener("click", frontAuf);
 
 document.getElementById("b-war").addEventListener("click", ()=>{
   /* Kriegsname und Startstadt gehoeren dem Verwalter. Clanname und Seite
-     stehen seit dem 02.09. unter Manage - Card, beim Leiter. */
+     stehen beim Leiter, im Clanfenster auf dem Reiter "Card". Der Weg
+     dorthin hiess einmal ueber den Knopf "Manage"; den gibt es seit dem
+     Menueumbau nicht mehr sichtbar, die Reiter haengen einzeln in der
+     Gruppe "Clan". */
   const verw = istAdmin();
   openDlg(`
     <div class="dlg-h"><h2>War settings</h2>
-      <p>The clan's name and side are under <b>Manage → Card</b>.</p></div>
+      <p>The clan's name and side are under <b>Clan → Card</b>.</p></div>
     <div class="dlg-b">
       <div style="display:flex;flex-direction:column;gap:8px">
         <div class="row" style="align-items:center">
@@ -32997,7 +33004,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0023341cff</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 97fa7b334b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33139,7 +33146,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0023341cff";
+const BAU = "97fa7b334b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
