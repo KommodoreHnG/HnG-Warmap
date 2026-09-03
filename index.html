@@ -11723,9 +11723,30 @@ function ocrNorm(v){
   for (let j = 0; j < OCR_RN; j++) v[j] /= q;
   return v;
 }
+/* A TEMPLATE THAT COMES WITH THE TOOL, because the book cannot learn this
+   one. The book learns from sure readings, and this sign is never read
+   surely - the reader does not know it and makes "mano" of it, or "omon",
+   depending on which preparation it got.
+   It is U+00A4, the currency sign: a circle with four short arms at the
+   corners. Looked up, and its history fits the find exactly - it was put
+   into type to STAND FOR a sign the font does not have. The game's font
+   says with it, four times over, "I do not know this character", and that
+   is precisely what the player sees on the screen. So the tool shows it
+   too. Cut out of the Kommodore's own capture, four of them averaged; the
+   two preparations agree on the shape to ninety-eight hundredths, so it
+   does not hang on the scale. */
+const OCR_MITGEBRACHT = {
+  "\u00a4": "ffffffffffffffffffffffffffffffffffffffffffffffffffe702aeeda99bdeea107effff70001562100135510007ffff20000000000000000001ffff60000000000000000006ffffd500000000000000005efffffe2000004984000002dffffffe400006effe500004effffffe20002dffffd20003effffffe10004effffe50002dffffffe10006fffffe70002dffffffe10006ffffff70002dffffffe20005effffe50002dffffffe30002dffffd10003effffffe500006eeee500004effffffd2000003773000002deffffd500000000000000005dffff50000000000000000005ffff20000000000000000001ffff80001774100147710008ffffe912beedcbbcdfeb218effffffffffffffffffffffffffffffffffffffffffffffffff"
+};
 function ocrBuchAuf(){
   if (ocrBuch) return ocrBuch;
   ocrBuch = {};
+  for (const [ch, str] of Object.entries(OCR_MITGEBRACHT)){
+    if (!str || str.length !== OCR_RN) continue;
+    const g = new Float32Array(OCR_RN);
+    for (let j = 0; j < OCR_RN; j++) g[j] = parseInt(str[j], 16) * 17;
+    ocrBuch[ch] = {roh: g, n: 3, v: ocrNorm(Float32Array.from(g)), mit: true};
+  }
   try {
     const roh = JSON.parse(localStorage.getItem(OCR_BUCH_SPEICHER) || "{}");
     for (const [ch, e] of Object.entries(roh)){
@@ -11794,6 +11815,9 @@ function ocrSchriftPruefen(feld, text, symbole){
   if (!feld || !text || !symbole || !symbole.length) return text;
   const buch = ocrBuchAuf();
   const namen = Object.keys(buch).filter(ch => buch[ch].n >= 2);
+  /* the delivered templates count towards the book being usable - without
+     them a fresh browser would have to read a dozen units before it could
+     recognise the one sign it was given for free */
   if (namen.length < 12) return text;
   let si = 0, aus = "", i = 0;
   for (const ch of text){
@@ -11802,7 +11826,14 @@ function ocrSchriftPruefen(feld, text, symbole){
     const y = symbole[si++];
     /* out of step with the character list - then leave the rest alone */
     if (!y || y.t !== ch){ aus += text.slice(i-1); break; }
-    if (!buch[ch] || buch[ch].n < 2){ aus += ch; continue; }
+    /* A SECOND DOOR, for a character the book does not hold. The doorman
+       used to compare the read character with ITSELF and let it pass when
+       it had nothing to compare against - and that is exactly the case
+       here: "m", "a", "n", "o" are small letters, and the book holds almost
+       none, because the game writes nearly everything in capitals. Now such
+       a character may be swapped too, but only against a plainly higher
+       proof, because the defence is missing. */
+    const kennt = !!(buch[ch] && buch[ch].n >= 2);
     const g = ocrGlyphRoh(feld, y.b);
     if (!g){ aus += ch; continue; }
     ocrNorm(g);
@@ -11813,14 +11844,16 @@ function ocrSchriftPruefen(feld, text, symbole){
        fitted an L with 0,50 and a Z with 0,996, and a Z is what it was. So
        the doorman only speaks when the character read does plainly NOT look
        like itself. */
-    const kGelesen = passt(ch);
-    if (kGelesen >= 0.90){ aus += ch; continue; }
+    const kGelesen = kennt ? passt(ch) : -1;
+    if (kennt && kGelesen >= 0.90){ aus += ch; continue; }
     let b1 = null, k1 = -9, k2 = -9;
     for (const n of namen){
       const k = passt(n);
       if (k > k1){ k2 = k1; k1 = k; b1 = n; } else if (k > k2) k2 = k;
     }
-    aus += (b1 && b1 !== ch && k1 >= 0.95 && k1 - k2 >= 0.05) ? b1 : ch;
+    const genug = kennt ? (k1 >= 0.95 && k1 - k2 >= 0.05)
+                        : (k1 >= 0.97 && k1 - k2 >= 0.08);
+    aus += (b1 && b1 !== ch && genug) ? b1 : ch;
   }
   return aus;
 }
@@ -11874,7 +11907,10 @@ function bildAbstand(a, b){
   return d;
 }
 /* THREE WITNESSES TO UNREADABILITY, and one of them is enough. */
-const UNITS_LESBAR = /[\p{L}\p{N} .,\-_'"()\[\]:;!?&+*\/#@]/u;
+/* The currency sign counts as readable now that a template for it is
+   delivered: the tool can name it, and what it names is exactly what the
+   player sees on the screen. */
+const UNITS_LESBAR = /[\p{L}\p{N} .,\-_'"()\[\]:;!?&+*\/#@¤]/u;
 function unitsUnlesbar(text, symbole, feld){
   const t = String(text || "").trim();
   if (t.length < 2) return false;
@@ -32610,7 +32646,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b6ec5f9270</span></p></div>
+         installation. <span style="color:var(--dim2)">· build e664ce0673</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32752,7 +32788,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b6ec5f9270";
+const BAU = "e664ce0673";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
