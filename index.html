@@ -5605,7 +5605,7 @@ const joinOf = id => Object.keys(S.join)
    through towns that are not the enemy's and not fighting; if no such path
    exists, the shortest path of all plus one hour (they would run into a
    battle). Speed is the slowest team type the committed players have on
-   the map. TEMPO_KAL is the scale - map units per minute at speed 1 - and
+   the map. TEMPO_KAL is the scale - map units per SECOND at speed 1 - and
    comes from one measurement in the game; until it is set, the window shows
    the path and the team type but no minutes. */
 /* The scale, measured in the game on 02.09.2026: a motorised guard
@@ -5659,6 +5659,48 @@ function wegSuche(starts, ziel, passierbar){
   weg.reverse();
   return {laenge: dist[ziel], hops: weg.length - 1, weg, von: weg[0]};
 }
+/* ---- COULD IT HAVE GOT THERE? -----------------------------------------
+   Two captured lines can carry the same tag and still be two units. It
+   happens, and it is rare - which is why the proof has to be the strict
+   one. Two ways to be sure:
+
+   Both in ONE town at ONCE. Then they are plainly two, and the sheet says
+   so by carrying the tag twice.
+
+   Or: in two towns, and the unit could not possibly have travelled between
+   them in the time that passed. That is reckoned along the supply lines,
+   with the game's own speeds and the same calibration the gathering time
+   of an order uses.
+
+   THE RECKONING IS GENEROUS IN EVERY DIRECTION: the FASTEST kind that could
+   fit, not the likeliest; the shortest path, no matter who holds the towns
+   along it; and half again the speed on top, because a brace lifts a team
+   by up to a fifth and fifty per cent is three and a half times the margin
+   that needs. All three lean the same way - rather miss a double once than
+   invent one once. And where something is missing - no path, no speed, no
+   town on file - nothing is judged at all: then it is the same unit. */
+const AT_TEMPO_TOLERANZ = 1.5;
+function atKonnteReisen(vonOrt, nachOrt, sekunden, arten){
+  if (vonOrt === null || vonOrt === undefined || vonOrt === nachOrt) return true;
+  const A = MAP.n[vonOrt], B = MAP.n[nachOrt];
+  if (!A || !B || !(sekunden >= 0) || !TEMPO_KAL) return true;
+  /* AS THE CROW FLIES, NOT ALONG THE ROADS. Measured: 's-Hertogenbosch and
+     Culemborg lie thirteen map units apart, and the supply lines between
+     them run two hundred and forty-one over sixteen stations. Reckoning
+     along the roads would have called neighbouring towns unreachable in a
+     minute and invented doubles out of nothing - exactly the wrong way
+     round. The straight line at top speed is the floor no team can beat,
+     and it depends on no routing at all. It is also cheap: a handful of
+     operations instead of a shortest-path search over fourteen hundred
+     towns for every unit compared. */
+  const luft = Math.hypot(A[1] - B[1], A[2] - B[2]);
+  let tempo = 0;
+  for (const k of arten){ const t = AT[k] && AT[k].speed; if (t > tempo) tempo = t; }
+  if (!tempo) return true;
+  return sekunden >= luft / (tempo * TEMPO_KAL * AT_TEMPO_TOLERANZ);
+}
+/* the key two entries are grouped by - the same one gleicheAT decides on */
+const atSchluessel = u => atTagKey(u && u.tag) || namKey(String((u && u.name) || ""));
 function sammelzeit(a){
   const f = a.f, ziel = a.from;
   const hauptst = MAP.n.map((n, i) => i).filter(i => MAP.n[i][4] && i !== ziel);
@@ -13757,7 +13799,15 @@ function kbBehalten(){
   const zeilen = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen && !z.gespeichert);
   if (!zeilen.length){ toast("Nothing new to keep."); return; }
   if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return; }
-  let spieler = 0, teams = 0, sicht = 0;
+  let spieler = 0, teams = 0, sicht = 0, doppelt = 0;
+  /* HOW OFTEN DOES THIS SHEET CARRY THE SAME UNIT? That is the first of the
+     two proofs: what stands twice in one town at one time IS twice. */
+  const imBlatt = new Map();
+  for (const z of zeilen){
+    const sl = atSchluessel(z);
+    if (sl) imBlatt.set(sl, (imBlatt.get(sl) || 0) + 1);
+  }
+  const jetztS = Math.round(jetzt()/1000);
   const spotK = `${ort}:${S.me}`;
   const liste = (((S.spot || {})[spotK] && S.spot[spotK].v) || []).slice();
   for (const z of zeilen){
@@ -13770,13 +13820,37 @@ function kbBehalten(){
       const key = spielerKey(z.besitzer);
       const depot = feindDepot(key).slice();
       const neu = {tag: String(z.tag || "").replace(/\s+/g, "").toUpperCase(), name: String(z.name || ""), kurz: 0};
-      const da = depot.find(d => gleicheAT(d, neu));
-      if (!da){
-        depot.push(Object.assign({id: Math.random().toString(36).slice(2,9), k, name: neu.name, tag: neu.tag, kurz: 0},
+      const treffer = depot.filter(d => gleicheAT(d, neu));
+      /* IS THIS A FURTHER UNIT, OR THE SAME ONE AGAIN? */
+      let weitere = false;
+      if (treffer.length){
+        const sl = atSchluessel(neu);
+        /* 1 the sheet shows more of them than the file holds - so they stand
+             in one town at one time, and there really are that many */
+        if (sl && treffer.length < (imBlatt.get(sl) || 1)) weitere = true;
+        /* 2 or none of the ones on file could have got here in the time */
+        else {
+          const arten = new Set([k]);
+          for (const d of treffer) if (d.k) arten.add(d.k);
+          weitere = treffer.every(d =>
+            d.o !== undefined && d.o !== null && d.o !== ort && d.t
+            && !atKonnteReisen(d.o, ort, jetztS - d.t, arten));
+        }
+      }
+      if (!treffer.length || weitere){
+        depot.push(Object.assign({id: Math.random().toString(36).slice(2,9), k, name: neu.name, tag: neu.tag, kurz: 0,
+                                  o: ort, t: jetztS},
                                  unbestaetigt ? {ung: 1} : {}));
         setFeindDepot(key, depot); teams++;
-      } else if (da.ung && !unbestaetigt){
-        setFeindDepot(key, depot.map(d => d === da ? Object.assign({}, d, {k, name: neu.name || d.name, ung: 0}) : d));
+        if (weitere) doppelt++;
+      } else {
+        /* the same unit: where it stands now and when it was seen - without
+           those two the travel proof above has nothing to work with */
+        const da = treffer[0];
+        const besser = (da.ung && !unbestaetigt) ? {k, name: neu.name || da.name, ung: 0} : {};
+        if (da.o !== ort || da.t !== jetztS || Object.keys(besser).length)
+          setFeindDepot(key, depot.map(d => d === da
+            ? Object.assign({}, d, {o: ort, t: jetztS}, besser) : d));
       }
     }
     if (seite !== null){
@@ -13787,6 +13861,9 @@ function kbBehalten(){
     }
     z.gespeichert = true;
   }
+  /* A DOUBLE IS RARE ENOUGH TO BE WORTH SAYING OUT LOUD. Whoever reads it
+     should know that the tool did not miscount but decided. */
+  if (doppelt) toast(`${doppelt} unit${doppelt === 1 ? "" : "s"} recorded a second time — same name, but it cannot be the same team.`);
   if (sicht) setSpot(ort, liste);
   /* and the browser copy, as before - it costs nothing */
   try {
@@ -31908,7 +31985,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build aa1984bf29</span></p></div>
+         installation. <span style="color:var(--dim2)">· build a2ba235678</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32050,7 +32127,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "aa1984bf29";
+const BAU = "a2ba235678";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
