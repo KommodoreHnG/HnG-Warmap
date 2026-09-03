@@ -10996,6 +10996,30 @@ function unitsKartenFinden(d, yReihe){
    Measured at the places in question: Stockheim carries an ink share of
    1,00 - a card really stands there. Bannewitz and the three nineteen-unit
    captures carry 0,00 - nothing stands there. No grey zone at all. */
+/* WHERE THE CARD INK BEGINS. Between the track's left end and the first
+   card the ground is empty, and a card - even a sliver of one - is not.
+   Measured column by column over the card's own height, counting points
+   where the colour is anything but grey:
+     empty ground                    0
+     a card's rim                   50
+     a card's inside          18 to 34
+   No grey zone whatever, so six columns in a row above twelve settle it.
+   This is what tells a track edge read through the see-through bar from
+   the real one: the first CARD may be missed by the run finder when it is
+   cut to a sliver, but its ink is still there. */
+function unitsTinteAb(d, fy, von, bis){
+  let lauf = 0;
+  for (let x = Math.max(0, von); x < bis; x++){
+    let n = 0;
+    for (let y = fy; y < fy + 50; y++){
+      const p = (y*UNITS_W + x)*4;
+      if (unitsMax(d,p) - unitsMin(d,p) > 60) n++;
+    }
+    if (n >= 12){ if (++lauf >= 6) return x - lauf + 1; }
+    else lauf = 0;
+  }
+  return null;
+}
 function unitsReiheLinks(d, y, runs, L){
   if (!runs || !runs.length || !(L > 0)) return runs || [];
   const br = runs[0][1] - runs[0][0];
@@ -12242,17 +12266,32 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        green strength bar 50 px lower - symbol and plate rim would be read
        from the wrong rows. */
     R.roll = unitsRoll(d);
+    /* THE TRACK'S LEFT END, ASKED OF THE INK. The run finder reads it
+       through the see-through bar and can be far out (raw 1209 in all
+       three of the Kommodore's nineteen-unit captures, where the true edge
+       is 1473). It is noticed the same way as before - more than one pitch
+       between the track's beginning and the first card cannot be - but the
+       answer no longer assumes the first card FOUND is the first card
+       THERE. In one of those three the leftmost card is cut to
+       thirty-eight points, too narrow for the run finder, which looks for
+       runs of sixty to eighty; the old repair took the second card for the
+       first and pushed the edge sixty points to the right, and the count
+       came out 17 instead of 19. The ink of that sliver is plain to see. */
+    if (R.roll && R.roll.bahnLinks && k.rahmen.length
+        && R.roll.bahnLinks <= k.rahmen[0][0] - UNITS_RASTER){
+      const t = unitsTinteAb(d, k.fy, R.roll.bahnLinks, k.rahmen[0][0]);
+      if (t !== null){ R.roll.bahnLinks = t - 6; R.roll.bahnRepariert = true; }
+    }
     /* now that the track is known, the row may be extended to the left -
-       no further than the track's own beginning */
+       no further than the track's own beginning. With the edge put right
+       first, the ink test now runs over the sliver instead of half over
+       empty ground (0,42 there, just under its threshold of 0,5 - which is
+       why it used to leave the card lying). */
     if (R.roll && R.roll.bahnLinks) k.rahmen = unitsReiheLinks(d, k.fy, k.rahmen, R.roll.bahnLinks);
-    /* THE TRACK'S LEFT END, CHECKED AGAINST THE CARDS. They fill the window
-       without gaps, so less than one pitch may lie between the track's
-       beginning and the first card - otherwise another card would stand
-       there. It does not (the ink was looked for and is not there), so the
-       track's beginning is what is wrong. It is found by looking for five
-       dark points in a row above and below the thumb, and the bar is
-       see-through: whatever is dark on the map behind it answers instead.
-       Measured on sixteen bars, four came out wrong, one by 273 points. */
+    /* AND THE LAST RESORT, unchanged. Is there no ink at all in the gap,
+       nothing stands there and the track's beginning really is wrong -
+       then the first card settles it, as before. Measured on sixteen bars,
+       four came out wrong that way, one by 273 points. */
     if (R.roll && R.roll.bahnLinks && k.rahmen.length
         && R.roll.bahnLinks <= k.rahmen[0][0] - UNITS_RASTER){
       R.roll.bahnLinks = k.rahmen[0][0] - 6;
@@ -32918,7 +32957,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5d1976348e</span></p></div>
+         installation. <span style="color:var(--dim2)">· build fcf68a5e44</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33060,7 +33099,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "5d1976348e";
+const BAU = "fcf68a5e44";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
