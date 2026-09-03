@@ -33551,6 +33551,40 @@ const IMPORT_HTML = `
 /* Starting a new war - one function for the button in the War menu and
    the one inside the settings window. Order matters: right, question,
    backup, cut (see the long note that used to sit on the button). */
+/* THE THREE START TOWNS, PUT RIGHT AFTER LOADING - because guessing at
+   the cause has failed often enough.
+   What is certain: locally the three are set correctly (measured), and
+   after the reload they are gone. Between those two moments lie four
+   steps that could each swallow them - the sending, the server accepting,
+   the wiping of the local store, the fetching back. Without the
+   Kommodore's server I cannot tell which, and he has waited long enough.
+   So it is no longer guessed at, it is REPAIRED. After the first complete
+   fetch the tool looks: is there a fresh war cut, and does NOT ONE town on
+   the whole map belong to anybody? Then something went wrong - because a
+   war without a single owner does not exist. The three start towns are
+   then simply set again.
+   WHY THAT IS SAFE. The condition is not "the three are missing" but
+   "nobody holds anything anywhere". A captured capital still has an owner
+   and does not fall under it; a running war always has dozens. The case
+   catches exactly the broken state after a war start and nothing else.
+   And it needs the same rights as starting a war: whoever may not cut a
+   war does not put anything right either. */
+function startStaedteNachtragen(){
+  if (!CFG) return;
+  if (!istAdmin() || !darf("aufklaerung")) return;
+  if (!epoche()) return;                       /* no war has been cut yet */
+  const stst = startStaedte();
+  const soll = [0,1,2].filter(f => stst[f] != null && MAP.n[stst[f]]);
+  if (!soll.length) return;
+  /* does anybody hold anything at all? one is enough to stay out */
+  for (let i = 0; i < MAP.n.length; i++) if (ownerOf(i) >= 0) return;
+  let n = 0;
+  for (const f of soll) if (stamp("owner", String(stst[f]), f)) n++;
+  if (!n) return;
+  save(); syncPush();
+  toast(`The new war had no start towns — ${n} set again.`);
+  rebuildUnits(); side(); tally(); draw(); kopfzeile(); kraftLeiste();
+}
 function neuenKriegStarten(){
   if (!istAdmin()){ toast("Starting a new war is the admin's call."); return; }
   if (!confirm("Start a new war?\n\nControl, battles, deployed teams, arrows, defence lines, "
@@ -33861,7 +33895,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 3bad828752</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 7a003d81e7</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34003,7 +34037,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "3bad828752";
+const BAU = "7a003d81e7";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -34013,6 +34047,8 @@ let syncRunde = null;
    nicht, was auf dem Server steht - und ein Knopf, der aus dem eigenen
    Bild rechnet, rechnet dann falsch. Siehe den Riegel in neuerKrieg. */
 let ersterAbrufDurch = false;
+/* nur einmal je Sitzung - der Nachtrag soll nicht bei jedem Abruf pruefen */
+let KRIEG_NACHTRAG = true;
 /* Hat jemand die Zeichenfarbe von Hand gewaehlt? Dann wird sie nicht mehr
    aus der Clanseite nachgezogen. */
 let faktionSelbstGewaehlt = false;
@@ -34237,6 +34273,9 @@ async function syncPull(){
     /* Ab hier kennt dieser Browser den Stand des Servers. Der Kriegsknopf
        darf erst jetzt rechnen - siehe den Riegel in neuerKrieg. */
     ersterAbrufDurch = true;
+    /* der Stand des Servers ist da - jetzt laesst sich sagen, ob der
+       letzte Kriegsstart seine drei Staedte verloren hat */
+    if (KRIEG_NACHTRAG){ KRIEG_NACHTRAG = false; try { startStaedteNachtragen(); } catch(e){} }
     /* DIE ZEICHENFARBE NACHZIEHEN. Sie wird beim Aufbau genau einmal
        gesetzt (faction = clanFaktion()), und bei leerem Speicher gibt es
        die Clanseite da noch gar nicht - dann griff die Vorgabe, und ein
