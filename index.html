@@ -4708,8 +4708,14 @@ function draw(){
       }
     }
     /* Objectives switch: a translucent pin above every target - marks the
-       town without touching anything around it. */
-    if (objOnly && obj && r >= 3){
+       town without touching anything around it.
+       BUT NOT OVER THE TOWN THE MOUSE IS ON. The pin sits close above the
+       disc, and whoever moves the mouse onto a town to look at it saw the
+       pin instead. The condition used to name only the switch and the
+       size; the pointer did not come into it at all. Every other pin
+       stays - the switch is there to show where the targets are, and it
+       must not lose that at every handgrip. */
+    if (objOnly && obj && r >= 3 && i !== hoverIdx){
       const ph = Math.min(16, Math.max(6, r*1.6)), py = y - r - ph*1.05;
       ctx.globalAlpha = 0.62*aOrt;
       ctx.fillStyle = light() ? "#1a2029" : "#f3ecd8";
@@ -6875,11 +6881,25 @@ cv.addEventListener("mousedown", e => {
 /* Hover card — what is at this town without having to click it */
 const hover = document.getElementById("hover");
 let hoverIdx = null, hoverTimer = null;
+/* The map is redrawn when the town under the pointer changes - and only
+   while the Objectives switch is on, because that is the only thing on
+   the canvas which depends on it. The hover card itself is an element of
+   its own and never needed a redraw. */
+function hoverNeuZeichnen(vorher){
+  if (objOnly && vorher !== hoverIdx) draw();
+}
 function hoverZeigen(i, mx, my){
-  if (i === null){ hover.style.display = "none"; hoverIdx = null; return; }
+  if (i === null){
+    const vorher = hoverIdx;
+    hover.style.display = "none"; hoverIdx = null;
+    hoverNeuZeichnen(vorher);
+    return;
+  }
   /* Ueber aufBildschirm: .float traegt zoom:var(--ui), siehe Ziehsymbol. */
   if (i === hoverIdx){ aufBildschirm(hover, mx+16, my+14); return; }
+  const vorher = hoverIdx;
   hoverIdx = i;
+  hoverNeuZeichnen(vorher);
   const n = MAP.n[i], f = factionOf(i), gr = unitsAt(i), sp = spotsAt(i);
   const teams = teamsAt(i), sch = estAt(i), pb = S.para[i] && S.para[i].v;
   hover.innerHTML = `
@@ -6905,7 +6925,9 @@ function hoverZeigen(i, mx, my){
 }
 
 cv.addEventListener("mouseleave", ()=>{
+  const vorherHov = hoverIdx;
   hover.style.display = "none"; hoverIdx = null;
+  hoverNeuZeichnen(vorherHov);
   if (!editing && hoverObj){ hoverObj = null; cv.classList.remove("griff"); draw(); }
 });
 cv.addEventListener("mousemove", e => {
@@ -33004,7 +33026,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 97fa7b334b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 995dba017d</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33146,7 +33168,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "97fa7b334b";
+const BAU = "995dba017d";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
