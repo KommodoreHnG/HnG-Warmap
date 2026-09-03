@@ -906,6 +906,12 @@ body.kb-zieht{user-select:none}
 /* the guess the tool is still weighing - never as loud as the figure that
    actually stands on the sheet */
 .kb-raten{opacity:.55;font-style:italic;letter-spacing:.02em}
+/* the quiet mark of a unit the clan already knows, and the louder one that
+   proposes a reading out of its book */
+.kb-bek{font-size:8px;vertical-align:middle;color:#4f7a3a;opacity:.8;flex:0 0 auto}
+.kb-aehnlich{background:#efe5cc;flex:0 0 auto;border:1px solid #b3a482;color:#6b5a2e;
+  cursor:pointer;font-size:12px;line-height:1;padding:1px 5px;border-radius:3px}
+.kb-aehnlich:hover{background:#e2d4b0;border-color:#8a7a56}
 .kb-fest{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;
   font-size:13px;line-height:1;padding:3px 6px;border-radius:3px;
   box-shadow:0 1px 0 rgba(80,60,30,.18)}
@@ -12370,6 +12376,69 @@ function kbSchluessel(z){ return namKey((z.tag || "") + " " + (z.name || "")); }
 /* How long the tool watches before it moves the count, and how many of
    those looks must agree. Twenty-five looks are about two seconds. */
 const KB_RING = 25, KB_RING_MEHRHEIT = 21;
+/* ---- WHAT DOES THE CLAN ALREADY KNOW ABOUT THIS UNIT? -----------------
+   The enemy depot is one shared row per enemy player - the whole clan
+   writes into it - so a line being captured can be held against everything
+   anybody has ever recorded about that player. Two directions:
+
+   ALREADY KNOWN. A quiet mark on the line, and in its hint what stands on
+   file: which kind, and where it was last seen. The one capturing then
+   sees at a glance what is new and what is a unit turning up again.
+
+   AND THE OTHER WAY ROUND - THE BOOK HELPS THE READER. A reading that
+   RESEMBLES a known unit is more likely to be that unit, badly read, than
+   a unit nobody has ever seen.
+
+   THAT SECOND ONE CARRIES AN OLD TRAP. This very fuzzy comparison was
+   built once before and taken out again: the tags 3-1-004 and 3-1-007
+   differ by ONE character, and the rule held two different units to be the
+   same. Three bolts in front of it now: it only ever PROPOSES and never
+   writes; it only speaks when the reading itself was doubtful; and it only
+   speaks when EXACTLY ONE known unit fits. Where two fit, the question is
+   open and stays open. */
+const KB_ZWEIFEL = 80;          // below this the reading is doubtful
+function kbBekannt(z){
+  if (!z || z.status !== "erfasst" || z.eigen) return null;
+  const bes = String(z.besitzer || "").trim();
+  if (!bes) return null;
+  let depot = [];
+  try { depot = feindDepot(spielerKey(bes)); } catch(e){ return null; }
+  if (!depot.length) return null;
+  const gleich = depot.find(d => gleicheAT(d, z));
+  if (gleich) return {stand: "gleich", e: gleich};
+  const tk = atTagKey(z.tag), nk = namKey(String(z.name || ""));
+  let treffer = null, mehrere = false;
+  /* no tag read at all - then a name that stands word for word on file is
+     the surest hint there is */
+  if (tk.length < 3 && nk.length >= 3){
+    for (const d of depot){
+      if (namKey(String(d.name || "")) !== nk || !atTagKey(d.tag)) continue;
+      if (treffer) mehrere = true; else treffer = d;
+    }
+    return (treffer && !mehrere) ? {stand: "aehnlich", e: treffer, warum: "same name"} : null;
+  }
+  /* a tag was read - but only a doubtful one may be talked out of it */
+  if (tk.length < 3) return null;
+  if (!(z.nameZuv !== undefined && z.nameZuv !== null && z.nameZuv < KB_ZWEIFEL)) return null;
+  const erlaubt = tk.length >= 6 ? 2 : 1;
+  for (const d of depot){
+    const dk = atTagKey(d.tag);
+    if (!dk || Math.abs(dk.length - tk.length) > 1) continue;
+    if (levenshtein(dk, tk) > erlaubt) continue;
+    if (treffer) mehrere = true; else treffer = d;
+  }
+  return (treffer && !mehrere) ? {stand: "aehnlich", e: treffer, warum: "one letter apart"} : null;
+}
+const kbBekanntSetzen = z => { if (z) z.bekannt = kbBekannt(z); };
+/* the hint a known unit carries: what kind it is and where it was last seen */
+function kbBekanntText(b){
+  if (!b || !b.e) return "";
+  const d = b.e;
+  const teile = [];
+  if (d.k) teile.push(atName(d.k) + (d.ung ? " (not confirmed)" : ""));
+  if (d.o !== undefined && d.o !== null && MAP.n[d.o]) teile.push("last seen in " + MAP.n[d.o][0]);
+  return teile.join(" \u00b7 ");
+}
 /* Already on the sheet?
    THE TAG DECIDES, EXACTLY. The old rule let two readings count as one
    unit when owner and strength matched and the tag differed by no more
@@ -12601,6 +12670,9 @@ function kbVerarbeiten(R, vorgabe){
       Object.assign(z, {status: "erfasst", tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp, nameZuv: e.nameZuv,
                         eigen: !!e.eigen, seite: e.seite !== null && e.seite !== undefined ? e.seite : z.seite,
                         zwilling: zwilling ? da.i + 1 : null});
+      /* what the clan already knows about this one - looked up once, when
+         the line is written, not on every draw */
+      kbBekanntSetzen(z);
       /* the side, if the picture did not give it: what we already know
          about this player counts for more than nothing */
       if ((z.seite === null || z.seite === undefined) && z.besitzer){
@@ -13392,7 +13464,8 @@ function kbZeichnen(){
     ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${z.fest ? "fest" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""}" data-i="${z.i}">
       <div>${z.i + 1}</div>
       <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set"}">${z.typ ? "" : "?"}</span></div>
-      <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${z.status === "erfasst" ? zeig(z, "tag", z.tag) + (z.zwilling ? " ²" : "") : "<i>?</i>"}</div>
+      <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${
+        z.status === "erfasst" ? zeig(z, "tag", z.tag) + (z.zwilling ? " ²" : "") : "<i>?</i>"}</div>
       <div class="f" data-f="name" title="click to correct" style="${z.nameZuv && z.nameZuv < 60 ? "color:#9b3b2e" : ""}">${z.status === "erfasst" ? zeig(z, "name", z.name) : ""}</div>
       <div class="f" data-f="besitzer" title="click to correct">${z.status === "erfasst" ? zeig(z, "besitzer", z.besitzer || "") : ""}</div>
       <div class="f hp" data-f="hp" title="click to correct">${z.status !== "erfasst" ? ""
@@ -13400,6 +13473,14 @@ function kbZeichnen(){
         : kbStaerkeHTML(z)}</div>
       <div class="f" data-f="seite" title="click to change">${z.eigen ? "own" : kbSeiteName(z.seite)}</div>
       <div class="kb-schluss">${
+        /* WHAT THE CLAN'S BOOK SAYS, at the end of the line where the other
+           marks stand. It sat in the tag column first, and that column is
+           narrow enough to cut a tag short - the mark was clipped away with
+           it. */
+        z.bekannt && z.bekannt.stand === "gleich"
+          ? `<span class="kb-bek" title="Already in the clan's book — ${kbEsc(kbBekanntText(z.bekannt))}">\u25cf</span>` : ""}${
+        z.bekannt && z.bekannt.stand === "aehnlich"
+          ? `<button class="kb-aehnlich" data-i="${z.i}" title="The book has &quot;${kbEsc(z.bekannt.e.tag || z.bekannt.e.name)}&quot; (${kbEsc(z.bekannt.warum)}) — ${kbEsc(kbBekanntText(z.bekannt))}. Click to take that over.">\u2248</button>` : ""}${
         z.abweichung ? `<button class="kb-nehmen" data-i="${z.i}" title="Read as &quot;${kbEsc(z.abweichung.tag)} ${kbEsc(z.abweichung.name)} — ${kbEsc(z.abweichung.besitzer)}&quot; — click to take that over">!</button>` : ""
       }<button class="kb-fest ${z.fest ? "zu" : ""} ${z.abweichung ? "warnt" : ""}" data-i="${z.i}" title="${
         z.fest ? "Locked — the tool will not change this line. Click to open it." : "Lock this line so the tool cannot change it"
@@ -13440,6 +13521,21 @@ function kbBearbeiten(ev){
   if (schloss){ kbFrieren(+schloss.dataset.i); return; }
   const nehmen = ev.target.closest(".kb-nehmen");
   if (nehmen){ kbAbweichungNehmen(+nehmen.dataset.i); return; }
+  const aehnlich = ev.target.closest(".kb-aehnlich");
+  if (aehnlich){
+    const z = KB.zeilen[+aehnlich.dataset.i];
+    if (z && z.bekannt && z.bekannt.e){
+      const d = z.bekannt.e;
+      if (d.tag) z.tag = d.tag;
+      if (d.name && !z.name) z.name = d.name;
+      if (d.k && !z.typ && !d.ung) z.typ = d.k;
+      z.nameZuv = 100;                    // taken by hand - no longer a doubt
+      kbBekanntSetzen(z);
+      KB.status = `Line ${z.i + 1} taken from the clan's book: ${z.tag || z.name}.`;
+      kbZeichnen();
+    }
+    return;
+  }
   if (ev.target.closest(".weg")){
     const i = +ev.target.closest(".weg").dataset.i;
     if (kbFest(KB.zeilen[i])){ KB.status = `Line ${i + 1} is locked — open the lock first.`; kbZeichnen(); return; }
@@ -13473,6 +13569,7 @@ function kbBearbeiten(ev){
     else if (feld === "hp"){ z.hp = [...v.matchAll(/(\d+)\s*\/\s*(\d+)/g)].map(m => [+m[1], +m[2]]); }
     else { z[feld] = v.trim(); }
     if (z.status !== "erfasst" && (z.tag || z.name || z.besitzer)) z.status = "erfasst";
+    kbBekanntSetzen(z);
     kbZeichnen();
   };
   el.addEventListener("blur", fertig);
@@ -13880,6 +13977,9 @@ function kbBehalten(){
   /* A DOUBLE IS RARE ENOUGH TO BE WORTH SAYING OUT LOUD. Whoever reads it
      should know that the tool did not miscount but decided. */
   if (doppelt) toast(`${doppelt} unit${doppelt === 1 ? "" : "s"} recorded a second time — same name, but it cannot be the same team.`);
+  /* everything just recorded is known from now on - so the marks on the
+     sheet say so straight away */
+  for (const z of KB.zeilen) kbBekanntSetzen(z);
   if (sicht) setSpot(ort, liste);
   /* and the browser copy, as before - it costs nothing */
   try {
@@ -32001,7 +32101,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 766ea06fcd</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 40ef3df3f1</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32143,7 +32243,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "766ea06fcd";
+const BAU = "40ef3df3f1";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
