@@ -12479,7 +12479,14 @@ function kbFenster(R){
        false find at the edge then inflated the count; at the right stop
        that put units on the sheet which cannot exist. */
     const plaetze = Math.round(Wv / UNITS_RASTER);
-    const N = Math.max(plaetze, N0);
+    /* A TRACK MEANS SOMETHING IS OUT OF SIGHT. The game only draws the
+       scroll track when the units do not all fit in the window - so
+       whatever the geometry makes of the thumb, the total is at least one
+       more than what can be counted on screen. That holds whatever the
+       window's capacity turns out to be, and it is the one bound here that
+       needs no calibration at all. */
+    const sichtbar = R.karten ? R.karten.length : 0;
+    const N = Math.max(plaetze, N0, sichtbar + 1);
     const V = Math.max(0, ((R.roll.x0 - (tL + 6.06)) / Math.max(1, K - b)) * (105*N - 15 - Wv));
     /* THE ROW CANNOT BEGIN LATER THAN ITS OWN CARDS ALLOW. Counting the
        slots from the geometry alone keeps units off the sheet that cannot
@@ -32415,7 +32422,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 390dfea91e</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 9f5c14ffec</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32557,7 +32564,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "390dfea91e";
+const BAU = "9f5c14ffec";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
