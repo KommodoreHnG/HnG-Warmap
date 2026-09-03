@@ -11660,6 +11660,27 @@ function unitsSchriftVon(besitzer){
   for (const [k, v] of Object.entries(zahl)) if (v > n){ n = v; beste = k; }
   return beste;
 }
+/* LETTERS THAT LOOK THE SAME IN BOTH ALPHABETS. Cyrillic capitals read as
+   Latin ones without the reader noticing: А В С Е Н К М О Р Т Х У come back
+   as A B C E H K M O P T X Y, and И as N. A line made ONLY of those is
+   almost certainly not Latin - real Latin text reaches for G, L, R, S, D, W
+   as well. MEASURED on the Kommodore's own set:
+     Cyrillic            1,00 over seventeen letters
+     Danish              0,80
+     MCR                 0,64
+     BLKWTR, Turkish     0,50
+   The trap this closes is a nasty one: the Latin reading of the Cyrillic
+   line came back with SEVENTY, one point under the Russian model's
+   seventy-one, and seventy is enough to take the shortcut - so no other
+   model was ever asked. No threshold on confidence can separate one point.
+   The content can. */
+const OCR_ZWILLINGE = new Set("ABCEHKMOPTXYNI".split(""));
+function unitsZwillingsverdacht(text){
+  const t = String(text || "").toUpperCase();
+  let n = 0, zw = 0;
+  for (const ch of t) if (ch >= "A" && ch <= "Z"){ n++; if (OCR_ZWILLINGE.has(ch)) zw++; }
+  return n >= 8 && zw/n >= 0.95;
+}
 async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
   /* a middling Latin read is still Latin: only a low confidence together
      with few Latin letters calls the other models (a 68 percent "SANTAS
@@ -11684,8 +11705,12 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
      looks Latin enough to slip through and is not Latin at all. At sixty
      the Spanish and German names still take the shortcut and the Korean
      one does not. */
-  if ((beste.zuv >= 70 && lateinAnteil >= 0.8)
-      || (beste.zuv >= 60 && lateinAnteil >= 0.8 && t.length >= 6)) return beste;
+  /* a line made only of look-alikes takes no shortcut, and Russian goes
+     first - whatever else was expected */
+  const zwilling = unitsZwillingsverdacht(t);
+  if (zwilling && !bevorzugt) bevorzugt = "rus";
+  if (!zwilling && ((beste.zuv >= 70 && lateinAnteil >= 0.8)
+      || (beste.zuv >= 60 && lateinAnteil >= 0.8 && t.length >= 6))) return beste;
   const feld = unitsSchlicht(c, {x, y, w, h}, 3);
   let top = beste;
   /* the expected one first, and it may pass with a lower bar - an
@@ -11705,11 +11730,24 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
          foreign model reads it badly - Korean turned "ROKA-03" into
          "0#-03". Whoever calls this takes the tag from the Latin reading
          and the name from the model that won. */
-      const huerde = sp === bevorzugt ? 4 : 10;
-      if (text && zuv >= top.zuv + huerde && zuv > beste.zuv) top = {text, zuv, schrift: sp, latein: beste.text};
-      /* a model that reads the line well is the model - no need to ask the
-         rest (a Korean line cost all five readings, twelve seconds a frame) */
-      if (top.zuv >= 75) break;
+      /* AND WHERE THE LATIN READING IS ALREADY UNDER SUSPICION, the
+         expected model needs no lead at all. Measured on the Cyrillic
+         line: Russian 71, Latin 70 - one point, and the Russian reading is
+         the right one. Demanding a lead there would mean demanding proof
+         that the twin test has already given. */
+      const huerde = sp === bevorzugt ? (zwilling ? 0 : 4) : 10;
+      /* THE MARGIN IS AGAINST THE LATIN READING, because that is what it
+         has to justify: leaving Latin at all. Between two foreign models
+         the better one simply wins. It used to count against whichever
+         foreign model was ahead, and so Japanese - which read the line
+         rightly with seventy-nine - lost to Arabic's seventy-nonsense,
+         because it would have needed eighty. */
+      if (text && zuv >= beste.zuv + huerde && zuv > (top.schrift ? top.zuv : -1))
+        top = {text, zuv, schrift: sp, latein: beste.text};
+      /* a model that reads the line WELL is the model - but eighty-five,
+         not seventy-five: a middling one must not end the search before a
+         better one has had its turn */
+      if (top.schrift && top.zuv >= 85) break;
     } catch(e){}
   }
   return top;
@@ -12331,7 +12369,12 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
     const unlesbar = unitsUnlesbar(name.text, name.symbole, name.feld);
     /* the tag from the Latin reading, whatever model won the line */
     let tagRoh = t.length > 1 ? t[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "";
-    if (name.schrift && name.latein){
+    /* ONLY WHERE THERE IS A TAG AT ALL. Where the whole line is one foreign
+       name - no dash, no tag - the Latin reading of it is junk, and taking
+       a tag from it invents one: a Chinese line came out as "TvEhE-E". The
+       model that won the line says whether a tag is there: if ITS reading
+       has no separator, there is none. */
+    if (name.schrift && name.latein && t.length > 1){
       const lr = name.latein.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[–—]\s+/g, " - ")
                             .replace(/^[^\p{L}\p{N}]+/u, "");
       const lt = lr.split(AT_TRENNER);
@@ -32688,7 +32731,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 852105999b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0ce5e52438</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32830,7 +32873,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "852105999b";
+const BAU = "0ce5e52438";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
