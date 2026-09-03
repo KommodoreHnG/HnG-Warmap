@@ -1,7 +1,7 @@
 index.html
-  Bau       4487e89a0a
-  SHA-256   af648ba1ff78508d049cf679753cc7ae4bacd49e702d81737bf2083430038f7f
-  Groesse   2709426 Bytes
+  Bau       b391778060
+  SHA-256   c733570ec0112d65b8da5a4139be53a070f45aff6ffd25ac95558924b57d45b1
+  Groesse   2711113 Bytes
 
 Selbst nachbauen:  python karte_bauen.py
 Nachrechnen:       certutil -hashfile index.html SHA256

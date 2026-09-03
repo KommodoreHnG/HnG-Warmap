@@ -13031,9 +13031,11 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       if (rest && unitsFremdSchrift(rest)) nameText = rest;
     }
     /* the misread bars first, so that both sides are clean when they are
-       held against each other below */
+       held against each other below. The tag is done further down, right
+       after it is declared - up here it does not exist yet, and reaching
+       for it threw "Cannot access 'tagRoh' before initialization" on every
+       unit. */
     nameText = atStrichZuI(nameText);
-    tagRoh = atStrichZuI(tagRoh);
     /* THE NAME AND THE OWNER ARE TWO READINGS OF THE SAME WORD. The
        Kommodore noticed the naming convention: the owner's name usually
        hangs at the very END of the unit's name. Counted on his own sheet:
@@ -13070,6 +13072,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        a tag from it invents one: a Chinese line came out as "TvEhE-E". The
        model that won the line says whether a tag is there: if ITS reading
        has no separator, there is none. */
+    tagRoh = atStrichZuI(tagRoh);
     if (name.schrift && name.latein && t.length > 1){
       const lr = name.latein.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[–—]\s+/g, " - ")
                             .replace(/^[^\p{L}\p{N}]+/u, "");
@@ -24790,13 +24793,37 @@ async function ocrLaden(){
 /* psm: 3 ganze Seite, 4 eine Spalte, 6 ein Block, 11 verstreute Zeilen.
    `weiss` begrenzt den Zeichenvorrat - bei einem reinen Zahlenfeld kann dann
    kein Buchstabe mehr entstehen, und die Erkennung ist deutlich schneller. */
+/* THE LATIN THE GAME REALLY GETS. The reader ran on the English model,
+   and that knows no umlauts, no Polish L with its stroke, no Turkish
+   g-breve, no Czech hooks - while the Kommodore's own set of captures has
+   some of each.
+   A single script model for all of Latin exists (script/Latin), but it is
+   not to be had over the path this tool uses: both routes answer 404. So
+   several languages in ONE model, which Tesseract can do as well.
+   MEASURED on his captures, English against this set:
+     Polish          80 "BPP-006 - tACHMYTY"   90 "... LACHMYTY"
+     MCR             68 "~ McR - PARA-002"     82 "— MCR - PARA-002"
+     odd characters  30 (a jumble)             55 (readable)
+     Turkish         80                        88  (same text)
+     odd font        82                        91  (same text)
+     Danish          88                        89  (same text)
+     BLKWTR          90                        89  (same text)
+   Six of seven better or equal, two texts really put right. And what it
+   costs was the real question, after everything reported about the
+   stuttering: measured on the same line, averaged over three runs, 1102
+   thousandths against 1133 - thirty-one thousandths, under three
+   hundredths. Building the worker takes 792 thousandths once instead of
+   162; after that it stands.
+   The price is elsewhere: the FIRST time, six models have to come down
+   instead of one. */
+const OCR_SPRACHEN = "eng+deu+dan+pol+tur+ces";
 async function ocrBereit(psm, weiss, melde){
   ocrMelder = melde || (()=>{});
-  if (!window.Tesseract) ocrMelder("Loading the text recogniser (about 3 MB, first time only) …");
+  if (!window.Tesseract) ocrMelder("Loading the text recogniser (about 15 MB, first time only) …");
   await ocrLaden();
   if (!ocrWorker){
     ocrMelder("Starting the recogniser …");
-    ocrWorker = await window.Tesseract.createWorker("eng", 1, {
+    ocrWorker = await window.Tesseract.createWorker(OCR_SPRACHEN, 1, {
       logger: m => { if (m.status === "recognizing text")
         ocrMelder(`Reading … ${Math.round(m.progress*100)} %`); }
     });
@@ -33775,7 +33802,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 4487e89a0a</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b391778060</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33917,7 +33944,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "4487e89a0a";
+const BAU = "b391778060";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
