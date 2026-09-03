@@ -15159,17 +15159,15 @@ async function kbTick(){
     KB.kastenOffen = neu;
     KB.blick = (KB.blick || 0) + 1;
     if (!kasten) KB.kastenLetzte = null;
-    /* FINISHED WORK IS LEFT TO REST. The Kommodore's own rule: "maybe the
-       code has to let tasks that are already done rest - then we have more
-       capacity left for what remains."
-       The fourth-look refresh exists so the strip stays fresh while the
-       sheet is still filling. Once every line is captured there is nothing
-       left to freshen, and the forty thousandths of geometry are spent on
-       a picture nobody is waiting for. A CHANGED head box still goes
-       through at once - that is the click that means new work. */
-    const fertig = KB.zeilen.length
-      && KB.zeilen.every(z => z.status === "erfasst" || z.eigen);
-    if (neu || (!fertig && KB.blick % 4 === 0) || !KB.zeilen.length){
+    /* THE FOURTH-LOOK REFRESH RUNS ALWAYS, and it must. I once made it
+       stop when every line was captured - the Kommodore's own rule, "let
+       finished work rest" - and that was the wrong place for it. The
+       refresh is not only about freshness: it is the ONLY way the tool
+       notices that the BAR itself has changed, that more cards have come.
+       With a sheet of one captured line it fell silent and stayed at one,
+       while eleven cards stood in the game. A sheet is never "finished"
+       while the bar can still grow. */
+    if (neu || KB.blick % 4 === 0 || !KB.zeilen.length){
       const G = await unitsLesen(F, null, null, "bild");
       if (!KB || !KB.live) return;
       kbVerarbeiten(G);
@@ -33802,7 +33800,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b391778060</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0511c059d3</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33944,7 +33942,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b391778060";
+const BAU = "0511c059d3";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
