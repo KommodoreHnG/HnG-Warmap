@@ -13013,7 +13013,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        in capitals at the start counts as a label as long as something
        follows it; failing that, the whole line stands. It only comes back
        empty when the line really is. */
-    const bzRoh = ((bes.text || "") + (bes2 && bes2.text ? " " + bes2.text : "")).trim();
+    const bzRoh = atStrichZuI(((bes.text || "") + (bes2 && bes2.text ? " " + bes2.text : "")).trim());
     const bmFrei = atAufschriftAb(bzRoh);
     const bm = bmFrei ? [null, bmFrei]
       : /^\s*(?:BESITZER|OWNER|PROPRIETARIO|PROPRIETAIRE|PROPRI\u00c9TAIRE|PROPIETARIO|W\u0141A\u015aCICIEL|\u0412\u041b\u0410\u0414\u0415\u041b\u0415\u0426)\s*[:;.\-]?\s*(.*)$/iu.exec(bzRoh)
@@ -13030,6 +13030,10 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       const rest = (tf.length > 1 ? tf.slice(1).join(" - ") : rf).trim();
       if (rest && unitsFremdSchrift(rest)) nameText = rest;
     }
+    /* the misread bars first, so that both sides are clean when they are
+       held against each other below */
+    nameText = atStrichZuI(nameText);
+    tagRoh = atStrichZuI(tagRoh);
     /* THE NAME AND THE OWNER ARE TWO READINGS OF THE SAME WORD. The
        Kommodore noticed the naming convention: the owner's name usually
        hangs at the very END of the unit's name. Counted on his own sheet:
@@ -13283,6 +13287,12 @@ function kbOrtMelden(name){
    That is the order of work; nobody wants two towns on one sheet. */
 function kbOrtSetzen(i, linie){
   if (i === null || i === undefined) return;
+  /* THE HAND OUTRANKS THE PICTURE - the same order as at the finder frame.
+     The mark used to guard only the TEXT in the field, not the town behind
+     it: even with the text left standing, the sheet went on belonging to
+     the town that was read. Only where no town stands at all may the
+     reader set one. */
+  if (KB.ortHand && KB.ort !== null && KB.ort !== undefined) return;
   const neu = KB.ort !== null && KB.ort !== undefined && i !== KB.ort;
   if (neu){
     const offen = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen && !z.gespeichert).length;
@@ -14705,9 +14715,14 @@ function kbZeichnen(){
        overwritten a tenth of a second later. */
     const nf = links.querySelector("#kb-ort");
     if (nf){
+      /* THE HAND HOLDS UNTIL IT IS GIVEN BACK. "blur" used to drop the
+         mark - and clicking back into the game IS a blur, so the next look
+         overwrote the town that had just been typed. The mark stays now;
+         what gives it back is the one gesture that plainly means it,
+         EMPTYING the field. Same language as the finder frame, which
+         Escape hands back to the game. */
       nf.addEventListener("focus", ()=>{ if (KB) KB.ortHand = true; });
-      nf.addEventListener("blur",  ()=>{ if (KB) KB.ortHand = false; });
-      nf.addEventListener("input", ()=>{ if (KB) KB.ortHand = true; });
+      nf.addEventListener("input", ()=>{ if (KB) KB.ortHand = nf.value.trim() !== ""; });
     }
   }
   /* MAY I GO ON? IN WORDS. The Kommodore found the sounds hard to read,
@@ -14741,6 +14756,14 @@ function kbZeichnen(){
   }
   /* the field is only set from outside while no hand lies in it */
   const ortFeldLinks = links.querySelector("#kb-ort");
+  if (ortFeldLinks){
+    /* so that nobody wonders later why the sheet stopped following */
+    ortFeldLinks.style.outline = KB.ortHand ? "2px solid var(--accent)" : "";
+    ortFeldLinks.style.outlineOffset = KB.ortHand ? "-2px" : "";
+    ortFeldLinks.title = KB.ortHand
+      ? "Held by hand — the reading will not change it. Clear the field to hand it back."
+      : "read from the bar, or type it";
+  }
   if (ortFeldLinks && !KB.ortHand && document.activeElement !== ortFeldLinks){
     const soll = ortName || "";
     if (ortFeldLinks.value !== soll) ortFeldLinks.value = soll;
@@ -15077,7 +15100,17 @@ async function kbTick(){
        that a display which never changes still gets refreshed. */
     const geregt = kbWache(f);
     KB.wacheZaehler = (KB.wacheZaehler || 0) + 1;
-    if (geregt < 3 && KB.wacheZaehler % 20 !== 0 && KB.zeilen.length){
+    /* AND THE DOORMAN GUARDS THE START TOO. There used to be "&&
+       KB.zeilen.length" here, so that while the sheet was still EMPTY every
+       single look read the whole strip and worked out the whole geometry -
+       fourteen times a second, with nothing stirring. That is exactly the
+       phase before things get going, and it is what the Kommodore felt.
+       The exception was meant to let the first look through. It gets
+       through anyway: on the first call the doorman has no picture to
+       compare against and reports every cell as changed. And when the
+       detail list opens, that is a large change in the bar - he fires, the
+       look goes through, the sheet comes about. */
+    if (geregt < 3 && KB.wacheZaehler % 20 !== 0){
       KB.fehlschlaege = 0;
       return;
     }
@@ -15123,7 +15156,17 @@ async function kbTick(){
     KB.kastenOffen = neu;
     KB.blick = (KB.blick || 0) + 1;
     if (!kasten) KB.kastenLetzte = null;
-    if (neu || KB.blick % 4 === 0 || !KB.zeilen.length){
+    /* FINISHED WORK IS LEFT TO REST. The Kommodore's own rule: "maybe the
+       code has to let tasks that are already done rest - then we have more
+       capacity left for what remains."
+       The fourth-look refresh exists so the strip stays fresh while the
+       sheet is still filling. Once every line is captured there is nothing
+       left to freshen, and the forty thousandths of geometry are spent on
+       a picture nobody is waiting for. A CHANGED head box still goes
+       through at once - that is the click that means new work. */
+    const fertig = KB.zeilen.length
+      && KB.zeilen.every(z => z.status === "erfasst" || z.eigen);
+    if (neu || (!fertig && KB.blick % 4 === 0) || !KB.zeilen.length){
       const G = await unitsLesen(F, null, null, "bild");
       if (!KB || !KB.live) return;
       kbVerarbeiten(G);
@@ -26913,6 +26956,24 @@ const AT_TRENNER = /\s[-\u2010-\u2015\u2212]\s/;
    whole line was kept as the owner's name. So the word before the colon is
    now COMPARED with the known ones instead of equated - up to two
    characters apart. BES|TZER against BESITZER is one. */
+/* THE GAME'S CAPITAL I IS A BARE UPRIGHT STROKE, and the reader has a sign
+   of its own for that: the bar. Both are a stroke, so it tosses a coin.
+   Seen three times on one of the Kommodore's sheets:
+     |NF23 -DB- SOOFAAAA   should be INF23
+     KYOST|POYSTI          should be KYOSTIPOYSTI
+     APC|O                 should be APCIO
+   and BES|TZER for BESITZER before that.
+   BUT NOT EVERY BAR IS AN I. Players use it as decoration - |Balken|,
+   |BLKWTR| - and that must not be touched; the file says so at the
+   tidying-up expression already. The difference is WHERE it stands:
+   decoration stands on the outside, a misread I stands INSIDE the word.
+   So only a bar between two letters or digits is swapped. That catches
+   KYOST|POYSTI, APC|O and BES|TZER and leaves |Balken| alone. A leading
+   one stays as it is - out there the bar is allowed. */
+function atStrichZuI(text){
+  return String(text == null ? "" : text)
+    .replace(/(?<=[\p{L}\p{N}])[|\u2502\u01c0](?=[\p{L}\p{N}])/gu, "I");
+}
 const AT_AUFSCHRIFTEN = ["BESITZER","OWNER","PROPRIETARIO","PROPRIETAIRE",
   "PROPRI\u00c9TAIRE","PROPIETARIO","W\u0141A\u015aCICIEL","\u0412\u041b\u0410\u0414\u0415\u041b\u0415\u0426"];
 function atAufschriftAb(text){
@@ -33714,7 +33775,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c7d0bdd293</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 4487e89a0a</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33856,7 +33917,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "c7d0bdd293";
+const BAU = "4487e89a0a";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
