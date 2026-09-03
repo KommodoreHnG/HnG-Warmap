@@ -12418,6 +12418,7 @@ function kbNeu(){
           N: 0, erste: 0, sichtbar: 0, karten: [], zeilen: [],
           auswahl: null, wandel: null, gemeldet: null, scan: false, reiheKennung: null,
           handAn: false, handWahl: null, handZieht: false, ortKennung: null, blick: 0, ortLaeuft: false, ortHand: false,
+          fehlschlaege: 0, letzterFehler: null,
           warte: [], werkt: false, arbeit: null, kastenLetzte: null, dauerMittel: 850,
           gesamt: null,
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null};
@@ -13921,11 +13922,32 @@ async function kbTick(){
       kbOrtArbeit(V);
     }
     KB.vorige = kn;
+    KB.fehlschlaege = 0;              // this look came through
   } catch(e){
     if (!KB) return;
     KB.scan = false;
-    KB.status = /denied|Permission/i.test(String(e.message || e)) ? "Screen sharing was declined." : "Capture: " + (e.message || e);
-    kbLiveStop(); kbZeichnen();
+    const txt = String((e && e.message) || e);
+    /* ONE BAD LOOK IS NOT A REASON TO STOP. Every error used to end the
+       whole capture, and at fourteen looks a second a single stumble was
+       enough: the window happens to deliver no picture while it redraws, a
+       frame comes back empty, some reading trips over a half-built image.
+       None of that is over - all of it stopped.
+       Only what is really over ends the capture: the sharing was declined
+       or taken back. Everything else is counted and skipped, and only five
+       failures IN A ROW mean it is no longer chance. A look that comes
+       through sets the count back to nought, so a stumble every few
+       seconds is not noticed at all. */
+    const abgelehnt = /denied|permission|notallowed|dismissed|not allowed/i.test(txt);
+    KB.fehlschlaege = (KB.fehlschlaege || 0) + 1;
+    KB.letzterFehler = txt;
+    if (abgelehnt || KB.fehlschlaege >= KB_FEHLER_MAX){
+      KB.status = abgelehnt ? "Screen sharing was declined or ended."
+        : `Capture stopped after ${KB.fehlschlaege} failed looks in a row: ${txt}`;
+      kbLiveStop(); kbZeichnen();
+    } else {
+      KB.status = `A look failed and was skipped (${KB.fehlschlaege} of ${KB_FEHLER_MAX}) — ${txt}`;
+      kbZeichnen();
+    }
   } finally { if (KB) KB.laeuft = false; }
 }
 /* The town half, on its own. It reads the town's name and the strengths
@@ -13946,6 +13968,10 @@ async function kbOrtArbeit(V){
     if (KB) KB.letzte = null;
   } finally { if (KB) KB.ortLaeuft = false; }
 }
+/* How many looks may fail IN A ROW before the capture really stops. One is
+   chance; five in a row at fourteen looks a second is a third of a second
+   in which nothing at all worked, and that is a reason. */
+const KB_FEHLER_MAX = 5;
 function kbLiveStart(){
   if (!KB || KB.live) return;
   /* Nearly seven looks a second. Every one of them does the quick half -
@@ -13954,6 +13980,7 @@ function kbLiveStart(){
      looks, which is now a third of a second instead of a whole one. A look
      that overlaps a running one is skipped (KB.laeuft), so the rate costs
      nothing while a reading is under way. */
+  KB.fehlschlaege = 0; KB.letzterFehler = null;
   KB.live = setInterval(kbTick, 70);
   KB.status = "Live - click the units in the game's detail bar, left to right.";
   kbRauschenAn(); kbZeichnen(); kbTick();
@@ -32388,7 +32415,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f1af6fd958</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 390dfea91e</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32530,7 +32557,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f1af6fd958";
+const BAU = "390dfea91e";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
