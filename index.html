@@ -13059,6 +13059,40 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        for it threw "Cannot access 'tagRoh' before initialization" on every
        unit. */
     nameText = atStrichZuI(nameText);
+    /* THE ELLIPSIS IS THE ANSWER, NOT A PROBLEM. Where the game sets three
+       dots it is saying: this was cut off here. And by the naming
+       convention what was cut off is the owner, who stands in full one
+       line below.
+       The Kommodore's case: the game shows "AT002 - NOBLEAC..." with
+       "BESITZER: NOBLEACTUAL", and the sheet carried "NOBLEACC.." - a
+       guessed second C on top of the cut.
+       The similarity check further down could not help: it asks whether
+       the two are alike to within a third of their length, and a CUT name
+       is shorter by whatever was cut away. So the question here is not
+       "are they alike" but "does the owner BEGIN the way the name's end
+       stops":
+         name's end before the dots   NOBLEACC
+         owner, cut to the same length NOBLEACT
+         distance                     1
+       One character - the guessed C. So the beginning fits, the rest is
+       the owner, and the name is completed to NOBLEACTUAL. The wrong C
+       goes with it, without anybody having to find it on its own.
+       The allowance grows with the length (one slip per six characters, at
+       least one), so a long piece does not fail on a single misread letter
+       and a short one is not completed at random. */
+    const AT_PUNKTE = /\s*(?:\u2026|\.{2,})\s*$/;
+    if (bzName && AT_PUNKTE.test(nameText)){
+      const tn = nameText.split(AT_TRENNER);
+      const schwanz = tn[tn.length-1].replace(AT_PUNKTE, "").trim();
+      if (schwanz.length >= 3 && bzName.length > schwanz.length){
+        const kopf = bzName.slice(0, schwanz.length);
+        const erlaubt = Math.max(1, Math.floor(schwanz.length/6));
+        if (levenshtein(schwanz.toUpperCase(), kopf.toUpperCase()) <= erlaubt){
+          tn[tn.length-1] = bzName;
+          nameText = tn.join(" - ");
+        }
+      }
+    }
     /* THE NAME AND THE OWNER ARE TWO READINGS OF THE SAME WORD. The
        Kommodore noticed the naming convention: the owner's name usually
        hangs at the very END of the unit's name. Counted on his own sheet:
@@ -33904,7 +33938,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d1c676c4f8</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 01871db394</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34046,7 +34080,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d1c676c4f8";
+const BAU = "01871db394";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
