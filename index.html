@@ -11814,9 +11814,11 @@ function unitsRauteMerkmale(grau){
    its neighbour and read 3711. Plain threshold: the strip is a pale band
    over the map, and the local-contrast path takes the black digits for
    background there. */
-async function unitsGesamtZahlen(c, rt, melde){
+async function unitsGesamtZahlen(c, rt, melde, abbrechen){
   const z = [];
   for (let i = 0; i < rt.length; i++){
+    /* a unit has been clicked - the numbers wait, the unit does not */
+    if (abbrechen && abbrechen()) break;
     const m = rt[i].mitte;
     const l = i ? m - rt[i-1].mitte : 96, g = i < rt.length-1 ? rt[i+1].mitte - m : 96;
     const hb = Math.max(28, Math.min(46, Math.min(l, g)/2 - 4));
@@ -11983,8 +11985,16 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
      And the shortcut for a confident reading falls under the same rule: a
      reading may be confident and still be confident nonsense, if what it
      was given was never Latin to begin with. */
+  /* AND THE COLON COUNTS LIKE THE DASH. The owner's line carries the
+     game's own word in front of the name - "BESITZER: <name>" - and those
+     nine Latin characters lift the share of the whole line over the bar,
+     so the shortcut fires and no foreign model is ever asked. The name
+     line has known its dash for a long time; the owner line did not know
+     its colon. Only what stands behind the label may decide. */
+  const ohneAuf = atAufschriftAb(t);
   const tr = t.search(AT_TRENNER);
-  const rest = tr >= 0 ? t.slice(tr).replace(AT_TRENNER, "").trim() : t;
+  const rest = ohneAuf !== null ? ohneAuf
+    : tr >= 0 ? t.slice(tr).replace(AT_TRENNER, "").trim() : t;
   const zaehl = rest.length ? rest : t;
   const lateinAnteil = zaehl.length ? (zaehl.match(/[A-Za-z0-9 _\-|.:]/g) || []).length / zaehl.length : 0;
   /* AND THE MIDDLING READING GETS A HIGHER BAR. Forty-five was chosen so
@@ -11999,7 +12009,30 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
   if (zwilling && !bevorzugt) bevorzugt = "rus";
   if (!zwilling && ((beste.zuv >= 70 && lateinAnteil >= 0.8)
       || (beste.zuv >= 60 && lateinAnteil >= 0.8 && t.length >= 6))) return beste;
+  /* BOTH PREPARATIONS FOR THE FOREIGN MODELS TOO. Every field is put
+     through a plain threshold before the reader sees it - black and white
+     out of grey. For Latin capitals that is good. For Arabic it is fatal:
+     the script is thin, joined up and carries dots, and the threshold
+     tears the joins open. Measured on the Kommodore's Arabic capture,
+     whose true text is فرقة صاعقة - ١٠١ :
+       prepared      31, and nonsense
+       unprepared    69, with the first word right
+     And with 69 against the Latin nonsense at 43, Arabic would win a line
+     for the first time at all.
+     Measured across every foreign sample there is:
+       Korean      prepared 64   raw 67
+       Chinese     prepared 70   raw 77
+       Chinese 2   prepared 65   raw 54
+       Japanese    prepared 79   raw 84
+       Cyrillic    prepared 71   raw 82
+       Arabic      prepared 31   raw 69
+     Neither wins every time - Chinese 2 falls off raw, all the others
+     rise. So nothing is swapped: both are tried and the surer reading
+     counts, exactly as the Latin path has always done. */
   const feld = unitsSchlicht(c, {x, y, w, h}, 3);
+  const feldRoh = document.createElement("canvas");
+  feldRoh.width = w; feldRoh.height = h;
+  feldRoh.getContext("2d").drawImage(c, x, y, w, h, 0, 0, w, h);
   let top = beste;
   /* the expected one first, and it may pass with a lower bar - an
      expectation that has carried before earns more than a model tried at
@@ -12011,8 +12044,12 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
     try {
       if (melde) melde(`Trying ${sp} …`);
       const wk = await unitsFremdWorker(sp);
-      const r = await wk.recognize(feld);
-      const zuv = Math.round((r.data && r.data.confidence) || 0);
+      const rA = await wk.recognize(feld);
+      const rB = await wk.recognize(feldRoh);
+      const zA = Math.round((rA.data && rA.data.confidence) || 0);
+      const zB = Math.round((rB.data && rB.data.confidence) || 0);
+      const r = zB > zA ? rB : rA;
+      const zuv = Math.max(zA, zB);
       const text = ((r.data && r.data.text) || "").trim().replace(/\s+/g, " ");
       /* THE LATIN READING RIDES ALONG. A tag is Latin by build, and a
          foreign model reads it badly - Korean turned "ROKA-03" into
@@ -12660,9 +12697,16 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       R.ortZeilen = zl ? zl.length : 0;
       R.ortText = ort.text; R.ortZuv = ort.zuv;
       R.stadt = stadt;
-      if (R.gesamtRauten && R.gesamtRauten.length){
+      /* THE SIX NUMBERS ARE TRIMMING. The name is one reading and nothing
+         can be filed without it, so it stays in front. The numbers under
+         the diamonds are six readings through the same recogniser, and
+         they are worth nothing if a unit is waiting behind them. So they
+         are only read while the queue is empty - and a unit that comes in
+         meanwhile ends them at once. */
+      if (R.gesamtRauten && R.gesamtRauten.length && !(KB && KB.warte && KB.warte.length)){
         sag("Reading the town's strength …");
-        R.gesamtZahlen = await unitsGesamtZahlen(c, R.gesamtRauten, null);
+        R.gesamtZahlen = await unitsGesamtZahlen(c, R.gesamtRauten,
+          null, () => !!(KB && KB.warte && KB.warte.length));
       }
       /* "BAD LOBENSTEIN - C": the letter names the attack line (A to E) the
          units stand on. They are not in the town - they are attacking it
@@ -12750,9 +12794,12 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        follows it; failing that, the whole line stands. It only comes back
        empty when the line really is. */
     const bzRoh = ((bes.text || "") + (bes2 && bes2.text ? " " + bes2.text : "")).trim();
-    const bm = /^\s*(?:BESITZER|OWNER|PROPRIETARIO|PROPRIETAIRE|PROPRI\u00c9TAIRE|PROPIETARIO|W\u0141A\u015aCICIEL|\u0412\u041b\u0410\u0414\u0415\u041b\u0415\u0426)\s*[:;.\-]?\s*(.*)$/iu.exec(bzRoh)
+    const bmFrei = atAufschriftAb(bzRoh);
+    const bm = bmFrei ? [null, bmFrei]
+      : /^\s*(?:BESITZER|OWNER|PROPRIETARIO|PROPRIETAIRE|PROPRI\u00c9TAIRE|PROPIETARIO|W\u0141A\u015aCICIEL|\u0412\u041b\u0410\u0414\u0415\u041b\u0415\u0426)\s*[:;.\-]?\s*(.*)$/iu.exec(bzRoh)
       || /^\s*[\p{Lu}\p{Lo}]{4,14}\s*[:;.\-]\s*(.+)$/u.exec(bzRoh)
       || (bzRoh ? [bzRoh, bzRoh] : null);
+    let bzName = bm ? bm[1].trim() : null;
     let nameText = (t.length > 1 ? t.slice(1).join(" - ") : roh).trim();
     /* the foreign reading only ever gives the NAME - the tag stays the one
        the Latin model read, because a tag is Latin by build */
@@ -12762,6 +12809,32 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       const tf = rf.split(AT_TRENNER);
       const rest = (tf.length > 1 ? tf.slice(1).join(" - ") : rf).trim();
       if (rest && unitsFremdSchrift(rest)) nameText = rest;
+    }
+    /* THE NAME AND THE OWNER ARE TWO READINGS OF THE SAME WORD. The
+       Kommodore noticed the naming convention: the owner's name usually
+       hangs at the very END of the unit's name. Counted on his own sheet:
+         AT001 - PUZARIKI / PUZARIKI    fits
+         AT001 - BROBRIAN / BROBRIAN    fits
+         AT002 - BROBRIAN / BROBRIAN    fits
+         BATALLON         / VLATKOOL    does not
+       Three of four. And these are two readings taken from two different
+       parts of the picture - so where they RESEMBLE each other without
+       being equal, one of them has a mistake in it, and the surer one
+       wins.
+       Kept strict: only when they differ by at most a third of their
+       length (BATALLON against VLATKOOL is seven of eight apart, far over
+       it), and only when the winner was at least ten points surer. */
+    if (nameText && bzName && nameText !== bzName){
+      const tn = nameText.split(AT_TRENNER);
+      const schwanz = tn[tn.length-1].trim();
+      const d = levenshtein(schwanz.toUpperCase(), bzName.toUpperCase());
+      const lang = Math.max(schwanz.length, bzName.length);
+      if (schwanz && lang >= 4 && d > 0 && d <= lang/3){
+        if (bes.zuv >= name.zuv + 10){
+          tn[tn.length-1] = bzName;
+          nameText = tn.join(" - ");
+        } else if (name.zuv >= bes.zuv + 10) bzName = schwanz;
+      }
     }
     /* the print of the name line, and whether its letters can be trusted */
     bildKennFeld = name.feld || null;
@@ -12789,7 +12862,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       tag: tagRoh,
       name: nameText,
       nameZuv: name.zuv,
-      besitzer: bm ? bm[1].trim() : null, besitzerRoh: bes.text, besitzerZuv: bes.zuv,
+      besitzer: bzName, besitzerRoh: bes.text, besitzerZuv: bes.zuv,
       hp, form: R.form
     };
   }
@@ -14608,7 +14681,8 @@ function kbPult(){
     <button class="rd-schalter" id="kb-leer">New sheet</button>
     <div class="kb-abstand"></div>
     <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run borderless or windowed. Your own units are shown but not kept.</div>`;
-  document.getElementById("kb-kraft").addEventListener("click", ()=>{ KB.live ? kbLiveStop() : kbLiveStart(); });
+  /* the user's own switch: off means off, sharing included */
+  document.getElementById("kb-kraft").addEventListener("click", ()=>{ KB.live ? kbLiveStop(true) : kbLiveStart(); });
   document.getElementById("kb-ton").addEventListener("click", ()=>{ kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); kbPult(); });
   document.getElementById("kb-keep").addEventListener("click", kbBehalten);
   document.getElementById("kb-leer").addEventListener("click", ()=>{ const t = KB.ton; const live = KB.live; kbLiveStop(); KB = kbNeu(); if (live) kbLiveStart(); kbZeichnen(); });
@@ -14841,7 +14915,19 @@ async function kbTick(){
        sixty-five thousandths and makes a copy of its own that nothing
        changes afterwards, and the rest is sent off as work of its own with
        no waiting. The quick half carries on meanwhile. */
-    if (kn !== KB.letzte && (kn === KB.vorige || KB.letzte === null) && !KB.ortLaeuft){
+    /* WHOEVER CLICKED GOES FIRST. The unit queue and the town pass go
+       through the SAME text reader, and it can only do one thing at a
+       time. The town pass reads the name and then the six numbers under
+       the diamonds - about six seconds - and for those six seconds a
+       picture of a unit that was clicked long ago simply waits. The
+       Kommodore's Schweinfurt capture shows exactly that: "Reading the
+       town's strength ...", the queue empty, and NOTHING read of thirteen
+       units.
+       So the town pass is not even begun while pictures are waiting or one
+       is being read. The town does not run away; it is caught up as soon
+       as there is quiet. */
+    const ruhe = !(KB.warte && KB.warte.length) && !KB.arbeit && !KB.werkt;
+    if (ruhe && kn !== KB.letzte && (kn === KB.vorige || KB.letzte === null) && !KB.ortLaeuft){
       KB.letzte = kn;
       const V = await unitsRahmen(f);
       if (!KB || !KB.live) return;
@@ -14916,11 +15002,24 @@ function kbLiveStart(){
   KB.status = "Live - click the units in the game's detail bar, left to right.";
   kbRauschenAn(); kbZeichnen(); kbTick();
 }
-function kbLiveStop(){
+/* STOPPING THE TICK IS NOT STOPPING THE SHARE, and it used to be only the
+   first. clearInterval, noise off, done - while the sharing carried on
+   delivering eight pictures a second of 3840 by 2160 points, whether
+   anybody looked or not. The operating system kept copying, the video
+   element kept decoding, and nobody was watching: whoever switched the
+   capture off went on paying for it until they left the page. That is the
+   rest of the sluggishness the Kommodore still felt.
+   BUT NOT EVERY STOP MAY DROP THE SHARE. "New sheet" stops and starts
+   again at once; dropping the share there would make him pick the window
+   afresh every time. So the caller says which is meant - and the player's
+   room, which shares the same stream, keeps it if it is capturing. */
+function kbLiveStop(auchFreigabe){
   kbMorseStopp();
   if (!KB || !KB.live) return;
   clearInterval(KB.live); KB.live = null;
-  kbRauschenAus(); kbZeichnen();
+  kbRauschenAus();
+  if (auchFreigabe && !(typeof PG !== "undefined" && PG && PG.live)) bildFreigabeBeenden();
+  kbZeichnen();
 }
 /* one picture, for checks without the game */
 async function kbBild(datei){ if (!KB) return; const R = await unitsLesen(datei, t => { if (KB) KB.status = t; }, KB.reiheKennung); if (KB && R.reiheKennung) KB.reiheKennung = R.reiheKennung; if (KB) kbVerarbeiten(R); return R; }
@@ -15609,10 +15708,12 @@ function pgLiveStart(){
   PG.status = "Live — open a battle on the war map and scroll its player lists.";
   kbRauschenAn(); pgZeichnen(); pgTick();
 }
-function pgLiveStop(){
+function pgLiveStop(auchFreigabe){
   if (!PG || !PG.live) return;
   clearInterval(PG.live); PG.live = null;
-  kbRauschenAus(); pgZeichnen();
+  kbRauschenAus();
+  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)) bildFreigabeBeenden();
+  pgZeichnen();
 }
 async function pgBild(datei){
   if (!PG) return;
@@ -15727,7 +15828,8 @@ function pgPult(){
     <div class="kb-abstand"></div>
     <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run
       borderless or windowed. Names go into the register with their side; nothing else is kept.</div>`;
-  document.getElementById("sp-kraft").addEventListener("click", () => { PG.live ? pgLiveStop() : pgLiveStart(); });
+  /* the user's own switch: off means off, sharing included */
+  document.getElementById("sp-kraft").addEventListener("click", () => { PG.live ? pgLiveStop(true) : pgLiveStart(); });
   document.getElementById("sp-ton").addEventListener("click", () => {
     kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); pgPult(); });
   document.getElementById("sp-keep").addEventListener("click", pgBehalten);
@@ -15784,7 +15886,7 @@ async function spielerraumAuf(){
 function spielerraumZu(){
   if (!pgOffen) return;
   pgOffen = false;
-  pgLiveStop(); kbRauschenAus(); kbOszAus();
+  pgLiveStop(true); kbRauschenAus(); kbOszAus();
   document.getElementById("spieler").classList.remove("an");
   PG = null;
   unitsFremdSchliessen();
@@ -15811,7 +15913,7 @@ async function kabineAuf(){
 function kabineZu(){
   if (!kbOffen) return;
   kbOffen = false;
-  kbLiveStop(); kbRauschenAus(); kbOszAus();
+  kbLiveStop(true); kbRauschenAus(); kbOszAus();
   document.getElementById("kabine").classList.remove("an");
   KB = null;
   unitsFremdSchliessen();
@@ -26568,6 +26670,24 @@ async function ocrLesen(datei, quelle){
    dann ein Auslassungszeichen. Ein solcher Name ist unvollstaendig und wird
    nie ergaenzt, nur vermerkt. */
 const AT_TRENNER = /\s[-\u2010-\u2015\u2212]\s/;
+/* THE WORD THE GAME PUTS IN FRONT OF THE OWNER. The list was matched
+   EXACTLY, and the reader does not read exactly: BESITZER comes back as
+   BES|TZER, the I turned into a stroke, and then nothing matched and the
+   whole line was kept as the owner's name. So the word before the colon is
+   now COMPARED with the known ones instead of equated - up to two
+   characters apart. BES|TZER against BESITZER is one. */
+const AT_AUFSCHRIFTEN = ["BESITZER","OWNER","PROPRIETARIO","PROPRIETAIRE",
+  "PROPRI\u00c9TAIRE","PROPIETARIO","W\u0141A\u015aCICIEL","\u0412\u041b\u0410\u0414\u0415\u041b\u0415\u0426"];
+function atAufschriftAb(text){
+  const t = String(text || "").trim();
+  const m = /^([^:;]{3,18})\s*[:;]\s*(.+)$/u.exec(t);
+  if (!m) return null;
+  const wort = m[1].replace(/[^\p{L}]/gu, "").toUpperCase();
+  if (wort.length < 3) return null;
+  for (const a of AT_AUFSCHRIFTEN)
+    if (Math.abs(a.length - wort.length) <= 2 && levenshtein(wort, a) <= 2) return m[2].trim();
+  return null;
+}
 function atZeileTeilen(zeile){
   const s = String(zeile == null ? "" : zeile).replace(/\s+/g, " ").trim();
   if (!s) return null;
@@ -33357,7 +33477,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0c48c498ba</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 808c16dc69</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33499,7 +33619,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0c48c498ba";
+const BAU = "808c16dc69";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
