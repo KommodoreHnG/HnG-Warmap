@@ -10814,7 +10814,10 @@ const UNITS_ZEILEN = {
 };
 const UNITS_BAND = 68, UNITS_ZIFFERN = [19, 61];   /* band height; digit rows within it */
 const UNITS_BAENDER = [["erweitert",1614], ["standard",1701], ["erweitert",1944], ["standard",2031]];
-const UNITS_NAME_X = 1165, UNITS_BAHN_RECHTS = 2621, UNITS_RASTER = 105;
+/* The card window's edges. The right one was measured on eight bars with
+   the true unit count known: the track ends at 2605, not at 2621. */
+const UNITS_NAME_X = 1165, UNITS_BAHN_RECHTS = 2621, UNITS_BAHN_LINKS = 1180,
+      UNITS_BAHN_ENDE = 2605, UNITS_RASTER = 105;
 const UNITS_REIHE_MIN = 8;          /* raster strength below which there is no bar */
 const UNITS_LOCAL = "units_seen";   /* browser-side store, see unitsBehalten */
 
@@ -10984,16 +10987,28 @@ function unitsReiheFuellen(d, y, runs){
     }
     aus.push(runs[i]);
   }
-  const letzte = aus[aus.length-1], br = letzte[1] - letzte[0];
+  const br = aus[0][1] - aus[0][0];
+  const tinteIn = (x0, x1) => {
+    let n = 0;
+    for (let x = Math.max(0, x0); x < x1; x++){
+      const p = (y*UNITS_W + x)*4;
+      if ((unitsMax(d,p) - unitsMin(d,p)) > 60) n++;
+    }
+    return n;
+  };
+  /* ONLY TO THE RIGHT, AND THAT IS A MEASURED DECISION. A scrolled row is
+     cut at the left just as it is at the right, and adding the left one too
+     looked obvious. Tried and measured: it invented cards in three of nine
+     bars - at_3 grew from eleven to twelve, Stockheim from thirteen to
+     fourteen - because the bar's LEFT edge is not reliably known and the
+     ink test then fires on the map behind it. The right edge is known
+     exactly, so the right side stays and the left side waits until the
+     bar's left edge is settled. */
+  const letzte = aus[aus.length-1];
   const x0 = letzte[0] + UNITS_RASTER;
   if (x0 + 30 < UNITS_BAHN_RECHTS){
     const x1 = Math.min(UNITS_BAHN_RECHTS, x0 + br);
-    let tinte = 0;
-    for (let x = x0; x < x1; x++){
-      const p = (y*UNITS_W + x)*4;
-      if ((unitsMax(d,p) - unitsMin(d,p)) > 60) tinte++;
-    }
-    if (tinte >= 20) aus.push([x0, x1, true]);
+    if (tinteIn(x0, x1) >= 20) aus.push([x0, x1, true]);
   }
   return aus;
 }
@@ -32472,7 +32487,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 79933156bb</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 2ad90d0657</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32614,7 +32629,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "79933156bb";
+const BAU = "2ad90d0657";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
