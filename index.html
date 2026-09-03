@@ -10950,7 +10950,52 @@ function unitsKartenFinden(d, yReihe){
     const runs = unitsLaeufe(d, yReihe+dy, 60, 80);
     if (runs.length > best.n) best = {n: runs.length, dy, runs};
   }
-  return {fy: yReihe + best.dy, rahmen: best.runs};
+  return {fy: yReihe + best.dy, rahmen: unitsReiheFuellen(d, yReihe + best.dy, best.runs)};
+}
+/* THE ROW IS A GRID, AND A GRID SAYS WHAT A SINGLE CARD CANNOT. Measured on
+   eleven bars: the cards are ninety points wide and one hundred and five
+   apart, without one exception. That makes the grid the surest thing in the
+   whole bar - surer than any single card.
+   The run search does not use it. It takes runs of saturated points sixty
+   to eighty long and keeps what it finds, and two things fall through:
+   A PALE CARD IN THE MIDDLE. Where its rim is too weak, its neighbours
+   stand two hundred and ten apart instead of a hundred and five. The grid
+   says a card belongs there, and it is put back - its points are there, it
+   was only its rim that was faint, so it reads like any other.
+   AND THE LAST CARD, CUT OFF BY THE WINDOW'S EDGE. The Kommodore sees them;
+   its run is shorter than sixty and the sieve dropped it without a word.
+   Where the grid says another card begins and there is ink at that place,
+   it is taken - but it is marked as cut, and NO sign is matched on it: half
+   a tactical sign reads as a whole wrong one, and a wrong type is worse
+   than a missing one. */
+function unitsReiheFuellen(d, y, runs){
+  if (!runs || runs.length < 2) return runs || [];
+  const aus = [runs[0]];
+  for (let i = 1; i < runs.length; i++){
+    const l = runs[i-1][0], r = runs[i][0];
+    const n = Math.round((r - l) / UNITS_RASTER);
+    /* only a clean multiple of the pitch is a gap with cards in it */
+    if (n >= 2 && n <= 6 && Math.abs((r - l) - n*UNITS_RASTER) <= 4){
+      const br = runs[i-1][1] - runs[i-1][0];
+      for (let k = 1; k < n; k++){
+        const x0 = Math.round(l + k*UNITS_RASTER);
+        aus.push([x0, x0 + br]);
+      }
+    }
+    aus.push(runs[i]);
+  }
+  const letzte = aus[aus.length-1], br = letzte[1] - letzte[0];
+  const x0 = letzte[0] + UNITS_RASTER;
+  if (x0 + 30 < UNITS_BAHN_RECHTS){
+    const x1 = Math.min(UNITS_BAHN_RECHTS, x0 + br);
+    let tinte = 0;
+    for (let x = x0; x < x1; x++){
+      const p = (y*UNITS_W + x)*4;
+      if ((unitsMax(d,p) - unitsMin(d,p)) > 60) tinte++;
+    }
+    if (tinte >= 20) aus.push([x0, x1, true]);
+  }
+  return aus;
 }
 /* Side of a set of pixels, by the same three rules the map reader uses,
    plus the yellow of one's own units. */
@@ -11886,16 +11931,19 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
     const plattenOben = R.roll ? 1818 : 1854, rimOben = plattenOben + 12;
     /* the signs found last time, keyed by where the card stood */
     const unitsTypMerker = unitsTypAlt, unitsTypNeu = {};
-    R.karten = k.rahmen.map(([x0,x1]) => {
+    R.karten = k.rahmen.map(([x0,x1,teil]) => {
       const u = unitsUrteil(unitsFlaeche(d, x0, x1));
       const seite = u.klasse !== "-" ? u.klasse : unitsBlass(unitsRing(d, x0, x1, rimOben));
       /* THE SIGN IS ONLY MATCHED WHEN THE ROW HAS MOVED. Matching costs
          fifteen thousandths for twelve cards, every single look; while the
          bar stands still the signs of a moment ago still hold. */
       const alt = unitsTypMerker[x0];
-      const t = alt || unitsTypVon(c, x0-9, rimOben);
-      unitsTypNeu[x0] = t;
-      return {x0: x0-9, x1: x1+9, seite, rand: unitsPlattenRand(d, x0-9, plattenOben), q: unitsQuotient(d, x0-9, plattenOben),
+      /* a card cut off by the window's edge shows half a sign, and half a
+         sign matches a whole wrong one - so it gets none */
+      const t = teil ? null : (alt || unitsTypVon(c, x0-9, rimOben));
+      if (!teil) unitsTypNeu[x0] = t;
+      return {x0: x0-9, x1: x1+9, seite, teil: !!teil,
+              rand: unitsPlattenRand(d, x0-9, plattenOben), q: unitsQuotient(d, x0-9, plattenOben),
               typ: t && t.sicher ? t.typ : null, typKorr: t ? t.korr : null, typAbstand: t ? t.abstand : null,
               typListe: t ? t.liste : null, typSchwelle: t ? t.schwelle : null};
     });
@@ -11905,7 +11953,9 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
     R.reiheFarbe = unitsReiheFaerben(R.karten);
     /* which of the visible cards is picked - the one plate darker than the
        band above it */
-    R.auswahl = unitsAuswahl(R.karten.map(x => x.q));
+    /* a cut card cannot be the picked one - its plate is only half in the
+       picture, and the quotient that finds the pick is measured across it */
+    R.auswahl = unitsAuswahl(R.karten.map(x => x.teil ? 9 : x.q));
     const fy = R.karten.length ? k.fy : reihe.y - 5;      /* rim top, 1830 in the usual bar */
     R.node = unitsNode(d, fy + 5);
     /* A bar is open when the card runs stand in the 105 grid (at least one
@@ -32422,7 +32472,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 9f5c14ffec</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 79933156bb</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32564,7 +32614,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "9f5c14ffec";
+const BAU = "79933156bb";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
