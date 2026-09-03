@@ -10815,7 +10815,23 @@ const UNITS_ZEILEN = {
 const UNITS_BAND = 68, UNITS_ZIFFERN = [19, 61];   /* band height; digit rows within it */
 const UNITS_BAENDER = [["erweitert",1614], ["standard",1701], ["erweitert",1944], ["standard",2031]];
 /* The card window's edges. The right one was measured on eight bars with
-   the true unit count known: the track ends at 2605, not at 2621. */
+   the true unit count known: the track ends at 2605, not at 2621.
+
+   AND THE PITCH IS A MEASURED FACT, not an assumption. Twelve bars, more
+   than a hundred and thirty gaps, edge to edge with sub-pixel interpolation
+   at the rim row: the mean pitch of every single bar lies between 104,995
+   and 105,021, and the spread within a bar between 0,005 and 0,07. The
+   widest single gap over all of them is 105,24 and the narrowest 104,87.
+   So 105 is exact, and the grid may be trusted to put back a card that the
+   run search lost.
+
+   The card's WIDTH is a different matter: it runs from 70,96 to 72,64
+   between pictures while holding to a few hundredths within one. That is
+   the threshold, not the game - pitch compares a left edge with a left
+   edge, so the slopes are alike and their crossings shift together; width
+   compares a left edge with a right one, and there the two slopes differ.
+   Nothing is hung on the width except telling a cut card from a whole one,
+   and there the difference is twenty-five points, not two. */
 const UNITS_NAME_X = 1165, UNITS_BAHN_RECHTS = 2621, UNITS_BAHN_LINKS = 1180,
       UNITS_BAHN_ENDE = 2605, UNITS_RASTER = 105;
 const UNITS_REIHE_MIN = 8;          /* raster strength below which there is no bar */
@@ -32487,7 +32503,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 2ad90d0657</span></p></div>
+         installation. <span style="color:var(--dim2)">· build df9dd32b7f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32629,7 +32645,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "2ad90d0657";
+const BAU = "df9dd32b7f";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
