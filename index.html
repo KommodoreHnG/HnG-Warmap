@@ -12093,6 +12093,64 @@ const unitsFremdSchrift = t => /[^\u0000-\u024F\u2010-\u2015\u2212]/.test(t || "
    for a name that short. */
 const unitsKey = t => namKey(t).replace(/ß/g, "ss");
 let unitsKeys = null;
+/* WHERE THE TOWN'S NAME ACTUALLY STANDS. The reader used to take a fixed
+   window - fy+8, 62 high - and that window is right for one line and wrong
+   for two. The game wraps a long name, and then the first line sits some
+   twenty points HIGHER than a single line would. Measured on the
+   Kommodore's own captures, counting the edges in each picture row:
+     one line    Plauen, Colmar, Leipzig      fy+26 .. fy+64
+     two lines   Saint-Die-des-Vosges         fy-16 .. fy+22 and fy+33 .. fy+69
+     two lines   Frankfurt a.M. Flugplatz     fy+2  .. fy+40 and fy+50 .. fy+87
+   A line is always 36 to 38 points high with a dozen between two of them.
+   The old window cut the wrapped ones in half - Frankfurt came back as
+   "rRANAFURT AM.", which is exactly the upper line's top half.
+   NOT BY BRIGHTNESS. The bar is see-through, and the name stands dark on
+   pale in one capture and pale on dark in the next. What a line of type
+   always has is EDGES: places where the brightness jumps from one point to
+   its neighbour. Empty ground has none.
+   AND COUNTED, NOT AVERAGED. A second line is often just "- C" - two
+   characters over four hundred points of width. In the average it
+   disappears (1,5 against 1,4 on empty ground, nothing to tell apart); in
+   the COUNT of edges it stands out plainly:
+     empty ground        0 to 1
+     "- C" on its own    5 to 13
+     a full line       118 to 174 */
+const UNITS_ORT_KANTE = 12, UNITS_ORT_MIND = 3, UNITS_ORT_HOCH = 20,
+      UNITS_ORT_MAX = 52, UNITS_ORT_LUECKE = 24;
+function unitsOrtZeilen(d, fy, x0, x1){
+  if (x1 - x0 < 40) return null;
+  const von = Math.max(0, fy - 30), bis = Math.min(UNITS_H, fy + 100);
+  const kanten = [];
+  for (let y = von; y < bis; y++){
+    let k = 0, vor = -1;
+    const z = y*UNITS_W;
+    for (let x = x0; x < x1; x++){
+      const p = (z + x)*4;
+      const L = (d[p] + d[p+1] + d[p+2])/3;
+      if (vor >= 0 && Math.abs(L - vor) > UNITS_ORT_KANTE) k++;
+      vor = L;
+    }
+    kanten.push(k);
+  }
+  const bl = [];
+  let a = -1;
+  for (let i = 0; i <= kanten.length; i++){
+    const an = i < kanten.length && kanten[i] >= UNITS_ORT_MIND;
+    if (an && a < 0) a = i;
+    else if (!an && a >= 0){
+      const h = i - a;
+      if (h >= UNITS_ORT_HOCH && h <= UNITS_ORT_MAX) bl.push([von + a, von + i]);
+      a = -1;
+    }
+  }
+  if (!bl.length) return null;
+  /* at most two, and the second only when it follows close enough to be
+     the rest of the same name */
+  const aus = [bl[0]];
+  for (let i = 1; i < bl.length && aus.length < 2; i++)
+    if (bl[i][0] - aus[aus.length-1][1] <= UNITS_ORT_LUECKE) aus.push(bl[i]);
+  return aus;
+}
 function unitsStadt(text){
   if (!unitsKeys) unitsKeys = MAP.n.map((n,i) => [unitsKey(n[0]), i]);
   const versuch = k => {
@@ -12309,14 +12367,34 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
          bar is translucent: zoomed far out, a dense net of lines and dots
          lies under the name and shifts a global threshold. The reading
          that names a town wins; with neither, the more confident one. */
-      const o1 = await unitsText(c, UNITS_NAME_X, fy + 8, Math.max(60, rechts-UNITS_NAME_X), 62, null, "schlicht");
+      const zl = unitsOrtZeilen(d, fy, UNITS_NAME_X, rechts);
+      const nb = Math.max(60, rechts - UNITS_NAME_X);
+      /* the lines the search found, each read on its own and joined with a
+         space - so that a name split over two lines comes back whole, and
+         the "- C" that names the attack line stays at the end where
+         unitsStadt strips it off. Finds it nothing, the old fixed window
+         still serves. */
+      const lies = async (modus) => {
+        if (!zl) return unitsText(c, UNITS_NAME_X, fy + 8, nb, 62, null, modus);
+        let text = "", zuv = 0;
+        for (const [a, b] of zl){
+          const r = await unitsText(c, UNITS_NAME_X, a - 6, nb, (b - a) + 12, null, modus);
+          const t = (r.text || "").trim();
+          if (!t) continue;
+          text = text ? text + " " + t : t;
+          zuv = zuv ? Math.min(zuv, r.zuv) : r.zuv;
+        }
+        return {text, zuv};
+      };
+      const o1 = await lies("schlicht");
       const s1 = unitsStadt(o1.text);
       let ort = o1, stadt = s1;
       if (!s1 || !s1.sicher){
-        const o2 = await unitsText(c, UNITS_NAME_X, fy + 8, Math.max(60, rechts-UNITS_NAME_X), 62);
+        const o2 = await lies(null);
         const s2 = unitsStadt(o2.text);
         if (s2 && (!s1 || s2.sicher || s2.d < s1.d)){ ort = o2; stadt = s2; }
       }
+      R.ortZeilen = zl ? zl.length : 0;
       R.ortText = ort.text; R.ortZuv = ort.zuv;
       R.stadt = stadt;
       if (R.gesamtRauten && R.gesamtRauten.length){
@@ -32840,7 +32918,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b3124f3e24</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 5d1976348e</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32982,7 +33060,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b3124f3e24";
+const BAU = "5d1976348e";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
