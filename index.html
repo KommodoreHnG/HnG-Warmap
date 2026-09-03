@@ -2392,8 +2392,13 @@ const SOLDAT_NAME_MAX = 24, TEAM_NAME_MAX = 20, TEAM_TAG_MAX = 10;
    one, and stored as it stands it matches nothing afterwards. */
 const atNameSauber = t => String(t == null ? "" : t)
   .replace(/\s*(\u2026|\.\.\.)\s*$/, "").trim().slice(0, TEAM_NAME_MAX).trim();
+/* THE TAG NEVER CARRIES THE DOTS - only the name does, because the line is
+   cut at its END and the name stands there. So a tag with dots on it is not
+   a shortened value but a MISREAD one, and wiping the dots away would only
+   make a wrong reading LOOK clean. It keeps them; what somebody typed stays
+   as they typed it, and what was read wrong stays visibly wrong. */
 const atTagSauber = t => String(t == null ? "" : t)
-  .replace(/\s*(\u2026|\.\.\.)\s*$/, "").trim().toUpperCase().slice(0, TEAM_TAG_MAX).trim();
+  .trim().toUpperCase().slice(0, TEAM_TAG_MAX).trim();
 
 function soldatNorm(s){
   if (!s || typeof s !== "object") return null;
@@ -25166,7 +25171,16 @@ function atZeileTeilen(zeile){
 }
 /* Kuerzel vergleichbar machen, ohne Zeichen wegzuwerfen: nur Grossschreibung
    und Leerraum. Welche Schrift jemand benutzt, geht uns nichts an. */
-const atTagKey = s => String(s == null ? "" : s).replace(/\s+/g, "").toUpperCase();
+/* ...BUT SUCH A TAG IS NO IDENTITY. gleicheAT decides on the tags as soon as
+   BOTH sides carry one, and only falls back to the name - with its
+   beginning rule - when one is missing. A tag with dots is therefore
+   harmful twice over: it does not match the right one, and it shuts out the
+   very comparison that could have saved the case. So for COMPARING it
+   counts as absent. Stored it stays exactly as it was read. */
+const atTagKey = s => {
+  const t = String(s == null ? "" : s).replace(/\s+/g, "").toUpperCase();
+  return /(\u2026|\.\.\.)/.test(t) ? "" : t;
+};
 /* Zwei Eintraege sind dieselbe Einheit, wenn die Kuerzel uebereinstimmen.
    Fehlt eines, hilft der Name - ein abgeschnittener zaehlt als Treffer, wenn
    der laengere so anfaengt. */
@@ -31894,7 +31908,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 67bc83476b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build aa1984bf29</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32036,7 +32050,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "67bc83476b";
+const BAU = "aa1984bf29";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
