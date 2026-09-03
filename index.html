@@ -11321,6 +11321,43 @@ function unitsTypVon(c, x0, fy){
           schwelle, sicher: abstand >= 0.05 && best.k >= schwelle};
 }
 
+/* THE DISC'S OWN MARK, for telling one town from the next. Reading the
+   name costs two passes of the text recogniser, and it is the same town
+   for as long as the card row stands still - so the row gets a
+   fingerprint and the pass is skipped while it holds. But two towns with
+   the same number of cards, the same roll and the same number of diamonds
+   carry the same fingerprint, and then the sheet stays on the old town and
+   the units are written to it. For a database that is the worst mistake
+   there is here, because nobody notices it.
+   The disc is what settles it. It sits in a fixed window, it does not roll
+   with the row, it is not see-through, and it carries the town's colour
+   and sign. Thirty tiles, brightness and colourfulness each to half a
+   byte. MEASURED on sixteen captures:
+     the SAME town at different rolls came out character for character
+     equal - Frankfurt four times, Cologne three, Schildau three, Leipzig
+     twice; and every different town carried its own mark, the two closest
+     (Schildau and Leipzig) parting in several places.
+   The direction of the error is right, too: a mark that changes when the
+   town did not costs one reading of the name. A mark that stays when the
+   town changed puts units in the wrong town. */
+function unitsScheibenZeichen(d, yReihe){
+  const X0 = 1050, X1 = 1150, Y0 = yReihe - 40, Y1 = yReihe + 90;
+  if (Y0 < 0 || Y1 > UNITS_H) return "-";
+  let aus = "";
+  for (let ty = 0; ty < 6; ty++)
+    for (let tx = 0; tx < 5; tx++){
+      let sh = 0, sb = 0, n = 0;
+      for (let y = Y0 + Math.round(ty*(Y1-Y0)/6); y < Y0 + Math.round((ty+1)*(Y1-Y0)/6); y++)
+        for (let x = X0 + Math.round(tx*(X1-X0)/5); x < X0 + Math.round((tx+1)*(X1-X0)/5); x++){
+          const p = (y*UNITS_W + x)*4;
+          sh += unitsMax(d,p); sb += unitsMax(d,p) - unitsMin(d,p); n++;
+        }
+      if (!n) return "-";
+      aus += Math.min(15, Math.round(sh/n/17)).toString(16)
+           + Math.min(15, Math.round(sb/n/17)).toString(16);
+    }
+  return aus;
+}
 /* The coloured disc with the town's symbol, left of the name. */
 function unitsNode(d, yReihe){
   const px = []; let n = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
@@ -12396,7 +12433,10 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       });
       R.reiheKennung = R.karten.map(k => Math.round(k.x0/4)).join(",")
         + "|" + (R.roll ? Math.round(R.roll.x0/4) + ":" + Math.round(R.roll.breite/4) : "-")
-        + "|" + R.gesamtRauten.length;
+        + "|" + R.gesamtRauten.length
+        /* and the disc, so that two towns which happen to look alike in
+           cards, roll and diamonds are still told apart */
+        + "|" + unitsScheibenZeichen(d, reihe.y);
       if (art === "bild" || (letzteReihe && letzteReihe === R.reiheKennung)){
         R.ortGespart = true;
         R.stadt = null; R.linie = null;
@@ -32957,7 +32997,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build fcf68a5e44</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0023341cff</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33099,7 +33139,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "fcf68a5e44";
+const BAU = "0023341cff";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
