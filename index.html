@@ -25145,12 +25145,23 @@ const AT_TRENNER = /\s[-\u2010-\u2015\u2212]\s/;
 function atZeileTeilen(zeile){
   const s = String(zeile == null ? "" : zeile).replace(/\s+/g, " ").trim();
   if (!s) return null;
+  /* BOTH BRANCHES STRIP THE DOTS. The one with a separator always did; the
+     one without - a blurred capture where the dash was lost - set the
+     "short" mark and left the dots hanging on the name. That fails exactly
+     where the mark exists to help: gleicheAT compares cut names by their
+     beginning, and "at034 - kommo..." is no beginning of
+     "at034 - kommodore", nor does the longer one start with the dotted
+     one. So the one match the rule was built for never came about. */
+  const punkte = /\s*(\u2026|\.\.\.)$/;
   const m = AT_TRENNER.exec(s);
-  if (!m) return {tag: "", name: s, kurz: /(\u2026|\.\.\.)$/.test(s)};
+  if (!m){
+    const kurz0 = punkte.test(s);
+    return {tag: "", name: kurz0 ? s.replace(punkte, "").trim() : s, kurz: kurz0};
+  }
   let tag = s.slice(0, m.index).trim();
   let name = s.slice(m.index + m[0].length).trim();
-  const kurz = /(\u2026|\.\.\.)$/.test(name);
-  if (kurz) name = name.replace(/\s*(\u2026|\.\.\.)$/, "").trim();
+  const kurz = punkte.test(name);
+  if (kurz) name = name.replace(punkte, "").trim();
   return {tag, name, kurz};
 }
 /* Kuerzel vergleichbar machen, ohne Zeichen wegzuwerfen: nur Grossschreibung
@@ -31883,7 +31894,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d535b9fae3</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 67bc83476b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32025,7 +32036,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d535b9fae3";
+const BAU = "67bc83476b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
