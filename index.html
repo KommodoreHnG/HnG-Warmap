@@ -5680,6 +5680,22 @@ function wegSuche(starts, ziel, passierbar){
    invent one once. And where something is missing - no path, no speed, no
    town on file - nothing is judged at all: then it is the same unit. */
 const AT_TEMPO_TOLERANZ = 1.5;
+/* TWO STAMPS, TWO CLOCKS. The enemy depot is one shared row per enemy
+   player - the whole clan writes into it - so "last seen" was stamped by
+   whoever captured that town, and "now" by whoever is capturing this one.
+   They are two different machines.
+   The error leans the dangerous way: if the second capturer's clock runs
+   slow, the gap between the two sightings looks shorter than it was, and a
+   journey that was perfectly possible counts as impossible. The result
+   would be an invented double - the very mistake this whole rule exists to
+   prevent. So two minutes of slack are added to the measured gap. Machines
+   keep their clocks within seconds of each other; two minutes is ample,
+   and the rule stays sharp where it matters: over three hundred and
+   twenty-nine map units a heavy tank needs at least two hundred and
+   eighty-nine seconds, and sixty measured seconds become a hundred and
+   eighty - still impossible. Only the cases close to the line now fall to
+   the safe side, which is where they belong. */
+const AT_UHR_SCHLUPF = 120;
 function atKonnteReisen(vonOrt, nachOrt, sekunden, arten){
   if (vonOrt === null || vonOrt === undefined || vonOrt === nachOrt) return true;
   const A = MAP.n[vonOrt], B = MAP.n[nachOrt];
@@ -5697,7 +5713,7 @@ function atKonnteReisen(vonOrt, nachOrt, sekunden, arten){
   let tempo = 0;
   for (const k of arten){ const t = AT[k] && AT[k].speed; if (t > tempo) tempo = t; }
   if (!tempo) return true;
-  return sekunden >= luft / (tempo * TEMPO_KAL * AT_TEMPO_TOLERANZ);
+  return sekunden + AT_UHR_SCHLUPF >= luft / (tempo * TEMPO_KAL * AT_TEMPO_TOLERANZ);
 }
 /* the key two entries are grouped by - the same one gleicheAT decides on */
 const atSchluessel = u => atTagKey(u && u.tag) || namKey(String((u && u.name) || ""));
@@ -31985,7 +32001,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build a2ba235678</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 766ea06fcd</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32127,7 +32143,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "a2ba235678";
+const BAU = "766ea06fcd";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
