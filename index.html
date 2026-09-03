@@ -930,6 +930,16 @@ body.kb-zieht{user-select:none}
   font:700 10px/1 system-ui;padding:2px 5px}
 .kb-nehmen:hover{background:#b8452f}
 .kb-z.fest{background:rgba(74,107,58,.10);box-shadow:inset 3px 0 0 #4a6b3a}
+/* THE GOLDEN FRAME, on the sheet this time. The tool kept KB.auswahl and
+   showed it nowhere - the Kommodore could not see which unit the code
+   thought he was on. Outline, not box-shadow: a locked or doubtful line
+   already carries one of those on its left edge, and the two must not
+   fight. A line held over from a rescued reading breathes slowly - then
+   the tool is saying "I think here", not "here". */
+.kb-z.wahl{outline:2px solid var(--accent); outline-offset:-2px}
+.kb-z.wahl.geglaubt{animation:kbWahlAtem 1.6s ease-in-out infinite}
+@keyframes kbWahlAtem{0%,100%{outline-color:var(--accent)}50%{outline-color:rgba(226,172,72,.28)}}
+@media (prefers-reduced-motion:reduce){.kb-z.wahl.geglaubt{animation:none;outline-style:dashed}}
 .kb-z.fest .f{cursor:default}
 .rd-kf.ort .kb-ortname{font-weight:700;letter-spacing:.02em;color:#eaf6e4}
 .kb-z.schreibt .f{color:#1a3a8a}
@@ -11221,11 +11231,39 @@ function unitsQuotient(d, x0, oben){
   }
   return (nb && b) ? (r/nr) / (b/nb) : 1;
 }
+/* THE PICK IS TOLD BY THE GAP, NOT BY A THRESHOLD. The quotient divides
+   the plate's rim by the band above it - and that band is the MAP behind
+   the see-through bar, bright field here, dark wood there. So the number
+   hangs on something that has nothing to do with the pick.
+   MEASURED on nine captures, every one of them looked at afterwards to
+   see whether a unit really was picked:
+     PICKED      Kumhausen  gap 0,135      Colmar  gap 0,088
+     NOT PICKED  eich3 0,046   Plauen 0,023   Nah 0,012
+                 Begegnung 0,007   e19 0,005   Stockheim 0,002
+                 Wetzlar 0,002
+   The absolute value does not separate: Colmar sits only 0,05 under the
+   old threshold of 0,66 and Plauen only 0,04 over it - a little darker
+   ground behind the bar and both tip over. The GAP separates, and it is
+   measured like against like: every card stands in the same picture, over
+   the same ground, at the same capture brightness.
+   The threshold is 0,06 - the geometric middle between the largest gap
+   with nothing picked (0,046, terrain showing through the see-through bar
+   at Leipzig) and the smallest with something picked (0,088). It sits
+   thirty hundredths above the one and thirty-two below the other, as
+   evenly as the measurements allow.
+   With one card there is nothing to compare against, and only there does
+   the old absolute test still serve. */
+const UNITS_WAHL_ABSTAND = 0.06, UNITS_WAHL_NAH = 0.05, UNITS_WAHL_ABS = 0.66;
 function unitsAuswahl(quoten){
   if (!quoten.length) return null;
   let iMin = 0;
   for (let i = 1; i < quoten.length; i++) if (quoten[i] < quoten[iMin]) iMin = i;
-  return quoten[iMin] < 0.66 ? iMin : null;
+  if (quoten.length < 2)
+    return quoten[iMin] < UNITS_WAHL_ABS ? {i: iMin, abstand: Infinity, sicher: true} : null;
+  let zweit = Infinity;
+  for (let i = 0; i < quoten.length; i++) if (i !== iMin && quoten[i] < zweit) zweit = quoten[i];
+  const abstand = zweit - quoten[iMin];
+  return {i: iMin, abstand, sicher: abstand >= UNITS_WAHL_ABSTAND};
 }
 /* The unit type from the card's symbol: the inner field of the frame
    (frame 72 x 50 anchored top-left at plate x0+9 / rim top, inset by 5 to
@@ -12418,7 +12456,10 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        band above it */
     /* a cut card cannot be the picked one - its plate is only half in the
        picture, and the quotient that finds the pick is measured across it */
-    R.auswahl = unitsAuswahl(R.karten.map(x => x.teil ? 9 : x.q));
+    /* a clipped card shows half a plate and cannot be judged */
+    const wahlProbe = unitsAuswahl(R.karten.map(x => x.teil ? 9 : x.q));
+    R.wahlKnapp = wahlProbe;
+    R.auswahl = (wahlProbe && wahlProbe.sicher) ? wahlProbe.i : null;
     const fy = R.karten.length ? k.fy : reihe.y - 5;      /* rim top, 1830 in the usual bar */
     R.node = unitsNode(d, fy + 5);
     /* A bar is open when the card runs stand in the 105 grid (at least one
@@ -13388,8 +13429,36 @@ function kbVerarbeiten(R, vorgabe){
         const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t;
       }
     });
-    /* the picked card: the finder frame steps over to it, with a clack */
-    const wahl = (R.auswahl !== null && R.auswahl !== undefined) ? KB.erste + R.auswahl : null;
+    /* THE PICK IS FOLLOWED, NOT DECIDED AFRESH EACH TIME. The Kommodore
+       pointed out that one can also step through the units with the arrow
+       keys, and asked whether the tool could read those. It cannot: the
+       picture comes from a shared window, so while he is stepping in the
+       game the keys go to the game and the page sees no key event at all.
+       But his conclusion holds without the keyboard - whoever steps, steps
+       by ONE - and that stands in the picture itself.
+       So a slightly weaker reading (0,05 instead of 0,06) is taken as
+       well, but only when it lands at most one place from the last pick.
+       That is exactly the arrow-key step, and the rule rescues no more
+       than that: two places away nothing is taken.
+       And 0,05 is not half of anything - it is set ABOVE every false
+       alarm ever measured (the worst was 0,046). Half the threshold would
+       have been 0,03, and then the terrain behind the bar alone could
+       have pushed the frame onto the neighbour. Following therefore does
+       not weaken the proof; it lowers it for the one step the arrow key
+       makes, and no further. A clear reading always wins, wherever it
+       points - following must not forbid the jump of a mouse click across
+       the bar. */
+    let wahl = (R.auswahl !== null && R.auswahl !== undefined) ? KB.erste + R.auswahl : null;
+    let geglaubt = false;
+    if (wahl === null && R.wahlKnapp && KB.auswahl !== null && KB.auswahl !== undefined
+        && R.wahlKnapp.abstand >= UNITS_WAHL_NAH){
+      const kand = KB.erste + R.wahlKnapp.i;
+      if (kand >= 0 && kand < KB.N && Math.abs(kand - KB.auswahl) <= 1){
+        wahl = kand; geglaubt = true;
+        R.auswahl = R.wahlKnapp.i;   /* so the reading may be written down too */
+      }
+    }
+    KB.wahlGeglaubt = wahl !== null && geglaubt;
     if (wahl !== KB.auswahl){ KB.auswahl = wahl; if (wahl !== null) kbKlack(); }
   } else if (!R.form){
     KB.status = "No detail bar in the picture.";
@@ -14315,7 +14384,7 @@ function kbZeichnen(){
   };
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Town ?"}${KB.linie ? ` · attack line ${kbEsc(KB.linie)}` : ""} · ${new Date().toLocaleDateString()}</div>
     <div class="kb-z kopfz"><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Side</div><div></div></div>
-    ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${z.fest ? "fest" : ""} ${z.unsicher ? "unsicher" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""}" data-i="${z.i}">
+    ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${z.fest ? "fest" : ""} ${z.unsicher ? "unsicher" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}">
       <div>${z.i + 1}</div>
       <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set"}">${z.typ ? "" : "?"}</span></div>
       <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${
@@ -33055,7 +33124,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d081b09342</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 6fc4d65950</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33197,7 +33266,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d081b09342";
+const BAU = "6fc4d65950";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
