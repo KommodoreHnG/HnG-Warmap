@@ -14300,16 +14300,31 @@ function kbSpangeVerdrahten(r, streifen){
     e.preventDefault();
     KB.handAn = false; KB.handWahl = null; kbZeichnen();
   });
-  r.addEventListener("keydown", e => {
-    const jetztI = kbWahl();
-    if (jetztI === null) return;
-    if (e.key === "ArrowRight" || e.key === "ArrowDown"){ kbHandSetzen(Math.min(KB.N-1, jetztI+1), true); kbZeichnen(); e.preventDefault(); }
-    else if (e.key === "ArrowLeft" || e.key === "ArrowUp"){ kbHandSetzen(Math.max(0, jetztI-1), true); kbZeichnen(); e.preventDefault(); }
-    else if (e.key === "Home"){ kbHandSetzen(0, true); kbZeichnen(); e.preventDefault(); }
-    else if (e.key === "End"){ kbHandSetzen(KB.N-1, true); kbZeichnen(); e.preventDefault(); }
-    else if (e.key === "Escape"){ KB.handAn = false; KB.handWahl = null; kbZeichnen(); e.preventDefault(); }
-  });
 }
+/* THE ARROW KEYS MOVE THE READING FRAME - and they hang on the WINDOW, not
+   on the strip.
+   They were written long ago and could never once fire: a keydown goes to
+   the element holding the KEYBOARD FOCUS, and the strip is a div with no
+   tabindex - such an element cannot take the focus at all. Dead code from
+   the day it was written, which is why the Kommodore never noticed it.
+   And his reasoning is right: with the browser window in front the page
+   sees every key, and moving the frame needs no game in the foreground -
+   it is a matter between him and the tool alone. Window to the front and
+   step through; no click first, no focus to set. */
+function kbTastenSchritt(e){
+  if (!KB || !KB.N) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  const jetztI = kbWahl();
+  const setz = i => { kbHandSetzen(i, true); kbZeichnen(); e.preventDefault(); };
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") setz(Math.min(KB.N-1, (jetztI === null ? -1 : jetztI) + 1));
+  else if (e.key === "ArrowLeft" || e.key === "ArrowUp") setz(Math.max(0, (jetztI === null ? 1 : jetztI) - 1));
+  else if (e.key === "Home") setz(0);
+  else if (e.key === "End") setz(KB.N-1);
+  else if (e.key === "Escape" && KB.handAn){
+    KB.handAn = false; KB.handWahl = null; kbZeichnen(); e.preventDefault();
+  }
+}
+document.addEventListener("keydown", kbTastenSchritt);
 
 /* ---- drawing ----------------------------------------------------------- */
 function kbZeichnen(){
@@ -14502,7 +14517,7 @@ function kbZeichnen(){
       if (b) b.onclick = () => { KB.handAn = false; KB.handWahl = null; kbZeichnen(); };
     } else {
       schiene.className = "kb-schiene";
-      schiene.innerHTML = KB.N ? "Drag the frame along the strip, or click a card, to set the unit by hand." : "";
+      schiene.innerHTML = KB.N ? "Drag the frame along the strip, click a card, or step with <b>\u2190</b> <b>\u2192</b> \u2014 <b>Esc</b> hands it back to the game." : "";
     }
   }
   /* keep the filling going while a unit is being read */
@@ -33342,7 +33357,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build da973bf823</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0c48c498ba</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33484,7 +33499,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "da973bf823";
+const BAU = "0c48c498ba";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
