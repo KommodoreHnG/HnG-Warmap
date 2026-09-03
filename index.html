@@ -11116,13 +11116,64 @@ function unitsLaeufe(d, y, minL, maxL, x0=1250, x1=2640){
    repeat sits 40 px lower than with outlined ones. So the rim is searched
    well above and a little below the raster row, and everything else in the
    bar is placed from the rim. */
+/* WHERE THE CARDS ARE, WHEN THE PATTERN POINTS ELSEWHERE. unitsReihe takes
+   the picture row in which the 105 pitch repeats most strongly. With twelve
+   cards that is unmistakable; with THREE it is not, and then another row
+   out-shouts the card row - the line of strength diamonds at y 1976 to
+   2044, six of them 96 apart, near enough to 105 to ring along.
+   MEASURED on the Kommodore's three airfield captures and two ordinary
+   towns:
+     picture             unitsReihe says   cards stand at   out by
+     Recon fighters           2024              1866          158
+     medium fighters          2024              1866          158
+     heavy fighters           2024              1866          158
+     Wetzlar (5 cards)        1871              1866            5
+     Colmar (12 cards)        1835              1830            5
+   And the search below only looks 56 points up. It never reaches 158, so
+   an airfield - which holds few units - was never read at all.
+   AND COUNTING THE RUNS IS NOT ENOUGH - that was tried and did not help.
+   The strength diamonds are 60 to 80 points wide as well, and six of them
+   stand side by side, so with three cards the diamond row still won the
+   count (measured: y 2022 instead of 1866).
+   WHAT REALLY TELLS THEM APART IS ALREADY IN THIS FILE:
+     cards     105 points apart   (UNITS_RASTER)
+     diamonds   96 points apart   (G_SCHRITT, or 126 where a number needs
+                                   the room)
+   So a row is judged by how many of its runs stand 105 APART, not by how
+   many it carries. Measured at the best row of each of the five captures:
+     Recon fighters    105, 105, 105
+     medium fighters   105, 105
+     heavy fighters    105, 105
+     Wetzlar           105, 105, 105, 105
+     Colmar            105 eleven times
+   Not one outlier, three cards included - while the diamond row scores
+   nought, because none of its gaps is 105. */
 function unitsKartenFinden(d, yReihe){
-  let best = {n:0, dy:0, runs:[]};
-  for (let dy=-56; dy<=24; dy++){
-    const runs = unitsLaeufe(d, yReihe+dy, 60, 80);
-    if (runs.length > best.n) best = {n: runs.length, dy, runs};
+  const aufRaster = runs => {
+    let n = 0;
+    for (let i = 1; i < runs.length; i++)
+      if (Math.abs((runs[i][0] - runs[i-1][0]) - UNITS_RASTER) <= 4) n++;
+    return n;
+  };
+  const suche = (von, bis) => {
+    let best = {paare: -1, n: 0, y: 0, runs: []};
+    for (let y = von; y <= bis; y++){
+      const runs = unitsLaeufe(d, y, 60, 80);
+      const paare = aufRaster(runs);
+      if (paare > best.paare || (paare === best.paare && runs.length > best.n))
+        best = {paare, n: runs.length, y, runs};
+    }
+    return best;
+  };
+  let best = suche(yReihe-56, yReihe+24);
+  /* no pair on the grid nearby - then the row that was handed in is not
+     the card row, and the whole band is swept for one that is */
+  if (best.paare < 1){
+    const weit = suche(1700, 2050);
+    if (weit.paare > best.paare || (weit.paare === best.paare && weit.n > best.n)) best = weit;
   }
-  return {fy: yReihe + best.dy, rahmen: unitsReiheFuellen(d, yReihe + best.dy, best.runs)};
+  const fy = best.n ? best.y : yReihe;
+  return {fy, rahmen: unitsReiheFuellen(d, fy, best.runs)};
 }
 /* THE ROW IS A GRID, AND A GRID SAYS WHAT A SINGLE CARD CANNOT. Measured on
    eleven bars: the cards are ninety points wide and one hundred and five
@@ -11506,7 +11557,27 @@ function unitsTypVon(c, x0, fy){
     /* the angle decides between gun tank and tank destroyer, and it
        decides before the ranking is read - a sign the card plainly does
        not carry must not win on the strength of the rest of the picture */
-    if (spitze !== null && Math.abs(spitze) >= UNITS_SPITZE_TOT){
+    /* THE FENCE THAT WAS MISSING. All three witnesses - the angle and the
+       two bars - take one thing for granted that was never written down:
+       that the card shows a tank at all. They measure ink at three places
+       and strike types out of the ranking without asking whether the card
+       belongs to that family.
+       The Kommodore's airfield captures show what that costs. A fighter's
+       sign is an oval too, with a propeller in it, and it carries plenty of
+       ink above the middle:
+         fighter_squadron        angle -1,79
+         heavy_fighter_squadron  angle -1,79
+         fighter_recon           angle -1,52
+       So the angle fired, took the card for a tank destroyer and swept the
+       gun tanks away - on an aeroplane. "medium tank destroyer" was read
+       where a reconnaissance fighter stands.
+       They may only speak when the ranking already has a tank in front.
+       Then "which tank?" is a fair question, and that is what they were
+       built for. The cases they were made for are untouched: light against
+       medium, medium against tank destroyer - a tank stands in front in
+       every one of them. */
+    const vornPanzer = rang.length && UNITS_PANZERART[rang[0].key] !== undefined;
+    if (vornPanzer && spitze !== null && Math.abs(spitze) >= UNITS_SPITZE_TOT){
       const jagd = spitze < 0 ? 1 : 0;
       for (let i = rang.length - 1; i >= 0; i--){
         const art = UNITS_PANZERART[rang[i].key];
@@ -11519,7 +11590,7 @@ function unitsTypVon(c, x0, fy){
     const bWert = (w, nein, ja) => w === null ? -1 : (w > nein ? 0 : (w < ja ? 1 : -1));
     const b1 = bWert(balken1, UNITS_B1_NEIN, UNITS_B1_JA);
     const b2 = bWert(balken2, UNITS_B2_NEIN, UNITS_B2_JA);
-    if (b1 >= 0 || b2 >= 0){
+    if (vornPanzer && (b1 >= 0 || b2 >= 0)){
       for (let i = rang.length - 1; i >= 0; i--){
         const bb = UNITS_PANZERBALKEN[rang[i].key];
         if (!bb) continue;
@@ -33546,7 +33617,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 648295dceb</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 2e9734c6b4</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33688,7 +33759,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "648295dceb";
+const BAU = "2e9734c6b4";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
