@@ -10987,6 +10987,47 @@ function unitsKartenFinden(d, yReihe){
    it is taken - but it is marked as cut, and NO sign is matched on it: half
    a tactical sign reads as a whole wrong one, and a wrong type is worse
    than a missing one. */
+/* TO THE LEFT, AND THIS TIME WITH A FENCE. A scrolled row is cut at the
+   left just as at the right, and a card whose rim is too faint is lost
+   there like anywhere else. Extending left without a bound was tried and
+   invented cards in three of nine bars - the ink test fires on the map
+   behind the see-through bar. The fence is the track's own left end: no
+   card can begin left of it, and inside it the ink test is decisive.
+   Measured at the places in question: Stockheim carries an ink share of
+   1,00 - a card really stands there. Bannewitz and the three nineteen-unit
+   captures carry 0,00 - nothing stands there. No grey zone at all. */
+function unitsReiheLinks(d, y, runs, L){
+  if (!runs || !runs.length || !(L > 0)) return runs || [];
+  const br = runs[0][1] - runs[0][0];
+  const aus = runs.slice();
+  /* ONLY A WHOLE CARD IS PUT BACK HERE, and its ink must be as solid as a
+     card's. MEASURED, and the two cases look nothing alike: at Stockheim
+     the gap holds a solid run of exactly seventy-two points beginning eight
+     past the track's edge, and its ink fills the strip completely - a card,
+     lost by the run search. At at_3 the gap holds a solid run of
+     fifty-eight that begins BEFORE the track's edge: too narrow for a card
+     and clipped by nothing. Its ink fills only two thirds of the strip.
+     A card cut off by the window's left edge would look like the second
+     one, and with this evidence the two cannot be told apart - so a cut
+     card is not put back on the left at all. One missing card makes the
+     count one too low; one invented card moves every name onto its
+     neighbour. */
+  for (let k = 0; k < 3; k++){
+    const jetzt = aus[0][0];
+    const x0 = jetzt - UNITS_RASTER;
+    if (x0 < L || x0 + br > jetzt - 6) break;
+    let tinte = 0, n = 0;
+    for (let x = x0; x < x0 + br; x++)
+      for (let yy = y; yy < y + 3; yy++){
+        const p = (yy*UNITS_W + x)*4;
+        if (unitsMax(d,p) - unitsMin(d,p) > 60) tinte++;
+        n++;
+      }
+    if (!n || tinte/n < 0.9) break;
+    aus.unshift([x0, x0 + br]);
+  }
+  return aus;
+}
 function unitsReiheFuellen(d, y, runs){
   if (!runs || runs.length < 2) return runs || [];
   const aus = [runs[0]];
@@ -11811,7 +11852,7 @@ function bildAbstand(a, b){
 }
 /* THREE WITNESSES TO UNREADABILITY, and one of them is enough. */
 const UNITS_LESBAR = /[\p{L}\p{N} .,\-_'"()\[\]:;!?&+*\/#@]/u;
-function unitsUnlesbar(text, symbole){
+function unitsUnlesbar(text, symbole, feld){
   const t = String(text || "").trim();
   if (t.length < 2) return false;
   /* 1 what stands there is largely made of marks no name is made of */
@@ -11823,31 +11864,45 @@ function unitsUnlesbar(text, symbole){
   }
   if (alle >= 2 && schlecht >= 2 && schlecht/alle >= 0.4) return true;
   if (!symbole || symbole.length < 3) return false;
-  /* 2 the characters were read with barely any confidence at all */
+  /* 2 A BOX FOUR TIMES THE LINE'S OWN HEIGHT HOLDS NO CHARACTER. This is
+     the witness the real case needed, and it took two tries to get right.
+     Seven clown faces come back as "HHH" - three perfectly allowed
+     letters, each read with ninety of a hundred - and every other witness
+     stays silent. But seven of them fill far more line than three letters
+     explain, and the reader says so itself in the boxes it draws.
+     The first try measured that width in points and was wrong: the two
+     preparations work at different scales, so the same line gave 184 in
+     one and 109 in the other, and an honest name fell over the threshold.
+     Measured against the line's own HEIGHT the scale drops out, and the
+     numbers agree in both preparations. The widest box of a line, in line
+     heights:
+       Latin, four captures       0,35   0,35   0,35   0,50
+       Chinese                    1,32   0,64
+       the clowns                 4,31   3,81
+     The threshold is two: three times above the widest real sign, and half
+     of what the clowns reach. */
+  const H = (feld && feld.height) || 0;
+  if (H){
+    let breiteste = 0;
+    for (const y of symbole){
+      const w = (y.b && y.b.x1 - y.b.x0) || 0;
+      if (w > breiteste) breiteste = w;
+    }
+    if (breiteste / H > 2) return true;
+  }
+  /* 3 the characters were read with barely any confidence at all */
   let sum = 0;
   for (const y of symbole) sum += y.c || 0;
   if (sum/symbole.length < 45) return true;
-  /* 3 AND THE BEST WITNESS: they fit nothing in the font book. The book
-     learns the game's own letters from sure readings; what matches not a
-     single one of them is not one of them. */
-  const buch = ocrBuchAuf();
-  const namen = Object.keys(buch).filter(ch => buch[ch].n >= 2);
-  if (namen.length < 20) return false;
-  let fremd = 0, gezaehlt = 0;
-  for (const y of symbole){
-    const g = ocrGlyphRoh(bildKennFeld, y.b);
-    if (!g) continue;
-    ocrNorm(g);
-    let best = -9;
-    for (const n of namen){
-      let k = 0; const v = buch[n].v;
-      for (let j = 0; j < OCR_RN; j++) k += g[j]*v[j];
-      if (k > best) best = k;
-    }
-    gezaehlt++;
-    if (best < 0.75) fremd++;
-  }
-  return gezaehlt >= 3 && fremd/gezaehlt >= 0.6;
+  /* THE FONT BOOK WAS A FOURTH WITNESS HERE, AND IT IS GONE. It was the
+     speculative one - "these glyphs match nothing the tool has learned" -
+     and on real data it cried wolf: "A-001 - mano" was called unreadable
+     because the book holds hardly any small letters, the game writing in
+     capitals nearly everywhere. The case it was meant for is now carried by
+     the width, which is measured and does not depend on what the book
+     happens to have seen. A witness that answers differently depending on
+     how long the tool has been running is no witness. */
+  return false;
 }
 let bildKennFeld = null;      // the prepared name line the witnesses look at
 /* One line, read with one named model. Used when the owner's line has
@@ -11959,6 +12014,24 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        green strength bar 50 px lower - symbol and plate rim would be read
        from the wrong rows. */
     R.roll = unitsRoll(d);
+    /* now that the track is known, the row may be extended to the left -
+       no further than the track's own beginning */
+    if (R.roll && R.roll.bahnLinks) k.rahmen = unitsReiheLinks(d, k.fy, k.rahmen, R.roll.bahnLinks);
+    /* THE TRACK'S LEFT END, CHECKED AGAINST THE CARDS. They fill the window
+       without gaps, so less than one pitch may lie between the track's
+       beginning and the first card - otherwise another card would stand
+       there. It does not (the ink was looked for and is not there), so the
+       track's beginning is what is wrong. It is found by looking for five
+       dark points in a row above and below the thumb, and the bar is
+       see-through: whatever is dark on the map behind it answers instead.
+       Measured on sixteen bars, four came out wrong, one by 273 points. */
+    if (R.roll && R.roll.bahnLinks && k.rahmen.length
+        && R.roll.bahnLinks <= k.rahmen[0][0] - UNITS_RASTER){
+      R.roll.bahnLinks = k.rahmen[0][0] - 6;
+      R.roll.bahnRepariert = true;
+      const kanal = (UNITS_BAHN_RECHTS - 8) - (R.roll.bahnLinks + 7);
+      R.roll.anteil = kanal ? Math.min(1, R.roll.breite/kanal) : null;
+    }
     const plattenOben = R.roll ? 1818 : 1854, rimOben = plattenOben + 12;
     /* the signs found last time, keyed by where the card stood */
     const unitsTypMerker = unitsTypAlt, unitsTypNeu = {};
@@ -12159,7 +12232,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
     }
     /* the print of the name line, and whether its letters can be trusted */
     bildKennFeld = name.feld || null;
-    const unlesbar = unitsUnlesbar(name.text, name.symbole);
+    const unlesbar = unitsUnlesbar(name.text, name.symbole, name.feld);
     R.einheit = {
       unlesbar: unlesbar || undefined,
       bild: unlesbar ? bildKennung(name.feld) : undefined,
@@ -32503,7 +32576,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build df9dd32b7f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bbfd08be4e</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32645,7 +32718,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "df9dd32b7f";
+const BAU = "bbfd08be4e";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
