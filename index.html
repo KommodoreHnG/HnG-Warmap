@@ -908,6 +908,8 @@ body.kb-zieht{user-select:none}
 .kb-raten{opacity:.55;font-style:italic;letter-spacing:.02em}
 /* the quiet mark of a unit the clan already knows, and the louder one that
    proposes a reading out of its book */
+/* the mark of a name no reader can hold on to */
+.kb-unles{font-size:11px;line-height:1;color:#c0803a;flex:0 0 auto;opacity:.9}
 .kb-bek{font-size:8px;vertical-align:middle;color:#4f7a3a;opacity:.8;flex:0 0 auto}
 .kb-aehnlich{background:#efe5cc;flex:0 0 auto;border:1px solid #b3a482;color:#6b5a2e;
   cursor:pointer;font-size:12px;line-height:1;padding:1px 5px;border-radius:3px}
@@ -11678,6 +11680,96 @@ function ocrSchriftPruefen(feld, text, symbole){
   }
   return aus;
 }
+/* ---- WHEN THE LETTERS CANNOT BE TRUSTED -------------------------------
+   Seven clown faces are a perfectly good unit name in the game and a
+   hopeless one for a reader. The trouble is not that they cannot be read -
+   it is that the reader makes something DIFFERENT of them every look:
+   "@@@@" now, "SSSS" the next time, and every capture is then a new unit.
+
+   So where the letters cannot be trusted, the PICTURE decides who this is.
+   The name line gets a fingerprint: brought down to sixteen by eight
+   points, each point light or dark against the field's own middle, packed
+   into thirty-two characters. The same name gives the same print whatever
+   the reader makes of it; two different names give different prints. */
+const BILD_B = 16, BILD_H = 8, BILD_N = BILD_B*BILD_H;
+let bildKennC = null, bildKennG = null;
+function bildKennung(feld){
+  if (!feld || !feld.width) return "";
+  if (!bildKennC){
+    bildKennC = document.createElement("canvas");
+    bildKennC.width = BILD_B; bildKennC.height = BILD_H;
+    bildKennG = bildKennC.getContext("2d", {willReadFrequently:true});
+    bildKennG.imageSmoothingEnabled = true; bildKennG.imageSmoothingQuality = "high";
+  }
+  try { bildKennG.drawImage(feld, 0, 0, BILD_B, BILD_H); } catch(e){ return ""; }
+  const px = bildKennG.getImageData(0, 0, BILD_B, BILD_H).data;
+  const g = new Float32Array(BILD_N);
+  let m = 0;
+  for (let i = 0, j = 0; j < BILD_N; i += 4, j++){
+    g[j] = (299*px[i] + 587*px[i+1] + 114*px[i+2])/1000;
+    m += g[j];
+  }
+  m /= BILD_N;
+  let aus = "";
+  for (let j = 0; j < BILD_N; j += 4){
+    let n = 0;
+    for (let k = 0; k < 4; k++) if (g[j+k] > m) n |= 1 << k;
+    aus += n.toString(16);
+  }
+  return aus;
+}
+/* how many of the hundred and twenty-eight points two prints differ in */
+function bildAbstand(a, b){
+  if (typeof a !== "string" || typeof b !== "string") return null;
+  if (a.length !== BILD_N/4 || b.length !== BILD_N/4) return null;
+  let d = 0;
+  for (let i = 0; i < a.length; i++){
+    let x = parseInt(a[i], 16) ^ parseInt(b[i], 16);
+    while (x){ d += x & 1; x >>= 1; }
+  }
+  return d;
+}
+/* THREE WITNESSES TO UNREADABILITY, and one of them is enough. */
+const UNITS_LESBAR = /[\p{L}\p{N} .,\-_'"()\[\]:;!?&+*\/#@]/u;
+function unitsUnlesbar(text, symbole){
+  const t = String(text || "").trim();
+  if (t.length < 2) return false;
+  /* 1 what stands there is largely made of marks no name is made of */
+  let schlecht = 0, alle = 0;
+  for (const ch of t){
+    if (/\s/.test(ch)) continue;
+    alle++;
+    if (!UNITS_LESBAR.test(ch)) schlecht++;
+  }
+  if (alle >= 2 && schlecht >= 2 && schlecht/alle >= 0.4) return true;
+  if (!symbole || symbole.length < 3) return false;
+  /* 2 the characters were read with barely any confidence at all */
+  let sum = 0;
+  for (const y of symbole) sum += y.c || 0;
+  if (sum/symbole.length < 45) return true;
+  /* 3 AND THE BEST WITNESS: they fit nothing in the font book. The book
+     learns the game's own letters from sure readings; what matches not a
+     single one of them is not one of them. */
+  const buch = ocrBuchAuf();
+  const namen = Object.keys(buch).filter(ch => buch[ch].n >= 2);
+  if (namen.length < 20) return false;
+  let fremd = 0, gezaehlt = 0;
+  for (const y of symbole){
+    const g = ocrGlyphRoh(bildKennFeld, y.b);
+    if (!g) continue;
+    ocrNorm(g);
+    let best = -9;
+    for (const n of namen){
+      let k = 0; const v = buch[n].v;
+      for (let j = 0; j < OCR_RN; j++) k += g[j]*v[j];
+      if (k > best) best = k;
+    }
+    gezaehlt++;
+    if (best < 0.75) fremd++;
+  }
+  return gezaehlt >= 3 && fremd/gezaehlt >= 0.6;
+}
+let bildKennFeld = null;      // the prepared name line the witnesses look at
 /* One line, read with one named model. Used when the owner's line has
    already shown which script this clan writes in. */
 async function unitsFremdLesen(c, x, y, w, h, schrift){
@@ -11804,6 +11896,9 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
               typListe: t ? t.liste : null, typSchwelle: t ? t.schwelle : null};
     });
     unitsTypAlt = unitsTypNeu;
+    /* the bar is of one faction - misread cards are put right here, before
+       anything else in the room ever sees them */
+    R.reiheFarbe = unitsReiheFaerben(R.karten);
     /* which of the visible cards is picked - the one plate darker than the
        band above it */
     R.auswahl = unitsAuswahl(R.karten.map(x => x.q));
@@ -11823,7 +11918,10 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
     R.seite = R.node.kompakt ? ["US","GE","SU"].indexOf(R.node.klasse) : -1;
     if (R.seite < 0) R.seite = null;
     /* no bar, no cards, no holder - what was found there came from the map */
-    if (!R.leiste){ R.karten = []; R.seite = null; R.roll = null; }
+    /* no bar, no cards - and then no verdict about the bar's faction
+       either. A picture without a bar can still yield one stray card, and
+       its colour would otherwise stand as the row's. */
+    if (!R.leiste){ R.karten = []; R.seite = null; R.roll = null; R.reiheFarbe = null; }
     if (R.leiste){
       /* the name field ends at the track's left end - a card mid-blink is
          not found, and the field must not swallow the pale cards */
@@ -11953,7 +12051,12 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       const rest = (tf.length > 1 ? tf.slice(1).join(" - ") : rf).trim();
       if (rest && unitsFremdSchrift(rest)) nameText = rest;
     }
+    /* the print of the name line, and whether its letters can be trusted */
+    bildKennFeld = name.feld || null;
+    const unlesbar = unitsUnlesbar(name.text, name.symbole);
     R.einheit = {
+      unlesbar: unlesbar || undefined,
+      bild: unlesbar ? bildKennung(name.feld) : undefined,
       schrift: name.schrift || bes.schrift || null,
       tag: t.length > 1 ? t[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "",
       name: nameText,
@@ -12234,10 +12337,39 @@ function kbMorse(text, platz){
   return Math.max(0, t - kbKlang.currentTime);
 }
 
-/* When the holder is unknown, the cards say what side the units are - only
-   when every coloured card agrees, never from yellow (own) cards. On an
-   attack line the cards are the attackers, so this is right there even
-   when a holder is known and differs. */
+/* ONE BAR, ONE FACTION - and that is a promise of the game, not an
+   observation of ours. A green card cannot stand beside a red or a violet
+   one; what a town's bar holds belongs to one side. Yellow is the single
+   exception: one's own units show yellow and may stand beside exactly one
+   other colour.
+   A promise is worth more than a reading. The rule used to demand that
+   EVERY coloured card agree and gave up on disagreement - one badly read
+   card silenced the whole bar. But disagreement cannot happen; where it
+   stands, it is a misreading, and then the majority is the best estimate
+   there is. So the majority names the faction, every coloured card that
+   contradicts it is put right, and every card whose colour could not be
+   read at all inherits it - that last one was simply given away before.
+   Only a tie decides nothing: two against two says nothing, and guessing
+   would be worse than silence. */
+function unitsReiheFaerben(karten){
+  const zahl = {US: 0, GE: 0, SU: 0};
+  for (const k of karten) if (zahl[k.seite] !== undefined) zahl[k.seite]++;
+  let beste = null, n = 0, gleichstand = false;
+  for (const seite of ["US", "GE", "SU"]){
+    if (zahl[seite] > n){ n = zahl[seite]; beste = seite; gleichstand = false; }
+    else if (n > 0 && zahl[seite] === n) gleichstand = true;
+  }
+  if (!beste || gleichstand) return null;
+  let berichtigt = 0, geerbt = 0;
+  for (const k of karten){
+    if (k.seite === "gelb") continue;                  // own units, the one exception
+    if (k.seite === beste) continue;
+    if (zahl[k.seite] !== undefined){ k.seiteBerichtigt = k.seite; berichtigt++; }
+    else geerbt++;
+    k.seite = beste;
+  }
+  return {seite: beste, berichtigt, geerbt};
+}
 function unitsReihenSeite(R){
   const s = new Set((R.karten || []).map(k => k.seite).filter(x => x === "US" || x === "GE" || x === "SU"));
   return s.size === 1 ? ["US","GE","SU"].indexOf([...s][0]) : null;
@@ -12667,7 +12799,17 @@ function kbVerarbeiten(R, vorgabe){
          the crew maxima, and those fit exactly one type often enough. It
          only fills a gap - a read symbol is never overruled. */
       if (!z.typ){ const kand = kbTypKandidaten(e.hp); if (kand.length === 1) z.typ = kand[0]; }
-      Object.assign(z, {status: "erfasst", tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp, nameZuv: e.nameZuv,
+      /* A DESCRIPTION GIVEN BY HAND IS NEVER OVERWRITTEN. Once the
+         Kommodore has written "7 clowns" over a row of clowns, the reader
+         may go on making something new of them every look - it does not
+         touch the line any more. The mark has to be read BEFORE it is set,
+         or the very assignment that clears it would open the line again. */
+      const beschrieben = !!(z.unlesbar && z.beschrieben);
+      if (!beschrieben)
+        Object.assign(z, {unlesbar: e.unlesbar || false, bild: e.bild || z.bild || null,
+                          tag: e.tag, name: e.name, nameZuv: e.nameZuv});
+      else if (e.bild) z.bild = e.bild;      // the print stays fresh either way
+      Object.assign(z, {status: "erfasst", besitzer: e.besitzer, hp: e.hp,
                         eigen: !!e.eigen, seite: e.seite !== null && e.seite !== undefined ? e.seite : z.seite,
                         zwilling: zwilling ? da.i + 1 : null});
       /* what the clan already knows about this one - looked up once, when
@@ -13466,7 +13608,14 @@ function kbZeichnen(){
       <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set"}">${z.typ ? "" : "?"}</span></div>
       <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${
         z.status === "erfasst" ? zeig(z, "tag", z.tag) + (z.zwilling ? " ²" : "") : "<i>?</i>"}</div>
-      <div class="f" data-f="name" title="click to correct" style="${z.nameZuv && z.nameZuv < 60 ? "color:#9b3b2e" : ""}">${z.status === "erfasst" ? zeig(z, "name", z.name) : ""}</div>
+      <div class="f" data-f="name" title="${
+        z.unlesbar && !z.beschrieben ? "The reader makes something different of these characters every look. Click and write what you see."
+        : z.unlesbar ? "Your description — the game shows characters no reader can hold on to" : "click to correct"
+      }" style="${z.unlesbar && !z.beschrieben ? "color:#c0803a;font-style:italic"
+                : z.nameZuv && z.nameZuv < 60 ? "color:#9b3b2e" : ""}">${
+        z.status !== "erfasst" ? ""
+        : (z.unlesbar && !z.beschrieben) ? "unreadable — click and describe it"
+        : zeig(z, "name", z.name)}</div>
       <div class="f" data-f="besitzer" title="click to correct">${z.status === "erfasst" ? zeig(z, "besitzer", z.besitzer || "") : ""}</div>
       <div class="f hp" data-f="hp" title="click to correct">${z.status !== "erfasst" ? ""
         : (KB.schreibt && KB.schreibt.i === z.i) ? zeig(z, "hp", (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  "))
@@ -13477,6 +13626,10 @@ function kbZeichnen(){
            marks stand. It sat in the tag column first, and that column is
            narrow enough to cut a tag short - the mark was clipped away with
            it. */
+        z.unlesbar
+          ? `<span class="kb-unles" title="${z.beschrieben
+              ? "Described by hand — recognised again by the picture of its name line, not by its letters"
+              : "Unreadable characters — this unit is recognised by the picture of its name line"}">\u270e</span>` : ""}${
         z.bekannt && z.bekannt.stand === "gleich"
           ? `<span class="kb-bek" title="Already in the clan's book — ${kbEsc(kbBekanntText(z.bekannt))}">\u25cf</span>` : ""}${
         z.bekannt && z.bekannt.stand === "aehnlich"
@@ -13561,6 +13714,10 @@ function kbBearbeiten(ev){
   } else {
     el = document.createElement("input"); el.type = "text";
     el.value = feld === "hp" ? (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "").join(" ") : (z[feld] || "");
+    /* nobody wants to delete a soup of characters before writing "7 clowns" */
+    if (feld === "name" && z.unlesbar && !z.beschrieben){
+      el.value = ""; el.placeholder = "e.g. 7 clowns";
+    }
   }
   const fertig = () => {
     const v = el.value;
@@ -13568,6 +13725,11 @@ function kbBearbeiten(ev){
     else if (feld === "typ"){ z.typ = v || null; }
     else if (feld === "hp"){ z.hp = [...v.matchAll(/(\d+)\s*\/\s*(\d+)/g)].map(m => [+m[1], +m[2]]); }
     else { z[feld] = v.trim(); }
+    /* A NAME WRITTEN BY HAND OVER AN UNREADABLE ONE IS A DESCRIPTION, and
+       from then on the reader leaves the line alone. Recognised again it is
+       by the print of its name line, not by what anybody called it - two
+       people may describe the same clowns differently and both be right. */
+    if (feld === "name" && z.unlesbar) z.beschrieben = !!z[feld];
     if (z.status !== "erfasst" && (z.tag || z.name || z.besitzer)) z.status = "erfasst";
     kbBekanntSetzen(z);
     kbZeichnen();
@@ -13932,7 +14094,12 @@ function kbBehalten(){
       if (merkeSpieler(z.besitzer, seite === null ? undefined : seite)) spieler++;
       const key = spielerKey(z.besitzer);
       const depot = feindDepot(key).slice();
-      const neu = {tag: String(z.tag || "").replace(/\s+/g, "").toUpperCase(), name: String(z.name || ""), kurz: 0};
+      const neu = {tag: String(z.tag || "").replace(/\s+/g, "").toUpperCase(),
+                   name: String(z.name || ""), kurz: 0,
+                   unlesbar: z.unlesbar || undefined, bild: z.bild || undefined};
+      /* an unreadable unit that nobody has described yet goes in without a
+         name at all - the character soup would only look like one */
+      if (z.unlesbar && !z.beschrieben) neu.name = "";
       const treffer = depot.filter(d => gleicheAT(d, neu));
       /* IS THIS A FURTHER UNIT, OR THE SAME ONE AGAIN? */
       let weitere = false;
@@ -13953,6 +14120,9 @@ function kbBehalten(){
       if (!treffer.length || weitere){
         depot.push(Object.assign({id: Math.random().toString(36).slice(2,9), k, name: neu.name, tag: neu.tag, kurz: 0,
                                   o: ort, t: jetztS},
+                                 /* the print rides along only where it is needed - for a
+                                    name nobody can read, it is the only identity there is */
+                                 z.unlesbar ? {unlesbar: 1, bild: z.bild || "", name: neu.name} : {},
                                  unbestaetigt ? {ung: 1} : {}));
         setFeindDepot(key, depot); teams++;
         if (weitere) doppelt++;
@@ -25377,8 +25547,33 @@ const atTagKey = s => {
 /* Zwei Eintraege sind dieselbe Einheit, wenn die Kuerzel uebereinstimmen.
    Fehlt eines, hilft der Name - ein abgeschnittener zaehlt als Treffer, wenn
    der laengere so anfaengt. */
+/* HOW MANY OF THE HUNDRED AND TWENTY-EIGHT POINTS MAY DIFFER and it still
+   counts as the same picture. MEASURED on the sample captures, one line put
+   through everything a fresh capture can do to it:
+
+     shifted by one point          4      two different lines, five pairs:
+     shifted by two points         8        51, 54, 58, 61, 63
+     a quarter brighter            1
+     a fifth darker                2
+     scaled by fifteen per cent   22
+
+   The worst the same line does is twenty-two, the best two different ones
+   manage is fifty-one. Thirty sits in the middle of that gap and belongs to
+   neither side. My first guess had been twelve, which the scaling case
+   would have broken. */
+const BILD_GLEICH = 30;
 function gleicheAT(a, b){
   const ta = atTagKey(a.tag), tb = atTagKey(b.tag);
+  /* WHERE THE LETTERS CANNOT BE TRUSTED, THE PICTURE DECIDES. What the
+     reader makes of a row of clowns differs from look to look, so comparing
+     its letters would make every capture a new unit. The print of the name
+     line does not care what the letters were taken for. */
+  if (a.unlesbar || b.unlesbar){
+    const d = bildAbstand(a.bild, b.bild);
+    if (d !== null) return d <= BILD_GLEICH;
+    if (ta && tb) return ta === tb;
+    return false;                       // unreadable and no print - no claim
+  }
   if (ta && tb) return ta === tb;
   const na = String(a.name || "").trim().toLowerCase();
   const nb = String(b.name || "").trim().toLowerCase();
@@ -32101,7 +32296,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 40ef3df3f1</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 75667326c5</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32243,7 +32438,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "40ef3df3f1";
+const BAU = "75667326c5";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
