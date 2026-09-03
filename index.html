@@ -11503,6 +11503,55 @@ const UNITS_PANZERBALKEN = {
   medium_tank_destroyer: [1, 0],
   heavy_tank_destroyer:  [1, 1]
 };
+/* THE RECONNAISSANCE FIGHTER HAS A TAIL. The three fighters are the
+   closest pair of all eighteen signs - 0,903 and 0,900 of a possible 1,00.
+   Printing their DIFFERENCE point by point splits the problem in two.
+   THE TWO SQUADRONS ARE THE SAME DRAWING. Between fighter_squadron and
+   heavy_fighter_squadron the difference holds nothing but a one-point
+   fringe along the edges of the strokes - the same picture, a hair
+   different in size. No witness can separate that, and none is built.
+   Their STRENGTHS separate them instead, and beyond doubt, because every
+   air unit has a crew of its own: 12/12, 16/14 and 18/16. kbTypKandidaten
+   does exactly that already, so the type is settled the moment the unit is
+   clicked - and from the sign alone it stays open, which is honest.
+   THE RECON FIGHTER, though, runs a slanted stroke out of the bottom left
+   that neither squadron has. Measured in x 21..33, y 30..39, in the same
+   currency as the angle and the bars:
+     fighter_recon            -0,41
+     fighter_squadron         +1,15
+     heavy_fighter_squadron   +1,38
+   A clearance of 1,56 to the nearer squadron. And the same fence as for
+   the tanks: the tail only speaks when the ranking already has a fighter
+   in front - other signs scatter across the whole range in that window and
+   must not be touched by it. */
+const UNITS_SCHWEIF = {x0: 21, x1: 33, y0: 30, y1: 39};
+const UNITS_SCHWEIF_RECON = 0.1, UNITS_SCHWEIF_STAFFEL = 0.7;
+const UNITS_LUFTART = {fighter_recon: 1, fighter_squadron: 0, heavy_fighter_squadron: 0};
+/* AND THE CROSS-STROKES ON THE UPWARD ARROW, which the Kommodore spotted.
+   They sit on the HEAVY fighter, not the medium one - the two signs are so
+   alike (0,900 of 1,00) that swapping them is easy, and his own captures
+   settle it without interpretation, because every air unit has a crew of
+   its own. Both pictures show the same bar in Jablonec with a different
+   unit clicked:
+     picture             clicked   cross-strokes   raw reading
+     medium (12/12)        #0         +0,56        fighter_squadron
+     heavy  (16/14)        #1         -0,50        heavy_fighter_squadron
+   So the raw reading was RIGHT all along - it was never sure enough. The
+   comparer gives 0,93 and 0,91, and with five hundredths of clearance
+   demanded both stayed undecided.
+   The window is x 23..30 and 36..41, y 8..11 - beside the mast, where the
+   medium fighter and the scout have nothing but empty ground and the heavy
+   one has its strokes and its cross-bar:
+                template   real card
+     medium      +0,65       +0,56
+     scout       +0,79       +0,73
+     heavy       -0,35       -0,50
+   With the tail this names all three: no tail and no strokes is the
+   medium, no tail with strokes the heavy, a tail without strokes the
+   scout. Both behind the same fence as the tank witnesses. */
+const UNITS_QUER_X = [23, 30, 36, 41], UNITS_QUER_Y = [8, 11];
+const UNITS_QUER_SCHWER = -0.1, UNITS_QUER_LEICHT = 0.35;
+const UNITS_LUFTSCHWER = {fighter_recon: 0, fighter_squadron: 0, heavy_fighter_squadron: 1};
 const UNITS_SPITZE = {x0: 26, x1: 36, y0: 0, y1: 7};
 const UNITS_SPITZE_TOT = 0.3;
 const UNITS_PANZERART = {light_armor: 0, medium_armor: 0, heavy_armor: 0,
@@ -11534,7 +11583,7 @@ function unitsTypVon(c, x0, fy){
     q = Math.sqrt(q) || 1;
     /* the ink above the oval and in the two bar strips, on this card, at
        this shift */
-    let spitze = null, balken1 = null, balken2 = null;
+    let spitze = null, balken1 = null, balken2 = null, schweif = null, quer = null;
     if (unitsTypB === 62 && unitsTypH === 40){
       const mittel = S => {
         let sum = 0, n = 0;
@@ -11545,6 +11594,13 @@ function unitsTypVon(c, x0, fy){
       spitze  = mittel(UNITS_SPITZE);
       balken1 = mittel(UNITS_BALKEN1);
       balken2 = mittel(UNITS_BALKEN2);
+      schweif = mittel(UNITS_SCHWEIF);
+      let sq = 0, nq = 0;
+      for (let y = UNITS_QUER_Y[0]; y < UNITS_QUER_Y[1]; y++){
+        for (let x = UNITS_QUER_X[0]; x < UNITS_QUER_X[1]; x++){ sq += v[y*unitsTypB + x]; nq++; }
+        for (let x = UNITS_QUER_X[2]; x < UNITS_QUER_X[3]; x++){ sq += v[y*unitsTypB + x]; nq++; }
+      }
+      if (nq) quer = (sq/nq)/q*100;
     }
     /* the WHOLE ranking of this shift, not just its winner: when the town
        cannot hold the best sign, the best one it can hold counts */
@@ -11590,6 +11646,23 @@ function unitsTypVon(c, x0, fy){
     const bWert = (w, nein, ja) => w === null ? -1 : (w > nein ? 0 : (w < ja ? 1 : -1));
     const b1 = bWert(balken1, UNITS_B1_NEIN, UNITS_B1_JA);
     const b2 = bWert(balken2, UNITS_B2_NEIN, UNITS_B2_JA);
+    /* the tail and the cross-strokes, for the fighters, behind the same
+       kind of fence: they only speak when a fighter already stands in
+       front */
+    if (rang.length && UNITS_LUFTART[rang[0].key] !== undefined){
+      const recon = schweif === null ? -1
+                  : schweif < UNITS_SCHWEIF_RECON ? 1
+                  : schweif > UNITS_SCHWEIF_STAFFEL ? 0 : -1;
+      const schwer = quer === null ? -1
+                   : quer < UNITS_QUER_SCHWER ? 1
+                   : quer > UNITS_QUER_LEICHT ? 0 : -1;
+      if (recon >= 0 || schwer >= 0)
+        for (let i = rang.length - 1; i >= 0; i--){
+          const la = UNITS_LUFTART[rang[i].key], ls = UNITS_LUFTSCHWER[rang[i].key];
+          if (la === undefined) continue;
+          if ((recon >= 0 && la !== recon) || (schwer >= 0 && ls !== schwer)) rang.splice(i, 1);
+        }
+    }
     if (vornPanzer && (b1 >= 0 || b2 >= 0)){
       for (let i = rang.length - 1; i >= 0; i--){
         const bb = UNITS_PANZERBALKEN[rang[i].key];
@@ -33617,7 +33690,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 2e9734c6b4</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 08bf033553</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33759,7 +33832,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "2e9734c6b4";
+const BAU = "08bf033553";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
