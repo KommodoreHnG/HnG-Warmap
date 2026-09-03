@@ -11640,7 +11640,27 @@ function unitsGleicheFormen(fremd, latein){
 }
 /* Does this text carry letters outside the Latin alphabet at all? */
 const unitsHatFremde = t => /[^\u0000-\u024F\u2000-\u206F\s]/.test(String(t || ""));
-async function unitsTextSchriften(c, x, y, w, h, beste, melde){
+/* WHICH SCRIPT TO EXPECT FROM THIS OWNER. A player nearly always writes
+   his units' names in one script - the Kommodore noticed it in his own
+   captures - and the clan's book already knows which one, because his
+   other units are in it. The hint is therefore not stored against the
+   PERSON but read fresh out of the UNITS: a unit carries a name, and a
+   name is written in a script. That is a statement about the name.
+   (The file decided once before, at the very place where a player is
+   written down, not to keep a guessed time zone against a person. The same
+   restraint holds here.) */
+function unitsSchriftVon(besitzer){
+  const b = String(besitzer || "").trim();
+  if (b.length < 2) return null;
+  let liste = [];
+  try { liste = feindDepot(spielerKey(b)); } catch(e){ return null; }
+  const zahl = {};
+  for (const d of liste) if (d.schrift) zahl[d.schrift] = (zahl[d.schrift] || 0) + 1;
+  let beste = null, n = 0;
+  for (const [k, v] of Object.entries(zahl)) if (v > n){ n = v; beste = k; }
+  return beste;
+}
+async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
   /* a middling Latin read is still Latin: only a low confidence together
      with few Latin letters calls the other models (a 68 percent "SANTAS
      ELVES" cost four extra readings) */
@@ -11668,7 +11688,13 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde){
       || (beste.zuv >= 60 && lateinAnteil >= 0.8 && t.length >= 6)) return beste;
   const feld = unitsSchlicht(c, {x, y, w, h}, 3);
   let top = beste;
-  for (const sp of UNITS_SCHRIFTEN){
+  /* the expected one first, and it may pass with a lower bar - an
+     expectation that has carried before earns more than a model tried at
+     random */
+  const reihe = bevorzugt && UNITS_SCHRIFTEN.indexOf(bevorzugt) >= 0
+    ? [bevorzugt, ...UNITS_SCHRIFTEN.filter(x2 => x2 !== bevorzugt)]
+    : UNITS_SCHRIFTEN;
+  for (const sp of reihe){
     try {
       if (melde) melde(`Trying ${sp} …`);
       const wk = await unitsFremdWorker(sp);
@@ -11679,7 +11705,8 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde){
          foreign model reads it badly - Korean turned "ROKA-03" into
          "0#-03". Whoever calls this takes the tag from the Latin reading
          and the name from the model that won. */
-      if (text && zuv >= top.zuv + 10 && zuv > beste.zuv) top = {text, zuv, schrift: sp, latein: beste.text};
+      const huerde = sp === bevorzugt ? 4 : 10;
+      if (text && zuv >= top.zuv + huerde && zuv > beste.zuv) top = {text, zuv, schrift: sp, latein: beste.text};
       /* a model that reads the line well is the model - no need to ask the
          rest (a Korean line cost all five readings, twelve seconds a frame) */
       if (top.zuv >= 75) break;
@@ -12229,14 +12256,24 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        be beaten by the other path - on the sample pictures the owner line
        came out right 85 times in 90 that way. The second pass now only runs
        when the first leaves a doubt, and that is half of what a unit costs. */
-    const besser = async (x, y, w, hh) => {
+    const besser = async (x, y, w, hh, bevorzugt) => {
       const a = await unitsText(c, x, y, w, hh);
-      if (a.zuv >= 80) return unitsTextSchriften(c, x, y, w, hh, a, sag);
+      if (a.zuv >= 80) return unitsTextSchriften(c, x, y, w, hh, a, sag, bevorzugt);
       const b = await unitsText(c, x, y, w, hh, null, "schlicht");
-      return unitsTextSchriften(c, x, y, w, hh, b.zuv > a.zuv + 5 ? b : a, sag);
+      return unitsTextSchriften(c, x, y, w, hh, b.zuv > a.zuv + 5 ? b : a, sag, bevorzugt);
     };
-    const name = await besser(UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h);
+    /* THE OWNER'S LINE IS READ FIRST. It holds the name alone, without a
+       tag in front of it, and it is the cleaner of the two; and only with
+       it does the tool know whose unit it is looking at - and therefore
+       which script to expect on the line above. */
     const bes  = await besser(UNITS_KASTEN.x0, o+Z.besitzer.dy, B, Z.besitzer.h);
+    const besVor = (() => {
+      const roh = (bes.text || "").trim();
+      const m = /^\s*(?:BESITZER|OWNER|PROPRIETARIO|PROPRIETAIRE|PROPRI\u00c9TAIRE|PROPIETARIO|W\u0141A\u015aCICIEL|\u0412\u041b\u0410\u0414\u0415\u041b\u0415\u0426)\s*[:;.\-]?\s*(.*)$/iu.exec(roh)
+        || /^\s*[\p{Lu}\p{Lo}]{4,14}\s*[:;.\-]\s*(.+)$/u.exec(roh);
+      return unitsSchriftVon(m ? m[1] : roh);
+    })();
+    const name = await besser(UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h, besVor);
     /* first learn from what was read surely, then let the doorman look at
        what was not - a G that came back as a 6 is caught here */
     ocrSchriftLernen(name.feld, name.symbole);
@@ -13117,7 +13154,8 @@ function kbVerarbeiten(R, vorgabe){
       const beschrieben = !!(z.unlesbar && z.beschrieben);
       if (!beschrieben)
         Object.assign(z, {unlesbar: e.unlesbar || false, bild: e.bild || z.bild || null,
-                          tag: e.tag, name: e.name, nameZuv: e.nameZuv});
+                          tag: e.tag, name: e.name, nameZuv: e.nameZuv,
+                          schrift: e.schrift || z.schrift || null});
       else if (e.bild) z.bild = e.bild;      // the print stays fresh either way
       Object.assign(z, {status: "erfasst", besitzer: e.besitzer, hp: e.hp,
                         eigen: !!e.eigen, seite: e.seite !== null && e.seite !== undefined ? e.seite : z.seite,
@@ -14446,7 +14484,8 @@ function kbBehalten(){
       const depot = feindDepot(key).slice();
       const neu = {tag: String(z.tag || "").replace(/\s+/g, "").toUpperCase(),
                    name: String(z.name || ""), kurz: 0,
-                   unlesbar: z.unlesbar || undefined, bild: z.bild || undefined};
+                   unlesbar: z.unlesbar || undefined, bild: z.bild || undefined,
+                   schrift: z.schrift || undefined};
       /* an unreadable unit that nobody has described yet goes in without a
          name at all - the character soup would only look like one */
       if (z.unlesbar && !z.beschrieben) neu.name = "";
@@ -14472,6 +14511,7 @@ function kbBehalten(){
                                   o: ort, t: jetztS},
                                  /* the print rides along only where it is needed - for a
                                     name nobody can read, it is the only identity there is */
+                                 z.schrift ? {schrift: z.schrift} : {},
                                  z.unlesbar ? {unlesbar: 1, bild: z.bild || "", name: neu.name} : {},
                                  unbestaetigt ? {ung: 1} : {}));
         setFeindDepot(key, depot); teams++;
@@ -14480,7 +14520,9 @@ function kbBehalten(){
         /* the same unit: where it stands now and when it was seen - without
            those two the travel proof above has nothing to work with */
         const da = treffer[0];
-        const besser = (da.ung && !unbestaetigt) ? {k, name: neu.name || da.name, ung: 0} : {};
+        const besser = Object.assign({},
+          (da.ung && !unbestaetigt) ? {k, name: neu.name || da.name, ung: 0} : {},
+          (z.schrift && da.schrift !== z.schrift) ? {schrift: z.schrift} : {});
         if (da.o !== ort || da.t !== jetztS || Object.keys(besser).length)
           setFeindDepot(key, depot.map(d => d === da
             ? Object.assign({}, d, {o: ort, t: jetztS}, besser) : d));
@@ -32646,7 +32688,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build e664ce0673</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 852105999b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32788,7 +32830,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "e664ce0673";
+const BAU = "852105999b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
