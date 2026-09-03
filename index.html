@@ -11017,8 +11017,14 @@ async function unitsRahmen(quelle){
    functions changes - 1820 by 730 is 1,33 million points instead of 8,3,
    a sixth of the work. The canvas itself still carries the whole picture,
    so the cut-outs for the queue are unaffected. */
+/* THE PART OF THE SCREEN WHERE SOMETHING ACTUALLY STANDS. Of the eight and
+   a third million points of a 4K screen, 1,33 million are touched - a
+   sixth, and those at full resolution. The capture itself cannot be cut
+   down: a window share knows no region, the operating system copies the
+   whole window either way. Everything after it can be, and is. */
 const SCHNELL = {x: 1000, y: 1380, w: 1820, h: 730};
 let unitsPuffer = null, unitsSchnellC = null, unitsSchnellG = null;
+let unitsHellMerk = null, unitsHellZaehler = 0;
 async function unitsRahmenSchnell(quelle){
   if (!unitsSchnellC){
     unitsSchnellC = document.createElement("canvas");
@@ -11040,13 +11046,26 @@ async function unitsRahmenSchnell(quelle){
   if (bm.close) bm.close();
   const id = unitsSchnellG.getImageData(SCHNELL.x, SCHNELL.y, SCHNELL.w, SCHNELL.h);
   const q = id.data;
-  /* the same self-healing as the long way, measured over the strip */
-  const h = new Uint32Array(256);
-  let n = 0;
-  for (let p = 0; p < q.length; p += 28){ h[Math.max(q[p], q[p+1], q[p+2])]++; n++; }
-  let hell = 0, sum = 0;
-  for (let v = 0; v < 256; v++){ sum += h[v]; if (sum >= n/2){ hell = v; break; } }
-  let gain = 1;
+  /* THE BRIGHTNESS IS A PROPERTY OF THE SHARING, NOT OF THE PICTURE. The
+     same self-healing as the long way - a window shared under Windows HDR
+     arrives up to four times darker, and the median of the brightest
+     channel over every seventh point says so. But that median does not
+     change between two looks an eighth of a second apart, and taking it
+     costs 4,4 thousandths of the strip's 14,5 - measured. So it is taken
+     on the first look and then again every thirtieth, about every two
+     seconds: a changed window or a brighter game is caught within that. */
+  let hell, gain;
+  if (unitsHellZaehler % 30 === 0 || unitsHellMerk === null){
+    const h = new Uint32Array(256);
+    let n = 0;
+    for (let p = 0; p < q.length; p += 28){ h[Math.max(q[p], q[p+1], q[p+2])]++; n++; }
+    hell = 0;
+    let sum = 0;
+    for (let v = 0; v < 256; v++){ sum += h[v]; if (sum >= n/2){ hell = v; break; } }
+    unitsHellMerk = hell;
+  } else hell = unitsHellMerk;
+  unitsHellZaehler++;
+  gain = 1;
   if (hell < 55){
     gain = Math.min(24, srgbLin(74) / Math.max(srgbLin(4), srgbLin(hell)));
     const lut = boostLut(gain);
@@ -14647,7 +14666,7 @@ function kbKennung(d){
    counts: a head box appearing or going, a card turning dark, a row
    rolling - all of them are large areas and stand in 96 by 24 points as
    plainly as in eight million. */
-let kbWacheC = null, kbWacheG = null;
+let kbWacheC = null, kbWacheG = null, kbWacheAlt = null;
 function kbWache(bild){
   if (!kbWacheC){
     kbWacheC = document.createElement("canvas");
@@ -14658,9 +14677,22 @@ function kbWache(bild){
   const y0 = Math.round(H*0.639), hh = Math.round(H*0.338);   /* y 1380..2110 at 2160 */
   kbWacheG.drawImage(bild, 0, y0, W, hh, 0, 0, 96, 24);
   const d = kbWacheG.getImageData(0, 0, 96, 24).data;
-  let h = 5381;
-  for (let i = 0; i < d.length; i += 4) h = ((h*33) ^ d[i] ^ (d[i+1]<<3) ^ (d[i+2]<<6)) >>> 0;
-  return h;
+  /* AN EYE, NOT A HASH. It used to compare number against number - equal or
+     not. But the bar is see-through and the map lies under it: a single
+     point moving by one count set the doorman off, though nothing that
+     counts had changed. So he counts how many of the 2304 cells moved by
+     more than eight steps of brightness. Under three, the bar stood still.
+     A card turning dark, a head box appearing, a row rolling - those are
+     dozens to hundreds of cells. */
+  const n = 96*24;
+  const jetztB = new Uint8Array(n);
+  for (let i = 0, j = 0; j < n; i += 4, j++) jetztB[j] = (d[i] + d[i+1] + d[i+2])/3;
+  let anders = 0;
+  if (kbWacheAlt){
+    for (let j = 0; j < n; j++) if (Math.abs(jetztB[j] - kbWacheAlt[j]) > 8) anders++;
+  } else anders = n;
+  kbWacheAlt = jetztB;
+  return anders;
 }
 async function kbTick(){
   if (!KB || !KB.live || KB.laeuft) return;
@@ -14684,13 +14716,12 @@ async function kbTick(){
     /* nothing stirred in the bar - this look is over, and it cost a third
        of one thousandth. Only every twentieth look goes through anyway, so
        that a display which never changes still gets refreshed. */
-    const wache = kbWache(f);
+    const geregt = kbWache(f);
     KB.wacheZaehler = (KB.wacheZaehler || 0) + 1;
-    if (wache === KB.wacheLetzte && KB.wacheZaehler % 20 !== 0 && KB.zeilen.length){
+    if (geregt < 3 && KB.wacheZaehler % 20 !== 0 && KB.zeilen.length){
       KB.fehlschlaege = 0;
       return;
     }
-    KB.wacheLetzte = wache;
     /* THE QUICK FRAME: only the lower strip, into a buffer that stands. */
     const F = await unitsRahmenSchnell(f);
     if (!KB || !KB.live) return;
@@ -33266,7 +33297,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d69929f7ff</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 806509e2eb</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33408,7 +33439,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d69929f7ff";
+const BAU = "806509e2eb";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
