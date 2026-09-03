@@ -764,6 +764,15 @@ body.meld-modus{cursor:help}
 .kb-links{grid-area:links;width:260px;background:#0e1013;border-right:1px solid #22252c;
   padding:14px;color:#a9b0b8;font-size:13px;line-height:1.5;overflow:auto}
 .kb-links h3{margin:0 0 6px;font-size:10px;letter-spacing:.14em;color:#6d7680;text-transform:uppercase}
+/* THE ONE QUESTION, ANSWERED IN WORDS. Green: the picture is in the box,
+   go on. Amber: clicked, but not yet taken - this is the only state he has
+   to wait through. Red: the queue is filling up. */
+.kb-links .kb-ampel{font-family:var(--schmal);font-size:13px;letter-spacing:.10em;text-transform:uppercase;
+  border-radius:3px;padding:7px 12px;margin-bottom:8px;border:1px solid transparent;text-align:center}
+.kb-links .kb-ampel:empty{display:none}
+.kb-links .kb-ampel.frei{background:rgba(74,107,58,.18);border-color:#4a6b3a;color:#9ec98a}
+.kb-links .kb-ampel.nimmt{background:rgba(226,172,72,.16);border-color:#8a6820;color:#e2ac48}
+.kb-links .kb-ampel.voll{background:rgba(155,59,46,.20);border-color:#9b3b2e;color:#e08a76}
 .kb-links .kb-jetzt{background:#15181d;border:1px solid #2a2e36;border-radius:3px;padding:10px 12px;margin-bottom:14px}
 .kb-links .kb-jetzt b{color:#e8d9a8;font-size:15px}
 /* the field set */
@@ -8788,8 +8797,15 @@ function bildQuelleHTML(id){
    half second between two of them stood on no capture at all. That is also
    why hooking the arrow keys would not have helped: knowing that somebody
    stepped is no use when there is no picture of the unit they stepped
-   past. Fifteen matches the tick. */
-const BILD_TAKT = 15;
+   past.
+   EIGHT, NOT FIFTEEN. Fifteen was set to match the tick, but this is work
+   the operating system does CONSTANTLY, whether the tool looks or not: a
+   copy of 3840 by 2160 points, fifteen times a second, is a hundred and
+   twenty million points every second - and the Kommodore's machine went
+   sluggish with it. Eight gives a picture every hundred and twenty-five
+   thousandths, and nobody clicks a unit faster than that. Still four times
+   the two it used to be. */
+const BILD_TAKT = 8;
 let bildTaktGesetzt = false;
 /* ONE VIDEO ELEMENT, KEPT RUNNING. Every look used to build its own, start
    it, wait for its first picture - up to half a second at two pictures a
@@ -12897,21 +12913,22 @@ function kbVerschluss(warten){
     /* the spring: a short bright tone falling back */
     const o = kbKlang.createOscillator(), og = kbKlang.createGain();
     o.type = "triangle";
-    o.frequency.setValueAtTime(2050, t + 0.012);
-    o.frequency.exponentialRampToValueAtTime(1500, t + 0.052);
+    /* TWO OPPOSITE SHAPES, not one and the same plus something. "Ready"
+       and "falling behind" used to be the identical snap, the second with
+       a low tone hung on the end - and a difference by ADDITION is no
+       difference at all when one is not listening closely. The snap stays,
+       it means "the picture is in the box"; what follows points a
+       direction. Clear: a tone that RISES. Behind: one that FALLS and
+       stays low. And the warning comes earlier - four waiting pictures
+       instead of eight. */
+    const stau = warten >= 4;
+    o.frequency.setValueAtTime(stau ? 520 : 1500, t + 0.012);
+    o.frequency.exponentialRampToValueAtTime(stau ? 300 : 2050, t + (stau ? 0.16 : 0.052));
     og.gain.setValueAtTime(0.0001, t + 0.012);
-    og.gain.exponentialRampToValueAtTime(0.055, t + 0.020);
-    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.056);
-    o.connect(og); og.connect(kbKlang.destination); o.start(t + 0.012); o.stop(t + 0.06);
-    /* the reader is falling behind */
-    if (warten >= 8){
-      const l = kbKlang.createOscillator(), lg = kbKlang.createGain();
-      l.type = "sine"; l.frequency.setValueAtTime(320, t + 0.07);
-      lg.gain.setValueAtTime(0.0001, t + 0.07);
-      lg.gain.exponentialRampToValueAtTime(0.05, t + 0.085);
-      lg.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
-      l.connect(lg); lg.connect(kbKlang.destination); l.start(t + 0.07); l.stop(t + 0.19);
-    }
+    og.gain.exponentialRampToValueAtTime(stau ? 0.075 : 0.055, t + 0.020);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + (stau ? 0.17 : 0.056));
+    o.connect(og); og.connect(kbKlang.destination);
+    o.start(t + 0.012); o.stop(t + (stau ? 0.18 : 0.06));
   } catch(e){}
 }
 /* Two tones, the way a station calls before an announcement. */
@@ -14293,6 +14310,7 @@ function kbZeichnen(){
   if (links.dataset.gebaut !== "1"){
     links.innerHTML = `
     <h3>Now</h3>
+    <div class="kb-ampel"></div>
     <div class="kb-jetzt"></div>
     <h3>Town</h3>
     <input id="kb-ort" list="units-orte" placeholder="read from the bar, or type it" style="width:100%;background:#15181d;border:1px solid #2a2e36;color:#e8d9a8;padding:6px 8px;border-radius:3px">
@@ -14314,6 +14332,21 @@ function kbZeichnen(){
       nf.addEventListener("blur",  ()=>{ if (KB) KB.ortHand = false; });
       nf.addEventListener("input", ()=>{ if (KB) KB.ortHand = true; });
     }
+  }
+  /* MAY I GO ON? IN WORDS. The Kommodore found the sounds hard to read,
+     and he is right - a tone is a poor way to answer a yes-or-no question
+     that stands there the whole time. Three states, and only the middle
+     one is a wait: between his click and the picture being taken. */
+  const wartend = (KB.warte || []).length + (KB.arbeit ? 1 : 0);
+  const ampel = !KB.live ? ["", ""]
+    : KB.kastenOffen ? ["nimmt", "Taking the picture …"]
+    : wartend >= 8 ? ["voll", `Too fast — ${wartend} waiting`]
+    : ["frei", "Next unit"];
+  const ampelEl = links.querySelector(".kb-ampel");
+  if (ampelEl){
+    const soll = `kb-ampel ${ampel[0]}`;
+    if (ampelEl.className !== soll) ampelEl.className = soll;
+    if (ampelEl.textContent !== ampel[1]) ampelEl.textContent = ampel[1];
   }
   const jetztSoll = sz ? `<b>${kbEsc(sz.tag)}</b><br>${kbEsc(sz.name)}<br>${kbEsc(sz.besitzer)}` : kbEsc(KB.status);
   const jetzt = links.querySelector(".kb-jetzt");
@@ -14604,8 +14637,36 @@ function kbKennung(d){
   }
   return out.join(",");
 }
+/* HAS ANYTHING MOVED IN THE BAR? The strip is read on every look, and
+   that is twenty-three thousandths fourteen times a second - a third of a
+   core spent finding out that nothing stirred. So a doorman goes in front:
+   the LOWER STRIP only - not the whole picture, or the movement on the map
+   would set it off constantly - shrunk to 96 by 24 points and added up
+   into one number. Measured: the doorman 0,33 thousandths against the
+   strip's 23,3, seventy times cheaper. He cannot miss anything that
+   counts: a head box appearing or going, a card turning dark, a row
+   rolling - all of them are large areas and stand in 96 by 24 points as
+   plainly as in eight million. */
+let kbWacheC = null, kbWacheG = null;
+function kbWache(bild){
+  if (!kbWacheC){
+    kbWacheC = document.createElement("canvas");
+    kbWacheC.width = 96; kbWacheC.height = 24;
+    kbWacheG = kbWacheC.getContext("2d", {willReadFrequently:true});
+  }
+  const H = bild.height || UNITS_H, W = bild.width || UNITS_W;
+  const y0 = Math.round(H*0.639), hh = Math.round(H*0.338);   /* y 1380..2110 at 2160 */
+  kbWacheG.drawImage(bild, 0, y0, W, hh, 0, 0, 96, 24);
+  const d = kbWacheG.getImageData(0, 0, 96, 24).data;
+  let h = 5381;
+  for (let i = 0; i < d.length; i += 4) h = ((h*33) ^ d[i] ^ (d[i+1]<<3) ^ (d[i+2]<<6)) >>> 0;
+  return h;
+}
 async function kbTick(){
   if (!KB || !KB.live || KB.laeuft) return;
+  /* breathing space after a run of failures - see the catch below */
+  if (KB.pause && jetzt() < KB.pause) return;
+  KB.pause = 0;
   KB.laeuft = true;
   /* THE PICTURE OF THIS MOMENT, held still. The look uses it twice - once
      for the quick strip and once, further down, for the town pass. A video
@@ -14620,6 +14681,16 @@ async function kbTick(){
        each one. */
     const f = bild = await bildLive();
     if (!KB || !KB.live) return;
+    /* nothing stirred in the bar - this look is over, and it cost a third
+       of one thousandth. Only every twentieth look goes through anyway, so
+       that a display which never changes still gets refreshed. */
+    const wache = kbWache(f);
+    KB.wacheZaehler = (KB.wacheZaehler || 0) + 1;
+    if (wache === KB.wacheLetzte && KB.wacheZaehler % 20 !== 0 && KB.zeilen.length){
+      KB.fehlschlaege = 0;
+      return;
+    }
+    KB.wacheLetzte = wache;
     /* THE QUICK FRAME: only the lower strip, into a buffer that stands. */
     const F = await unitsRahmenSchnell(f);
     if (!KB || !KB.live) return;
@@ -14646,6 +14717,9 @@ async function kbTick(){
     const kasten = unitsForm(d);
     const kk = kasten ? kbKastenKennung(d, kasten.oben, kasten.form) : null;
     const neu = kk !== null && kk !== KB.kastenLetzte;
+    /* what the sign over "Now" reads off: a box that is there but not yet
+       taken is the one moment he really has to wait through */
+    KB.kastenOffen = neu;
     KB.blick = (KB.blick || 0) + 1;
     if (!kasten) KB.kastenLetzte = null;
     if (neu || KB.blick % 4 === 0 || !KB.zeilen.length){
@@ -14688,25 +14762,27 @@ async function kbTick(){
     if (!KB) return;
     KB.scan = false;
     const txt = String((e && e.message) || e);
-    /* ONE BAD LOOK IS NOT A REASON TO STOP. Every error used to end the
-       whole capture, and at fourteen looks a second a single stumble was
-       enough: the window happens to deliver no picture while it redraws, a
-       frame comes back empty, some reading trips over a half-built image.
-       None of that is over - all of it stopped.
-       Only what is really over ends the capture: the sharing was declined
-       or taken back. Everything else is counted and skipped, and only five
-       failures IN A ROW mean it is no longer chance. A look that comes
-       through sets the count back to nought, so a stumble every few
-       seconds is not noticed at all. */
-    const abgelehnt = /denied|permission|notallowed|dismissed|not allowed/i.test(txt);
+    /* THE SHARE ITSELF SAYS WHETHER IT IS OVER, and nothing else does.
+       This used to search the error message for words - denied, permission,
+       dismissed - and end the capture on a hit, or after five failures in a
+       row. Both are guesses about a fact that can simply be asked for:
+       bildStrom.active.
+       While the share stands there is no reason to end anything. A look
+       that trips over a half-drawn window is not a reason to throw away a
+       session with twenty units in it - and that is what the Kommodore ran
+       into: too quick a hand, and the whole scan had to be started again.
+       So the capture now stops only when the sharing is really gone. A
+       stumble is counted, said, and skipped; after three in a row the tick
+       lies down for eight hundred thousandths so that a lasting fault does
+       not run fourteen times a second. It does not give up. */
     KB.fehlschlaege = (KB.fehlschlaege || 0) + 1;
     KB.letzterFehler = txt;
-    if (abgelehnt || KB.fehlschlaege >= KB_FEHLER_MAX){
-      KB.status = abgelehnt ? "Screen sharing was declined or ended."
-        : `Capture stopped after ${KB.fehlschlaege} failed looks in a row: ${txt}`;
+    if (!bildStrom || !bildStrom.active){
+      KB.status = "The screen sharing has ended.";
       kbLiveStop(); kbZeichnen();
     } else {
-      KB.status = `A look failed and was skipped (${KB.fehlschlaege} of ${KB_FEHLER_MAX}) — ${txt}`;
+      if (KB.fehlschlaege >= KB_FEHLER_MAX) KB.pause = jetzt() + 800;
+      KB.status = `A look failed and was skipped (${KB.fehlschlaege}) — ${txt}`;
       kbZeichnen();
     }
   } finally {
@@ -33190,7 +33266,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 1195c6e585</span></p></div>
+         installation. <span style="color:var(--dim2)">· build d69929f7ff</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33332,7 +33408,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "1195c6e585";
+const BAU = "d69929f7ff";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
