@@ -8751,6 +8751,7 @@ search.addEventListener("blur", ()=>setTimeout(()=>hits.style.display="none", 18
    darf. Wir fragen also nach dem Spielfenster, und der Browser fragt dich.
    Die Freigabe bleibt danach stehen, jedes weitere Bild geht ohne Rückfrage. */
 let bildStrom = null;        // laufende Freigabe
+let bildVideo = null;        // das eine Element, das den Strom zeigt
 let bildAbmelden = null;     // räumt die Zuhörer des offenen Fensters weg
 
 const bildAufnahmeMoeglich = () =>
@@ -8781,22 +8782,74 @@ function bildQuelleHTML(id){
 
 /* Ein Bild aus der laufenden Freigabe. Beim ersten Mal fragt der Browser, was
    er sehen darf; danach nicht mehr, solange die Freigabe steht. */
-async function bildAufnehmen(){
+/* HOW FAST THE SHARED WINDOW IS ALLOWED TO BE. It used to ask for TWO
+   pictures a second, while the tick asks fourteen times a second - so the
+   same picture came back seven times over, and whatever happened in the
+   half second between two of them stood on no capture at all. That is also
+   why hooking the arrow keys would not have helped: knowing that somebody
+   stepped is no use when there is no picture of the unit they stepped
+   past. Fifteen matches the tick. */
+const BILD_TAKT = 15;
+let bildTaktGesetzt = false;
+/* ONE VIDEO ELEMENT, KEPT RUNNING. Every look used to build its own, start
+   it, wait for its first picture - up to half a second at two pictures a
+   second - use it once and throw it away. */
+async function bildVideoHolen(){
+  await bildStromHolen();
+  if (bildVideo && bildVideo.srcObject === bildStrom && bildVideo.videoWidth) return bildVideo;
+  const v = document.createElement("video");
+  v.srcObject = bildStrom; v.muted = true; v.playsInline = true;
+  await v.play();
+  /* the very first picture is often still black - wait for a real one */
+  await new Promise(fertig => {
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(()=>fertig());
+    else setTimeout(fertig, 260);
+  });
+  if (!v.videoWidth) throw new Error("The picture came back empty.");
+  bildVideo = v;
+  return v;
+}
+/* ONE FRAME, WITHOUT THE DETOUR THROUGH PNG. The old way drew the video
+   into a canvas, made a PNG of it with toBlob, wrapped that in a File -
+   and the reader's first act was to turn it back into a picture. Measured
+   on a real 4K capture from the archive, twice over:
+     encoding the PNG    1249 ms and 1223 ms   (9,4 megabytes)
+     decoding it again      99 ms and  107 ms
+     together            1348 ms and 1330 ms
+     straight from the source          0,2 ms and 0,5 ms
+   With a tick of seventy thousandths and a lock that skips a look while
+   another runs, the tool managed barely ONE look a second instead of
+   fourteen. The caller closes the bitmap when it is done with it. */
+async function bildLive(){
+  return await createImageBitmap(await bildVideoHolen());
+}
+async function bildStromHolen(){
   if (!bildAufnahmeMoeglich())
     throw new Error("This browser cannot capture a window here.");
-  if (!bildStrom || !bildStrom.active){
+  if (bildStrom && bildStrom.active){
+    /* a share opened before this was raised still runs at its old rate -
+       ask once whether it will go faster */
+    if (!bildTaktGesetzt){
+      bildTaktGesetzt = true;
+      try { await bildStrom.getVideoTracks()[0].applyConstraints({frameRate: BILD_TAKT}); } catch(e){}
+    }
+    return bildStrom;
+  }
+  /* no share yet, or the last one ended - ask for one */
+  bildVideo = null; bildTaktGesetzt = true;
+  {
     /* Ein Fenster kann die Seite nicht selbst waehlen - das laesst kein
        Browser zu, sonst koennte jede Seite ungefragt mitlesen. Was geht: die
        Auswahl gleich auf der Fensterliste oeffnen statt bei den Bildschirmen,
        den eigenen Tab ausblenden und das Umschalten erlauben. Danach bleibt
        die Freigabe stehen, und jedes weitere Bild ist ein Klick. */
     bildStrom = await navigator.mediaDevices.getDisplayMedia({
-      video: {frameRate: 2, displaySurface: "window"},
+      video: {frameRate: BILD_TAKT, displaySurface: "window"},
       audio: false, selfBrowserSurface: "exclude",
       surfaceSwitching: "include", systemAudio: "exclude",
       monitorTypeSurfaces: "exclude"});
     const spur = bildStrom.getVideoTracks()[0];
-    if (spur) spur.addEventListener("ended", ()=>{ bildStrom = null; });
+    if (spur) spur.addEventListener("ended", ()=>{ bildStrom = null; bildVideo = null; });
     /* Welches Fenster geteilt wurde, erfaehrt die Seite nicht - das waere die
        Luecke, die die ganze Regel verhindern soll. Ob ueberhaupt ein Fenster
        oder ein ganzer Bildschirm geteilt wird, steht aber im Datenstrom, und
@@ -8807,24 +8860,24 @@ async function bildAufnehmen(){
         toast("A whole screen is being shared — picking just the game window reads better.");
     } catch(e){}
   }
-  const v = document.createElement("video");
-  v.srcObject = bildStrom; v.muted = true; v.playsInline = true;
-  await v.play();
-  /* Das allererste Bild ist oft noch schwarz - auf ein echtes warten. */
-  await new Promise(fertig => {
-    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(()=>fertig());
-    else setTimeout(fertig, 260);
-  });
+  return bildStrom;
+}
+/* A PICTURE AS A FILE, for the places that really need one - the "Grabbing"
+   button and anything that hands a picture on. The two ticks, which read
+   the picture themselves the moment they have it, take bildLive instead. */
+async function bildAufnehmen(){
+  const v = await bildVideoHolen();
   const c = document.createElement("canvas");
   c.width = v.videoWidth; c.height = v.videoHeight;
-  if (!c.width || !c.height){ v.pause(); throw new Error("The picture came back empty."); }
+  if (!c.width || !c.height) throw new Error("The picture came back empty.");
   c.getContext("2d").drawImage(v, 0, 0);
-  v.pause(); v.srcObject = null;
   const blob = await new Promise(ok => c.toBlob(ok, "image/png"));
   if (!blob) throw new Error("The picture could not be built.");
   return new File([blob], "aufnahme.png", {type: "image/png"});
 }
 function bildFreigabeBeenden(){
+  if (bildVideo){ try { bildVideo.pause(); } catch(e){} bildVideo.srcObject = null; bildVideo = null; }
+  bildTaktGesetzt = false;
   if (bildStrom){ bildStrom.getTracks().forEach(t => t.stop()); bildStrom = null; }
 }
 
@@ -14554,12 +14607,18 @@ function kbKennung(d){
 async function kbTick(){
   if (!KB || !KB.live || KB.laeuft) return;
   KB.laeuft = true;
+  /* THE PICTURE OF THIS MOMENT, held still. The look uses it twice - once
+     for the quick strip and once, further down, for the town pass. A video
+     element would hand out a LATER picture the second time, and then the
+     slow half would no longer see what the quick half saw. A bitmap is a
+     snapshot and stays put. */
+  let bild = null;
   try {
     /* Every await is a place where the cabin may have been closed in the
        meantime - the reading that came back after the stop reached into
        nothing ("Cannot read properties of null"). So: look again after
        each one. */
-    const f = await bildAufnehmen();
+    const f = bild = await bildLive();
     if (!KB || !KB.live) return;
     /* THE QUICK FRAME: only the lower strip, into a buffer that stands. */
     const F = await unitsRahmenSchnell(f);
@@ -14650,7 +14709,10 @@ async function kbTick(){
       KB.status = `A look failed and was skipped (${KB.fehlschlaege} of ${KB_FEHLER_MAX}) — ${txt}`;
       kbZeichnen();
     }
-  } finally { if (KB) KB.laeuft = false; }
+  } finally {
+    if (bild && bild.close) bild.close();
+    if (KB) KB.laeuft = false;
+  }
 }
 /* The town half, on its own. It reads the town's name and the strengths
    under the row of diamonds - seconds of work through the text reader -
@@ -15297,8 +15359,9 @@ function pgVerarbeiten(R){
 async function pgTick(){
   if (!PG || !PG.live || PG.laeuft) return;
   PG.laeuft = true;
+  let bild = null;
   try {
-    const f = await bildAufnehmen();
+    const f = bild = await bildLive();
     if (!PG || !PG.live) return;
     const R = await gfLesen(f);
     if (!PG || !PG.live) return;
@@ -15367,7 +15430,10 @@ async function pgTick(){
     PG.status = /denied|Permission/i.test(String(e.message || e))
       ? "Screen sharing was declined." : "Capture: " + (e.message || e);
     pgLiveStop();
-  } finally { if (PG) PG.laeuft = false; }
+  } finally {
+    if (bild && bild.close) bild.close();
+    if (PG) PG.laeuft = false;
+  }
   pgZeichnen();
 }
 function pgLiveStart(){
@@ -33124,7 +33190,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 6fc4d65950</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 1195c6e585</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33266,7 +33332,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "6fc4d65950";
+const BAU = "1195c6e585";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
