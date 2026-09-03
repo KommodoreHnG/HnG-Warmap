@@ -13727,6 +13727,23 @@ function kbTuersteher(e, ziel, ohneLeiste){
   /* 1 something must actually have been read */
   const tagDa = kbTagDa(e.tag), nameDa = String(e.name || "").trim().length >= 2;
   if (!tagDa && !nameDa) return {ok: false, grund: "nothing readable in the box"};
+  /* 1b AND IT MUST BE READABLE, OR STAND FOR A REAL CARD. unitsUnlesbar
+     already judges on four witnesses whether a line is writing at all, but
+     its answer was only ASSIGNED to the row - after the quality gate had
+     let the reading through. So the check that recognises a jumble merely
+     coloured it in instead of stopping it.
+     Not simply always blocking, because the Kommodore set the opposite
+     case himself, for the clowns: "it is enough for me if the algorithm
+     names this unreadability clearly and marks it for the user". There the
+     UNIT is real and only its name cannot be deciphered - the line should
+     stand, marked, with its picture print.
+     What tells the two apart is whether a card stands behind it. With the
+     clowns there is a bar and a picked card. On a picture where the tool
+     itself says "No detail bar" there is no bar, no card, nothing - and
+     then an unreadable reading is not a name one cannot decipher, it is
+     noise. */
+  if (e.unlesbar && ohneLeiste)
+    return {ok: false, grund: "the box could not be read, and no card in the bar stands behind it"};
   /* 2 a line that already holds a unit is not overwritten by another one.
      Only the hand may do that, by setting the frame itself - and the case
      without a bar, where the line was found by the tag and is therefore
@@ -24837,10 +24854,19 @@ async function ocrLaden(){
    162; after that it stands.
    The price is elsewhere: the FIRST time, six models have to come down
    instead of one. */
-const OCR_SPRACHEN = "eng+deu+dan+pol+tur+ces";
+/* ZURUECKGENOMMEN auf Englisch allein. Das mehrsprachige Modell las die
+   Umlaute und das polnische L wirklich besser - gemessen, sechs von sieben
+   Proben besser oder gleich. Es liest aber auch RAUSCHEN besser: wo
+   Englisch an einem Kasten ohne Schrift aufgab, findet ein Modell mit
+   sechs Sprachen immer irgendetwas, und die Schwellen des Tuerstehers
+   (62 und 45) sind an Englisch geeicht. Kommodore sah danach Zeichensalat
+   auf dem Blatt, wo vorher nichts stand.
+   Die Umlaute kommen wieder - aber erst, wenn der Tuersteher dagegen neu
+   geeicht ist, und nicht als Nebenwirkung. */
+const OCR_SPRACHEN = "eng";
 async function ocrBereit(psm, weiss, melde){
   ocrMelder = melde || (()=>{});
-  if (!window.Tesseract) ocrMelder("Loading the text recogniser (about 15 MB, first time only) …");
+  if (!window.Tesseract) ocrMelder("Loading the text recogniser (about 3 MB, first time only) …");
   await ocrLaden();
   if (!ocrWorker){
     ocrMelder("Starting the recogniser …");
@@ -33823,7 +33849,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d3fa93b3e9</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c8d68d276e</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33965,7 +33991,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d3fa93b3e9";
+const BAU = "c8d68d276e";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
