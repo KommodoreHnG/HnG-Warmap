@@ -909,6 +909,10 @@ body.kb-zieht{user-select:none}
 /* the quiet mark of a unit the clan already knows, and the louder one that
    proposes a reading out of its book */
 /* the mark of a name no reader can hold on to */
+/* a line whose reading does not carry: red, and it says why */
+.kb-z.unsicher{background:rgba(155,59,46,.13);box-shadow:inset 3px 0 0 #9b3b2e}
+.kb-schwach{font-size:8px;vertical-align:middle;color:#9b3b2e;flex:0 0 auto}
+.kb-hinweis.schwach{color:#9b3b2e;line-height:1.5}
 .kb-unles{font-size:11px;line-height:1;color:#c0803a;flex:0 0 auto;opacity:.9}
 .kb-bek{font-size:8px;vertical-align:middle;color:#4f7a3a;opacity:.8;flex:0 0 auto}
 .kb-aehnlich{background:#efe5cc;flex:0 0 auto;border:1px solid #b3a482;color:#6b5a2e;
@@ -11912,7 +11916,21 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        65 px apart and 6207 red points where the disc would be. */
     let paare = 0;
     for (let i=0; i+1<k.rahmen.length; i++) if (Math.abs((k.rahmen[i+1][0] - k.rahmen[i][0]) - UNITS_RASTER) <= 3) paare++;
-    R.leiste = paare >= 1 || R.node.kompakt;
+    /* A TACTICAL SIGN IS A CARD - but this is not where the few-unit case
+       is lost. MEASURED on thirty-one full captures: the bar is found in
+       seventeen and missed in nine, and the nine are exactly the towns with
+       very few units. I took the count of NEIGHBOURING cards in the 105
+       grid for the culprit - one card has no neighbour - and added the sign
+       as a third witness. It changed nothing: still none of the nine.
+       The loss happens one step earlier. The card row itself is found by
+       its REPETITION every 105 points, and a single card repeats nothing;
+       the run search then returns no runs at all, so there is no card here
+       to carry a sign. The witness stands because it is true and costs
+       nothing, but the few-unit case needs the row to be found another
+       way - anchored on the town disc, or on a sign sought directly in the
+       band. That is still open. */
+    const zeichenDa = R.karten.some(x => x.typ);
+    R.leiste = paare >= 1 || R.node.kompakt || zeichenDa;
     /* the holder only from a compact disc - map colour at that place is
        not a holder */
     R.seite = R.node.kompakt ? ["US","GE","SU"].indexOf(R.node.klasse) : -1;
@@ -11979,6 +11997,13 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
   }
   const kasten = unitsForm(d);
   R.form = kasten ? kasten.form : null; R.kastenOben = kasten ? kasten.oben : null;
+  /* NO HEAD BOX, NO PICKED UNIT. The golden frame marks the card the game
+     has picked, and the game only picks one while it shows that unit's box
+     with tag and name. The pick is read from one plate being darker than
+     the band above it, and dragging the scroll bar moves that difference
+     about - so the frame turned up while nothing had been clicked at all.
+     It cannot have been: without the box there is nothing picked. */
+  if (!R.form) R.auswahl = null;
   /* the halves that do not read the box end here */
   if (art === "bild" || art === "ort") return R;
   if (kasten){
@@ -12468,7 +12493,7 @@ function kbFenster(R){
   }
   return {N: n, erste: 0, sichtbar: n};
 }
-function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, fest: false, abweichung: null}; }
+function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, fest: false, abweichung: null, unsicher: false, kandidat: null, unsicherGrund: null}; }
 /* A LOCKED LINE IS NOT TOUCHED. Not by a reading, not by a move, not by
    clearing, not by the tidying up of a bar that has grown shorter. What
    the tool reads differently it only reports: the line gets a note, the
@@ -12607,9 +12632,50 @@ function kbSchonDa(e){
    card in the bar and not from the reading. */
 function kbZeileLeeren(z){
   Object.assign(z, {status: "vermutet", tag: "", name: "", besitzer: "", hp: null,
+                    unsicher: false, kandidat: null, unsicherGrund: null,
                     nameZuv: 0, zwilling: null, gespeichert: false});
 }
 
+/* ---- IS THIS READING GOOD ENOUGH TO BE WRITTEN DOWN? -------------------
+   The doorman asks whether a reading fits the LINE. He does not ask whether
+   it is worth anything at all - and so a reading of thirty out of a hundred
+   went through, off a half-transparent bar with the map moving behind it.
+
+   Three ways through this gate:
+     1 The reading is sure enough on its own.
+     2 Or two readings say the same. Two dim looks that agree are as good as
+       one clear one, because they are two DIFFERENT pictures - the same
+       picture is never read twice. That is what "several source images"
+       means.
+     3 Or the line is still empty and the reading at least usable: something
+       provisional beats nothing at all.
+
+   AND THE MEMORY HOLDS. Once a name stands, a WORSE reading does not touch
+   it. Every new reading used to write over the old one, and behind a
+   see-through bar over a moving map that means the name flickers. */
+const KB_GUT = 62, KB_BRAUCHBAR = 45;
+const kbLesungSchluessel = e =>
+  (namKey(String((e && e.tag) || "")) + "|" + namKey(String((e && e.name) || ""))).trim();
+function kbGuteLesung(z, e){
+  const zuv = Math.round(+e.nameZuv || 0);
+  const schl = kbLesungSchluessel(e);
+  if (!schl.replace("|", "")) return {schreiben: false, grund: `Line ${z.i + 1}: nothing readable in the box.`};
+  /* the candidate is kept per LINE, and a line is a place in the bar - so
+     the position reader is what holds this memory together */
+  const k = (z.kandidat && z.kandidat.schl === schl)
+    ? z.kandidat : {schl, n: 0, zuv: 0};
+  k.n++; k.zuv = Math.max(k.zuv, zuv);
+  /* a name that already stands is not replaced by something weaker */
+  if (z.status === "erfasst" && z.name && schl !== kbLesungSchluessel(z)
+      && zuv + 8 < (z.nameZuv || 0) && k.n < 2)
+    return {schreiben: false, kandidat: k,
+            grund: `Line ${z.i + 1} keeps its name — the new reading is weaker (${zuv} against ${Math.round(z.nameZuv)}).`};
+  if (zuv >= KB_GUT) return {schreiben: true};
+  if (k.n >= 2) return {schreiben: true};
+  if (z.status !== "erfasst" && zuv >= KB_BRAUCHBAR) return {schreiben: true, schwach: true};
+  return {schreiben: false, kandidat: k,
+          grund: `Line ${z.i + 1} reads poorly (${zuv} of 100) — pan or zoom the game a little, then click it again.`};
+}
 /* THE DOORMAN. Nothing reaches the sheet on the word of one witness. The
    position reader says WHICH line is meant, the text reader says WHAT
    stands in the box, and the two are held against each other before
@@ -12794,6 +12860,18 @@ function kbVerarbeiten(R, vorgabe){
         kbZeichnen();
         return;
       }
+      /* THE QUALITY GATE, before anything is written. A reading that does
+         not carry is kept as a candidate and the line says so - in red, and
+         with what to do about it. */
+      const guete = kbGuteLesung(z, e);
+      if (!guete.schreiben){
+        z.unsicher = true; z.kandidat = guete.kandidat || null;
+        z.unsicherGrund = guete.grund;
+        KB.status = guete.grund;
+        kbZeichnen();
+        return;
+      }
+      z.unsicher = false; z.kandidat = null; z.unsicherGrund = null;
       if (!z.typ){ const k2 = R.karten[i - KB.erste]; const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
       /* The composition is a second witness: the strength diamonds carry
          the crew maxima, and those fit exactly one type often enough. It
@@ -13603,7 +13681,7 @@ function kbZeichnen(){
   };
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Town ?"}${KB.linie ? ` · attack line ${kbEsc(KB.linie)}` : ""} · ${new Date().toLocaleDateString()}</div>
     <div class="kb-z kopfz"><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Side</div><div></div></div>
-    ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${z.fest ? "fest" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""}" data-i="${z.i}">
+    ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${z.fest ? "fest" : ""} ${z.unsicher ? "unsicher" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""}" data-i="${z.i}">
       <div>${z.i + 1}</div>
       <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set"}">${z.typ ? "" : "?"}</span></div>
       <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${
@@ -13626,6 +13704,8 @@ function kbZeichnen(){
            marks stand. It sat in the tag column first, and that column is
            narrow enough to cut a tag short - the mark was clipped away with
            it. */
+        z.unsicher
+          ? `<span class="kb-schwach" title="${kbEsc(z.unsicherGrund || "read too poorly to write down")}">\u25cf</span>` : ""}${
         z.unlesbar
           ? `<span class="kb-unles" title="${z.beschrieben
               ? "Described by hand — recognised again by the picture of its name line, not by its letters"
@@ -13640,7 +13720,19 @@ function kbZeichnen(){
       }">${z.fest ? "🔒" : "🔓"}</button>${
         z.gespeichert ? `<span title="recorded" style="color:#4f7a3a">✓</span>` : `<button class="weg" data-i="${z.i}" title="remove this line">×</button>`}</div>
     </div>`).join("")}
-    ${KB.N ? "" : `<div class="kb-hinweis">Nothing on the sheet yet.</div>`}`;
+    ${KB.N ? "" : `<div class="kb-hinweis">Nothing on the sheet yet.</div>`}
+    ${(() => {
+      /* WHAT TO DO ABOUT THE RED LINES, said once and plainly. Panning or
+         zooming the game puts something else behind the see-through bar,
+         and the next capture is then a different picture - that second
+         reading is what carries the name. */
+      const rot = KB.zeilen.filter(z => z.unsicher).map(z => z.i + 1);
+      if (!rot.length) return "";
+      return `<div class="kb-hinweis schwach">Line${rot.length === 1 ? "" : "s"} <b>${rot.join(", ")}</b>
+        ${rot.length === 1 ? "reads" : "read"} too poorly to write down — the bar is see-through and the map moves behind it.
+        Pan or zoom the game a little and click ${rot.length === 1 ? "it" : "them"} again: the reader then has a second
+        picture to work from, and two that agree carry the name.</div>`;
+    })()}`;
   blatt.querySelectorAll(".kb-z[data-i] .sym").forEach(el => {
     const z = KB.zeilen[+el.closest(".kb-z").dataset.i];
     if (z && z.typ){ const c = kbSymbol(z.typ); if (c) el.appendChild(c); }
@@ -32296,7 +32388,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 75667326c5</span></p></div>
+         installation. <span style="color:var(--dim2)">· build f1af6fd958</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32438,7 +32530,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "75667326c5";
+const BAU = "f1af6fd958";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
