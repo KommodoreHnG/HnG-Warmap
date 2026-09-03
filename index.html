@@ -27032,21 +27032,30 @@ const AT_TRENNER = /\s[-\u2010-\u2015\u2212]\s/;
    characters apart. BES|TZER against BESITZER is one. */
 /* THE GAME'S CAPITAL I IS A BARE UPRIGHT STROKE, and the reader has a sign
    of its own for that: the bar. Both are a stroke, so it tosses a coin.
-   Seen three times on one of the Kommodore's sheets:
-     |NF23 -DB- SOOFAAAA   should be INF23
-     KYOST|POYSTI          should be KYOSTIPOYSTI
-     APC|O                 should be APCIO
-   and BES|TZER for BESITZER before that.
-   BUT NOT EVERY BAR IS AN I. Players use it as decoration - |Balken|,
-   |BLKWTR| - and that must not be touched; the file says so at the
-   tidying-up expression already. The difference is WHERE it stands:
-   decoration stands on the outside, a misread I stands INSIDE the word.
-   So only a bar between two letters or digits is swapped. That catches
-   KYOST|POYSTI, APC|O and BES|TZER and leaves |Balken| alone. A leading
-   one stays as it is - out there the bar is allowed. */
+   The Kommodore's ruling: "if it is going to be wrong, then rather a
+   capital I than odd strokes."
+   The first rule only swapped a bar INSIDE a word, between two letters or
+   digits. On his sheet it stands nearly everywhere else, because Roman
+   numerals are made of exactly those strokes:
+     DIV |          should be DIV I          at the end
+     DIV |I         should be DIV II         at the start of the group
+     DIV |||        should be DIV III        the whole group
+     DIV |V         should be DIV IV         before a letter
+     BATALLON II|   should be BATALLON III   at the end
+   So every bar becomes an I now - with one exception.
+   THE EXCEPTION IS THE BAR AS DECORATION. Players frame their name with
+   it - |Balken|, |BLKWTR| - and that has stood under protection since the
+   tidying-up expression. Such decoration comes as a PAIR right on the
+   outside, at the start AND at the end. That pair is left alone;
+   everything between it, and every bar without a counterpart, becomes an
+   I. */
 function atStrichZuI(text){
-  return String(text == null ? "" : text)
-    .replace(/(?<=[\p{L}\p{N}])[|\u2502\u01c0](?=[\p{L}\p{N}])/gu, "I");
+  const t = String(text == null ? "" : text);
+  const B = /[|\u2502\u01c0]/g;
+  const rahmen = t.length >= 3 && B.test(t[0]) && (B.lastIndex = 0, B.test(t[t.length-1]));
+  B.lastIndex = 0;
+  if (!rahmen) return t.replace(B, "I");
+  return t[0] + t.slice(1, -1).replace(B, "I") + t[t.length-1];
 }
 const AT_AUFSCHRIFTEN = ["BESITZER","OWNER","PROPRIETARIO","PROPRIETAIRE",
   "PROPRI\u00c9TAIRE","PROPIETARIO","W\u0141A\u015aCICIEL","\u0412\u041b\u0410\u0414\u0415\u041b\u0415\u0426"];
@@ -33895,7 +33904,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 7a003d81e7</span></p></div>
+         installation. <span style="color:var(--dim2)">· build d1c676c4f8</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34037,7 +34046,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "7a003d81e7";
+const BAU = "d1c676c4f8";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
