@@ -14074,18 +14074,40 @@ const KB_KASTEN_AUS = {x: 1480, w: 900, hoch: 250, tief: 90};
 let kbArbeitC = null, kbArbeitG = null;
 /* A fingerprint of what stands in the box - the name and owner rows, every
    ninth point. A different unit gives a different number. */
+/* IS THIS THE SAME UNIT IN THE BOX AS A MOMENT AGO? This used to fold the
+   name and owner lines into ONE number - and a single point moving by one
+   count gave a completely different number. The head box is see-through,
+   the map lies under it and the capture has noise in it, so the SAME unit
+   counted as a new one at the next look and was photographed again. That
+   is what filled the queue: eleven units on the sheet and twenty-four
+   pictures waiting.
+   So the samples are kept as they are and compared instead of folded. Two
+   boxes are the same when at most two samples lie more than FORTY steps
+   apart. The two things being told apart are orders of magnitude away from
+   each other:
+     noise on a see-through surface        a few steps
+     background against a letter stroke    two hundred and more
+   A changed character in the name comes through; a trembling point does
+   not. */
+const KB_KASTEN_STUFE = 40, KB_KASTEN_DULDUNG = 2;
 function kbKastenKennung(d, oben, form){
   const Z = UNITS_ZEILEN[form];
-  let h = 2166136261;
+  const werte = [];
   for (const zeile of [Z.name, Z.besitzer]){
     const y0 = oben + zeile.dy, y1 = y0 + zeile.h;
     for (let y = Math.max(0, y0); y < Math.min(UNITS_H, y1); y += 3)
-      for (let x = UNITS_KASTEN.x0; x < UNITS_KASTEN.x1; x += 9){
-        h ^= unitsMax(d, (y*UNITS_W + x)*4);
-        h = (h * 16777619) >>> 0;
-      }
+      for (let x = UNITS_KASTEN.x0; x < UNITS_KASTEN.x1; x += 9)
+        werte.push(unitsMax(d, (y*UNITS_W + x)*4));
   }
-  return form + ":" + oben + ":" + h;
+  return {form, oben, werte: Uint8Array.from(werte)};
+}
+function kbKastenGleich(a, b){
+  if (!a || !b || a.form !== b.form || Math.abs(a.oben - b.oben) > 2) return false;
+  if (a.werte.length !== b.werte.length) return false;
+  let anders = 0;
+  for (let i = 0; i < a.werte.length; i++)
+    if (Math.abs(a.werte[i] - b.werte[i]) > KB_KASTEN_STUFE && ++anders > KB_KASTEN_DULDUNG) return false;
+  return true;
 }
 /* THE TOWN CHANGES FASTER THAN ITS NAME CAN BE READ. Reading it costs a
    pass of the text recogniser and waits for two still pictures; the name
@@ -14148,7 +14170,18 @@ async function kbEinreihen(F, G){
   let bmp;
   try { bmp = await createImageBitmap(F.c, sx, sy, sw, sh); } catch(e){ return false; }
   if (!KB){ if (bmp.close) bmp.close(); return false; }
-  KB.warte.push({bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel});
+  /* THE SAME LINE MAY NOT STAND IN THE QUEUE TWICE. Every picture carries
+     the line it will be written to; if one for that line is already
+     waiting, it is REPLACED, not appended - the newer picture is at least
+     as good as the older. The queue can then never grow longer than the
+     number of units in the town. */
+  const platz = ziel === KB_OHNE_LEISTE ? -1 : KB.warte.findIndex(j => j.ziel === ziel);
+  const neuerJob = {bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel};
+  if (platz >= 0){
+    const alt = KB.warte[platz];
+    if (alt.bmp && alt.bmp.close) alt.bmp.close();
+    KB.warte[platz] = neuerJob;
+  } else KB.warte.push(neuerJob);
   /* THE PICTURE IS IN. This is the moment the next unit may be clicked, and
      the only moment worth a sound of its own. */
   kbVerschluss(KB.warte.length);
@@ -14747,7 +14780,18 @@ async function kbTick(){
        look so the strip stays fresh. */
     const kasten = unitsForm(d);
     const kk = kasten ? kbKastenKennung(d, kasten.oben, kasten.form) : null;
-    const neu = kk !== null && kk !== KB.kastenLetzte;
+    let neu = kk !== null && !kbKastenGleich(kk, KB.kastenLetzte);
+    /* A BOX THAT WAS REFUSED IS NOT OFFERED AGAIN AT ONCE. It used to be:
+       kbEinreihen gives nothing back when the queue is full, the caller
+       only remembers a box it TOOK, so the same box counted as new at the
+       very next look and the whole geometry ran again - a hundred and
+       sixty thousandths, eight to fourteen times a second, which left the
+       text reader even less time and made the queue longer still. A jam
+       that fed itself. The retry stays - a box with no card certainly
+       picked should come round again - it just no longer costs every
+       look. */
+    if (neu && KB.kastenAbgelehnt && kbKastenGleich(kk, KB.kastenAbgelehnt)
+        && (KB.blick || 0) - (KB.abgelehntBlick || 0) < 8) neu = false;
     /* what the sign over "Now" reads off: a box that is there but not yet
        taken is the one moment he really has to wait through */
     KB.kastenOffen = neu;
@@ -14765,7 +14809,8 @@ async function kbTick(){
       if (neu && G.form){
         const genommen = await kbEinreihen(F, G);
         if (!KB || !KB.live) return;
-        if (genommen) KB.kastenLetzte = kk;
+        if (genommen){ KB.kastenLetzte = kk; KB.kastenAbgelehnt = null; }
+        else { KB.kastenAbgelehnt = kk; KB.abgelehntBlick = KB.blick || 0; }
       }
     }
     /* THE TOWN RUNS BESIDE THE TICK, NOT INSIDE IT. Measured on the whole
@@ -33297,7 +33342,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 806509e2eb</span></p></div>
+         installation. <span style="color:var(--dim2)">· build da973bf823</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33439,7 +33484,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "806509e2eb";
+const BAU = "da973bf823";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
