@@ -4431,6 +4431,30 @@ function draw(){
     if (!imKrieg(e) || !e.v) continue;
     if (e.v.f != null || e.v.k) adern.set(k, e.v);
   }
+  /* THE WIDTHS, ON THE GAME'S OWN MEASURE. Measured on four pictures and
+     always the same: a supply line's core is 0,28 node radii, and with its
+     black contour 0,44 altogether. The node radius here is ortRadius(),
+     which has stood on the game's measure since the disc was calibrated -
+     so 0,28 of it is about 0,556·z, where 1,5·z used to be drawn. The own
+     supply line was 2,7 times too wide.
+     THE GRADING STAYS. Three of the four widths are stepped on purpose,
+     and the Kommodore asked for the front and the attack to keep standing
+     out - so the whole field moves onto the game's measure and carries its
+     ratios along:
+       unknown   0,9·z  ->  0,60 x  ->  0,168·r
+       own       1,5·z  ->  1,00 x  ->  0,280·r     the game's measure
+       front     1,9·z  ->  1,27 x  ->  0,355·r
+       attack    2,4·z  ->  1,60 x  ->  0,448·r
+     THE CONTOUR, which was missing altogether. From core 0,28 and total
+     0,44 follows 0,08 node radii on each side - the contour is 1,571 times
+     the core. It goes on the lines the game has as well. The unknown line
+     gets none: it is not a game line but the statement "we do not know",
+     and a black rim would make it louder instead of quieter.
+     And the old widths hung on the zoom alone and left the interface scale
+     out; ortRadius() carries it, so lines and discs now grow together. */
+  const rK = ortRadius();
+  const kern = f => Math.max(0.5, 0.28*rK*f), kontur = f => Math.max(0.9, 0.44*rK*f);
+  const konturFarbe = light() ? "rgba(20,24,30,.55)" : "rgba(0,0,0,.62)";
   ctx.lineCap = "round";
   for (const [a,b] of MAP.e){
     const oa = ownerOf(a), ob = ownerOf(b);
@@ -4455,23 +4479,28 @@ function draw(){
       } else front.push([x1,y1,x2,y2]);
       continue;
     }
-    if (oa >= 0 && oa === ob){ ctx.strokeStyle = col(FACTIONS[oa]); ctx.lineWidth = Math.max(1, 1.5*z); }
-    else { ctx.strokeStyle = light() ? "rgba(70,82,98,.45)" : "rgba(150,168,190,.28)"; ctx.lineWidth = Math.max(.6,.9*z); }
+    if (oa >= 0 && oa === ob){
+      /* the contour first, the coloured core over it */
+      ctx.strokeStyle = konturFarbe; ctx.lineWidth = kontur(1);
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.strokeStyle = col(FACTIONS[oa]); ctx.lineWidth = kern(1);
+    }
+    else { ctx.strokeStyle = light() ? "rgba(70,82,98,.45)" : "rgba(150,168,190,.28)"; ctx.lineWidth = kern(0.6); }
     ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
   }
   if (front.length){                       // the front, drawn last so it reads on top
-    ctx.strokeStyle = "#8b95a5"; ctx.lineWidth = Math.max(1.4, 1.9*z);
     ctx.beginPath();
     for (const [x1,y1,x2,y2] of front){ ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); }
-    ctx.stroke();
+    ctx.strokeStyle = konturFarbe; ctx.lineWidth = kontur(1.27); ctx.stroke();
+    ctx.strokeStyle = "#8b95a5"; ctx.lineWidth = kern(1.27); ctx.stroke();
   }
   /* Angriffsrichtungen ueber der ruhigen Front: die Farbe des Angreifers,
      die Spitze zum Verteidiger. Wer eine belagerte Stadt anschaut, sieht so
      ohne einen Klick, aus welcher Richtung gespawnt wird. */
   for (const [f, ax, ay, bx, by] of angriff){
-    ctx.strokeStyle = col(FACTIONS[f]);
-    ctx.lineWidth = Math.max(1.8, 2.4*z);
-    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+    ctx.strokeStyle = konturFarbe; ctx.lineWidth = kontur(1.6); ctx.stroke();
+    ctx.strokeStyle = col(FACTIONS[f]); ctx.lineWidth = kern(1.6); ctx.stroke();
     const L = Math.hypot(bx-ax, by-ay);
     if (L < 14) continue;
     /* Die Spitze sitzt nicht am Ende, sondern zwei Drittel des Weges: am
@@ -33026,7 +33055,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 995dba017d</span></p></div>
+         installation. <span style="color:var(--dim2)">· build d081b09342</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -33168,7 +33197,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "995dba017d";
+const BAU = "d081b09342";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
