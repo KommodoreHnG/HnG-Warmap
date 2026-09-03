@@ -11191,6 +11191,32 @@ function unitsTypVorlagenBauen(){
   }
   return unitsTypVorlagen;
 }
+/* THE ANGLE THROUGH THE ROUND SIGN. The Kommodore reported tank destroyers
+   read as medium armour and pointed straight at the difference: the tank
+   destroyer's sign IS the tank's sign plus a big V - its point sitting
+   above the oval in the middle, its two legs running down and outwards
+   right through it.
+   It is the same trap the diamonds fell into. The comparer holds two
+   thousand four hundred picture points against each other, and the angle
+   is a thin stroke among them; in the sum it does not show. So it is
+   measured on its own, in the one window where it stands alone: above the
+   oval, where a gun tank has nothing at all. Measured on the eighteen
+   templates, in the currency the reader already keeps (the picture brought
+   to mean zero and length one), times a hundred:
+     Light Armor            +0,68
+     Medium Armor           +0,99
+     Heavy Armor            +1,19
+     ------------------------------ zero lies here
+     Medium Tank Destroyer  -0,91
+     Heavy Tank Destroyer   -0,65
+   Ink is negative there, because both sides are brought to dark=small. No
+   grey zone, two thirds of clearance to either side. A dead band of three
+   tenths stays all the same: a half-covered sign or a clipped card lands
+   in the middle, and there the comparer decides alone as before. */
+const UNITS_SPITZE = {x0: 26, x1: 36, y0: 0, y1: 7};
+const UNITS_SPITZE_TOT = 0.3;
+const UNITS_PANZERART = {light_armor: 0, medium_armor: 0, heavy_armor: 0,
+                         medium_tank_destroyer: 1, heavy_tank_destroyer: 1};
 function unitsTypVon(c, x0, fy){
   const vorl = unitsTypVorlagenBauen();
   if (!vorl.length) return null;
@@ -11216,6 +11242,15 @@ function unitsTypVon(c, x0, fy){
     let q = 0;
     for (let j = 0; j < v.length; j++){ v[j] -= m; q += v[j]*v[j]; }
     q = Math.sqrt(q) || 1;
+    /* the ink above the oval, on this card, at this shift */
+    let spitze = null;
+    if (unitsTypB === 62 && unitsTypH === 40){
+      const S = UNITS_SPITZE;
+      let sum = 0, n = 0;
+      for (let y = S.y0; y < S.y1; y++)
+        for (let x = S.x0; x < S.x1; x++){ sum += v[y*unitsTypB + x]; n++; }
+      if (n) spitze = (sum/n)/q*100;
+    }
     /* the WHOLE ranking of this shift, not just its winner: when the town
        cannot hold the best sign, the best one it can hold counts */
     const rang = [];
@@ -11224,9 +11259,19 @@ function unitsTypVon(c, x0, fy){
       for (let j = 0; j < v.length; j++) k += v[j]*t.v[j];
       rang.push({key: t.k, k: k/q});
     }
+    /* the angle decides between gun tank and tank destroyer, and it
+       decides before the ranking is read - a sign the card plainly does
+       not carry must not win on the strength of the rest of the picture */
+    if (spitze !== null && Math.abs(spitze) >= UNITS_SPITZE_TOT){
+      const jagd = spitze < 0 ? 1 : 0;
+      for (let i = rang.length - 1; i >= 0; i--){
+        const art = UNITS_PANZERART[rang[i].key];
+        if (art !== undefined && art !== jagd) rang.splice(i, 1);
+      }
+    }
     rang.sort((a, b) => b.k - a.k);
     return rang.length ? {key: rang[0].key, k: rang[0].k, zweit: rang.length > 1 ? rang[1].k : 0,
-                          liste: rang.slice(0, 6), dx, dy} : null;
+                          liste: rang.slice(0, 6), spitze, dx, dy} : null;
   };
   let best = null;
   for (const dy of [-2, 0, 2]) for (const dx of [-2, 0, 2]){
@@ -11248,6 +11293,7 @@ function unitsTypVon(c, x0, fy){
      honestly unknown */
   const schwelle = unitsTypB === 62 ? 0.85 : 0.6;
   return {typ: best.key, korr: best.k, abstand, liste: best.liste,
+          spitze: best.spitze,
           schwelle, sicher: abstand >= 0.05 && best.k >= schwelle};
 }
 
@@ -12219,10 +12265,22 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        its colour would otherwise stand as the row's. */
     if (!R.leiste){ R.karten = []; R.seite = null; R.roll = null; R.reiheFarbe = null; }
     if (R.leiste){
-      /* the name field ends at the track's left end - a card mid-blink is
-         not found, and the field must not swallow the pale cards */
-      const rechts = (R.roll && R.roll.bahnLinks) ? R.roll.bahnLinks - 8
-                   : (R.karten.length ? Math.min(R.karten[0].x0 - 20, 1700) : 1700);
+      /* THE NAME FIELD ENDS WHERE THE CARDS BEGIN - whichever bound is the
+         tighter one. The town name is what pushes the cards to the right:
+         it stands to their left, and a long one leaves less room, which is
+         why the card window's left edge wanders between towns and why a
+         long name can even break onto two lines. MEASURED on eight bars,
+         with and without a track and with a broken line among them, the
+         first card begins 41 to 45 points after the last letter of the
+         name, and the track 35 to 39:
+           LEIPZIG - B  44/39   FRANKFURT A.M. 43/37   KOELN 44/38
+           SCHILDAU     45/38   COLMAR         41/35
+           SAINT-DIE-DES-VOSGES - C (two lines)  43     WETZLAR - D  42
+         So either bound places the field right - but the tighter of the
+         two can never swallow a card, and a card mid-blink is not found. */
+      const rechts = Math.min(
+        (R.roll && R.roll.bahnLinks) ? R.roll.bahnLinks - 8 : 1700,
+        R.karten.length ? R.karten[0].x0 - 20 : 1700);
       /* the fingerprint of the card row: where the cards stand, and how
          far the bar is rolled */
       /* the town's own strength line, found with the picture - the numbers
@@ -13541,6 +13599,27 @@ function kbGelesenVerlangt(){
   }
   return noetig;
 }
+/* THE MEN A UNIT IS LED BY. Every type has exactly one group of people,
+   and the game's own data keeps it first: Infantry, Recon, Tank Crew,
+   Paratroopers, Fighter Pilots. Everything after it is equipment. */
+let kbMannschaft = null;
+function kbMannschaftsNamen(){
+  if (kbMannschaft) return kbMannschaft;
+  kbMannschaft = new Set();
+  for (const a of (MAP.at || [])) if (a.crew && a.crew.length) kbMannschaft.add(a.crew[0][0]);
+  return kbMannschaft;
+}
+/* THE MEN DECIDE, THE EQUIPMENT NEVER. A unit may stand in a town with not
+   one vehicle left and still be a unit - the Kommodore said so, and the
+   field test proved it: Soest showed Infantry 220, Motorcycles 4, Tank
+   Crew 1, Medium Armor 4, and the tool ruled out eleven types. Six of the
+   eleven were wrong, and all six the same way: their PEOPLE were standing
+   in the town and only their vehicles were missing.
+   So the rule now reads off the leading group alone. Is it absent, the
+   unit cannot be here. Is a piece of equipment absent, that says nothing
+   at all. For Soest: motorized and mechanized infantry and light armour
+   come back (their people are there); recon, airborne and the whole air
+   force stay out (no people of theirs anywhere in the bar). */
 function kbMoeglicheTypen(){
   const G = KB && KB.gesamt;
   if (!G || !G.rauten || !G.rauten.length) return null;
@@ -13550,12 +13629,35 @@ function kbMoeglicheTypen(){
   if (!da.size || offen) return null;
   const moeglich = new Set();
   for (const a of MAP.at){
+    const mann = (a.crew && a.crew.length) ? a.crew[0][0] : null;
     /* a group never named cannot say anything - such a type stays possible */
-    if (!a.crew.every(c => buch[c[0]])){ moeglich.add(a.k); continue; }
-    if (a.crew.every(c => da.has(c[0]))) moeglich.add(a.k);
+    if (!mann || !buch[mann] || da.has(mann)) moeglich.add(a.k);
   }
   for (const k of kbGelesenVerlangt()) moeglich.add(k);
   return moeglich;
+}
+/* THE OTHER DIRECTION, AND IT IS THE NEW ONE. Equipment in the bar cannot
+   shut anybody out, but it does demand somebody: a group of vehicles is
+   standing in the town because a unit brought it, and when only one type
+   is left that could have, that type IS in the town. Soest: motorcycles
+   are there, and of the two kinds that ride them the motorized recon is
+   already out for want of recon men - so Soest holds at least one
+   motorized guard.
+   This is SAID, not acted upon. The Kommodore set that line himself: the
+   strengths may support, they may not decide. */
+function kbFordertTypen(){
+  const G = KB && KB.gesamt;
+  if (!G || !G.rauten || !G.rauten.length) return [];
+  const moeglich = kbMoeglicheTypen();
+  if (!moeglich) return [];
+  const mann = kbMannschaftsNamen(), aus = new Set();
+  for (const r of G.rauten){
+    if (!r.gruppe || mann.has(r.gruppe)) continue;
+    const wer = (MAP.at || []).filter(a => moeglich.has(a.k)
+      && (a.crew || []).some(c => c[0] === r.gruppe));
+    if (wer.length === 1) aus.add(wer[0].k);
+  }
+  return [...aus];
 }
 /* What the naming buys: the types this town cannot hold. */
 function kbGesamtSatz(){
@@ -13565,7 +13667,14 @@ function kbGesamtSatz(){
   const m = kbMoeglicheTypen();
   if (!m) return `<span class="kb-gsatz">Nothing to go on yet.</span>`;
   const raus = (MAP.at || []).filter(a => !m.has(a.k));
-  if (raus.length) return `<span class="kb-gsatz gut">Not possible here: ${raus.map(a => kbEsc(a.name || a.k)).join(", ")}.</span>`;
+  /* what the equipment in the bar demands - held apart from what the men
+     rule out, because the two say different things */
+  const muss = kbFordertTypen();
+  const mussSatz = muss.length
+    ? ` <span class="kb-gsatz gut">At least one of each stands here: ${muss.map(k => kbEsc(atName(k))).join(", ")}.</span>`
+    : "";
+  if (raus.length) return `<span class="kb-gsatz gut">Not possible here: ${raus.map(a => kbEsc(a.name || a.k)).join(", ")}.</span>${mussSatz}`;
+  if (mussSatz) return `<span class="kb-gsatz gut">Every kind of unit is possible here.</span>${mussSatz}`;
   /* nothing ruled out - is that because everything fits, or because too
      few groups have a name yet? Say which. */
   const buch = kbRautenBuchAuf(), fehlt = kbGruppenNamen().filter(g => !buch[g]).length;
@@ -32731,7 +32840,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0ce5e52438</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b3124f3e24</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -32873,7 +32982,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0ce5e52438";
+const BAU = "b3124f3e24";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
