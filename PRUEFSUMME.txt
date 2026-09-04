@@ -1,6 +1,6 @@
 index.html
-  Bau       96d2209812
-  SHA-256   aa769c4d4092cf691bd70ae85bc5cb4f3e67f87734e7d14a498b78a36eb4ee35
+  Bau       86c2286c89
+  SHA-256   cddbeafa81d1e7424ebd9009113a5d167d58c2fe4b66b4bfeec989b955ebac8a
   Groesse   2770935 Bytes
 
 Selbst nachbauen:  python karte_bauen.py
