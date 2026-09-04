@@ -29856,7 +29856,7 @@ const MENUES = [
      steckt, meldet man oder sieht man nach: Gegner, Schlacht, Brett. */
   /* The board stays in the top bar itself - its "new" badge must be seen
      without opening a menu first. */
-  {id:"lage",  titel:"Intel",    knoepfe:["b-intel"]},
+  {id:"lage",  titel:"Intel",    knoepfe:["b-intel"], direkt:true},
   /* "War" IS THE WAR, not its settings. What one looks at under that name
      is how the front moved; the settings and the cut belong to whoever
      administers the war, so they sit under Admin. The settings button
@@ -29994,7 +29994,8 @@ function menueBauen(){
   for (const m of MENUES){
     const titel = document.createElement("button");
     titel.className = "mtitel"; titel.dataset.menue = m.id; titel.textContent = m.titel;
-    titel.setAttribute("aria-haspopup","true"); titel.setAttribute("aria-expanded","false");
+    if (!m.direkt) titel.setAttribute("aria-haspopup","true");
+    titel.setAttribute("aria-expanded","false");
     leiste.appendChild(titel);
 
     const kasten = document.createElement("div");
@@ -30012,7 +30013,12 @@ function menueBauen(){
     }
     kasten.dataset.titel = m.titel;
     titel.dataset.fuer = m.id;
-    titel.addEventListener("click", ev => { ev.stopPropagation(); menueOeffnen(m.id); });
+    titel.addEventListener("click", ev => {
+      ev.stopPropagation();
+      /* a direct entry: the title IS the button */
+      if (m.direkt){ menueSchliessen(); const b = document.getElementById(m.knoepfe[0]); if (b) b.click(); return; }
+      menueOeffnen(m.id);
+    });
     /* Steht ein ANDERES Menue offen, folgt das Zeigen dem Finger - wie
        gewohnt. Das eigene aber nicht anfassen: menueOeffnen ist ein
        Umschalter, und beim eigenen Titel hiesse Zeigen dann Zumachen.
@@ -30021,7 +30027,7 @@ function menueBauen(){
        es sofort wieder auf. Fuer den Benutzer sah es aus, als tue der Knopf
        beim zweiten Mal nichts. */
     titel.addEventListener("mouseenter", () => {
-      if (menuOffen && menuOffen !== m.id) menueOeffnen(m.id);
+      if (menuOffen && menuOffen !== m.id){ if (m.direkt) menueSchliessen(); else menueOeffnen(m.id); }
     });
   }
   /* Ein Klick auf einen Eintrag macht das Menue zu; der Eintrag selbst hat
@@ -35045,7 +35051,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 3815702817</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 5d6c869c36</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -35187,7 +35193,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "3815702817";
+const BAU = "5d6c869c36";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
