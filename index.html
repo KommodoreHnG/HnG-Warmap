@@ -884,13 +884,22 @@ body.kb-zieht{user-select:none}
 /* the sheet */
 .kb-blatt{background:#e9dfc6;color:#2b2416;border-radius:2px;padding:14px 18px 18px;
   box-shadow:0 8px 30px rgba(0,0,0,.5), inset 0 0 0 1px #d7ccb0;
-  background-image:repeating-linear-gradient(180deg, transparent 0 27px, rgba(80,60,30,.13) 27px 28px);
   font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive;font-size:15px;line-height:28px}
-.kb-blatt .kb-titel{font-family:var(--schmal);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
-  color:#7a6a48;border-bottom:1px solid #b9ab8a;margin-bottom:6px}
-.kb-z{display:grid;grid-template-columns:22px 34px 52px 1.05fr 1.75fr 1.2fr 1.45fr 56px 62px 64px;gap:8px;align-items:center;
+.kb-blatt .kb-titel{font-family:var(--schmal);font-size:13px;letter-spacing:.14em;text-transform:uppercase;
+  color:#7a6a48;border-bottom:1px solid #b9ab8a;margin-bottom:8px}
+/* THE RULING BELONGS TO THE ROWS. It sat on the paper, every 28 points
+   from the top edge, while a captured row was 59 points (two strengths
+   wrapping), an empty one 34, and the head above the rows as tall as its
+   text - so the lines drifted through the rows. Now the rows' own block
+   carries the ruling at its own pitch, and every row is exactly one
+   ruling tall: the dotted edge under a row and the line on the paper are
+   the same line. */
+.kb-zeilen{background-image:repeating-linear-gradient(180deg, transparent 0 35px, rgba(80,60,30,.22) 35px 36px);min-height:108px}
+.kb-zeilen:empty{min-height:0}
+.kb-z{display:grid;grid-template-columns:26px 38px 52px 1fr 1.5fr 1.2fr 1.6fr 56px 66px 124px;gap:8px;align-items:center;
   border-bottom:1px dotted rgba(90,70,40,.25);scroll-margin-block:160px 36px}
-.kb-z.kopfz{font-family:var(--schmal);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#7a6a48;
+.kb-zeilen .kb-z{height:36px;box-sizing:border-box;overflow:hidden}
+.kb-z.kopfz{font-family:var(--schmal);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#7a6a48;
   border-bottom:1px solid #b9ab8a}
 .kb-z.vermutet{color:#8f7f5e}
 .kb-z.eigen{color:#a08c5a;text-decoration:line-through}
@@ -903,7 +912,7 @@ body.kb-zieht{user-select:none}
   align-items:center;justify-content:center;font-weight:700;color:#7a6a48;background:#f6efdc}
 .kb-z .sym.us{border-color:#2fa458}.kb-z .sym.ge{border-color:#6f5fd6}.kb-z .sym.su{border-color:#c33a30}.kb-z .sym.eigen{border-color:#c8942a}
 .kb-z .sym canvas{width:36px;height:25px}
-.kb-z .f.hp{white-space:normal;display:flex;flex-wrap:wrap;gap:2px 10px;align-items:center}
+.kb-z .f.hp{white-space:nowrap;display:flex;flex-wrap:nowrap;gap:2px 10px;align-items:center;overflow:hidden}
 .kb-z .hpg{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
 .kb-raute{width:15px;height:15px;flex:none;stroke:#5c5137;fill:none;stroke-width:calc(var(--ico-strich)*24/15);
   stroke-linecap:round;stroke-linejoin:round}
@@ -930,25 +939,25 @@ body.kb-zieht{user-select:none}
   cursor:pointer;font-size:12px;line-height:1;padding:1px 5px;border-radius:3px}
 .kb-aehnlich:hover{background:#e2d4b0;border-color:#8a7a56}
 .kb-fest{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;
-  font-size:13px;line-height:1;padding:3px 6px;border-radius:3px;
+  font-size:14px;line-height:1;padding:3px 6px;border-radius:3px;
   box-shadow:0 1px 0 rgba(80,60,30,.18)}
 .kb-fest:hover{background:#e2d4b0;border-color:#8a7a56}
 .kb-fest.zu{background:#4a6b3a;border-color:#3a5530;color:#f2f6ee;
   box-shadow:0 0 0 1px rgba(74,107,58,.35)}
 .kb-fest.warnt{background:#f0b13a;border-color:#b3801f;color:#241d16}
-.kb-fest small{font:700 8px/1 var(--schmal);margin-left:2px}
+.kb-fest small{font:700 9px/1 var(--schmal);margin-left:2px}
 .kb-fest.vorgabe{opacity:.75}
-.kb-neu{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:2px 5px;border-radius:3px;margin-right:3px}
+.kb-neu{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;font-size:14px;line-height:1;padding:3px 6px;border-radius:3px;margin-right:3px}
 .kb-neu.an{background:#f0b13a;border-color:#b3801f;color:#241d16}
-.kb-haken{background:transparent;border:0;padding:0;color:#7a6a48;font-size:15px;line-height:1;cursor:pointer}
+.kb-haken{background:transparent;border:0;padding:0;color:#7a6a48;font-size:18px;line-height:1;cursor:pointer}
 .kb-haken.an{color:#2b2416}
 .kb-z.haken{background:rgba(226,172,72,.18)}
 .kb-blatt .kb-z{user-select:none}
-.kb-schreibrecht{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-family:var(--schmal);font-size:11px;letter-spacing:.06em;color:#7a6a48;margin:0 0 6px}
-.kb-recht{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:3px 7px;border-radius:3px}
+.kb-schreibrecht{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-family:var(--schmal);font-size:14px;letter-spacing:.05em;color:#7a6a48;margin:0 0 8px}
+.kb-recht{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:5px 11px;border-radius:3px}
 .kb-recht.an{background:#4a6b3a;border-color:#3a5530;color:#f2f6ee}
-.kb-recht-hinweis{flex-basis:100%;letter-spacing:0;color:#8a7a58;font-size:10px}
-.kb-sichtbar,.kb-typen-neu{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:3px 7px;border-radius:3px;margin-right:10px}
+.kb-recht-hinweis{flex-basis:100%;letter-spacing:0;color:#8a7a58;font-size:12px;line-height:1.45;margin-top:2px}
+.kb-sichtbar,.kb-typen-neu{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:5px 11px;border-radius:3px;margin-right:10px}
 .kb-nr{display:flex;align-items:center;gap:4px}
 .kb-riegel{display:inline-block;width:5px;height:18px;border-radius:2px;cursor:pointer;flex:none}
 .kb-riegel.r0{background:#4a6b3a}.kb-riegel.r1{background:#b3801f}.kb-riegel.r2{background:#3a5a8a}.kb-riegel.r3{background:#8a3a4a}
@@ -15611,7 +15620,7 @@ function kbZeichnen(){
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Town ?"}${KB.linie ? ` · attack line ${kbEsc(KB.linie)}` : ""} · ${new Date().toLocaleDateString()}</div>
     <div class="kb-schreibrecht"><button class="kb-sichtbar" title="Tick every line that stands in the part of the bar you see right now — then one lock click locks them all">\u2610 visible part</button><button class="kb-typen-neu" title="Read the types of the visible lines afresh — all whose type is not locked">\u21bb types</button><span>New readings may write:</span><button class="kb-recht ${kbSchreibrecht.typ ? "an" : ""}" data-was="typ" title="Whether a reading may set the type of a line whose lock nobody has set by hand">${kbSchreibrecht.typ ? "\u2611" : "\u2610"} type</button><button class="kb-recht ${kbSchreibrecht.name ? "an" : ""}" data-was="name" title="Whether a reading may write name and owner of a line whose lock nobody has set by hand">${kbSchreibrecht.name ? "\u2611" : "\u2610"} name &amp; owner</button><span class="kb-recht-hinweis">Tick lines with the box, Shift+click for a range, Ctrl+click for single ones — a lock click on a ticked line locks all ticked lines, and "Keep the sheet" keeps only the ticked ones while any are ticked.</span></div>
     <div class="kb-z kopfz"><div></div><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Side</div><div>Script</div><div></div></div>
-    ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${kbFestHand(z) ? "fest" : ""} ${z.haken ? "haken" : ""} ${z.unsicher ? "unsicher" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}">
+    <div class="kb-zeilen">${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${kbFestHand(z) ? "fest" : ""} ${z.haken ? "haken" : ""} ${z.unsicher ? "unsicher" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}">
       <div><button class="kb-haken ${z.haken ? "an" : ""}" data-i="${z.i}" title="Select this line — Shift+click a range, Ctrl+click adds or removes one">${z.haken ? "\u2611" : "\u2610"}</button></div>
       <div class="kb-nr">${z.riegel !== null && z.riegel !== undefined ? (() => { const nr = riegelListe.indexOf(z.riegel); return `<span class="kb-riegel r${nr % 4}" data-r="${z.riegel}" title="Screen section ${nr + 1} (from card ${z.riegel + 1}) — click to tick all of it"></span>`; })() : ""}${z.i + 1}</div>
       <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set"}">${z.typ ? "" : "?"}</span></div>
@@ -15656,7 +15665,7 @@ function kbZeichnen(){
         kbFestName(z) ? "Name and owner locked — a reading will not change them. Click to open." : "Name and owner open — click to lock them against readings"
       }${z.festName === null ? " (follows the default above)" : ""}">${kbFestName(z) ? "🔒" : "🔓"}<small>N</small></button>${
         z.gespeichert ? `<span title="recorded" style="color:#4f7a3a">✓</span>` : `<button class="weg" data-i="${z.i}" title="remove this line">×</button>`}</div>
-    </div>`).join("")}
+    </div>`).join("")}</div>
     ${KB.N ? "" : `<div class="kb-hinweis">Nothing on the sheet yet.</div>`}
     ${(() => {
       /* WHAT TO DO ABOUT THE RED LINES, said once and plainly. Panning or
@@ -34867,7 +34876,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build ba6938196d</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 030d6b402f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -35009,7 +35018,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "ba6938196d";
+const BAU = "030d6b402f";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
