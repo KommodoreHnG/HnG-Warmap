@@ -904,7 +904,7 @@ body.kb-zieht{user-select:none}
    the same line. */
 .kb-zeilen{background-image:repeating-linear-gradient(180deg, transparent 0 35px, rgba(80,60,30,.22) 35px 36px);min-height:108px}
 .kb-zeilen:empty{min-height:0}
-.kb-z{display:grid;grid-template-columns:26px 38px 52px minmax(70px,.9fr) 1.3fr minmax(160px,1.4fr) minmax(125px,1.3fr) 44px 40px 150px;gap:8px;align-items:center;
+.kb-z{display:grid;grid-template-columns:26px 38px 52px minmax(70px,.9fr) 1.3fr minmax(160px,1.4fr) minmax(125px,1.3fr) 40px 150px;gap:8px;align-items:center;
   border-bottom:1px dotted rgba(90,70,40,.25);scroll-margin-block:160px 36px}
 .kb-zeilen .kb-z{height:36px;box-sizing:border-box;overflow:hidden}
 .kb-z.kopfz{font-family:var(--schmal);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#7a6a48;
@@ -15503,7 +15503,11 @@ function kbTastenSchritt(e){
     KB.handAn = false; KB.handWahl = null; kbZeichnen(); e.preventDefault();
   }
 }
-document.addEventListener("keydown", kbTastenSchritt);
+/* NOT LISTENING. The Kommodore: the arrow keys get in the way more than
+   they help - the frame is moved by the mouse alone (drag, click a card,
+   double-click hands it back to the game). kbTastenSchritt stays in the
+   source, unregistered. */
+/* document.addEventListener("keydown", kbTastenSchritt); */
 
 /* ---- drawing ----------------------------------------------------------- */
 function kbZeichnen(){
@@ -15717,7 +15721,7 @@ function kbZeichnen(){
       if (b) b.onclick = () => { KB.handAn = false; KB.handWahl = null; kbZeichnen(); };
     } else {
       schiene.className = "kb-schiene";
-      schiene.innerHTML = KB.N ? "Drag the frame along the strip, click a card, or step with <b>\u2190</b> <b>\u2192</b> \u2014 <b>Esc</b> hands it back to the game." : "";
+      schiene.innerHTML = KB.N ? "Drag the frame along the strip or click a card \u2014 a double-click hands it back to the game." : "";
     }
   }
   /* keep the filling going while a unit is being read */
@@ -15752,12 +15756,13 @@ function kbZeichnen(){
         return `<button class="kb-recht ${zu ? "an" : ""}" data-was="${was}" ${n ? "" : "disabled"} title="${titel}">${zu ? "\u{1F513} open" : "\u{1F512} lock"} ${text}</button>`;
       };
       return `<span>Selection${n ? ` (${n})` : ""}:</span>${knopf("typ", "type")}${knopf("name", "name &amp; owner")}`;
-    })()}<span class="kb-recht-hinweis">Tick lines with the box, Shift+click for a range, Ctrl+click for single ones — a lock click on a ticked line locks all ticked lines, and "Keep the sheet" keeps only the ticked ones while any are ticked.</span></div>
-    <div class="kb-z kopfz"><div></div><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Side</div><div>Script</div><div></div></div>
+    })()}<span class="kb-recht-hinweis">Tick lines with the box, Shift+click for a range, Ctrl+click for single ones — a lock click on a ticked line locks all ticked lines, and "Keep the sheet" keeps only the ticked ones while any are ticked.${
+      riegelListe.length > 1 ? " The coloured bars at the line numbers mark screen sections — the lines taken in one view of the bar; click a bar to tick its whole section." : ""}</span></div>
+    <div class="kb-z kopfz"><div></div><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Script</div><div></div></div>
     <div class="kb-zeilen">${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${kbFestHand(z) ? "fest" : ""} ${z.haken ? "haken" : ""} ${z.unsicher ? "unsicher" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}">
       <div><button class="kb-haken ${z.haken ? "an" : ""}" data-i="${z.i}" title="Select this line — Shift+click a range, Ctrl+click adds or removes one">${z.haken ? "\u2611" : "\u2610"}</button></div>
-      <div class="kb-nr">${z.riegel !== null && z.riegel !== undefined ? (() => { const nr = riegelListe.indexOf(z.riegel); return `<span class="kb-riegel r${nr % 4}" data-r="${z.riegel}" title="Screen section ${nr + 1} (from card ${z.riegel + 1}) — click to tick all of it"></span>`; })() : ""}${z.i + 1}</div>
-      <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set"}">${z.typ ? "" : "?"}</span></div>
+      <div class="kb-nr">${riegelListe.length > 1 && z.riegel !== null && z.riegel !== undefined ? (() => { const nr = riegelListe.indexOf(z.riegel); return `<span class="kb-riegel r${nr % 4}" data-r="${z.riegel}" title="Screen section ${nr + 1} (from card ${z.riegel + 1}) — click to tick all of it"></span>`; })() : ""}${z.i + 1}</div>
+      <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${(z.eigen ? "own unit" : kbSeiteName(z.seite)) + " · " + (z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set")}">${z.typ ? "" : "?"}</span></div>
       <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${
         z.status === "erfasst" ? zeig(z, "tag", z.tag) + (z.zwilling ? " ²" : "") : "<i>?</i>"}</div>
       <div class="f nam ${(z.name || "").length > 16 ? "lang" : ""}" data-f="name" title="${
@@ -15772,7 +15777,6 @@ function kbZeichnen(){
       <div class="f hp" data-f="hp" title="click to correct">${z.status !== "erfasst" ? ""
         : (KB.schreibt && KB.schreibt.i === z.i) ? zeig(z, "hp", (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  "))
         : kbStaerkeHTML(z)}</div>
-      <div class="f" data-f="seite" title="click to change">${z.eigen ? "own" : kbSeiteName(z.seite)}</div>
       <div class="f" data-f="schrift" title="${z.schriftHand ? `Script hint set by hand: ${kbEsc(kbSchriftName(z.schriftHand))} — the reader tries this model first when it is unsure` : "click to set a script hint for unsure readings"}" style="${z.schriftHand ? "color:#1a3a8a" : ""}">${z.schriftHand ? kbSchriftKurz(z.schriftHand) : ""}</div>
       <div class="kb-schluss">${
         /* WHAT THE CLAN'S BOOK SAYS, at the end of the line where the other
@@ -35061,7 +35065,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build a70420a127</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 308df42f5f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -35203,7 +35207,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "a70420a127";
+const BAU = "308df42f5f";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
