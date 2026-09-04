@@ -938,6 +938,8 @@ body.kb-zieht{user-select:none}
 .kb-fest.warnt{background:#f0b13a;border-color:#b3801f;color:#241d16}
 .kb-fest small{font:700 8px/1 var(--schmal);margin-left:2px}
 .kb-fest.vorgabe{opacity:.75}
+.kb-neu{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:2px 5px;border-radius:3px;margin-right:3px}
+.kb-neu.an{background:#f0b13a;border-color:#b3801f;color:#241d16}
 .kb-haken{background:transparent;border:0;padding:0;color:#7a6a48;font-size:15px;line-height:1;cursor:pointer}
 .kb-haken.an{color:#2b2416}
 .kb-z.haken{background:rgba(226,172,72,.18)}
@@ -8887,12 +8889,20 @@ async function bildVideoHolen(){
    picture is shown (requestVideoFrameCallback); the count and the time of
    the last one are kept here. A room that ticks faster than the share
    delivers asks bildNeu whether there is anything new to look at. */
-let bildNr = 0, bildNrZeit = 0;
+let bildNr = 0, bildNrZeit = 0, bildTakte = [];
+/* pictures per second, over the last two seconds - the number behind
+   "how fast may I click": every unit needs two of them */
+function bildRate(){
+  const t = performance.now();
+  while (bildTakte.length && t - bildTakte[0] > 2000) bildTakte.shift();
+  return bildTakte.length / 2;
+}
 function bildBilderZaehlen(v){
   if (!v.requestVideoFrameCallback) return;
   const weiter = () => {
     if (bildVideo !== v) return;           /* replaced or ended - this count is over */
     bildNr++; bildNrZeit = performance.now();
+    bildTakte.push(bildNrZeit); if (bildTakte.length > 400) bildTakte.splice(0, 200);
     v.requestVideoFrameCallback(weiter);
   };
   v.requestVideoFrameCallback(weiter);
@@ -13661,7 +13671,7 @@ function kbOrtSetzen(i, linie){
     KB.zeilen = []; KB.N = 0; KB.erste = 0; KB.sichtbar = 0; KB.karten = []; KB.reiheKennung = null; KB.reiheAlt = null;
     KB.auswahl = null; KB.wandel = null; KB.nRing = null; KB.nSchaetzung = null; KB.hatteBahn = false; KB.hakenAnker = null; KB.gerollt = null; KB.reiheSeite = null;
     KB.handAn = false; KB.handWahl = null; KB.handZieht = false;
-    kbSchlangeLeeren(); KB.kastenLetzte = null; KB.gesamt = null;
+    kbSchlangeLeeren(); KB.kastenLetzte = null; KB.kastenRuhe = null; KB.gesamt = null;
     KB.letzte = null; KB.vorige = null; KB.schreibt = null;
     if (offen) toast(`${offen} unit${offen === 1 ? "" : "s"} kept — new sheet for ${MAP.n[i][0]}`);
   }
@@ -13787,7 +13797,7 @@ function kbNeu(){
           auswahl: null, hakenAnker: null, wandel: null, gemeldet: null, scan: false, reiheKennung: null,
           handAn: false, handWahl: null, handZieht: false, ortKennung: null, blick: 0, ortLaeuft: false, ortHand: false,
           fehlschlaege: 0, letzterFehler: null,
-          warte: [], werkt: false, arbeit: null, kastenLetzte: null, dauerMittel: 850,
+          warte: [], werkt: false, arbeit: null, kastenLetzte: null, kastenRuhe: null, dauerMittel: 850,
           reiheAlt: null,
           gesamt: null,
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null, gerollt: null};
@@ -13885,7 +13895,7 @@ function kbFenster(R){
   }
   return {N: n, erste: 0, sichtbar: n};
 }
-function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, festTyp: null, festName: null, haken: false, riegel: null, schriftHand: null, abweichung: null, unsicher: false, kandidat: null, unsicherGrund: null}; }
+function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, festTyp: null, festName: null, haken: false, riegel: null, schriftHand: null, abweichung: null, unsicher: false, kandidat: null, unsicherGrund: null, neuLesen: null}; }
 /* A LOCKED LINE IS NOT TOUCHED. Not by a reading, not by a move, not by
    clearing, not by the tidying up of a bar that has grown shorter. What
    the tool reads differently it only reports: the line gets a note, the
@@ -13901,6 +13911,41 @@ const kbFestTyp  = z => !!z && (z.festTyp  === null || z.festTyp  === undefined 
 const kbFestName = z => !!z && (z.festName === null || z.festName === undefined ? !kbSchreibrecht.name : !!z.festName);
 const kbFest     = z => kbFestTyp(z) || kbFestName(z);
 const kbFestHand = z => !!z && (z.festTyp === true || z.festName === true);
+/* READ AFRESH, ON ORDER. The Kommodore: "eine Option, den Namen einer
+   Zeile nochmal neu zu lesen bzw. das zu erzwingen". The next picture of
+   this unit overwrites name and owner, whatever stands on the line: past
+   the doorman's "already holds", without the "weaker reading" rule, with a
+   usable reading. A name lock is opened for it and put back as it was
+   once the line is written. If the unit stands in the box right now, the
+   box is offered again at once. A second click takes the order back. On a
+   ticked line the click acts on every ticked line. */
+function kbNeuLesen(i){
+  const z = KB && KB.zeilen[i];
+  if (!z) return;
+  const ziele = z.haken ? KB.zeilen.filter(u => u.haken) : [z];
+  const zurueck = !!z.neuLesen && ziele.every(u => u.neuLesen);
+  for (const u of ziele){
+    if (zurueck){ kbNeuLesenErledigt(u); continue; }
+    if (u.neuLesen) continue;
+    u.neuLesen = {vorher: u.festName};
+    u.nameZuv = 0; u.kandidat = null; u.unsicher = false; u.unsicherGrund = null; u.abweichung = null;
+    if (kbFestName(u)) u.festName = false;
+  }
+  if (z.haken){ for (const u of KB.zeilen) u.haken = false; KB.hakenAnker = null; }
+  const wahl = kbWahl();
+  if (!zurueck && wahl !== null && wahl !== undefined && ziele.some(u => u.i === wahl)){
+    KB.kastenLetzte = null; KB.kastenAbgelehnt = null; KB.kastenRuhe = null;
+  }
+  KB.status = zurueck
+    ? (ziele.length === 1 ? `Line ${z.i + 1} keeps what it has.` : `${ziele.length} lines keep what they have.`)
+    : (ziele.length === 1 ? `Line ${z.i + 1} will be read afresh — click its unit in the game.` : `${ziele.length} lines will be read afresh — click their units in the game.`);
+  kbZeichnen();
+}
+function kbNeuLesenErledigt(z){
+  if (!z || !z.neuLesen) return;
+  if (z.neuLesen.vorher !== undefined) z.festName = z.neuLesen.vorher;
+  z.neuLesen = null;
+}
 function kbFrieren(i, was, an){
   const z = KB && KB.zeilen[i];
   if (!z) return;
@@ -14068,10 +14113,24 @@ const kbTagDa = t => /[0-9]/.test(String(t || "")) && String(t).trim().length >=
    other line for its own old place and emptied it. Two known owners must
    match; an unknown owner on either side decides nothing, as before. */
 const kbBesitzerPasst = (a, b) => { const A = namKey(String(a || "")), B = namKey(String(b || "")); return !A || !B || A === B; };
+const kbBesitzerBeide = (a, b) => !!namKey(String(a || "")) && !!namKey(String(b || ""));
+/* THE COMPOSITION IS THE SECOND WITNESS. The maxima under the diamonds -
+   90 and 30 against 90 alone - belong to the unit, not to the reading.
+   Same tag, same owner and another composition is another unit (or a
+   reading off a box that was still changing). Unknown values decide
+   nothing, as an unknown owner does. */
+function kbBauGleich(a, b){
+  if (!a || !b || !a.length || !b.length) return true;
+  const ma = a.map(h => h ? +h[1] : null).filter(v => v !== null && !isNaN(v));
+  const mb = b.map(h => h ? +h[1] : null).filter(v => v !== null && !isNaN(v));
+  if (!ma.length || !mb.length) return true;
+  if (ma.length !== mb.length) return false;
+  return ma.every((v, i) => v === mb[i]);
+}
 function kbSchonDa(e){
   return KB.zeilen.find(u => {
     if (u.status !== "erfasst") return false;
-    if (kbTagDa(u.tag) && kbTagDa(e.tag)) return namKey(u.tag) === namKey(e.tag) && kbBesitzerPasst(u.besitzer, e.besitzer);
+    if (kbTagDa(u.tag) && kbTagDa(e.tag)) return namKey(u.tag) === namKey(e.tag) && kbBesitzerPasst(u.besitzer, e.besitzer) && kbBauGleich(u.hp, e.hp);
     return u.tag === e.tag && u.name === e.name && u.besitzer === e.besitzer;
   });
 }
@@ -14079,8 +14138,8 @@ function kbSchonDa(e){
    card in the bar and not from the reading. */
 function kbZeileLeeren(z){
   Object.assign(z, {status: "vermutet", tag: "", name: "", besitzer: "", hp: null,
-                    unsicher: false, kandidat: null, unsicherGrund: null,
-                    nameZuv: 0, zwilling: null, gespeichert: false, schriftHand: null});
+                    unsicher: false, kandidat: null, unsicherGrund: null, abweichung: null, bekannt: null,
+                    nameZuv: 0, zwilling: null, gespeichert: false, schriftHand: null, neuLesen: null});
 }
 
 /* ---- IS THIS READING GOOD ENOUGH TO BE WRITTEN DOWN? -------------------
@@ -14134,6 +14193,8 @@ function kbGuteLesung(z, e){
     return {schreiben: false, kandidat: k,
             grund: `Line ${z.i + 1} keeps its name — the new reading is weaker (${zuv} against ${Math.round(z.nameZuv)}).`};
   if (zuv >= KB_GUT) return {schreiben: true};
+  /* ordered afresh: a usable reading is taken, the line is meant to change */
+  if (z.neuLesen && zuv >= KB_BRAUCHBAR) return {schreiben: true, schwach: true};
   if (k.n >= 2) return {schreiben: true};
   if (z.status !== "erfasst" && zuv >= KB_BRAUCHBAR) return {schreiben: true, schwach: true};
   return {schreiben: false, kandidat: k,
@@ -14170,7 +14231,7 @@ function kbTuersteher(e, ziel, ohneLeiste){
      Only the hand may do that, by setting the frame itself - and the case
      without a bar, where the line was found by the tag and is therefore
      the right one by construction. */
-  if (z.status === "erfasst" && !KB.handAn && !ohneLeiste){
+  if (z.status === "erfasst" && !KB.handAn && !ohneLeiste && !z.neuLesen){
     const gleich = (kbTagDa(z.tag) && tagDa) ? (namKey(z.tag) === namKey(e.tag) && kbBesitzerPasst(z.besitzer, e.besitzer))
                  : namKey(z.name || "") === namKey(e.name || "");
     if (!gleich)
@@ -14420,7 +14481,9 @@ function kbVerarbeiten(R, vorgabe){
          written over. So a second click on a unit corrects any misreading,
          and nothing has to be typed by hand. */
       const zwilling = null;
-      if (da && da.i !== kand && !kbFestName(da)){ kbZeileLeeren(da); KB.status = `${e.tag || e.name} moved from line ${da.i + 1}.`; }
+      /* the move itself waits until the reading has passed every gate -
+         see below, after the quality check */
+      const umzug = !!(da && da.i !== kand && !kbFestName(da) && kbBesitzerBeide(da.besitzer, e.besitzer));
       const i = kand;
       const z = KB.zeilen[i];
       const tuer = kbTuersteher(e, i, vorgabe === KB_OHNE_LEISTE);
@@ -14452,6 +14515,7 @@ function kbVerarbeiten(R, vorgabe){
       if (kbGleicheLesung(z, e)){
         z.nameZuv = Math.max(+z.nameZuv || 0, +e.nameZuv || 0);
         z.unsicher = false; z.kandidat = null; z.unsicherGrund = null;
+        kbNeuLesenErledigt(z);
         if (!z.typ && !kbFestTyp(z)){ const k2 = R.karten[i - KB.erste]; const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
         if (!z.typ && !kbFestTyp(z)){ const kand = kbTypKandidaten(e.hp); if (kand.length === 1) z.typ = kand[0]; }
         if ((z.seite === null || z.seite === undefined) && e.seite !== null && e.seite !== undefined) z.seite = e.seite;
@@ -14472,6 +14536,13 @@ function kbVerarbeiten(R, vorgabe){
         return;
       }
       z.unsicher = false; z.kandidat = null; z.unsicherGrund = null;
+      /* THE SAME UNIT MOVES, IT DOES NOT DOUBLE - but only a reading that
+         is really written may take it from its old place. It used to be
+         cleared before the doorman had seen the reading, and a reading he
+         then refused had already emptied the other line: the unit stood
+         nowhere. And the move wants two known owners; an unknown one is
+         no witness for taking a line away. */
+      if (umzug){ kbZeileLeeren(da); KB.status = `${e.tag || e.name} moved from line ${da.i + 1}.`; }
       if (!z.typ && !kbFestTyp(z)){ const k2 = R.karten[i - KB.erste]; const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
       /* The composition is a second witness: the strength diamonds carry
          the crew maxima, and those fit exactly one type often enough. It
@@ -14494,6 +14565,7 @@ function kbVerarbeiten(R, vorgabe){
                                               : (KB.reiheSeite !== null && KB.reiheSeite !== undefined ? KB.reiheSeite : null)),
                         zwilling: zwilling ? da.i + 1 : null});
       if (z.riegel === null || z.riegel === undefined) z.riegel = KB.erste;
+      kbNeuLesenErledigt(z);
       /* what the clan already knows about this one - looked up once, when
          the line is written, not on every draw */
       kbBekanntSetzen(z);
@@ -14983,6 +15055,18 @@ let kbArbeitC = null, kbArbeitG = null;
    column, at most across one edge; a different name changes the numbers
    in many columns. Same means: no column more than 4 apart, and in sum no
    more than a tenth of the dark samples, eight at the least. */
+/* THE BOX MUST STAND STILL FIRST. Measured on Durchschalten.mkv frame by
+   frame (60 fps): after a click the game redraws name and strengths in
+   ONE frame and the owner line THREE frames later (167->170, 233->236,
+   263->266, 411->414 ... - 50 ms). A picture taken inside those 50 ms
+   carries the new name with the OLD owner; same tag and same owner then
+   read as the same unit, "moved from line 22", line 22 emptied - and the
+   correct picture that followed was refused as another unit. So a new
+   box is only taken once its print (name AND owner line) has been the
+   same in two looks at least 200 ms apart. Measured in the probe with the
+   video frames 40 ms apart (a 25 fps game): 100 ms still took the stale
+   picture, 200 ms did not. About a quarter of a second per unit. */
+const KB_KASTEN_RUHE = 200, KB_KASTEN_RUHE_MAX = 1500;
 const KB_KASTEN_SPALTE = 27, KB_KASTEN_DUNKEL = 90;
 const KB_KASTEN_JE_SPALTE = 4, KB_KASTEN_ANTEIL = 0.1, KB_KASTEN_MINDEST = 8;
 function kbKastenKennung(d, oben, form){
@@ -15337,7 +15421,7 @@ function kbZeichnen(){
         <div class="v">${w ? `${w}<small> waiting</small>` : "<small>clear</small>"}</div>
         ${w ? `<div class="kb-scan"><i></i></div>` : `<div class="bar"></div>`}</div>`; })()}
     <div class="rd-kf ${KB.scan ? "scannt" : ""}"><div class="t">${KB.scan ? "Reading" : "Capture"}</div>
-      <div class="v"><small>${KB.frame ? `${KB.frame.w}×${KB.frame.h}, brightness ${KB.hell}${KB.gain > 1 ? `, ×${KB.gain.toFixed(1)}` : ""}` : "—"}</small></div>
+      <div class="v"><small>${KB.frame ? `${KB.frame.w}×${KB.frame.h}, brightness ${KB.hell}, ${bildRate().toFixed(0)} pictures/s${KB.gain > 1 ? `, ×${KB.gain.toFixed(1)}` : ""}` : "—"}</small></div>
       ${KB.scan ? `<div class="kb-scan"><i></i></div>` : `<div class="bar"></div>`}</div>`;
   /* LEFT: BUILT ONCE, THEN ONLY WHAT CHANGES. The whole wall used to be
      written afresh out of one string on every look - fourteen times a
@@ -15563,7 +15647,10 @@ function kbZeichnen(){
         z.bekannt && z.bekannt.stand === "aehnlich"
           ? `<button class="kb-aehnlich" data-i="${z.i}" title="The book has &quot;${kbEsc(z.bekannt.e.tag || z.bekannt.e.name)}&quot; (${kbEsc(z.bekannt.warum)}) — ${kbEsc(kbBekanntText(z.bekannt))}. Click to take that over.">\u2248</button>` : ""}${
         z.abweichung ? `<button class="kb-nehmen" data-i="${z.i}" title="Read as &quot;${kbEsc(z.abweichung.tag)} ${kbEsc(z.abweichung.name)} — ${kbEsc(z.abweichung.besitzer)}&quot; — click to take that over">!</button>` : ""
-      }<button class="kb-fest typ ${kbFestTyp(z) ? "zu" : ""} ${z.festTyp === null ? "vorgabe" : ""}" data-i="${z.i}" data-was="typ" title="${
+      }<button class="kb-neu ${z.neuLesen ? "an" : ""}" data-i="${z.i}" title="${
+        z.neuLesen ? "Waiting for a fresh picture of this unit — click it in the game. Click again to take the order back."
+                   : "Read this line afresh: the next picture of its unit overwrites name and owner, whatever stands here"
+      }">\u21bb</button><button class="kb-fest typ ${kbFestTyp(z) ? "zu" : ""} ${z.festTyp === null ? "vorgabe" : ""}" data-i="${z.i}" data-was="typ" title="${
         kbFestTyp(z) ? "Type locked — a reading will not change it. Click to open." : "Type open — click to lock it against readings"
       }${z.festTyp === null ? " (follows the default above)" : ""}">${kbFestTyp(z) ? "🔒" : "🔓"}<small>T</small></button><button class="kb-fest name ${kbFestName(z) ? "zu" : ""} ${z.festName === null ? "vorgabe" : ""} ${z.abweichung ? "warnt" : ""}" data-i="${z.i}" data-was="name" title="${
         kbFestName(z) ? "Name and owner locked — a reading will not change them. Click to open." : "Name and owner open — click to lock them against readings"
@@ -15678,6 +15765,8 @@ function kbBearbeiten(ev){
     return;
   }
   /* the lock, and the note a locked line has collected */
+  const neuLesen = ev.target.closest(".kb-neu");
+  if (neuLesen){ kbNeuLesen(+neuLesen.dataset.i); return; }
   const schloss = ev.target.closest(".kb-fest");
   if (schloss){ kbFrieren(+schloss.dataset.i, schloss.dataset.was); return; }
   const nehmen = ev.target.closest(".kb-nehmen");
@@ -15891,6 +15980,9 @@ async function kbTick(){
        estimate and the sheet disagree and the ring is not yet full, every
        look goes through - at most twenty-five of them, three seconds. */
     const zahlOffen = !!(KB.nSchaetzung && KB.nSchaetzung.n !== KB.N && (KB.nRing || []).length < KB_RING) || !!KB.typenNeu;
+    /* a box sighted once is waiting for its second look - that look must
+       get through, or it would only come with the twentieth */
+    const kastenWartet = !!(KB.kastenRuhe && KB.kastenRuhe.offen && performance.now() - KB.kastenRuhe.seit < KB_KASTEN_RUHE_MAX);
     /* AND THE DOORMAN GUARDS THE START TOO. There used to be "&&
        KB.zeilen.length" here, so that while the sheet was still EMPTY every
        single look read the whole strip and worked out the whole geometry -
@@ -15901,7 +15993,7 @@ async function kbTick(){
        compare against and reports every cell as changed. And when the
        detail list opens, that is a large change in the bar - he fires, the
        look goes through, the sheet comes about. */
-    if (geregt < 3 && KB.wacheZaehler % 20 !== 0 && !zahlOffen){
+    if (geregt < 3 && KB.wacheZaehler % 20 !== 0 && !zahlOffen && !kastenWartet){
       KB.fehlschlaege = 0;
       return;
     }
@@ -15947,11 +16039,20 @@ async function kbTick(){
        look. */
     if (neu && KB.kastenAbgelehnt && kbKastenGleich(kk, KB.kastenAbgelehnt)
         && (KB.blick || 0) - (KB.abgelehntBlick || 0) < 8) neu = false;
+    /* seen once is not enough - the same print again, 200 ms later, and
+       only then is the box taken (the owner line lags the name by three
+       frames - 50 ms at 60 fps, 100 ms at 30) */
+    if (neu){
+      const t = performance.now();
+      if (KB.kastenRuhe && kbKastenGleich(kk, KB.kastenRuhe.kk)){
+        if (t - KB.kastenRuhe.seit < KB_KASTEN_RUHE) neu = false;
+      } else { KB.kastenRuhe = {kk, seit: t, offen: true}; neu = false; }
+    }
     /* what the sign over "Now" reads off: a box that is there but not yet
        taken is the one moment he really has to wait through */
-    KB.kastenOffen = neu;
+    KB.kastenOffen = neu || !!(KB.kastenRuhe && KB.kastenRuhe.offen);
     KB.blick = (KB.blick || 0) + 1;
-    if (!kasten) KB.kastenLetzte = null;
+    if (!kasten){ KB.kastenLetzte = null; KB.kastenRuhe = null; }
     /* THE FOURTH-LOOK REFRESH RUNS ALWAYS, and it must. I once made it
        stop when every line was captured - the Kommodore's own rule, "let
        finished work rest" - and that was the wrong place for it. The
@@ -15975,6 +16076,7 @@ async function kbTick(){
         if (!KB || !KB.live) return;
         if (genommen){ KB.kastenLetzte = kk; KB.kastenAbgelehnt = null; }
         else { KB.kastenAbgelehnt = kk; KB.abgelehntBlick = KB.blick || 0; }
+        if (KB.kastenRuhe) KB.kastenRuhe.offen = false;
       }
     }
     /* THE TOWN RUNS BESIDE THE TICK, NOT INSIDE IT. Measured on the whole
@@ -25707,7 +25809,20 @@ async function ocrText(quelle, psm, melde, weiss){
    man wissen muesste, was dort stehen sollte.
    Nicht "ocrLesen" nennen - so heisst seit langem der Schlachtbildschirm-Leser
    weiter unten, und die spaetere Definition gewinnt. */
+/* ONE READER, ONE AT A TIME. Preparation (page mode, character set) and
+   the reading itself used to be two awaits with a gap between them, and
+   two callers - the town pass with its digits, the box with everything -
+   could cross in that gap: the box was then read with the digit set,
+   fell through, and a foreign model won with nonsense ("빠삐 미버외예 |
+   869117태: 1500", seen in the probe). The chain keeps parameters and
+   picture together. */
+let ocrKette = Promise.resolve();
 async function ocrMitZuv(quelle, psm, melde, weiss){
+  const arbeit = ocrKette.then(() => ocrMitZuvEinzeln(quelle, psm, melde, weiss));
+  ocrKette = arbeit.catch(() => {});
+  return arbeit;
+}
+async function ocrMitZuvEinzeln(quelle, psm, melde, weiss){
   await ocrBereit(psm, weiss, melde);
   const r = await ocrWorker.recognize(quelle);
   const d = (r && r.data) || {};
@@ -34752,7 +34867,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 86c2286c89</span></p></div>
+         installation. <span style="color:var(--dim2)">· build ba6938196d</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34894,7 +35009,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "86c2286c89";
+const BAU = "ba6938196d";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
