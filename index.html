@@ -12962,6 +12962,22 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
     const wahlProbe = unitsAuswahl(R.karten.map(x => x.teil ? 9 : x.q));
     R.wahlKnapp = wahlProbe;
     R.auswahl = (wahlProbe && wahlProbe.sicher) ? wahlProbe.i : null;
+    /* THE PICKED CARD IS LOOKED AT AFRESH. The memo serves the row so the
+       machine stays quiet; the card the Kommodore has clicked is the one
+       he is looking at, and its sign is matched anew on every look - not
+       remembered - so a correction can come from it (kbVerarbeiten lets
+       only this card overwrite a standing type). */
+    if (R.auswahl !== null && R.auswahl !== undefined){
+      const kw = R.karten[R.auswahl];
+      if (kw && !kw.teil && !unitsTypGesperrt(kw.x0)){
+        const t = unitsTypVon(c, kw.x0, rimOben);
+        if (t){
+          Object.assign(kw, {typ: t.sicher ? t.typ : null, typKorr: t.korr, typAbstand: t.abstand,
+                             typListe: t.liste, typSchwelle: t.schwelle, frisch: true});
+          unitsTypAlt[(kw.x0 + 9) + ":" + unitsZeichenPrint(d, kw.x0, rimOben)] = t;
+        }
+      }
+    }
     const fy = R.karten.length ? k.fy : reihe.y - 5;      /* rim top, 1830 in the usual bar */
     R.node = unitsNode(d, fy + 5);
     /* A bar is open when the card runs stand in the 105 grid (at least one
@@ -14074,7 +14090,17 @@ function kbVerarbeiten(R, vorgabe){
     kbZeichnen(); return;
   }
   if (R.leiste){
-    if (R.stadt){ kbOrtSetzen(R.stadt.i, R.linie || null); }
+    /* A CHANGE OF TOWN NEEDS A SURE READING. The town pass hands the
+       nearest town to whatever it read, sure or not; taken as a change,
+       an unsure one empties the sheet - "Ratne" stood over Schwaebisch
+       Hall and twenty-one captured lines were gone. The first town of a
+       sheet may still be unsure, nothing is lost there and it shows in
+       the head; a DIFFERENT town only with a sure reading. */
+    if (R.stadt){
+      const steht = KB.ort !== null && KB.ort !== undefined;
+      if (!steht || R.stadt.i === KB.ort || R.stadt.sicher) kbOrtSetzen(R.stadt.i, R.linie || null);
+      else KB.status = `Town read as ${MAP.n[R.stadt.i] ? MAP.n[R.stadt.i][0] : "?"} - unsure, staying with ${MAP.n[KB.ort] ? MAP.n[KB.ort][0] : "the sheet's town"}.`;
+    }
     else if (KB.merk && KB.ort === null){ kbOrtSetzen(KB.merk.stadt, KB.merk.linie); }
     KB.halter = R.seite;
     /* a frame without the thumb (it blinks too) must not turn a scrolled
@@ -14152,14 +14178,26 @@ function kbVerarbeiten(R, vorgabe){
       kbRautenOrdnen();
     }
     KB.erste = f.erste; KB.sichtbar = f.sichtbar; KB.karten = R.karten;
+    /* TYPES: FILL WHAT IS EMPTY, CORRECT ONLY WHAT IS CLICKED. A standing
+       type is not touched by a passing look - a glowing card at its crest
+       is not a second opinion. The picked card is the exception: its sign
+       is matched afresh (unitsLesen) and may replace the type on its line,
+       captured or not, when it is sure and stands 0,08 clear of the
+       runner-up. The Kommodore's rule: correcting is fine, and the look
+       is stricter where he has clicked. */
+    const KB_KORREKTUR_ABSTAND = 0.08;
     R.karten.forEach((k, j) => {
       const z = KB.zeilen[KB.erste + j];
-      if (z && z.status !== "erfasst" && !kbFestTyp(z)){
+      if (!z || kbFestTyp(z)) return;
+      const gewaehlt = R.auswahl === j;
+      if (z.status !== "erfasst"){
         z.seite = k.seite === "US" ? 0 : k.seite === "GE" ? 1 : k.seite === "SU" ? 2 : z.seite;
         z.eigen = k.seite === "gelb";
-        const k2 = R.karten[j];
-        const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t;
-      }
+      } else if (!gewaehlt) return;
+      const t = kbTypAusListe(k);
+      if (!t) return;
+      if (!z.typ) z.typ = t;
+      else if (gewaehlt && t !== z.typ && (k.typAbstand || 0) >= KB_KORREKTUR_ABSTAND) z.typ = t;
     });
     /* THE PICK IS FOLLOWED, NOT DECIDED AFRESH EACH TIME. The Kommodore
        pointed out that one can also step through the units with the arrow
@@ -34505,7 +34543,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 68197887c8</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 886dac8567</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34647,7 +34685,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "68197887c8";
+const BAU = "886dac8567";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
