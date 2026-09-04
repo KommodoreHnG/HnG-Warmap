@@ -13951,10 +13951,16 @@ const kbTagDa = t => /[0-9]/.test(String(t || "")) && String(t).trim().length >=
    the same card leads to the same line and overwrites it, and two
    different cards are two different units. A line is only moved now when
    the tag matches to the letter. */
+/* A UNIT IS ITS TAG AND ITS OWNER. Tags like US-003 are numbered by each
+   player for himself: GUKOT's US-003 and PAINMAXX1's US-003 stood side by
+   side at Schwaebisch Hall, and with the tag alone each reading took the
+   other line for its own old place and emptied it. Two known owners must
+   match; an unknown owner on either side decides nothing, as before. */
+const kbBesitzerPasst = (a, b) => { const A = namKey(String(a || "")), B = namKey(String(b || "")); return !A || !B || A === B; };
 function kbSchonDa(e){
   return KB.zeilen.find(u => {
     if (u.status !== "erfasst") return false;
-    if (kbTagDa(u.tag) && kbTagDa(e.tag)) return namKey(u.tag) === namKey(e.tag);
+    if (kbTagDa(u.tag) && kbTagDa(e.tag)) return namKey(u.tag) === namKey(e.tag) && kbBesitzerPasst(u.besitzer, e.besitzer);
     return u.tag === e.tag && u.name === e.name && u.besitzer === e.besitzer;
   });
 }
@@ -14054,7 +14060,7 @@ function kbTuersteher(e, ziel, ohneLeiste){
      without a bar, where the line was found by the tag and is therefore
      the right one by construction. */
   if (z.status === "erfasst" && !KB.handAn && !ohneLeiste){
-    const gleich = (kbTagDa(z.tag) && tagDa) ? namKey(z.tag) === namKey(e.tag)
+    const gleich = (kbTagDa(z.tag) && tagDa) ? (namKey(z.tag) === namKey(e.tag) && kbBesitzerPasst(z.besitzer, e.besitzer))
                  : namKey(z.name || "") === namKey(e.name || "");
     if (!gleich)
       return {ok: false, vermerken: true,
@@ -34574,7 +34580,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 32480f4b98</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0b7401f834</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34716,7 +34722,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "32480f4b98";
+const BAU = "0b7401f834";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
