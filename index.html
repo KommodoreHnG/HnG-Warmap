@@ -946,7 +946,7 @@ body.kb-zieht{user-select:none}
 .kb-recht{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:3px 7px;border-radius:3px}
 .kb-recht.an{background:#4a6b3a;border-color:#3a5530;color:#f2f6ee}
 .kb-recht-hinweis{flex-basis:100%;letter-spacing:0;color:#8a7a58;font-size:10px}
-.kb-sichtbar{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:3px 7px;border-radius:3px;margin-right:10px}
+.kb-sichtbar,.kb-typen-neu{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:3px 7px;border-radius:3px;margin-right:10px}
 .kb-nr{display:flex;align-items:center;gap:4px}
 .kb-riegel{display:inline-block;width:5px;height:18px;border-radius:2px;cursor:pointer;flex:none}
 .kb-riegel.r0{background:#4a6b3a}.kb-riegel.r1{background:#b3801f}.kb-riegel.r2{background:#3a5a8a}.kb-riegel.r3{background:#8a3a4a}
@@ -14248,7 +14248,7 @@ function kbVerarbeiten(R, vorgabe){
       if (z.status !== "erfasst"){
         z.seite = k.seite === "US" ? 0 : k.seite === "GE" ? 1 : k.seite === "SU" ? 2 : z.seite;
         z.eigen = k.seite === "gelb";
-      } else if (!gewaehlt) return;
+      } else if (!gewaehlt && z.typ) return;
       const t = kbTypAusListe(k);
       if (!t) return;
       if (!z.typ) z.typ = t;
@@ -15413,7 +15413,7 @@ function kbZeichnen(){
   };
   const riegelListe = kbRiegelListe();
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Town ?"}${KB.linie ? ` · attack line ${kbEsc(KB.linie)}` : ""} · ${new Date().toLocaleDateString()}</div>
-    <div class="kb-schreibrecht"><button class="kb-sichtbar" title="Tick every line that stands in the part of the bar you see right now — then one lock click locks them all">\u2610 visible part</button><span>New readings may write:</span><button class="kb-recht ${kbSchreibrecht.typ ? "an" : ""}" data-was="typ" title="Whether a reading may set the type of a line whose lock nobody has set by hand">${kbSchreibrecht.typ ? "\u2611" : "\u2610"} type</button><button class="kb-recht ${kbSchreibrecht.name ? "an" : ""}" data-was="name" title="Whether a reading may write name and owner of a line whose lock nobody has set by hand">${kbSchreibrecht.name ? "\u2611" : "\u2610"} name &amp; owner</button><span class="kb-recht-hinweis">Tick lines with the box, Shift+click for a range, Ctrl+click for single ones — a lock click on a ticked line locks all ticked lines, and "Keep the sheet" keeps only the ticked ones while any are ticked.</span></div>
+    <div class="kb-schreibrecht"><button class="kb-sichtbar" title="Tick every line that stands in the part of the bar you see right now — then one lock click locks them all">\u2610 visible part</button><button class="kb-typen-neu" title="Read the types of the visible lines afresh — all whose type is not locked">\u21bb types</button><span>New readings may write:</span><button class="kb-recht ${kbSchreibrecht.typ ? "an" : ""}" data-was="typ" title="Whether a reading may set the type of a line whose lock nobody has set by hand">${kbSchreibrecht.typ ? "\u2611" : "\u2610"} type</button><button class="kb-recht ${kbSchreibrecht.name ? "an" : ""}" data-was="name" title="Whether a reading may write name and owner of a line whose lock nobody has set by hand">${kbSchreibrecht.name ? "\u2611" : "\u2610"} name &amp; owner</button><span class="kb-recht-hinweis">Tick lines with the box, Shift+click for a range, Ctrl+click for single ones — a lock click on a ticked line locks all ticked lines, and "Keep the sheet" keeps only the ticked ones while any are ticked.</span></div>
     <div class="kb-z kopfz"><div></div><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Side</div><div></div></div>
     ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${kbFestHand(z) ? "fest" : ""} ${z.haken ? "haken" : ""} ${z.unsicher ? "unsicher" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}">
       <div><button class="kb-haken ${z.haken ? "an" : ""}" data-i="${z.i}" title="Select this line — Shift+click a range, Ctrl+click adds or removes one">${z.haken ? "\u2611" : "\u2610"}</button></div>
@@ -15533,6 +15533,19 @@ function kbBearbeiten(ev){
   if (sichtbar){
     const von = KB.erste || 0, bis = von + Math.max(1, KB.sichtbar || 0) - 1;
     kbHakenAlle(KB.zeilen.filter(u => u.i >= von && u.i <= bis));
+    return;
+  }
+  /* TYPES AFRESH: the visible lines whose type is not locked lose it, the
+     sign memo goes, and the next look runs the whole geometry again. */
+  const typenNeu = ev.target.closest(".kb-typen-neu");
+  if (typenNeu){
+    const von = KB.erste || 0, bis = von + Math.max(1, KB.sichtbar || 0) - 1;
+    let n = 0;
+    for (const u of KB.zeilen) if (u.i >= von && u.i <= bis && !kbFestTyp(u)){ u.typ = null; n++; }
+    unitsTypAlt = {};
+    KB.typenNeu = true;
+    KB.status = n ? `Reading the types of ${n} visible line${n === 1 ? "" : "s"} afresh …` : "No visible line with an open type.";
+    kbZeichnen();
     return;
   }
   const riegel = ev.target.closest(".kb-riegel");
@@ -15759,7 +15772,7 @@ async function kbTick(){
        long while before the other four were written. So while the
        estimate and the sheet disagree and the ring is not yet full, every
        look goes through - at most twenty-five of them, three seconds. */
-    const zahlOffen = !!(KB.nSchaetzung && KB.nSchaetzung.n !== KB.N && (KB.nRing || []).length < KB_RING);
+    const zahlOffen = !!(KB.nSchaetzung && KB.nSchaetzung.n !== KB.N && (KB.nRing || []).length < KB_RING) || !!KB.typenNeu;
     /* AND THE DOORMAN GUARDS THE START TOO. There used to be "&&
        KB.zeilen.length" here, so that while the sheet was still EMPTY every
        single look read the whole strip and worked out the whole geometry -
@@ -15833,6 +15846,7 @@ async function kbTick(){
       const G = await unitsLesen(F, null, null, "bild");
       if (!KB || !KB.live) return;
       kbVerarbeiten(G);
+      KB.typenNeu = false;
       /* THE BOX IS SET ASIDE AT ONCE. Whatever stands in it now is kept as
          a small picture and read afterwards; clicking on never waits for a
          reading. Only what was really taken is marked as dealt with - it
@@ -34620,7 +34634,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f82977d261</span></p></div>
+         installation. <span style="color:var(--dim2)">· build fdeca2a521</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34762,7 +34776,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f82977d261";
+const BAU = "fdeca2a521";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
