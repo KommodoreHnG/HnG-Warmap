@@ -12975,7 +12975,13 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        the right length that happened to match a sign at 0,85, and the
        Kommodore had a sheet with no town clicked. A bar is a pair of
        cards on the grid, or the town's disc; nothing less. */
-    R.leiste = paare >= 1 || R.node.kompakt;
+    /* TWO PAIRS, OR THE DISC. One pair on the grid is what a stack of unit
+       icons on the bare map gave by chance ("Karte leer.png": runs of 62
+       and 61 points, 105 apart, at Aalen) - and two phantom units stood on
+       the sheet with no town clicked. Measured over 28 captures: every real
+       bar carries two pairs or more, or - with two cards - a compact town
+       disc; the bare map carried one pair and no disc. */
+    R.leiste = paare >= 2 || R.node.kompakt;
     /* the holder only from a compact disc - map colour at that place is
        not a holder */
     R.seite = R.node.kompakt ? ["US","GE","SU"].indexOf(R.node.klasse) : -1;
@@ -14648,25 +14654,48 @@ let kbArbeitC = null, kbArbeitG = null;
      background against a letter stroke    two hundred and more
    A changed character in the name comes through; a trembling point does
    not. */
-const KB_KASTEN_STUFE = 40, KB_KASTEN_DULDUNG = 2;
+/* COUNTED, NOT COMPARED POINT BY POINT. The samples above were compared
+   in place, and the Kommodore's stepping video showed what that costs:
+   the same unit stood in the box for 118 looks, and the box counted as
+   new every two to four looks - between two looks 637 of 3915 samples
+   jumped by up to 163 steps. Not a change: a jolt. Text and cards move by
+   a point or two now and then (the cards show it, x0 1384 to 1381), and a
+   fixed nine-point grid then falls from a stroke onto the ground. Every
+   "new" drove the quick look and put the same unit into the queue again.
+   So the print is shift-proof: for each line and each column of 27
+   points, the number of dark samples (max under 90 - the box carries dark
+   text on a light field), on a 3 by 3 grid. A jolt moves strokes within a
+   column, at most across one edge; a different name changes the numbers
+   in many columns. Same means: no column more than 4 apart, and in sum no
+   more than a tenth of the dark samples, eight at the least. */
+const KB_KASTEN_SPALTE = 27, KB_KASTEN_DUNKEL = 90;
+const KB_KASTEN_JE_SPALTE = 4, KB_KASTEN_ANTEIL = 0.1, KB_KASTEN_MINDEST = 8;
 function kbKastenKennung(d, oben, form){
   const Z = UNITS_ZEILEN[form];
   const werte = [];
   for (const zeile of [Z.name, Z.besitzer]){
-    const y0 = oben + zeile.dy, y1 = y0 + zeile.h;
-    for (let y = Math.max(0, y0); y < Math.min(UNITS_H, y1); y += 3)
-      for (let x = UNITS_KASTEN.x0; x < UNITS_KASTEN.x1; x += 9)
-        werte.push(unitsMax(d, (y*UNITS_W + x)*4));
+    const y0 = Math.max(0, oben + zeile.dy), y1 = Math.min(UNITS_H, y0 + zeile.h);
+    for (let x0 = UNITS_KASTEN.x0; x0 < UNITS_KASTEN.x1; x0 += KB_KASTEN_SPALTE){
+      let n = 0;
+      const x1 = Math.min(UNITS_KASTEN.x1, x0 + KB_KASTEN_SPALTE);
+      for (let y = y0; y < y1; y += 3)
+        for (let x = x0; x < x1; x += 3)
+          if (unitsMax(d, (y*UNITS_W + x)*4) < KB_KASTEN_DUNKEL) n++;
+      werte.push(Math.min(255, n));
+    }
   }
   return {form, oben, werte: Uint8Array.from(werte)};
 }
 function kbKastenGleich(a, b){
   if (!a || !b || a.form !== b.form || Math.abs(a.oben - b.oben) > 2) return false;
   if (a.werte.length !== b.werte.length) return false;
-  let anders = 0;
-  for (let i = 0; i < a.werte.length; i++)
-    if (Math.abs(a.werte[i] - b.werte[i]) > KB_KASTEN_STUFE && ++anders > KB_KASTEN_DULDUNG) return false;
-  return true;
+  let summe = 0, dunkel = 0;
+  for (let i = 0; i < a.werte.length; i++){
+    const dv = Math.abs(a.werte[i] - b.werte[i]);
+    if (dv > KB_KASTEN_JE_SPALTE) return false;
+    summe += dv; dunkel += Math.max(a.werte[i], b.werte[i]);
+  }
+  return summe <= Math.max(KB_KASTEN_MINDEST, KB_KASTEN_ANTEIL * dunkel);
 }
 /* THE TOWN CHANGES FASTER THAN ITS NAME CAN BE READ. Reading it costs a
    pass of the text recogniser and waits for two still pictures; the name
@@ -34284,7 +34313,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 9c0c451513</span></p></div>
+         installation. <span style="color:var(--dim2)">· build a96fa620ac</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34426,7 +34455,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "9c0c451513";
+const BAU = "a96fa620ac";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
