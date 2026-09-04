@@ -15378,8 +15378,16 @@ function kbPult(){
   /* the user's own switch: off means off, sharing included */
   document.getElementById("kb-kraft").addEventListener("click", ()=>{ KB.live ? kbLiveStop(true) : kbLiveStart(); });
   document.getElementById("kb-ton").addEventListener("click", ()=>{ kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); kbPult(); });
-  document.getElementById("kb-keep").addEventListener("click", kbBehalten);
-  document.getElementById("kb-leer").addEventListener("click", ()=>{ const t = KB.ton; const live = KB.live; kbLiveStop(); KB = kbNeu(); if (live) kbLiveStart(); kbZeichnen(); });
+  document.getElementById("kb-keep").addEventListener("click", ()=>{
+    if (!kbBehalten()) return;
+    /* KEEP MEANS DONE WITH THIS TOWN - a fresh sheet follows at once. Unless
+       lines were ticked and unsaved ones remain: those are not thrown away
+       unseen; the sheet stays and says so. */
+    const offen = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen && !z.gespeichert).length;
+    if (offen){ KB.status = `${offen} line${offen === 1 ? "" : "s"} not kept — tick or remove ${offen === 1 ? "it" : "them"}, then keep again for a fresh sheet.`; kbZeichnen(); return; }
+    kbNeuesBlatt();
+  });
+  document.getElementById("kb-leer").addEventListener("click", kbNeuesBlatt);
 }
 
 /* ---- editing the sheet ---------------------------------------------------- */
@@ -16122,6 +16130,19 @@ function kbBehalten(){
   toast(`${MAP.n[ort][0]}: ${spieler} player${spieler === 1 ? "" : "s"}, ${teams} team${teams === 1 ? "" : "s"}, ${sicht} sighting${sicht === 1 ? "" : "s"} recorded`
         + (ohneTyp ? ` — ${ohneTyp} with the type still to confirm in Intel.` : "."));
   KB.status = `Recorded for ${MAP.n[ort][0]} - see Intel → Players.`;
+  kbZeichnen();
+  return true;
+}
+/* A FRESH SHEET, the share kept: what the "New sheet" button does, and
+   what "Keep the sheet" does once it has recorded - the Kommodore's rule.
+   Only from the buttons: kbBehalten also runs by itself on a town change,
+   and there the caller clears the sheet on its own. */
+function kbNeuesBlatt(){
+  if (!KB) return;
+  const live = KB.live;
+  kbLiveStop();
+  KB = kbNeu();
+  if (live) kbLiveStart();
   kbZeichnen();
 }
 
@@ -34448,7 +34469,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 075f720cfc</span></p></div>
+         installation. <span style="color:var(--dim2)">· build a1253538fe</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34590,7 +34611,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "075f720cfc";
+const BAU = "a1253538fe";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
