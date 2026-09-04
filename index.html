@@ -816,7 +816,9 @@ body.meld-modus{cursor:help}
   background:radial-gradient(ellipse at 50% 30%, #15171c 0%, #0b0c10 75%)}
 /* the strip: one box per unit in town, in the side's colour, a question mark
    until the type is known, binoculars once the unit is on the sheet */
-.kb-streifen{position:relative;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;min-height:34px}
+/* the strip stays in view while the sheet scrolls - it is the finder, and
+   the eye needs it next to the line being written */
+.kb-streifen{position:sticky;top:0;z-index:3;background:#0b0c10;padding-top:2px;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;min-height:34px}
 /* the finder frame over the picked card - corner rails, notched movement.
    It can be taken by hand and run along the strip; it then holds still
    where it was put and tells the tool which unit is meant. */
@@ -887,7 +889,7 @@ body.kb-zieht{user-select:none}
 .kb-blatt .kb-titel{font-family:var(--schmal);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
   color:#7a6a48;border-bottom:1px solid #b9ab8a;margin-bottom:6px}
 .kb-z{display:grid;grid-template-columns:34px 52px 1.05fr 1.75fr 1.2fr 1.45fr 56px 24px;gap:8px;align-items:center;
-  border-bottom:1px dotted rgba(90,70,40,.25)}
+  border-bottom:1px dotted rgba(90,70,40,.25);scroll-margin-block:160px 36px}
 .kb-z.kopfz{font-family:var(--schmal);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#7a6a48;
   border-bottom:1px solid #b9ab8a}
 .kb-z.vermutet{color:#8f7f5e}
@@ -13489,7 +13491,7 @@ function kbOrtSetzen(i, linie){
     if (offen) kbBehalten();
     const live = KB.live, ton = kbTon;
     KB.zeilen = []; KB.N = 0; KB.erste = 0; KB.sichtbar = 0; KB.karten = []; KB.reiheKennung = null; KB.reiheAlt = null;
-    KB.auswahl = null; KB.wandel = null; KB.nRing = null; KB.nSchaetzung = null; KB.hatteBahn = false;
+    KB.auswahl = null; KB.wandel = null; KB.nRing = null; KB.nSchaetzung = null; KB.hatteBahn = false; KB.gerollt = null;
     KB.handAn = false; KB.handWahl = null; KB.handZieht = false;
     kbSchlangeLeeren(); KB.kastenLetzte = null; KB.gesamt = null;
     KB.letzte = null; KB.vorige = null; KB.schreibt = null;
@@ -13619,7 +13621,7 @@ function kbNeu(){
           warte: [], werkt: false, arbeit: null, kastenLetzte: null, dauerMittel: 850,
           reiheAlt: null,
           gesamt: null,
-          frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null};
+          frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null, gerollt: null};
 }
 /* Which card is picked. Until the measurement gives a rule for a single
    frame, the order counts: the first unit in the visible window that is
@@ -13859,6 +13861,22 @@ function kbZeileLeeren(z){
    AND THE MEMORY HOLDS. Once a name stands, a WORSE reading does not touch
    it. Every new reading used to write over the old one, and behind a
    see-through bar over a moving map that means the name flickers. */
+/* ---- DOES THE READING SAY WHAT THE LINE ALREADY SAYS? ------------------
+   Then there is nothing to write: no clerk, no Morse, no fresh line. The
+   fields are held against each other the way the sheet itself compares
+   them (namKey: case, spacing, punctuation and accents do not count - the
+   reader's case is noise, and the kept record strips them too), and the
+   strengths as the very text the sheet shows. A described line keeps its
+   tag and name anyway, so only owner and strengths can differ there. */
+const kbHpText = hp => (hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join(" ");
+function kbGleicheLesung(z, e){
+  if (!z || z.status !== "erfasst" || !e) return false;
+  const gleich = (a, b) => namKey(String(a || "")) === namKey(String(b || ""));
+  if (!gleich(z.besitzer, e.besitzer)) return false;
+  if (kbHpText(z.hp) !== kbHpText(e.hp)) return false;
+  if (z.unlesbar && z.beschrieben) return true;
+  return gleich(z.tag, e.tag) && gleich(z.name, e.name);
+}
 const KB_GUT = 62, KB_BRAUCHBAR = 45;
 const kbLesungSchluessel = e =>
   (namKey(String((e && e.tag) || "")) + "|" + namKey(String((e && e.name) || ""))).trim();
@@ -14145,6 +14163,25 @@ function kbVerarbeiten(R, vorgabe){
         KB.status = anders
           ? `Line ${i + 1} is locked — read as ${e.tag || e.name}, not taken over.`
           : `Line ${i + 1} is locked and reads the same.`;
+        kbZeichnen();
+        return;
+      }
+      /* THE SAME AGAIN IS NOT WRITTEN AGAIN. A reading that says what the
+         line already says is a confirmation, not a correction: the sheet
+         stays as it stands, no clerk, no Morse. What the confirmation adds
+         is taken all the same - the higher confidence, a type or a side
+         still missing, a doubt that was pending - and a DIFFERENT reading
+         goes on below and overwrites as before. (The Kommodore's rule:
+         a line that already carries the entry is not written again;
+         corrections stay allowed.) */
+      if (kbGleicheLesung(z, e)){
+        z.nameZuv = Math.max(+z.nameZuv || 0, +e.nameZuv || 0);
+        z.unsicher = false; z.kandidat = null; z.unsicherGrund = null;
+        if (!z.typ){ const k2 = R.karten[i - KB.erste]; const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
+        if (!z.typ){ const kand = kbTypKandidaten(e.hp); if (kand.length === 1) z.typ = kand[0]; }
+        if ((z.seite === null || z.seite === undefined) && e.seite !== null && e.seite !== undefined) z.seite = e.seite;
+        if (KB.ort === null && e.stadt !== null && e.stadt !== undefined) kbOrtSetzen(e.stadt);
+        KB.status = `Line ${i + 1} already reads ${z.tag || z.name} - unchanged.`;
         kbZeichnen();
         return;
       }
@@ -15237,6 +15274,27 @@ function kbZeichnen(){
     const z = KB.zeilen[+el.closest(".kb-z").dataset.i];
     if (z && z.typ){ const c = kbSymbol(z.typ); if (c) el.appendChild(c); }
   });
+  /* THE SHEET FOLLOWS THE PEN. Once per line, not per draw: the rows are
+     rebuilt on every look (about fourteen a second, every 60 ms while a
+     line is being written), and the Kommodore must be free to scroll away
+     and read the older lines. block:"nearest" moves nothing while the
+     line is already in view. */
+  const rollZiel = KB.schreibt ? KB.schreibt.i : KB.auswahl;
+  if (rollZiel !== null && rollZiel !== undefined && rollZiel !== KB.gerollt){
+    KB.gerollt = rollZiel;
+    const rz = blatt.querySelector(`.kb-z[data-i="${rollZiel}"]`);
+    if (rz && rz.scrollIntoView){
+      rz.scrollIntoView({block: "nearest"});
+      /* the strip sticks at the top and may be several rows tall when the
+         window is narrow - a line that came to rest under it is pushed
+         out from beneath, whatever the strip's height */
+      const schirm = document.getElementById("kb-schirm"), st = document.getElementById("kb-streifen");
+      if (schirm && st){
+        const unter = st.getBoundingClientRect().bottom + 6, oben = rz.getBoundingClientRect().top;
+        if (oben < unter) schirm.scrollTop -= (unter - oben);
+      }
+    }
+  }
   kbPult();
 }
 function kbPult(){
@@ -34313,7 +34371,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build a96fa620ac</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 636102d519</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34455,7 +34513,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "a96fa620ac";
+const BAU = "636102d519";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
