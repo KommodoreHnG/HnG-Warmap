@@ -11538,6 +11538,19 @@ let unitsTypVorlagen = null, unitsTypB = 38, unitsTypH = 25;
 const UNITS_TYP_TINTE = 0.06;
 /* what the signs were at each card position in the look before */
 let unitsTypAlt = {};
+/* a coarse print of the sign's window (62 x 40 at plate x0+9+5 / rim+5):
+   a 6 by 4 grid of samples, the brightest channel in four steps */
+function unitsZeichenPrint(d, x0, fy){
+  let p = "";
+  for (let j = 0; j < 4; j++){
+    const y = fy + 5 + 5 + j*10;
+    for (let i = 0; i < 6; i++){
+      const x = x0 + 9 + 5 + 5 + i*10;
+      p += (unitsMax(d, (y*UNITS_W + x)*4) >> 6);
+    }
+  }
+  return p;
+}
 function unitsTypVorlagenBauen(){
   if (unitsTypVorlagen) return unitsTypVorlagen;
   const abc = "0123456789abcdef";
@@ -12901,11 +12914,21 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       /* THE SIGN IS ONLY MATCHED WHEN THE ROW HAS MOVED. Matching costs
          fifteen thousandths for twelve cards, every single look; while the
          bar stands still the signs of a moment ago still hold. */
-      const alt = unitsTypMerker[x0];
+      /* KEYED BY PLACE AND BY WHAT STANDS THERE. Stepping through the
+         units with the arrow keys moves the row by exactly one card: every
+         place shows a different card, and x0 is the same. Keyed by x0
+         alone, the memo handed each card its predecessor's sign and the
+         new card on the right the sign of the one that left - measured on
+         two captures a step apart, both came back with the same sequence.
+         So the key carries a coarse print of the sign's window as well:
+         24 samples in four steps. A different sign at the same place
+         misses the memo and is matched. */
+      const schluessel = x0 + ":" + unitsZeichenPrint(d, x0-9, rimOben);
+      const alt = unitsTypMerker[schluessel];
       /* a card cut off by the window's edge shows half a sign, and half a
          sign matches a whole wrong one - so it gets none */
       const t = teil ? null : (alt || unitsTypVon(c, x0-9, rimOben));
-      if (!teil) unitsTypNeu[x0] = t;
+      if (!teil) unitsTypNeu[schluessel] = t;
       return {x0: x0-9, x1: x1+9, seite, teil: !!teil,
               rand: unitsPlattenRand(d, x0-9, plattenOben), q: unitsQuotient(d, x0-9, plattenOben),
               typ: t && t.sicher ? t.typ : null, typKorr: t ? t.korr : null, typAbstand: t ? t.abstand : null,
@@ -12946,8 +12969,13 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        nothing, but the few-unit case needs the row to be found another
        way - anchored on the town disc, or on a sign sought directly in the
        band. That is still open. */
-    const zeichenDa = R.karten.some(x => x.typ);
-    R.leiste = paare >= 1 || R.node.kompakt || zeichenDa;
+    /* THE SIGN WITNESS IS GONE. It never rescued one of the nine few-unit
+       towns it was meant for (measured above) - and once the matcher ran
+       on every look it opened the bar on a bare map: one coloured run of
+       the right length that happened to match a sign at 0,85, and the
+       Kommodore had a sheet with no town clicked. A bar is a pair of
+       cards on the grid, or the town's disc; nothing less. */
+    R.leiste = paare >= 1 || R.node.kompakt;
     /* the holder only from a compact disc - map colour at that place is
        not a holder */
     R.seite = R.node.kompakt ? ["US","GE","SU"].indexOf(R.node.klasse) : -1;
@@ -34256,7 +34284,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0c99960b1b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 9c0c451513</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34398,7 +34426,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0c99960b1b";
+const BAU = "9c0c451513";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
