@@ -11550,6 +11550,10 @@ let unitsTypVorlagen = null, unitsTypB = 38, unitsTypH = 25;
 const UNITS_TYP_TINTE = 0.06;
 /* what the signs were at each card position in the look before */
 let unitsTypAlt = {};
+/* the cards (by plate x0) whose line has the type locked - set by the
+   cabin's tick before every look; a locked sign is not matched at all */
+let unitsTypSperren = [];
+const unitsTypGesperrt = x0 => unitsTypSperren.some(sx => Math.abs(sx - x0) <= 6);
 /* a coarse print of the sign's window (62 x 40 at plate x0+9+5 / rim+5):
    a 6 by 4 grid of samples, the brightest channel in four steps */
 function unitsZeichenPrint(d, x0, fy){
@@ -12939,7 +12943,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       const alt = unitsTypMerker[schluessel];
       /* a card cut off by the window's edge shows half a sign, and half a
          sign matches a whole wrong one - so it gets none */
-      const t = teil ? null : (alt || unitsTypVon(c, x0-9, rimOben));
+      const t = teil ? null : (alt || (unitsTypGesperrt(x0-9) ? null : unitsTypVon(c, x0-9, rimOben)));
       if (!teil) unitsTypNeu[schluessel] = t;
       return {x0: x0-9, x1: x1+9, seite, teil: !!teil,
               rand: unitsPlattenRand(d, x0-9, plattenOben), q: unitsQuotient(d, x0-9, plattenOben),
@@ -13317,14 +13321,12 @@ let kbFunk = null;
 const KB_LOCAL = "units_seen";
 /* WHAT A NEW READING MAY WRITE on a line whose locks nobody has touched by
    hand: the type (from the card), the name and owner (from the box), or
-   both. A line's own lock, once set by hand, outranks it. Kept in the
-   browser. */
-const KB_SCHREIBRECHT = "units_kb_schreibrecht";
+   both. A line's own lock, once set by hand, outranks it. It lives with
+   the sheet: every new sheet - and so every entry into the room - starts
+   with both allowed (the Kommodore's rule). */
 let kbSchreibrecht = {typ: true, name: true};
-try { Object.assign(kbSchreibrecht, JSON.parse(localStorage.getItem(KB_SCHREIBRECHT) || "{}")); } catch(e){}
 function kbSchreibrechtSetzen(was){
   kbSchreibrecht[was] = !kbSchreibrecht[was];
-  try { localStorage.setItem(KB_SCHREIBRECHT, JSON.stringify(kbSchreibrecht)); } catch(e){}
   if (!KB) return;
   /* a note only makes sense on a line whose name is shut */
   if (was === "name") for (const z of KB.zeilen) if (!kbFestName(z)) z.abweichung = null;
@@ -13638,6 +13640,7 @@ function unitsZeileAus(R){
 
 /* ---- the state ----------------------------------------------------------- */
 function kbNeu(){
+  kbSchreibrecht = {typ: true, name: true};
   return {live: null, laeuft: false, letzte: null, vorige: null, hatteBahn: false,
           ort: null, linie: null, ziel: null, halter: null, merk: null,
           N: 0, erste: 0, sichtbar: 0, karten: [], zeilen: [],
@@ -14903,6 +14906,15 @@ async function kbEinreihen(F, G){
     kbZeichnen();
     return false;
   }
+  /* A LOCKED LINE IS NOT READ AT ALL. Name and owner shut - by hand or by
+     the default above the sheet - means no picture is taken and the text
+     reader stays idle for it; the box counts as dealt with until it
+     changes. Reading and then not writing would only cost the machine. */
+  if (ziel !== KB_OHNE_LEISTE && kbFestName(KB.zeilen[ziel])){
+    KB.status = `Line ${ziel + 1} is locked — not read.`;
+    kbZeichnen();
+    return true;
+  }
   const oben = G.kastenOben;
   const sx = KB_KASTEN_AUS.x, sw = KB_KASTEN_AUS.w;
   const sy = Math.max(0, oben - KB_KASTEN_AUS.hoch);
@@ -14938,6 +14950,12 @@ async function kbSchlange(){
   try {
     while (KB && KB.warte.length){
       const job = KB.warte.shift();
+      /* locked since the picture was taken - the reading is not owed */
+      if (job.ziel !== null && job.ziel >= 0 && KB.zeilen[job.ziel] && kbFestName(KB.zeilen[job.ziel])){
+        if (job.bmp && job.bmp.close) job.bmp.close();
+        if (KB.zeilen[job.ziel].status === "wartet") KB.zeilen[job.ziel].status = "vermutet";
+        continue;
+      }
       KB.arbeit = {ziel: job.ziel, ab: jetzt(), dauer: KB.dauerMittel};
       if (job.ziel !== null && KB.zeilen[job.ziel] && KB.zeilen[job.ziel].status === "wartet")
         KB.zeilen[job.ziel].status = "liest";
@@ -15666,6 +15684,9 @@ async function kbTick(){
        look so the strip stays fresh. */
     unitsBlassErlaubt = !!(KB.reiheAlt && KB.reiheAlt.karten.length >= 2
                            && (KB.blick || 0) - KB.reiheAlt.blick <= KB_REIHE_MERK);
+    /* which cards need no sign this look: those whose line has the type
+       locked, by hand or by the default */
+    unitsTypSperren = (KB.karten || []).map((k, j) => kbFestTyp(KB.zeilen[KB.erste + j]) ? k.x0 : null).filter(x => x !== null);
     const kasten = unitsForm(d);
     const kk = kasten ? kbKastenKennung(d, kasten.oben, kasten.form) : null;
     let neu = kk !== null && !kbKastenGleich(kk, KB.kastenLetzte);
@@ -34484,7 +34505,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 64c937597a</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 68197887c8</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34626,7 +34647,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "64c937597a";
+const BAU = "68197887c8";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
