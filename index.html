@@ -946,6 +946,10 @@ body.kb-zieht{user-select:none}
 .kb-recht{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:3px 7px;border-radius:3px}
 .kb-recht.an{background:#4a6b3a;border-color:#3a5530;color:#f2f6ee}
 .kb-recht-hinweis{flex-basis:100%;letter-spacing:0;color:#8a7a58;font-size:10px}
+.kb-sichtbar{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:3px 7px;border-radius:3px;margin-right:10px}
+.kb-nr{display:flex;align-items:center;gap:4px}
+.kb-riegel{display:inline-block;width:5px;height:18px;border-radius:2px;cursor:pointer;flex:none}
+.kb-riegel.r0{background:#4a6b3a}.kb-riegel.r1{background:#b3801f}.kb-riegel.r2{background:#3a5a8a}.kb-riegel.r3{background:#8a3a4a}
 .kb-z.fest .kb-fest{outline:none}
 .kb-nehmen{background:#9b3b2e;color:#f4ead9;border:none;border-radius:3px;cursor:pointer;
   font:700 10px/1 system-ui;padding:2px 5px}
@@ -13790,7 +13794,7 @@ function kbFenster(R){
   }
   return {N: n, erste: 0, sichtbar: n};
 }
-function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, festTyp: null, festName: null, haken: false, abweichung: null, unsicher: false, kandidat: null, unsicherGrund: null}; }
+function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, festTyp: null, festName: null, haken: false, riegel: null, abweichung: null, unsicher: false, kandidat: null, unsicherGrund: null}; }
 /* A LOCKED LINE IS NOT TOUCHED. Not by a reading, not by a move, not by
    clearing, not by the tidying up of a bar that has grown shorter. What
    the tool reads differently it only reports: the line gets a note, the
@@ -13824,6 +13828,19 @@ function kbFrieren(i, was, an){
    Shift+click sets every line between the last plain click and this one
    to the state of that anchor line. The marks live on the lines, so they
    survive the redraw and the renumbering after a removal. */
+/* THE RIEGEL'S NUMBER: sections in the order of their first card. */
+function kbRiegelListe(){
+  return [...new Set(KB.zeilen.filter(u => u.riegel !== null && u.riegel !== undefined).map(u => u.riegel))].sort((a, b) => a - b);
+}
+/* tick a whole set of lines, and say so */
+function kbHakenAlle(zeilen){
+  if (!KB) return;
+  for (const u of zeilen) u.haken = true;
+  if (zeilen.length) KB.hakenAnker = zeilen[zeilen.length - 1].i;
+  const n = KB.zeilen.filter(u => u.haken).length;
+  KB.status = n ? `${n} line${n === 1 ? "" : "s"} selected.` : "No line selected.";
+  kbZeichnen();
+}
 function kbHaken(i, bereich){
   const z = KB && KB.zeilen[i];
   if (!z) return;
@@ -14368,6 +14385,7 @@ function kbVerarbeiten(R, vorgabe){
       Object.assign(z, {status: "erfasst", besitzer: e.besitzer, hp: e.hp,
                         eigen: !!e.eigen, seite: e.seite !== null && e.seite !== undefined ? e.seite : z.seite,
                         zwilling: zwilling ? da.i + 1 : null});
+      if (z.riegel === null || z.riegel === undefined) z.riegel = KB.erste;
       /* what the clan already knows about this one - looked up once, when
          the line is written, not on every draw */
       kbBekanntSetzen(z);
@@ -15012,6 +15030,11 @@ async function kbEinreihen(F, G){
   kbVerschluss(KB.warte.length);
   if (ziel >= 0 && KB.zeilen[ziel] && KB.zeilen[ziel].status === "vermutet")
     KB.zeilen[ziel].status = "wartet";
+  /* THE SCREEN SECTION the picture was taken in: the first visible card.
+     Lines taken in the same section form one "Riegel" - the Kommodore's
+     word for the batch he gets each time he pushes the bar on. */
+  if (ziel >= 0 && KB.zeilen[ziel] && (KB.zeilen[ziel].riegel === null || KB.zeilen[ziel].riegel === undefined))
+    KB.zeilen[ziel].riegel = KB.erste;
   kbZeichnen();
   kbSchlange();
   return true;
@@ -15385,12 +15408,13 @@ function kbZeichnen(){
     const teil = String(txt).slice(0, n);
     return kbEsc(teil) + (n < String(txt).length && n > 0 ? `<span class="kb-tinte"></span>` : "");
   };
+  const riegelListe = kbRiegelListe();
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Town ?"}${KB.linie ? ` · attack line ${kbEsc(KB.linie)}` : ""} · ${new Date().toLocaleDateString()}</div>
-    <div class="kb-schreibrecht"><span>New readings may write:</span><button class="kb-recht ${kbSchreibrecht.typ ? "an" : ""}" data-was="typ" title="Whether a reading may set the type of a line whose lock nobody has set by hand">${kbSchreibrecht.typ ? "\u2611" : "\u2610"} type</button><button class="kb-recht ${kbSchreibrecht.name ? "an" : ""}" data-was="name" title="Whether a reading may write name and owner of a line whose lock nobody has set by hand">${kbSchreibrecht.name ? "\u2611" : "\u2610"} name &amp; owner</button><span class="kb-recht-hinweis">Tick lines with the box, Shift+click for a range, Ctrl+click for single ones — a lock click on a ticked line locks all ticked lines, and "Keep the sheet" keeps only the ticked ones while any are ticked.</span></div>
+    <div class="kb-schreibrecht"><button class="kb-sichtbar" title="Tick every line that stands in the part of the bar you see right now — then one lock click locks them all">\u2610 visible part</button><span>New readings may write:</span><button class="kb-recht ${kbSchreibrecht.typ ? "an" : ""}" data-was="typ" title="Whether a reading may set the type of a line whose lock nobody has set by hand">${kbSchreibrecht.typ ? "\u2611" : "\u2610"} type</button><button class="kb-recht ${kbSchreibrecht.name ? "an" : ""}" data-was="name" title="Whether a reading may write name and owner of a line whose lock nobody has set by hand">${kbSchreibrecht.name ? "\u2611" : "\u2610"} name &amp; owner</button><span class="kb-recht-hinweis">Tick lines with the box, Shift+click for a range, Ctrl+click for single ones — a lock click on a ticked line locks all ticked lines, and "Keep the sheet" keeps only the ticked ones while any are ticked.</span></div>
     <div class="kb-z kopfz"><div></div><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Side</div><div></div></div>
     ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${kbFestHand(z) ? "fest" : ""} ${z.haken ? "haken" : ""} ${z.unsicher ? "unsicher" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}">
       <div><button class="kb-haken ${z.haken ? "an" : ""}" data-i="${z.i}" title="Select this line — Shift+click a range, Ctrl+click adds or removes one">${z.haken ? "\u2611" : "\u2610"}</button></div>
-      <div>${z.i + 1}</div>
+      <div class="kb-nr">${z.riegel !== null && z.riegel !== undefined ? (() => { const nr = riegelListe.indexOf(z.riegel); return `<span class="kb-riegel r${nr % 4}" data-r="${z.riegel}" title="Screen section ${nr + 1} (from card ${z.riegel + 1}) — click to tick all of it"></span>`; })() : ""}${z.i + 1}</div>
       <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set"}">${z.typ ? "" : "?"}</span></div>
       <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${
         z.status === "erfasst" ? zeig(z, "tag", z.tag) + (z.zwilling ? " ²" : "") : "<i>?</i>"}</div>
@@ -15501,6 +15525,19 @@ function kbPult(){
 /* ---- editing the sheet ---------------------------------------------------- */
 function kbBearbeiten(ev){
   const f = ev.target.closest("[data-f]"); const zel = ev.target.closest(".kb-z[data-i]");
+  /* the visible part of the bar, and a whole screen section */
+  const sichtbar = ev.target.closest(".kb-sichtbar");
+  if (sichtbar){
+    const von = KB.erste || 0, bis = von + Math.max(1, KB.sichtbar || 0) - 1;
+    kbHakenAlle(KB.zeilen.filter(u => u.i >= von && u.i <= bis));
+    return;
+  }
+  const riegel = ev.target.closest(".kb-riegel");
+  if (riegel){
+    const r = +riegel.dataset.r;
+    kbHakenAlle(KB.zeilen.filter(u => u.riegel === r));
+    return;
+  }
   /* the default switches above the table */
   const recht = ev.target.closest(".kb-recht");
   if (recht){ kbSchreibrechtSetzen(recht.dataset.was); return; }
@@ -34580,7 +34617,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0b7401f834</span></p></div>
+         installation. <span style="color:var(--dim2)">· build a323424fa0</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34722,7 +34759,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0b7401f834";
+const BAU = "a323424fa0";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
