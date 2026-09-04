@@ -768,7 +768,15 @@ body.meld-modus{cursor:help}
    go on. Amber: clicked, but not yet taken - this is the only state he has
    to wait through. Red: the queue is filling up. */
 .kb-links .kb-ampel{font-family:var(--schmal);font-size:13px;letter-spacing:.10em;text-transform:uppercase;
-  border-radius:3px;padding:7px 12px;margin-bottom:8px;border:1px solid transparent;text-align:center}
+  border-radius:3px;padding:7px 12px;margin-bottom:8px;border:1px solid transparent;text-align:center;
+  display:flex;align-items:center;justify-content:center;gap:10px}
+/* THE SCAN RING. The Kommodore: "ein Scankreis, der voll laeuft" - easier
+   to read across the room than a word. It fills during the box's
+   stand-still time, stands full when the next unit may be clicked, and
+   turns red with the queue. */
+.kb-links .kb-ring{width:22px;height:22px;border-radius:50%;flex:none;
+  background:conic-gradient(currentColor calc(var(--p,100)*1%), rgba(255,255,255,.10) 0);
+  -webkit-mask:radial-gradient(circle, transparent 6.5px, #000 7.5px);mask:radial-gradient(circle, transparent 6.5px, #000 7.5px)}
 .kb-links .kb-ampel:empty{display:none}
 .kb-links .kb-ampel.frei{background:rgba(74,107,58,.18);border-color:#4a6b3a;color:#9ec98a}
 .kb-links .kb-ampel.nimmt{background:rgba(226,172,72,.16);border-color:#8a6820;color:#e2ac48}
@@ -896,7 +904,7 @@ body.kb-zieht{user-select:none}
    the same line. */
 .kb-zeilen{background-image:repeating-linear-gradient(180deg, transparent 0 35px, rgba(80,60,30,.22) 35px 36px);min-height:108px}
 .kb-zeilen:empty{min-height:0}
-.kb-z{display:grid;grid-template-columns:26px 38px 52px 1fr 1.5fr 1.2fr 1.6fr 56px 66px 124px;gap:8px;align-items:center;
+.kb-z{display:grid;grid-template-columns:26px 38px 52px minmax(70px,.9fr) 1.3fr minmax(160px,1.4fr) minmax(125px,1.3fr) 44px 40px 118px;gap:8px;align-items:center;
   border-bottom:1px dotted rgba(90,70,40,.25);scroll-margin-block:160px 36px}
 .kb-zeilen .kb-z{height:36px;box-sizing:border-box;overflow:hidden}
 .kb-z.kopfz{font-family:var(--schmal);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#7a6a48;
@@ -905,6 +913,16 @@ body.kb-zieht{user-select:none}
 .kb-z.eigen{color:#a08c5a;text-decoration:line-through}
 .kb-z .f{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:26px;cursor:text}
 .kb-z .f:hover{background:rgba(255,255,255,.35)}
+/* THE OWNER IS NEVER CUT SHORT. The cell used to trim with an ellipsis
+   whatever did not fit ("HENKDESTEEN1…" for HENKDESTEEN123), and that
+   read like a wrong name. The column has its width now; a long name is
+   set smaller instead of shorter. */
+.kb-z .f.bes{text-overflow:clip}
+.kb-z .f.bes.lang{font-size:13px}
+.kb-z .f.bes.sehrlang{font-size:11.5px;letter-spacing:-.01em}
+/* and a long unit name goes on two lines inside its ruling instead of
+   being cut - the Kommodore: "die Namen muessen immer ganz sichtbar sein" */
+.kb-z .f.nam.lang{white-space:normal;font-size:11.5px;line-height:15px;max-height:34px;text-overflow:clip;overflow:hidden;word-break:break-word}
 .kb-z .f input,.kb-z .f select{width:100%;font:inherit;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 4px}
 .kb-z .weg{background:transparent;border:0;color:#9b3b2e;font-size:16px;cursor:pointer;line-height:1}
 .kb-z .weg:hover{color:#d0392a}
@@ -12283,6 +12301,8 @@ const unitsBox = (x, y, w, h) => ({x: x/UNITS_W, y: y/UNITS_H, w: w/UNITS_W, h: 
 const UNITS_SCHRIFTEN = ["kor", "rus", "chi_sim", "ara", "jpn"];
 const KB_SCHRIFT_NAMEN = {kor: "Korean", rus: "Cyrillic", chi_sim: "Chinese", ara: "Arabic", jpn: "Japanese"};
 const kbSchriftName = sx => sx ? (KB_SCHRIFT_NAMEN[sx] || sx) : "";
+const KB_SCHRIFT_KURZ = {kor: "KO", rus: "RU", chi_sim: "ZH", ara: "AR", jpn: "JA"};
+const kbSchriftKurz = sx => sx ? (KB_SCHRIFT_KURZ[sx] || String(sx).slice(0, 2).toUpperCase()) : "";
 const unitsFremd = {};
 async function unitsFremdWorker(sprache){
   if (unitsFremd[sprache]) return unitsFremd[sprache];
@@ -13306,7 +13326,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
     /* The separator is " - " with spaces; a dark or blurred capture turns
        it into "=" or "==" without spaces. Back to the dash first. A hyphen
        without spaces stays - it belongs to the tag (USSR-004). */
-    const roh = name.text.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ")
+    const roh = unitsCjkEng(name.text, name.schrift || null).replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ")
                          .replace(/^[^\p{L}\p{N}]+/u, "");
     const t = roh.split(AT_TRENNER);
     /* THE OWNER LINE CARRIES A LABEL, AND THE LABEL IS TRANSLATED. It reads
@@ -13329,11 +13349,20 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
        the Latin model read, because a tag is Latin by build */
     let fremdTag = "";
     if (fremd && fremd.text){
-      const rf = fremd.text.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ")
+      const rf = unitsCjkEng(fremd.text, fremd.schrift).replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ")
                            .replace(/^[^\p{L}\p{N}]+/u, "");
       const tf = rf.split(AT_TRENNER);
-      const rest = (tf.length > 1 ? tf.slice(1).join(" - ") : rf).trim();
+      let rest = (tf.length > 1 ? tf.slice(1).join(" - ") : rf).trim();
       fremdTag = tf.length > 1 ? tf[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "";
+      /* no separator in the foreign reading either: the first word is the
+         tag when it looks like one (see the Latin side below) */
+      if (tf.length === 1){
+        const m = /^(\S{2,14})\s+(\S.*)$/u.exec(rf);
+        if (m && /[\p{N}\-\u2010-\u2015]/u.test(m[1])){
+          fremdTag = m[1].replace(/^[^\p{L}\p{N}]+/u, "").replace(/[.,;:\uff0e]+$/u, "").trim();
+          rest = m[2].trim();
+        }
+      }
       if (rest && unitsFremdSchrift(rest)) nameText = rest;
     }
     /* the misread bars first, so that both sides are clean when they are
@@ -13401,6 +13430,17 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
     const unlesbar = unitsUnlesbar(name.text, name.symbole, name.feld);
     /* the tag from the Latin reading, whatever model won the line */
     let tagRoh = t.length > 1 ? t[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "";
+    /* A TAG ALWAYS STANDS FIRST - the Kommodore's rule. Where no separator
+       was read at all, the first word is the tag when it looks like one:
+       two to fourteen characters with a digit or a dash, and a name
+       behind it. */
+    if (t.length === 1 && !fremdTag){
+      const m = /^(\S{2,14})\s+(\S.*)$/u.exec(roh);
+      if (m && /[\p{N}\-\u2010-\u2015]/u.test(m[1])){
+        tagRoh = m[1].replace(/^[^\p{L}\p{N}]+/u, "").replace(/[.,;:\uff0e]+$/u, "").trim();
+        nameText = atStrichZuI(m[2].trim());
+      }
+    }
     /* ONLY WHERE THERE IS A TAG AT ALL. Where the whole line is one foreign
        name - no dash, no tag - the Latin reading of it is junk, and taking
        a tag from it invents one: a Chinese line came out as "TvEhE-E". The
@@ -13659,6 +13699,23 @@ function kbOrtMelden(name){
     }
   } catch(e){}
   kbGong();
+}
+/* The ring's filling: the stand-still time of the box, from first sighting
+   to the picture being taken. Runs on its own frames while a box waits;
+   otherwise a single draw - full when free or busy, full and red when the
+   queue is long. */
+let kbRingLauf = null;
+function kbRingTakt(){
+  if (kbRingLauf){ clearTimeout(kbRingLauf); kbRingLauf = null; }
+  if (!KB || !KB.live) return;
+  const el = document.querySelector(".kb-links .kb-ampel .kb-ring");
+  if (!el) return;
+  const wartet = !!(KB.kastenRuhe && KB.kastenRuhe.offen);
+  const p = wartet ? Math.max(0, Math.min(100, (performance.now() - KB.kastenRuhe.seit) / KB_KASTEN_RUHE * 100)) : 100;
+  el.style.setProperty("--p", p.toFixed(0));
+  /* a timer, not an animation frame: frames rest in a covered tab, and
+     the ring would stand still just when the Kommodore looks over */
+  if (wartet) kbRingLauf = setTimeout(kbRingTakt, 40);
 }
 /* One place where the town is set, so the announcement cannot be forgotten.
    A CHANGE OF TOWN closes the sheet: what stands on it is written away
@@ -15482,7 +15539,11 @@ function kbZeichnen(){
   if (ampelEl){
     const soll = `kb-ampel ${ampel[0]}`;
     if (ampelEl.className !== soll) ampelEl.className = soll;
-    if (ampelEl.textContent !== ampel[1]) ampelEl.textContent = ampel[1];
+    if (ampelEl.dataset.text !== ampel[1]){
+      ampelEl.dataset.text = ampel[1];
+      ampelEl.innerHTML = ampel[1] ? `<span class="kb-ring"></span><span>${kbEsc(ampel[1])}</span>` : "";
+    }
+    kbRingTakt();
   }
   const jetztSoll = sz ? `<b>${kbEsc(sz.tag)}</b><br>${kbEsc(sz.name)}<br>${kbEsc(sz.besitzer)}` : kbEsc(KB.status);
   /* not "jetzt": that is the clock, and the clerk's progress bar further
@@ -15626,7 +15687,7 @@ function kbZeichnen(){
       <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set"}">${z.typ ? "" : "?"}</span></div>
       <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${
         z.status === "erfasst" ? zeig(z, "tag", z.tag) + (z.zwilling ? " ²" : "") : "<i>?</i>"}</div>
-      <div class="f" data-f="name" title="${
+      <div class="f nam ${(z.name || "").length > 16 ? "lang" : ""}" data-f="name" title="${
         z.unlesbar && !z.beschrieben ? "The reader makes something different of these characters every look. Click and write what you see."
         : z.unlesbar ? "Your description — the game shows characters no reader can hold on to" : "click to correct"
       }" style="${z.unlesbar && !z.beschrieben ? "color:#c0803a;font-style:italic"
@@ -15634,12 +15695,12 @@ function kbZeichnen(){
         z.status !== "erfasst" ? ""
         : (z.unlesbar && !z.beschrieben) ? "unreadable — click and describe it"
         : zeig(z, "name", z.name)}</div>
-      <div class="f" data-f="besitzer" title="click to correct">${z.status === "erfasst" ? zeig(z, "besitzer", z.besitzer || "") : ""}</div>
+      <div class="f bes ${(z.besitzer || "").length > 17 ? "sehrlang" : (z.besitzer || "").length > 13 ? "lang" : ""}" data-f="besitzer" title="${kbEsc(z.besitzer || "")} — click to correct">${z.status === "erfasst" ? zeig(z, "besitzer", z.besitzer || "") : ""}</div>
       <div class="f hp" data-f="hp" title="click to correct">${z.status !== "erfasst" ? ""
         : (KB.schreibt && KB.schreibt.i === z.i) ? zeig(z, "hp", (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  "))
         : kbStaerkeHTML(z)}</div>
       <div class="f" data-f="seite" title="click to change">${z.eigen ? "own" : kbSeiteName(z.seite)}</div>
-      <div class="f" data-f="schrift" title="${z.schriftHand ? "Script set by hand — the reader tries this model first when it is unsure" : "Script the reader used — click to set a hint for unsure readings"}" style="${z.schriftHand ? "color:#1a3a8a" : ""}">${kbSchriftName(z.schriftHand || z.schrift)}</div>
+      <div class="f" data-f="schrift" title="${z.schriftHand ? `Script hint set by hand: ${kbEsc(kbSchriftName(z.schriftHand))} — the reader tries this model first when it is unsure` : "click to set a script hint for unsure readings"}" style="${z.schriftHand ? "color:#1a3a8a" : ""}">${z.schriftHand ? kbSchriftKurz(z.schriftHand) : ""}</div>
       <div class="kb-schluss">${
         /* WHAT THE CLAN'S BOOK SAYS, at the end of the line where the other
            marks stand. It sat in the tag column first, and that column is
@@ -27995,7 +28056,10 @@ async function ocrLesen(datei, quelle){
    Gekuerzt wird nach Fensterbreite, nicht nach Zeichenzahl - am Ende steht
    dann ein Auslassungszeichen. Ein solcher Name ist unvollstaendig und wird
    nie ergaenzt, nur vermerkt. */
-const AT_TRENNER = /\s[-\u2010-\u2015\u2212]\s/;
+/* THE SEPARATOR IS " - " - and a foreign model reads its first space as
+   a full stop: ".- " counts too. A dash with a space on one side only
+   does not: the Chinese model writes "宇 -001" inside a tag. */
+const AT_TRENNER = /(?:\s[\-\u2010-\u2015\u2212]\s|[.\uff0e]\s*[\-\u2010-\u2015\u2212]\s+)/u;
 /* THE WORD THE GAME PUTS IN FRONT OF THE OWNER. The list was matched
    EXACTLY, and the reader does not read exactly: BESITZER comes back as
    BES|TZER, the I turned into a stroke, and then nothing matched and the
@@ -34876,7 +34940,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 030d6b402f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 2cc5a2a6b3</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -35018,7 +35082,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "030d6b402f";
+const BAU = "2cc5a2a6b3";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
