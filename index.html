@@ -904,7 +904,7 @@ body.kb-zieht{user-select:none}
    the same line. */
 .kb-zeilen{background-image:repeating-linear-gradient(180deg, transparent 0 35px, rgba(80,60,30,.22) 35px 36px);min-height:108px}
 .kb-zeilen:empty{min-height:0}
-.kb-z{display:grid;grid-template-columns:26px 38px 52px minmax(70px,.9fr) 1.3fr minmax(160px,1.4fr) minmax(125px,1.3fr) 44px 40px 118px;gap:8px;align-items:center;
+.kb-z{display:grid;grid-template-columns:26px 38px 52px minmax(70px,.9fr) 1.3fr minmax(160px,1.4fr) minmax(125px,1.3fr) 44px 40px 150px;gap:8px;align-items:center;
   border-bottom:1px dotted rgba(90,70,40,.25);scroll-margin-block:160px 36px}
 .kb-zeilen .kb-z{height:36px;box-sizing:border-box;overflow:hidden}
 .kb-z.kopfz{font-family:var(--schmal);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#7a6a48;
@@ -952,6 +952,7 @@ body.kb-zieht{user-select:none}
 .kb-schwach{font-size:8px;vertical-align:middle;color:#9b3b2e;flex:0 0 auto}
 .kb-hinweis.schwach{color:#9b3b2e;line-height:1.5}
 .kb-unles{font-size:11px;line-height:1;color:#c0803a;flex:0 0 auto;opacity:.9}
+.kb-unvoll{font:700 13px/1 var(--schmal);color:#f4ead9;background:#c0803a;border-radius:3px;padding:2px 5px;flex:0 0 auto;cursor:help}
 .kb-bek{font-size:8px;vertical-align:middle;color:#4f7a3a;opacity:.8;flex:0 0 auto}
 .kb-aehnlich{background:#efe5cc;flex:0 0 auto;border:1px solid #b3a482;color:#6b5a2e;
   cursor:pointer;font-size:12px;line-height:1;padding:1px 5px;border-radius:3px}
@@ -965,8 +966,9 @@ body.kb-zieht{user-select:none}
 .kb-fest.warnt{background:#f0b13a;border-color:#b3801f;color:#241d16}
 .kb-fest small{font:700 9px/1 var(--schmal);margin-left:2px}
 .kb-fest.vorgabe{opacity:.75}
-.kb-neu{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;font-size:14px;line-height:1;padding:3px 6px;border-radius:3px;margin-right:3px}
-.kb-neu.an{background:#f0b13a;border-color:#b3801f;color:#241d16}
+.kb-neu,.kb-typ-neu{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;font-size:14px;line-height:1;padding:3px 5px;border-radius:3px;margin-right:2px}
+.kb-neu small,.kb-typ-neu small{font:700 9px/1 var(--schmal);margin-left:1px}
+.kb-neu.an,.kb-typ-neu.an{background:#f0b13a;border-color:#b3801f;color:#241d16}
 .kb-haken{background:transparent;border:0;padding:0;color:#7a6a48;font-size:18px;line-height:1;cursor:pointer}
 .kb-haken.an{color:#2b2416}
 .kb-z.haken{background:rgba(226,172,72,.18)}
@@ -974,8 +976,9 @@ body.kb-zieht{user-select:none}
 .kb-schreibrecht{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-family:var(--schmal);font-size:14px;letter-spacing:.05em;color:#7a6a48;margin:0 0 8px}
 .kb-recht{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:5px 11px;border-radius:3px}
 .kb-recht.an{background:#4a6b3a;border-color:#3a5530;color:#f2f6ee}
+.kb-recht:disabled{opacity:.35;cursor:not-allowed}
 .kb-recht-hinweis{flex-basis:100%;letter-spacing:0;color:#8a7a58;font-size:12px;line-height:1.45;margin-top:2px}
-.kb-sichtbar,.kb-typen-neu{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:5px 11px;border-radius:3px;margin-right:10px}
+.kb-sichtbar,.kb-typen-neu,.kb-alle,.kb-zeile-plus{background:#efe5cc;border:1px solid #b3a482;color:#4a4133;cursor:pointer;font:inherit;line-height:1;padding:5px 11px;border-radius:3px;margin-right:10px}
 .kb-nr{display:flex;align-items:center;gap:4px}
 .kb-riegel{display:inline-block;width:5px;height:18px;border-radius:2px;cursor:pointer;flex:none}
 .kb-riegel.r0{background:#4a6b3a}.kb-riegel.r1{background:#b3801f}.kb-riegel.r2{background:#3a5a8a}.kb-riegel.r3{background:#8a3a4a}
@@ -12622,13 +12625,22 @@ function ocrSchriftPruefen(feld, text, symbole){
      them a fresh browser would have to read a dozen units before it could
      recognise the one sign it was given for free */
   if (namen.length < 12) return text;
-  let si = 0, aus = "", i = 0;
+  let si = 0, aus = "", i = 0, vorigesX1 = -1e9;
   for (const ch of text){
     i++;
     if (/\s/.test(ch)){ aus += ch; continue; }
     const y = symbole[si++];
     /* out of step with the character list - then leave the rest alone */
     if (!y || y.t !== ch){ aus += text.slice(i-1); break; }
+    /* ONLY LETTERS AND DIGITS ARE HELD AGAINST THE BOOK, and only in a box
+       of their own. Measured on "PANZERGRENADIER...": the first dot came
+       in a box of full line height that reached back into the R - the
+       cut-out showed the R, the book said R, and the sheet read "RR..".
+       A punctuation mark is never a letter, and a box that overlaps the
+       one before it shows the neighbour, not itself. */
+    const ueberlappt = y.b && y.b.x0 < vorigesX1 - 2;
+    if (y.b) vorigesX1 = Math.max(vorigesX1, y.b.x1);
+    if (!/[\p{L}\p{N}]/u.test(ch) || ueberlappt){ aus += ch; continue; }
     /* A SECOND DOOR, for a character the book does not hold. The doorman
        used to compare the read character with ITSELF and let it pass when
        it had nothing to compare against - and that is exactly the case
@@ -13711,11 +13723,16 @@ function kbRingTakt(){
   const el = document.querySelector(".kb-links .kb-ampel .kb-ring");
   if (!el) return;
   const wartet = !!(KB.kastenRuhe && KB.kastenRuhe.offen);
-  const p = wartet ? Math.max(0, Math.min(100, (performance.now() - KB.kastenRuhe.seit) / KB_KASTEN_RUHE * 100)) : 100;
+  /* the whole expected wait, not only the stand-still: the picture is
+     taken by the first look after the stand-still, and looks come with
+     the share's pictures - one more picture's worth, then */
+  const takt = 1000 / Math.max(4, bildRate() || 8);
+  const dauer = KB_KASTEN_RUHE + takt;
+  const p = wartet ? Math.max(0, Math.min(100, (performance.now() - KB.kastenRuhe.seit) / dauer * 100)) : 100;
   el.style.setProperty("--p", p.toFixed(0));
   /* a timer, not an animation frame: frames rest in a covered tab, and
      the ring would stand still just when the Kommodore looks over */
-  if (wartet) kbRingLauf = setTimeout(kbRingTakt, 40);
+  if (wartet) kbRingLauf = setTimeout(kbRingTakt, 16);
 }
 /* One place where the town is set, so the announcement cannot be forgotten.
    A CHANGE OF TOWN closes the sheet: what stands on it is written away
@@ -13961,7 +13978,7 @@ function kbFenster(R){
   }
   return {N: n, erste: 0, sichtbar: n};
 }
-function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, festTyp: null, festName: null, haken: false, riegel: null, schriftHand: null, abweichung: null, unsicher: false, kandidat: null, unsicherGrund: null, neuLesen: null}; }
+function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, festTyp: null, festName: null, haken: false, riegel: null, schriftHand: null, abweichung: null, unsicher: false, kandidat: null, unsicherGrund: null, neuLesen: null, typNeu: null}; }
 /* A LOCKED LINE IS NOT TOUCHED. Not by a reading, not by a move, not by
    clearing, not by the tidying up of a bar that has grown shorter. What
    the tool reads differently it only reports: the line gets a note, the
@@ -14006,6 +14023,34 @@ function kbNeuLesen(i){
     ? (ziele.length === 1 ? `Line ${z.i + 1} keeps what it has.` : `${ziele.length} lines keep what they have.`)
     : (ziele.length === 1 ? `Line ${z.i + 1} will be read afresh — click its unit in the game.` : `${ziele.length} lines will be read afresh — click their units in the game.`);
   kbZeichnen();
+}
+/* THE TYPE AFRESH, ON ORDER - the twin of kbNeuLesen for the sign. The
+   line loses its type, the sign memo goes, and the next look runs the
+   geometry again; a type lock is opened for it and put back once the
+   type stands (see kbZeichnen). */
+function kbTypNeu(i){
+  const z = KB && KB.zeilen[i];
+  if (!z) return;
+  const ziele = z.haken ? KB.zeilen.filter(u => u.haken) : [z];
+  const zurueck = !!z.typNeu && ziele.every(u => u.typNeu);
+  for (const u of ziele){
+    if (zurueck){ kbTypNeuErledigt(u); continue; }
+    if (u.typNeu) continue;
+    u.typNeu = {vorher: u.festTyp};
+    if (kbFestTyp(u)) u.festTyp = false;
+    u.typ = null;
+  }
+  if (z.haken){ for (const u of KB.zeilen) u.haken = false; KB.hakenAnker = null; }
+  if (!zurueck){ unitsTypAlt = {}; KB.typenNeu = true; }
+  KB.status = zurueck
+    ? (ziele.length === 1 ? `Line ${z.i + 1} keeps its type.` : `${ziele.length} lines keep their types.`)
+    : (ziele.length === 1 ? `Line ${z.i + 1}: the type is read afresh at the next look.` : `${ziele.length} lines: the types are read afresh at the next look.`);
+  kbZeichnen();
+}
+function kbTypNeuErledigt(z){
+  if (!z || !z.typNeu) return;
+  if (z.typNeu.vorher !== undefined) z.festTyp = z.typNeu.vorher;
+  z.typNeu = null;
 }
 function kbNeuLesenErledigt(z){
   if (!z || !z.neuLesen) return;
@@ -14205,7 +14250,7 @@ function kbSchonDa(e){
 function kbZeileLeeren(z){
   Object.assign(z, {status: "vermutet", tag: "", name: "", besitzer: "", hp: null,
                     unsicher: false, kandidat: null, unsicherGrund: null, abweichung: null, bekannt: null,
-                    nameZuv: 0, zwilling: null, gespeichert: false, schriftHand: null, neuLesen: null});
+                    nameZuv: 0, zwilling: null, gespeichert: false, schriftHand: null, neuLesen: null, typNeu: null});
 }
 
 /* ---- IS THIS READING GOOD ENOUGH TO BE WRITTEN DOWN? -------------------
@@ -14233,6 +14278,12 @@ function kbZeileLeeren(z){
    strengths as the very text the sheet shows. A described line keeps its
    tag and name anyway, so only owner and strengths can differ there. */
 const kbHpText = hp => (hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join(" ");
+/* A NAME THE GAME CUT SHORT. Three dots at the end mean the game did not
+   show the rest; the sheet marks it, the record carries the mark, and the
+   Kommodore completes it by hand - the full name stands in the game's
+   mouse-over window of the card. Once the name no longer ends in dots,
+   the mark is gone by itself. */
+const kbUnvoll = z => !!z && z.status === "erfasst" && !z.unlesbar && /(?:\u2026|\.{2,})\s*$/.test(String(z.name || ""));
 function kbGleicheLesung(z, e){
   if (!z || z.status !== "erfasst" || !e) return false;
   const gleich = (a, b) => namKey(String(a || "")) === namKey(String(b || ""));
@@ -14420,14 +14471,14 @@ function kbVerarbeiten(R, vorgabe){
       const sofort = KB.zeilen.length === 0;
       const sichtbarMin = KB.erste + (R.karten ? R.karten.length : 0);
       let letzteVoll = 0;
-      KB.zeilen.forEach((z, i) => { if (z.status === "erfasst" || kbFestHand(z)) letzteVoll = i + 1; });
+      KB.zeilen.forEach((z, i) => { if (z.status === "erfasst" || kbFestHand(z) || z.vonHand) letzteVoll = i + 1; });
       const getragen = KB.nRing.length >= KB_RING && beste >= KB_RING_MEHRHEIT;
       if (sofort || (getragen && vorschlag >= sichtbarMin && vorschlag >= letzteVoll)){
         if (vorschlag > KB.zeilen.length)
           for (let i = KB.zeilen.length; i < vorschlag; i++) KB.zeilen.push(kbZeileLeer(i));
         else
           while (KB.zeilen.length > vorschlag && KB.zeilen[KB.zeilen.length - 1].status === "vermutet"
-                 && !kbFestHand(KB.zeilen[KB.zeilen.length - 1])) KB.zeilen.pop();
+                 && !kbFestHand(KB.zeilen[KB.zeilen.length - 1]) && !KB.zeilen[KB.zeilen.length - 1].vonHand) KB.zeilen.pop();
         KB.nRing = [];
       }
     }
@@ -14581,6 +14632,8 @@ function kbVerarbeiten(R, vorgabe){
       if (kbGleicheLesung(z, e)){
         z.nameZuv = Math.max(+z.nameZuv || 0, +e.nameZuv || 0);
         z.unsicher = false; z.kandidat = null; z.unsicherGrund = null;
+        /* a note left by a refused reading is answered by this confirmation */
+        if (!kbFestName(z)) z.abweichung = null;
         kbNeuLesenErledigt(z);
         if (!z.typ && !kbFestTyp(z)){ const k2 = R.karten[i - KB.erste]; const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
         if (!z.typ && !kbFestTyp(z)){ const kand = kbTypKandidaten(e.hp); if (kand.length === 1) z.typ = kand[0]; }
@@ -14631,6 +14684,11 @@ function kbVerarbeiten(R, vorgabe){
                                               : (KB.reiheSeite !== null && KB.reiheSeite !== undefined ? KB.reiheSeite : null)),
                         zwilling: zwilling ? da.i + 1 : null});
       if (z.riegel === null || z.riegel === undefined) z.riegel = KB.erste;
+      /* THE NOTE OF A REFUSED READING DOES NOT OUTLIVE THE LINE IT WAS
+         LEFT ON. It used to stay through every later write, and offered
+         the Kommodore a stale reading to take over - "so wuerde ich bei
+         beiden Zeilen falsche Infos eintragen". */
+      z.abweichung = null;
       kbNeuLesenErledigt(z);
       /* what the clan already knows about this one - looked up once, when
          the line is written, not on every draw */
@@ -15678,8 +15736,23 @@ function kbZeichnen(){
     return kbEsc(teil) + (n < String(txt).length && n > 0 ? `<span class="kb-tinte"></span>` : "");
   };
   const riegelListe = kbRiegelListe();
+  /* a type ordered afresh has arrived - the lock goes back as it was */
+  for (const z of KB.zeilen) if (z.typNeu && z.typ) kbTypNeuErledigt(z);
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Town ?"}${KB.linie ? ` · attack line ${kbEsc(KB.linie)}` : ""} · ${new Date().toLocaleDateString()}</div>
-    <div class="kb-schreibrecht"><button class="kb-sichtbar" title="Tick every line that stands in the part of the bar you see right now — then one lock click locks them all">\u2610 visible part</button><button class="kb-typen-neu" title="Read the types of the visible lines afresh — all whose type is not locked">\u21bb types</button><span>New readings may write:</span><button class="kb-recht ${kbSchreibrecht.typ ? "an" : ""}" data-was="typ" title="Whether a reading may set the type of a line whose lock nobody has set by hand">${kbSchreibrecht.typ ? "\u2611" : "\u2610"} type</button><button class="kb-recht ${kbSchreibrecht.name ? "an" : ""}" data-was="name" title="Whether a reading may write name and owner of a line whose lock nobody has set by hand">${kbSchreibrecht.name ? "\u2611" : "\u2610"} name &amp; owner</button><span class="kb-recht-hinweis">Tick lines with the box, Shift+click for a range, Ctrl+click for single ones — a lock click on a ticked line locks all ticked lines, and "Keep the sheet" keeps only the ticked ones while any are ticked.</span></div>
+    <div class="kb-schreibrecht"><button class="kb-alle" title="${KB.zeilen.length && KB.zeilen.every(u => u.haken) ? "Untick every line" : "Tick every line on the sheet"}">${KB.zeilen.length && KB.zeilen.every(u => u.haken) ? "\u2610 none" : "\u2611 all"}</button><button class="kb-sichtbar" title="Tick every line that stands in the part of the bar you see right now — then one lock click locks them all">\u2610 visible part</button><button class="kb-typen-neu" title="Read the types of the visible lines afresh — all whose type is not locked">\u21bb types</button><button class="kb-zeile-plus" title="Add an empty line at the end — for a unit the count missed. The count vote will not take it away again; × removes it.">+ line</button>${(() => {
+      /* THE LOCKS FOR THE SELECTION. Without ticked lines the two buttons
+         are grey and dead; with ticks a click locks the type, or name and
+         owner, of every ticked line - or opens them, when all are shut. */
+      const gew = KB.zeilen.filter(u => u.haken), n = gew.length;
+      const knopf = (was, text) => {
+        const zu = n > 0 && gew.every(u => was === "typ" ? kbFestTyp(u) : kbFestName(u));
+        const titel = !n ? "Tick lines first — then this locks or opens them"
+          : zu ? `Open ${text.replace("&amp;", "&")} of the ${n} ticked line${n === 1 ? "" : "s"} for readings`
+               : `Lock ${text.replace("&amp;", "&")} of the ${n} ticked line${n === 1 ? "" : "s"} against readings`;
+        return `<button class="kb-recht ${zu ? "an" : ""}" data-was="${was}" ${n ? "" : "disabled"} title="${titel}">${zu ? "\u{1F513} open" : "\u{1F512} lock"} ${text}</button>`;
+      };
+      return `<span>Selection${n ? ` (${n})` : ""}:</span>${knopf("typ", "type")}${knopf("name", "name &amp; owner")}`;
+    })()}<span class="kb-recht-hinweis">Tick lines with the box, Shift+click for a range, Ctrl+click for single ones — a lock click on a ticked line locks all ticked lines, and "Keep the sheet" keeps only the ticked ones while any are ticked.</span></div>
     <div class="kb-z kopfz"><div></div><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Side</div><div>Script</div><div></div></div>
     <div class="kb-zeilen">${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${kbFestHand(z) ? "fest" : ""} ${z.haken ? "haken" : ""} ${z.unsicher ? "unsicher" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}">
       <div><button class="kb-haken ${z.haken ? "an" : ""}" data-i="${z.i}" title="Select this line — Shift+click a range, Ctrl+click adds or removes one">${z.haken ? "\u2611" : "\u2610"}</button></div>
@@ -15708,6 +15781,8 @@ function kbZeichnen(){
            it. */
         z.unsicher
           ? `<span class="kb-schwach" title="${kbEsc(z.unsicherGrund || "read too poorly to write down")}">\u25cf</span>` : ""}${
+        kbUnvoll(z)
+          ? `<span class="kb-unvoll" title="Name cut short by the game — hover the card in the game to see the full name, then click the name here and type it in full">\u2026</span>` : ""}${
         z.unlesbar
           ? `<span class="kb-unles" title="${z.beschrieben
               ? "Described by hand — recognised again by the picture of its name line, not by its letters"
@@ -15720,7 +15795,10 @@ function kbZeichnen(){
       }<button class="kb-neu ${z.neuLesen ? "an" : ""}" data-i="${z.i}" title="${
         z.neuLesen ? "Waiting for a fresh picture of this unit — click it in the game. Click again to take the order back."
                    : "Read this line afresh: the next picture of its unit overwrites name and owner, whatever stands here"
-      }">\u21bb</button><button class="kb-fest typ ${kbFestTyp(z) ? "zu" : ""} ${z.festTyp === null ? "vorgabe" : ""}" data-i="${z.i}" data-was="typ" title="${
+      }">\u21bb<small>N</small></button><button class="kb-typ-neu ${z.typNeu ? "an" : ""}" data-i="${z.i}" title="${
+        z.typNeu ? "Waiting for the next look to read the type afresh — click again to take the order back"
+                 : "Read the type of this line afresh at the next look, whatever stands here"
+      }">\u21bb<small>T</small></button><button class="kb-fest typ ${kbFestTyp(z) ? "zu" : ""} ${z.festTyp === null ? "vorgabe" : ""}" data-i="${z.i}" data-was="typ" title="${
         kbFestTyp(z) ? "Type locked — a reading will not change it. Click to open." : "Type open — click to lock it against readings"
       }${z.festTyp === null ? " (follows the default above)" : ""}">${kbFestTyp(z) ? "🔒" : "🔓"}<small>T</small></button><button class="kb-fest name ${kbFestName(z) ? "zu" : ""} ${z.festName === null ? "vorgabe" : ""} ${z.abweichung ? "warnt" : ""}" data-i="${z.i}" data-was="name" title="${
         kbFestName(z) ? "Name and owner locked — a reading will not change them. Click to open." : "Name and owner open — click to lock them against readings"
@@ -15784,6 +15862,19 @@ function kbPult(){
   document.getElementById("kb-kraft").addEventListener("click", ()=>{ KB.live ? kbLiveStop(true) : kbLiveStart(); });
   document.getElementById("kb-ton").addEventListener("click", ()=>{ kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); kbPult(); });
   document.getElementById("kb-keep").addEventListener("click", ()=>{
+    /* CUT NAMES ARE SAID ONCE BEFORE THEY ARE KEPT. The Kommodore wants
+       the full name typed in - it stands in the game's mouse-over window
+       of the card. The first click on Keep stops and says so; the second
+       keeps them, marked as incomplete in the record. */
+    const angehakt = KB.zeilen.some(z => z.haken);
+    const gekuerzt = KB.zeilen.filter(z => kbUnvoll(z) && !z.eigen && !z.gespeichert && (!angehakt || z.haken)).map(z => z.i + 1);
+    if (gekuerzt.length && !KB.unvollGewarnt){
+      KB.unvollGewarnt = true;
+      KB.status = `Line${gekuerzt.length === 1 ? "" : "s"} ${gekuerzt.join(", ")}: name cut short by the game (…). Hover the card in the game to see the full name, click the name here and type it in — or keep again to file ${gekuerzt.length === 1 ? "it" : "them"} marked as incomplete.`;
+      kbZeichnen();
+      return;
+    }
+    KB.unvollGewarnt = false;
     if (!kbBehalten()) return;
     /* KEEP MEANS DONE WITH THIS TOWN - a fresh sheet follows at once. Unless
        lines were ticked and unsaved ones remain: those are not thrown away
@@ -15799,6 +15890,23 @@ function kbPult(){
 function kbBearbeiten(ev){
   const f = ev.target.closest("[data-f]"); const zel = ev.target.closest(".kb-z[data-i]");
   /* the visible part of the bar, and a whole screen section */
+  /* A LINE BY HAND, for a unit the count missed */
+  const plus = ev.target.closest(".kb-zeile-plus");
+  if (plus){
+    const z = kbZeileLeer(KB.zeilen.length); z.vonHand = true;
+    KB.zeilen.push(z); KB.N = KB.zeilen.length; KB.nRing = [];
+    KB.status = `Line ${z.i + 1} added by hand.`;
+    kbZeichnen();
+    return;
+  }
+  /* ALL OR NONE: every line ticked - or, when they all are, none */
+  const alle = ev.target.closest(".kb-alle");
+  if (alle){
+    const offen = KB.zeilen.filter(u => !u.haken);
+    if (offen.length) kbHakenAlle(offen);
+    else { for (const u of KB.zeilen) u.haken = false; KB.hakenAnker = null; KB.status = "No line selected."; kbZeichnen(); }
+    return;
+  }
   const sichtbar = ev.target.closest(".kb-sichtbar");
   if (sichtbar){
     const von = KB.erste || 0, bis = von + Math.max(1, KB.sichtbar || 0) - 1;
@@ -15826,7 +15934,15 @@ function kbBearbeiten(ev){
   }
   /* the default switches above the table */
   const recht = ev.target.closest(".kb-recht");
-  if (recht){ kbSchreibrechtSetzen(recht.dataset.was); return; }
+  if (recht){
+    if (recht.disabled) return;
+    const gew = KB.zeilen.filter(u => u.haken);
+    if (!gew.length) return;
+    const was = recht.dataset.was;
+    const zu = gew.every(u => was === "typ" ? kbFestTyp(u) : kbFestName(u));
+    kbFrieren(gew[0].i, was, !zu);
+    return;
+  }
   /* SELECTING: the box, or any click with Shift or Ctrl held */
   const haken = ev.target.closest(".kb-haken");
   if (zel && (haken || ev.shiftKey || ev.ctrlKey || ev.metaKey)){
@@ -15835,6 +15951,8 @@ function kbBearbeiten(ev){
     return;
   }
   /* the lock, and the note a locked line has collected */
+  const typNeu = ev.target.closest(".kb-typ-neu");
+  if (typNeu){ kbTypNeu(+typNeu.dataset.i); return; }
   const neuLesen = ev.target.closest(".kb-neu");
   if (neuLesen){ kbNeuLesen(+neuLesen.dataset.i); return; }
   const schloss = ev.target.closest(".kb-fest");
@@ -16544,6 +16662,7 @@ function kbBehalten(){
                                     name nobody can read, it is the only identity there is */
                                  z.schrift ? {schrift: z.schrift} : {},
                                  z.unlesbar ? {unlesbar: 1, bild: z.bild || "", name: neu.name} : {},
+                                 kbUnvoll(z) ? {unvoll: 1} : {},
                                  unbestaetigt ? {ung: 1} : {}));
         setFeindDepot(key, depot); teams++;
         if (weitere) doppelt++;
@@ -16553,7 +16672,9 @@ function kbBehalten(){
         const da = treffer[0];
         const besser = Object.assign({},
           (da.ung && !unbestaetigt) ? {k, name: neu.name || da.name, ung: 0} : {},
-          (z.schrift && da.schrift !== z.schrift) ? {schrift: z.schrift} : {});
+          (z.schrift && da.schrift !== z.schrift) ? {schrift: z.schrift} : {},
+          /* the full name replaces a cut one on file, never the other way */
+          (da.unvoll && !kbUnvoll(z) && neu.name) ? {name: neu.name, unvoll: 0} : {});
         if (da.o !== ort || da.t !== jetztS || Object.keys(besser).length)
           setFeindDepot(key, depot.map(d => d === da
             ? Object.assign({}, d, {o: ort, t: jetztS}, besser) : d));
@@ -34940,7 +35061,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 2cc5a2a6b3</span></p></div>
+         installation. <span style="color:var(--dim2)">· build a70420a127</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -35082,7 +35203,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "2cc5a2a6b3";
+const BAU = "a70420a127";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
