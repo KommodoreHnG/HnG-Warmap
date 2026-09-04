@@ -888,7 +888,7 @@ body.kb-zieht{user-select:none}
   font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive;font-size:15px;line-height:28px}
 .kb-blatt .kb-titel{font-family:var(--schmal);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
   color:#7a6a48;border-bottom:1px solid #b9ab8a;margin-bottom:6px}
-.kb-z{display:grid;grid-template-columns:22px 34px 52px 1.05fr 1.75fr 1.2fr 1.45fr 56px 64px;gap:8px;align-items:center;
+.kb-z{display:grid;grid-template-columns:22px 34px 52px 1.05fr 1.75fr 1.2fr 1.45fr 56px 62px 64px;gap:8px;align-items:center;
   border-bottom:1px dotted rgba(90,70,40,.25);scroll-margin-block:160px 36px}
 .kb-z.kopfz{font-family:var(--schmal);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#7a6a48;
   border-bottom:1px solid #b9ab8a}
@@ -12262,6 +12262,8 @@ const unitsBox = (x, y, w, h) => ({x: x/UNITS_W, y: y/UNITS_H, w: w/UNITS_W, h: 
    line too - the most confident one wins when it is ten points better.
    Each model loads once and stays until the cabin closes. */
 const UNITS_SCHRIFTEN = ["kor", "rus", "chi_sim", "ara", "jpn"];
+const KB_SCHRIFT_NAMEN = {kor: "Korean", rus: "Cyrillic", chi_sim: "Chinese", ara: "Arabic", jpn: "Japanese"};
+const kbSchriftName = sx => sx ? (KB_SCHRIFT_NAMEN[sx] || sx) : "";
 const unitsFremd = {};
 async function unitsFremdWorker(sprache){
   if (unitsFremd[sprache]) return unitsFremd[sprache];
@@ -12437,7 +12439,8 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
          rightly with seventy-nine - lost to Arabic's seventy-nonsense,
          because it would have needed eighty. */
       if (text && zuv >= beste.zuv + huerde && zuv > (top.schrift ? top.zuv : -1))
-        top = {text, zuv, schrift: sp, latein: beste.text};
+        top = {text, zuv, schrift: sp, latein: beste.text,
+               lateinZuv: beste.zuv, lateinSymbole: beste.symbole || null, lateinFeld: beste.feld || null};
       /* a model that reads the line WELL is the model - but eighty-five,
          not seventy-five: a middling one must not end the search before a
          better one has had its turn */
@@ -12735,6 +12738,51 @@ async function unitsFremdLesen(c, x, y, w, h, schrift){
             zuv: Math.round((r.data && r.data.confidence) || 0), schrift};
   } catch(e){ return null; }
 }
+/* THE TAG'S OWN CONFIDENCE. The symbols come without spaces and stand in
+   step with the characters, so the tag is the first k of them - k the
+   non-space characters before the first separator of the Latin line - and
+   symbol k is the dash itself. */
+function unitsTagZuv(latein, symbole){
+  if (!latein || !symbole || !symbole.length) return null;
+  const l = String(latein).replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ");
+  const i = l.search(AT_TRENNER);
+  if (i < 0) return null;
+  const k = l.slice(0, i).replace(/\s/g, "").length;
+  const sy = symbole.slice(0, k);
+  if (!sy.length) return null;
+  let sum = 0, min = 100, x1 = 0;
+  for (const y of sy){ const c = y.c || 0; sum += c; if (c < min) min = c; if (y.b && y.b.x1 > x1) x1 = y.b.x1; }
+  const strich = symbole[k] && symbole[k].b ? symbole[k].b.x0 : 0;
+  const schnitt = strich > x1 ? Math.round((x1 + strich) / 2) : x1;
+  return {mittel: Math.round(sum / sy.length), min, n: sy.length, schnitt};
+}
+/* IS THE TAG TO BE DOUBTED. Content first - "1#7iEF-001" carries a sign no
+   tag is built of - then the symbols' confidence: mean under 62 (the
+   sheet's own bar for a good reading) or one character under 45. */
+const UNITS_TAG_ZEICHEN = /[A-Za-z0-9 ._\-|\/]/;
+function unitsTagUnsicher(tag, zuv){
+  const t = String(tag || "");
+  if (!t) return true;
+  for (const ch of t) if (!UNITS_TAG_ZEICHEN.test(ch)) return true;
+  /* the game sets tags in capitals: a small letter inside one ("ZrO",
+     "iEF") is the Latin model guessing at strokes it cannot read */
+  if (/[a-z]/.test(t)) return true;
+  return !!(zuv && (zuv.mittel < 62 || zuv.min < 45));
+}
+/* THE TAG, READ ONCE MORE WITH A NAMED MODEL. Where the Latin symbols show
+   where the tag ends, only that piece of the line is read; otherwise the
+   whole line, and the part before the dash is taken. */
+async function unitsTagNachlesen(c, x, y, w, h, schrift, tagZuv, feld){
+  let bw = w;
+  if (tagZuv && tagZuv.schnitt && feld && feld.width)
+    bw = Math.max(Math.round(h), Math.min(w, Math.round(tagZuv.schnitt / feld.width * w)));
+  const r = await unitsFremdLesen(c, x, y, bw, h, schrift);
+  if (!r || !r.text) return null;
+  const rf = r.text.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ")
+                   .replace(/^[^\p{L}\p{N}]+/u, "");
+  const tag = rf.split(AT_TRENNER)[0].trim();
+  return tag ? {tag, zuv: r.zuv, schrift, ganz: bw === w} : null;
+}
 /* Is there writing here that no Latin alphabet holds? */
 const unitsFremdSchrift = t => /[^\u0000-\u024F\u2010-\u2015\u2212]/.test(t || "");
 /* Town lookup with one difference to findeStadt: "ß" counts as "ss". The
@@ -12883,7 +12931,7 @@ function atPunkteErgaenzen(nameText, besitzer, weitere){
   }
   return bestes ? rumpf.slice(0, rumpf.length - bestes.k) + bestes.b : null;
 }
-async function unitsLesen(quelle, melde, letzteReihe, art){
+async function unitsLesen(quelle, melde, letzteReihe, art, hand){
   const sag = melde || (()=>{});
   const {c, d, quer, gross, hell, gain} = (quelle && quelle.rahmen) ? quelle : await unitsRahmen(quelle);
   const R = {gross, quer, hell, gain, karten: [], stadt: null, seite: null, roll: null, form: null, einheit: null};
@@ -13198,7 +13246,10 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
         || /^\s*[\p{Lu}\p{Lo}]{4,14}\s*[:;.\-]\s*(.+)$/u.exec(roh);
       return unitsSchriftVon(m ? m[1] : roh);
     })();
-    const name = await besser(UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h, besVor);
+    /* the script given by hand for this line comes before the owner's
+       depot script as the model to try first - both only where the reader
+       is unsure, the early return on a sure Latin reading stands */
+    const name = await besser(UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h, (hand && hand.schrift) || besVor);
     /* first learn from what was read surely, then let the doorman look at
        what was not - a G that came back as a 6 is caught here */
     ocrSchriftLernen(name.feld, name.symbole);
@@ -13247,11 +13298,13 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
     let nameText = (t.length > 1 ? t.slice(1).join(" - ") : roh).trim();
     /* the foreign reading only ever gives the NAME - the tag stays the one
        the Latin model read, because a tag is Latin by build */
+    let fremdTag = "";
     if (fremd && fremd.text){
       const rf = fremd.text.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ")
                            .replace(/^[^\p{L}\p{N}]+/u, "");
       const tf = rf.split(AT_TRENNER);
       const rest = (tf.length > 1 ? tf.slice(1).join(" - ") : rf).trim();
+      fremdTag = tf.length > 1 ? tf[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "";
       if (rest && unitsFremdSchrift(rest)) nameText = rest;
     }
     /* the misread bars first, so that both sides are clean when they are
@@ -13334,11 +13387,39 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
         if (kand.length >= 2) tagRoh = kand;
       }
     }
+    /* THE TAG IS NOT LATIN BY BUILD EVERYWHERE. "杨靖宇-001 - 东北抗联第一…": the
+       Chinese model read the name right and the Latin model made
+       "1#7iEF-001" of the tag - and the rule above then took the Latin tag,
+       as it always does. So where the Latin tag is doubtful - by its
+       characters or by its symbols' confidence - the tag comes from the
+       script the NAME came out in, or the script given by hand for this
+       line, or the owner's. The model that won the line has read the tag
+       already, no second run then; otherwise the tag's piece of the line
+       is read once more with that model. A sure Latin tag ("ROKA-03")
+       stays: the Korean model made "0#-03" of it. */
+    const tagSchrift = (hand && hand.schrift) || name.schrift || (fremd && fremd.schrift) || bes.schrift || null;
+    let tagInfo = {schrift: tagSchrift, teile: t.length, latein: name.latein || null, vorher: tagRoh};
+    if (tagSchrift && t.length > 1){
+      const tagZuv = unitsTagZuv(name.latein || name.text, name.lateinSymbole || name.symbole || null);
+      tagInfo.zuv = tagZuv; tagInfo.unsicher = unitsTagUnsicher(tagRoh, tagZuv);
+      if (unitsTagUnsicher(tagRoh, tagZuv)){
+        let neu = null;
+        if (name.schrift === tagSchrift && t[0])
+          neu = {tag: t[0].replace(/^[^\p{L}\p{N}]+/u, "").trim(), zuv: name.zuv, schrift: tagSchrift};
+        else if (fremd && fremd.schrift === tagSchrift && fremdTag)
+          neu = {tag: fremdTag, zuv: fremd.zuv, schrift: tagSchrift};
+        else
+          neu = await unitsTagNachlesen(c, UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h, tagSchrift,
+                                        tagZuv, name.lateinFeld || name.feld || null);
+        if (neu && neu.tag && (unitsFremdSchrift(neu.tag) || !tagZuv || neu.zuv >= tagZuv.mittel))
+          tagRoh = atStrichZuI(neu.tag);
+      }
+    }
     R.einheit = {
       unlesbar: unlesbar || undefined,
       bild: unlesbar ? bildKennung(name.feld) : undefined,
       schrift: name.schrift || bes.schrift || null,
-      tag: tagRoh,
+      tag: tagRoh, tagInfo,
       name: nameText,
       nameZuv: name.zuv,
       besitzer: bzName, besitzerRoh: bes.text, besitzerZuv: bes.zuv,
@@ -13794,7 +13875,7 @@ function kbFenster(R){
   }
   return {N: n, erste: 0, sichtbar: n};
 }
-function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, festTyp: null, festName: null, haken: false, riegel: null, abweichung: null, unsicher: false, kandidat: null, unsicherGrund: null}; }
+function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, festTyp: null, festName: null, haken: false, riegel: null, schriftHand: null, abweichung: null, unsicher: false, kandidat: null, unsicherGrund: null}; }
 /* A LOCKED LINE IS NOT TOUCHED. Not by a reading, not by a move, not by
    clearing, not by the tidying up of a bar that has grown shorter. What
    the tool reads differently it only reports: the line gets a note, the
@@ -13989,7 +14070,7 @@ function kbSchonDa(e){
 function kbZeileLeeren(z){
   Object.assign(z, {status: "vermutet", tag: "", name: "", besitzer: "", hp: null,
                     unsicher: false, kandidat: null, unsicherGrund: null,
-                    nameZuv: 0, zwilling: null, gespeichert: false});
+                    nameZuv: 0, zwilling: null, gespeichert: false, schriftHand: null});
 }
 
 /* ---- IS THIS READING GOOD ENOUGH TO BE WRITTEN DOWN? -------------------
@@ -14994,6 +15075,13 @@ function kbArbeitsRahmen(job){
   return {rahmen: true, c: kbArbeitC, d: kbArbeitPuffer, quer: false,
           gross: job.gross, hell: job.hell, gain: job.gain};
 }
+/* THE SCRIPT GIVEN BY HAND for a line; null lets the reader decide. Only
+   a model the tool knows. */
+function kbSchriftWunsch(ziel){
+  const z = ziel >= 0 && KB ? KB.zeilen[ziel] : null;
+  const sh = z && z.schriftHand ? z.schriftHand : null;
+  return sh && UNITS_SCHRIFTEN.indexOf(sh) >= 0 ? sh : null;
+}
 async function kbEinreihen(F, G){
   if (!KB || KB.warte.length >= 24) return;
   /* THE LINE IS BOUND FIRST - this is the unit that stood in the box when
@@ -15036,7 +15124,7 @@ async function kbEinreihen(F, G){
      as good as the older. The queue can then never grow longer than the
      number of units in the town. */
   const platz = ziel === KB_OHNE_LEISTE ? -1 : KB.warte.findIndex(j => j.ziel === ziel);
-  const neuerJob = {bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel};
+  const neuerJob = {bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel, schrift: kbSchriftWunsch(ziel)};
   if (platz >= 0){
     const alt = KB.warte[platz];
     if (alt.bmp && alt.bmp.close) alt.bmp.close();
@@ -15077,7 +15165,7 @@ async function kbSchlange(){
       let R = null;
       /* the owners already on the sheet, for completing a cut name */
       unitsBekannteBesitzer = KB.zeilen.filter(z => z.status === "erfasst" && z.besitzer).map(z => z.besitzer);
-      try { R = await unitsLesen(kbArbeitsRahmen(job), null, null, "einheit"); }
+      try { R = await unitsLesen(kbArbeitsRahmen(job), null, null, "einheit", job.schrift ? {schrift: job.schrift} : null); }
       catch(e){ R = null; }
       if (job.bmp && job.bmp.close) job.bmp.close();
       if (!KB) return;
@@ -15428,7 +15516,7 @@ function kbZeichnen(){
   const riegelListe = kbRiegelListe();
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Town ?"}${KB.linie ? ` · attack line ${kbEsc(KB.linie)}` : ""} · ${new Date().toLocaleDateString()}</div>
     <div class="kb-schreibrecht"><button class="kb-sichtbar" title="Tick every line that stands in the part of the bar you see right now — then one lock click locks them all">\u2610 visible part</button><button class="kb-typen-neu" title="Read the types of the visible lines afresh — all whose type is not locked">\u21bb types</button><span>New readings may write:</span><button class="kb-recht ${kbSchreibrecht.typ ? "an" : ""}" data-was="typ" title="Whether a reading may set the type of a line whose lock nobody has set by hand">${kbSchreibrecht.typ ? "\u2611" : "\u2610"} type</button><button class="kb-recht ${kbSchreibrecht.name ? "an" : ""}" data-was="name" title="Whether a reading may write name and owner of a line whose lock nobody has set by hand">${kbSchreibrecht.name ? "\u2611" : "\u2610"} name &amp; owner</button><span class="kb-recht-hinweis">Tick lines with the box, Shift+click for a range, Ctrl+click for single ones — a lock click on a ticked line locks all ticked lines, and "Keep the sheet" keeps only the ticked ones while any are ticked.</span></div>
-    <div class="kb-z kopfz"><div></div><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Side</div><div></div></div>
+    <div class="kb-z kopfz"><div></div><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Side</div><div>Script</div><div></div></div>
     ${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${kbFestHand(z) ? "fest" : ""} ${z.haken ? "haken" : ""} ${z.unsicher ? "unsicher" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}">
       <div><button class="kb-haken ${z.haken ? "an" : ""}" data-i="${z.i}" title="Select this line — Shift+click a range, Ctrl+click adds or removes one">${z.haken ? "\u2611" : "\u2610"}</button></div>
       <div class="kb-nr">${z.riegel !== null && z.riegel !== undefined ? (() => { const nr = riegelListe.indexOf(z.riegel); return `<span class="kb-riegel r${nr % 4}" data-r="${z.riegel}" title="Screen section ${nr + 1} (from card ${z.riegel + 1}) — click to tick all of it"></span>`; })() : ""}${z.i + 1}</div>
@@ -15448,6 +15536,7 @@ function kbZeichnen(){
         : (KB.schreibt && KB.schreibt.i === z.i) ? zeig(z, "hp", (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  "))
         : kbStaerkeHTML(z)}</div>
       <div class="f" data-f="seite" title="click to change">${z.eigen ? "own" : kbSeiteName(z.seite)}</div>
+      <div class="f" data-f="schrift" title="${z.schriftHand ? "Script set by hand — the reader tries this model first when it is unsure" : "Script the reader used — click to set a hint for unsure readings"}" style="${z.schriftHand ? "color:#1a3a8a" : ""}">${kbSchriftName(z.schriftHand || z.schrift)}</div>
       <div class="kb-schluss">${
         /* WHAT THE CLAN'S BOOK SAYS, at the end of the line where the other
            marks stand. It sat in the tag column first, and that column is
@@ -15612,7 +15701,11 @@ function kbBearbeiten(ev){
   if (kbFest(z) && KB.status.indexOf("locked") < 0) KB.status = `Line ${z.i + 1} is locked — the tool leaves it alone; your own corrections still apply.`;
   const feld = f.dataset.f;
   let el;
-  if (feld === "seite"){
+  if (feld === "schrift"){
+    el = document.createElement("select");
+    el.innerHTML = `<option value="">?</option>` + UNITS_SCHRIFTEN.map(sx => `<option value="${sx}">${kbEsc(kbSchriftName(sx))}</option>`).join("");
+    el.value = z.schriftHand || "";
+  } else if (feld === "seite"){
     el = document.createElement("select");
     el.innerHTML = `<option value="">?</option><option value="0">US</option><option value="1">GE</option><option value="2">USSR</option><option value="eigen">own</option>`;
     el.value = z.eigen ? "eigen" : (z.seite === null || z.seite === undefined ? "" : String(z.seite));
@@ -15632,6 +15725,7 @@ function kbBearbeiten(ev){
     const v = el.value;
     if (feld === "seite"){ z.eigen = v === "eigen"; z.seite = v === "" || v === "eigen" ? (v === "eigen" ? z.seite : null) : +v; }
     else if (feld === "typ"){ z.typ = v || null; }
+    else if (feld === "schrift"){ z.schriftHand = v || null; }
     else if (feld === "hp"){ z.hp = [...v.matchAll(/(\d+)\s*\/\s*(\d+)/g)].map(m => [+m[1], +m[2]]); }
     else { z[feld] = v.trim(); }
     /* A NAME WRITTEN BY HAND OVER AN UNREADABLE ONE IS A DESCRIPTION, and
@@ -34648,7 +34742,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b84bf05802</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 3abeb6c8da</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34790,7 +34884,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b84bf05802";
+const BAU = "3abeb6c8da";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
