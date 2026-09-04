@@ -12844,6 +12844,41 @@ async function unitsStaerke(c, d, oben, melde){
    name, owner and strength, and nothing at all means everything. A frame
    that has already been normalised may be handed in place of a picture, so
    that one look goes through the eight million points once, not twice. */
+/* THE OWNERS ALREADY ON THE SHEET - set by the queue before a box is
+   read, so a cut name can be completed from any of them, not only from the
+   owner line of this box. People send several units into one town, and
+   those do not stand side by side. */
+let unitsBekannteBesitzer = [];
+/* WHERE THE DOTS ARE, THE OWNER BEGINS. The game cuts a long unit name and
+   sets dots; by the naming convention what was cut is the owner. The first
+   rule took the last piece behind " - " and held it against the owner's
+   beginning - and failed where the dash has no spaces (INFO00005-PATRIXA44..
+   is one piece). So the owner is looked for at the END of the cut text,
+   whatever stands before it: the longest ending of three characters or
+   more that matches an owner's beginning (one slip per six characters, at
+   least one) is replaced by that whole owner. Every owner on the sheet is
+   tried, this box's own first; the longest match wins, on equal length the
+   closer. Returns the completed name, or null. */
+function atPunkteErgaenzen(nameText, besitzer, weitere){
+  const AT_PUNKTE = /\s*(?:\u2026|\.{2,})\s*$/;
+  if (!AT_PUNKTE.test(nameText || "")) return null;
+  const rumpf = String(nameText).replace(AT_PUNKTE, "").replace(/\s+$/, "");
+  const kandidaten = [besitzer, ...(weitere || [])].filter(b => b && String(b).trim().length >= 4);
+  let bestes = null;
+  for (const b of kandidaten){
+    const B = String(b).trim(), BU = B.toUpperCase();
+    for (let k = Math.min(rumpf.length, BU.length - 1); k >= 3; k--){
+      const ende = rumpf.slice(-k).toUpperCase();
+      const erlaubt = Math.max(1, Math.floor(k/6));
+      const d = levenshtein(ende, BU.slice(0, k));
+      if (d <= erlaubt){
+        if (!bestes || k > bestes.k || (k === bestes.k && d < bestes.d)) bestes = {k, d, b: B};
+        break;
+      }
+    }
+  }
+  return bestes ? rumpf.slice(0, rumpf.length - bestes.k) + bestes.b : null;
+}
 async function unitsLesen(quelle, melde, letzteReihe, art){
   const sag = melde || (()=>{});
   const {c, d, quer, gross, hell, gain} = (quelle && quelle.rahmen) ? quelle : await unitsRahmen(quelle);
@@ -13242,18 +13277,12 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        The allowance grows with the length (one slip per six characters, at
        least one), so a long piece does not fail on a single misread letter
        and a short one is not completed at random. */
-    const AT_PUNKTE = /\s*(?:\u2026|\.{2,})\s*$/;
-    if (bzName && AT_PUNKTE.test(nameText)){
-      const tn = nameText.split(AT_TRENNER);
-      const schwanz = tn[tn.length-1].replace(AT_PUNKTE, "").trim();
-      if (schwanz.length >= 3 && bzName.length > schwanz.length){
-        const kopf = bzName.slice(0, schwanz.length);
-        const erlaubt = Math.max(1, Math.floor(schwanz.length/6));
-        if (levenshtein(schwanz.toUpperCase(), kopf.toUpperCase()) <= erlaubt){
-          tn[tn.length-1] = bzName;
-          nameText = tn.join(" - ");
-        }
-      }
+    /* (the rule itself now lives in atPunkteErgaenzen, above unitsLesen -
+       it looks at the END of the cut text, whatever the separators, and at
+       every owner already on the sheet) */
+    {
+      const ergaenzt = atPunkteErgaenzen(nameText, bzName, unitsBekannteBesitzer);
+      if (ergaenzt) nameText = ergaenzt;
     }
     /* THE NAME AND THE OWNER ARE TWO READINGS OF THE SAME WORD. The
        Kommodore noticed the naming convention: the owner's name usually
@@ -15000,6 +15029,8 @@ async function kbSchlange(){
       kbZeichnen();
       const t0 = jetzt();
       let R = null;
+      /* the owners already on the sheet, for completing a cut name */
+      unitsBekannteBesitzer = KB.zeilen.filter(z => z.status === "erfasst" && z.besitzer).map(z => z.besitzer);
       try { R = await unitsLesen(kbArbeitsRahmen(job), null, null, "einheit"); }
       catch(e){ R = null; }
       if (job.bmp && job.bmp.close) job.bmp.close();
@@ -34543,7 +34574,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 886dac8567</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 32480f4b98</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34685,7 +34716,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "886dac8567";
+const BAU = "32480f4b98";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
