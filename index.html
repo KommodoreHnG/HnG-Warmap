@@ -895,6 +895,21 @@ body.kb-zieht{user-select:none}
   background:#e8d9a8;color:#1a1d23;font-size:10px;line-height:16px;text-align:center}
 .kb-k .nr{position:absolute;left:2px;bottom:-14px;font-size:9px;color:#5f666f}
 .kb-streifen.gross .kb-k{margin-bottom:12px}
+/* THE FLOATING STRIP - a Document Picture-in-Picture window over the game:
+   the same cards in one row at the game's own pitch (--kb-karte/--kb-luecke
+   set from the capture width), the frame, the current line, three buttons */
+.kb-schwebe{margin:0;padding:8px 10px;background:#0b0c10;color:#a9b0b8;font-family:var(--schmal);font-size:13px;line-height:1.4;overflow:hidden;user-select:none}
+.kb-schwebe .kb-streifen{position:relative;top:auto;z-index:auto;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:var(--kb-luecke,6px);padding:6px 2px 16px;margin:0 0 8px;min-height:0}
+.kb-schwebe .kb-k{flex:none;width:var(--kb-karte,46px);height:var(--kb-hoehe,34px)}
+.kb-schwebe .kb-k canvas{width:calc(var(--kb-karte,46px)*.7);height:auto}
+.kb-schwebe .kb-jetzt{background:#15181d;border:1px solid #2a2e36;border-radius:3px;padding:8px 10px;margin:0 0 8px;min-height:3.4em}
+.kb-schwebe .kb-jetzt b{color:#e8d9a8;font-size:15px}
+.kb-schwebe .kb-jetzt small{color:#8b929b}
+.kb-schwebe .kb-jetzt .hp{display:flex;flex-wrap:wrap;gap:2px 10px;margin-top:3px;color:#cbb98a}
+.kb-schwebe .kb-jetzt .hpg{display:inline-flex;align-items:center;gap:3px}
+.kb-schwebe .kb-knoepfe{display:flex;gap:8px;flex-wrap:wrap}
+.kb-schwebe .kb-knoepfe .rd-schalter{width:auto;padding:7px 12px}
+.kb-schwebe .kb-knoepfe .rd-schalter:disabled{opacity:.4;cursor:not-allowed}
 /* the sheet */
 .kb-blatt{background:#e9dfc6;color:#2b2416;border-radius:2px;padding:14px 18px 18px;
   box-shadow:0 8px 30px rgba(0,0,0,.5), inset 0 0 0 1px #d7ccb0;
@@ -1784,6 +1799,12 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
         title="When the clan last looked at each town — green just now, red long ago. Towns with no mark have not been scanned.">
         <svg viewBox="0 0 24 24"><circle cx="7" cy="14.5" r="4.2"/><circle cx="17" cy="14.5" r="4.2"/><path d="M10.6 13.2h2.8M7 10.3V4.6h2.6M17 10.3V4.6h-2.6"/></svg>
         <span class="lbl" data-txt="view.blick">Coverage</span></button>
+      <!-- The Aufmarsch, next to the binoculars: both live off what was last
+           seen - this one shows WHAT stood there, not only WHEN. -->
+      <button class="tool row" id="b-aufmarsch" aria-pressed="false"
+        title="Aufmarsch — what was last seen in each town: sightings, enemy records and own teams; ring coloured by side and sized by count, the outer ring says how fresh (green under an hour, red older than two days).">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.1" fill="currentColor" stroke="none"/><path d="M12 3.4a8.6 8.6 0 0 1 8.6 8.6"/><path d="M20.6 12a8.6 8.6 0 0 1-8.6 8.6" stroke-dasharray="2.6 2.6"/><path d="M12 20.6A8.6 8.6 0 0 1 3.4 12"/></svg>
+        <span class="lbl" data-txt="view.aufmarsch">Aufmarsch</span></button>
       <button class="tool row" id="b-names" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M4.4 7.6V5.2h15.2v2.4"/><path d="M12 5.2v13.6"/><path d="M8.9 18.8h6.2"/></svg>
         <span class="lbl" data-txt="view.names">Labels</span></button>
@@ -3012,6 +3033,9 @@ let showRadius = true;
    zusammengenommen, siehe sichtKarte. Vorgabe aus - eine neue Anzeige auf
    der Karte soll niemanden ueberraschen, der sie nicht bestellt hat. */
 let showBlick = false;
+/* Aufmarsch: the sum of what was last seen in each town (sightings, enemy
+   records, own teams). Off at the start, like the other newer overlays. */
+let showAufmarsch = false;
 /* STEHT AUF false, WEIL DIE SERVERREGEL FEHLT. warmap_may_write endet auf
    "else false" und kennt den Topf "sicht" nicht - jede geteilte Zeile wird
    abgewiesen, reisst den ganzen Stapel, laesst hunderte Einzelanfragen
@@ -3900,6 +3924,64 @@ function messStaerkeAt(i){
     if (hat){ n++; if (g.t > t) t = g.t; }
   }
   return {ist, max, n, t};
+}
+/* ---- Aufmarsch: what was last seen in each town -------------------------
+   Three sources, per town and side to ONE number:
+     S.spot   sightings {k,n,f,owner?}, row stamp e.t in ms
+     S.edep   enemy records: d.o = last seen in (town index), d.t in SECONDS,
+              side from S.roster[key].v.f (may be null -> bucket 3 "unknown")
+     unitIdx  own teams (u.s), stamp S.units[town:who].t in ms
+   The capture writes the SAME unit into spot AND edep, so per town and
+   side the MAXIMUM of both counts is taken, not the sum. */
+const AUFM_STUFEN = [
+  {bis:    3600e3, k:"frisch",  n:"< 1 h",  a:1.00, f:"#7dff9b"},
+  {bis: 12*3600e3, k:"stunden", n:"< 12 h", a:0.85, f:"#d8e86a"},
+  {bis: 48*3600e3, k:"tag",     n:"< 48 h", a:0.62, f:"#e8a34a"},
+  {bis:  Infinity, k:"alt",     n:"older",  a:0.38, f:"#c8453a"},
+];
+const aufmStufe = t => AUFM_STUFEN.find(q => alter(t) < q.bis) || AUFM_STUFEN[3];
+function aufmarschKarte(){
+  const m = new Map();
+  const eintrag = town => { let d = m.get(town);
+    if (!d){ d = {town, spot:[0,0,0,0], dep:[0,0,0,0], eigen:0, t:0}; m.set(town, d); } return d; };
+  const fach = f => (f === 0 || f === 1 || f === 2) ? f : 3;
+  for (const k of Object.keys(S.spot || {})){
+    const e = S.spot[k];
+    if (!e || !imKrieg(e) || !imZeit(e) || !Array.isArray(e.v) || !e.v.length) continue;
+    const town = +k.slice(0, k.indexOf(":"));
+    if (!MAP.n[town]) continue;
+    const d = eintrag(town);
+    for (const u of e.v) if (u) d.spot[fach(u.f)] += (u.n || 0);
+    d.t = Math.max(d.t, e.t || 0);
+  }
+  for (const [key, e] of Object.entries(S.edep || {})){
+    if (!e || !Array.isArray(e.v)) continue;
+    const r = (S.roster || {})[key], f = fach(r && r.v ? r.v.f : null);
+    for (const u of e.v){
+      if (!u || u.o === undefined || u.o === null || !u.t || !MAP.n[u.o]) continue;
+      const t = u.t * 1000;                                  /* seconds -> ms */
+      if (t < epoche() || (zeitReise && t > zeitReise)) continue;
+      const d = eintrag(u.o); d.dep[f] += 1; d.t = Math.max(d.t, t);
+    }
+  }
+  const eigenF = clanFaktion();
+  for (const [town, gruppen] of unitIdx){
+    if (!MAP.n[town]) continue;
+    let n = 0, t = 0;
+    for (const g of gruppen){
+      for (const u of g.list) n += (u.s || 0);
+      const e = S.units[`${town}:${g.who}`];
+      if (e && imZeit(e)) t = Math.max(t, e.t || 0);
+    }
+    if (!n) continue;
+    const d = eintrag(town); d.eigen += n; d.t = Math.max(d.t, t);
+  }
+  for (const d of m.values()){
+    d.je = [0,1,2,3].map(f => Math.max(d.spot[f], d.dep[f]));
+    d.je[eigenF] += d.eigen;
+    d.gesamt = d.je[0] + d.je[1] + d.je[2] + d.je[3];
+  }
+  return m;
 }
 const allSpots = () => {
   const m = new Map();
@@ -4979,6 +5061,52 @@ function draw(){
      Nicht-Ziele herunter (Objectives-Schalter). Ohne diese Zeile zeichnet
      alles Folgende blass weiter. */
   ctx.globalAlpha = 1;
+
+  /* --- Aufmarsch: what was last seen in each town, by side and freshness ---
+     Ring OUTSIDE every existing ring (largest is the selection ring r+6):
+     arc length per side = share of the count, width grows with the count,
+     alpha and a thin outer ring in the stage colour say how fresh. The
+     number sits NE: N has the triangle and the own count, E the note,
+     W the para glyph, SW the binoculars, S the name. */
+  if (showAufmarsch){
+    const eigenF = clanFaktion();
+    const farbeVon = f => f < 3 ? col(FACTIONS[f]) : col(FAK_UNBEKANNT);
+    const reihe = [eigenF, ...[0,1,2,3].filter(q => q !== eigenF)];
+    for (const d of aufmarschKarte().values()){
+      if (!d.gesamt) continue;
+      const n = MAP.n[d.town];
+      const [x,y] = toScr(n[1], n[2]);
+      if (x < -60 || y < -60 || x > WW+60 || y > HH+60) continue;
+      const st = aufmStufe(d.t);
+      const br = Math.max(2, (1.6 + Math.min(d.gesamt, 40)*0.12)*Math.sqrt(z))*uiScale;
+      const rr = rAussen(d.town) + 8*uiScale + br/2;
+      ctx.save();
+      ctx.lineCap = "butt"; ctx.setLineDash([]);
+      ctx.globalAlpha = st.a; ctx.lineWidth = br;
+      let a0 = -Math.PI/2;
+      for (const f of reihe){
+        if (!d.je[f]) continue;
+        const a1 = a0 + 6.2832*d.je[f]/d.gesamt;
+        ctx.strokeStyle = farbeVon(f);
+        ctx.beginPath(); ctx.arc(x, y, rr, a0, a1); ctx.stroke();
+        a0 = a1;
+      }
+      ctx.globalAlpha = .9;
+      ctx.strokeStyle = st.f; ctx.lineWidth = Math.max(1, 1.1*Math.sqrt(z))*uiScale;
+      ctx.beginPath(); ctx.arc(x, y, rr + br/2 + 1.5*uiScale, 0, 6.2832); ctx.stroke();
+      if (z > .8){
+        const feind = d.gesamt - d.je[eigenF];
+        const txt = feind + (d.eigen ? "/" + d.eigen : "");
+        ctx.font = `600 ${Math.max(9, 8*Math.sqrt(z))*uiScale}px ui-monospace,Consolas,monospace`;
+        ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+        ctx.fillStyle = st.f; ctx.strokeStyle = "rgba(5,8,12,.9)"; ctx.lineWidth = 2.5;
+        const tx = x + rr*0.72, ty = y - rr*0.72;
+        ctx.strokeText(txt, tx, ty); ctx.fillText(txt, tx, ty);
+      }
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
 
   /* --- enemy sightings, drawn above everything so they cannot be missed --- */
   for (const d of allSpots()){
@@ -7105,6 +7233,7 @@ function hoverZeigen(i, mx, my){
     ${sp.length ? `<div class="h-row h-warn"><b>${sp.reduce((s,g)=>s+g.list.reduce((t,u)=>t+(u.n||0),0),0)}</b>
       enemy reported <em>${alterText(Math.max(...sp.map(g=>g.t)))}</em>
       ${clansAt(i).length ? `<em style="color:var(--accent)">clan: ${clansAt(i).map(c=>esc(c.name)).join(", ")}</em>` : ""}</div>` : ""}
+    ${showAufmarsch && aufmarschKarte().get(i) ? (d => `<div class="h-row"><b>${d.gesamt}</b> last seen · ${alterText(d.t)} (${aufmStufe(d.t).n})</div>`)(aufmarschKarte().get(i)) : ""}
     ${sch.length ? `<div class="h-row">${sch.map(x=>esc(x.text)).join(" · ")}</div>` : ""}
     ${noteOf(i) ? `<div class="h-row h-note">${esc(noteOf(i).slice(0,90))}</div>` : ""}
     <div class="h-hint">click for detail</div>`;
@@ -7299,6 +7428,7 @@ document.addEventListener("keydown", e => {
   if (k === "o"){ document.getElementById("b-obj").click(); return; }
   if (k === "n"){ document.getElementById("b-names").click(); return; }
   if (k === "l"){ document.getElementById("b-key").click(); return; }
+  if (k === "m"){ document.getElementById("b-aufmarsch").click(); return; }
   if (k === "escape"){
     if (document.getElementById("veil").classList.contains("on")) closeDlg();
     else if (editing){ editing = null; draw(); }
@@ -7480,6 +7610,9 @@ document.getElementById("b-radius").addEventListener("click", function(){
 document.getElementById("b-flug").addEventListener("click", function(){
   showFlug = !showFlug; this.setAttribute("aria-pressed", String(showFlug));
   draw(); side();
+});
+document.getElementById("b-aufmarsch").addEventListener("click", function(){
+  showAufmarsch = !showAufmarsch; this.setAttribute("aria-pressed", String(showAufmarsch)); draw();
 });
 document.getElementById("b-blick").addEventListener("click", function(){
   showBlick = !showBlick; this.setAttribute("aria-pressed", String(showBlick)); draw();
@@ -11218,6 +11351,47 @@ async function unitsRahmen(quelle, ziel){
    down: a window share knows no region, the operating system copies the
    whole window either way. Everything after it can be, and is. */
 const SCHNELL = {x: 1000, y: 1380, w: 1820, h: 730};
+/* THE MOUSE-OVER WINDOW. Resting the mouse on a card in the bar, the game
+   shows a grey box with the unit's FULL name - "US-AR-3 - 3rd Armored
+   Division", in its own case and with every special character - and the
+   crew parts in words below. Measured on the Kommodore's capture: an even
+   grey of 123 in all channels, about 450 by 200 points, dark letters of
+   about 40. Found here by its grey: rows with an unbroken grey run of 260
+   points or more, text rows between them allowed as gaps of up to 40. */
+function unitsTooltip(d){
+  const Y0 = 1700, Y1 = 2110, X0 = SCHNELL.x, X1 = SCHNELL.x + SCHNELL.w;
+  const grau = p => { const r = d[p], g = d[p+1], b = d[p+2]; return r >= 100 && r <= 150 && Math.abs(r - g) <= 8 && Math.abs(g - b) <= 8; };
+  /* every grey block in the band - the bar's own panel and the strength
+     row are grey too, but see-through: the map shows through them and the
+     values wander. The window is opaque: along a run the value holds to
+     five. So a run counts only while it stays level. */
+  const bloecke = []; let akt = null, luecke = 0;
+  for (let y = Y0; y < Y1; y += 2){
+    let lauf = 0, bestLauf = 0, links = -1, bestL = -1, bestR = -1, ref = -1;
+    for (let x = X0; x < X1; x += 4){
+      const p = (y*UNITS_W + x)*4;
+      if (grau(p) && (lauf === 0 || Math.abs(d[p] - ref) <= 5)){ if (lauf === 0){ links = x; ref = d[p]; } lauf++; if (lauf > bestLauf){ bestLauf = lauf; bestL = links; bestR = x; } }
+      else lauf = 0;
+    }
+    if (bestLauf * 4 >= 260){
+      if (!akt){ akt = {y0: y, y1: y, x0: bestL, x1: bestR, grauZeilen: 0}; bloecke.push(akt); }
+      akt.y1 = y; akt.grauZeilen++; luecke = 0;
+      akt.x0 = Math.min(akt.x0, bestL); akt.x1 = Math.max(akt.x1, bestR);
+    } else if (akt){ luecke += 2; if (luecke > 40){ akt = null; luecke = 0; } }
+  }
+  const kand = bloecke.filter(b => b.y1 - b.y0 >= 80 && b.x1 - b.x0 >= 260).sort((a, b) => b.grauZeilen - a.grauZeilen)[0];
+  if (!kand) return null;
+  const by0 = kand.y0, by1 = kand.y1, bx0 = kand.x0, bx1 = kand.x1;
+  const zeilen = []; let an = false, sAb = 0;
+  for (let y = by0; y <= by1; y++){
+    let dunkel = 0;
+    for (let x = bx0 + 8; x < bx1 - 8; x += 2){ const p = (y*UNITS_W + x)*4; if (d[p] + d[p+1] + d[p+2] < 240) dunkel++; }
+    if (dunkel >= 3 && !an){ an = true; sAb = y; }
+    else if (dunkel < 3 && an){ an = false; if (y - sAb >= 10) zeilen.push([sAb, y]); }
+  }
+  if (!zeilen.length) return null;
+  return {x0: bx0, y0: by0, x1: bx1 + 4, y1: by1 + 2, zeile: zeilen[0], zeilen};
+}
 let unitsPuffer = null, unitsSchnellC = null, unitsSchnellG = null;
 let unitsHellMerk = null, unitsHellZaehler = 0;
 async function unitsRahmenSchnell(quelle){
@@ -12555,7 +12729,7 @@ async function unitsText(c, x, y, w, h, melde, art){
   /* art "dunkel": the caller knows the text is dark on a light field and
      the preparation must not guess - see bildAufbereiten */
   const feld = art === "schlicht" ? unitsSchlicht(c, {x, y, w, h})
-                                  : await bildAufbereiten(c, unitsBox(x, y, w, h), art === "dunkel" ? true : undefined);
+                                  : await bildAufbereiten(c, unitsBox(x, y, w, h), art === "dunkel" ? true : art === "hell" ? false : undefined);
   const r = await ocrMitZuv(feld, 7, melde || (()=>{}), "");
   return {text: (r.text || "").trim().replace(/\s+/g, " "), zuv: r.zuv, symbole: r.symbole, feld};
 }
@@ -14660,7 +14834,7 @@ function kbVerarbeiten(R, vorgabe){
       }
     }
     KB.wahlGeglaubt = wahl !== null && geglaubt;
-    if (wahl !== KB.auswahl){ KB.auswahl = wahl; if (wahl !== null) kbKlack(); }
+    if (wahl !== KB.auswahl){ if (!KB.handAn) kbVorrueckSchliessen(KB.auswahl, wahl); KB.auswahl = wahl; if (wahl !== null) kbKlack(); }
   } else if (!R.form){
     KB.status = "No detail bar in the picture.";
   }
@@ -15457,6 +15631,61 @@ async function kbEinreihen(F, G){
   kbSchlange();
   return true;
 }
+/* THE MOUSE-OVER WINDOW, seen twice at the same place (200 ms, like the
+   box), is cut out at its first text row and put in the queue. The same
+   place is not read twice; a moved mouse is a new place. */
+function kbTooltipPruefen(F, d){
+  if (!KB) return;
+  const t = unitsTooltip(d);
+  if (!t){ KB.tooltipRuhe = null; return; }
+  const jetztT = performance.now();
+  const gleich = KB.tooltipRuhe && Math.abs(KB.tooltipRuhe.x0 - t.x0) <= 3 && Math.abs(KB.tooltipRuhe.y0 - t.y0) <= 3;
+  if (!gleich){ KB.tooltipRuhe = {x0: t.x0, y0: t.y0, seit: jetztT, offen: true}; return; }
+  if (!KB.tooltipRuhe.offen || jetztT - KB.tooltipRuhe.seit < KB_KASTEN_RUHE) return;
+  KB.tooltipRuhe.offen = false;
+  const kenn = `${t.x0}:${t.y0}:${t.zeile[0]}`;
+  if (KB.tooltipLetzte === kenn) return;
+  KB.tooltipLetzte = kenn;
+  if (KB.warte.length >= 24) return;
+  const sx = t.x0, sy = Math.max(0, t.zeile[0] - 8), sw = t.x1 - t.x0, sh = Math.min(UNITS_H - sy, (t.zeile[1] - t.zeile[0]) + 16);
+  createImageBitmap(F.c, sx, sy, sw, sh).then(bmp => {
+    if (!KB){ if (bmp.close) bmp.close(); return; }
+    KB.warte.push({art: "tooltip", bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel: null, schrift: null});
+    kbSchlange();
+  }).catch(() => {});
+}
+/* dark letters on the grey box, read once, split at " - " into tag and
+   full name, and written into the line that carries the tag - a cut name
+   always, a whole one only where the beginning agrees */
+async function kbTooltipLesen(job){
+  let text = "", zuv = 0;
+  try {
+    const R = kbArbeitsRahmen(job);
+    const r = await unitsText(R.c, job.sx, job.sy, job.bmp.width, job.bmp.height, null, "dunkel");
+    text = (r.text || "").trim().replace(/\s+/g, " "); zuv = r.zuv || 0;
+  } catch(e){ text = ""; }
+  if (job.bmp && job.bmp.close) job.bmp.close();
+  if (!KB || !text) return;
+  const teil = atZeileTeilen(text);
+  const tag = teil && teil.tag ? String(teil.tag).trim() : "", name = teil && teil.name ? String(teil.name).trim() : "";
+  if (!tag || name.length < 2) return;
+  const tk = atTagKey(tag);
+  let z = KB.zeilen.find(u => u.status === "erfasst" && atTagKey(u.tag) === tk);
+  if (!z){
+    const w = kbWahl(), zw = (w !== null && w !== undefined) ? KB.zeilen[w] : null;
+    if (zw && zw.status === "erfasst" && zw.tag && tk.length >= 3 && levenshtein(atTagKey(zw.tag), tk) <= 1) z = zw;
+  }
+  if (!z){ KB.status = `Mouse-over read: ${tag} - ${name}, no line with that tag.`; kbZeichnen(); return; }
+  const alt = String(z.name || "");
+  const kern = alt.replace(/\s*(?:\u2026|\.{2,})\s*$/, "").trim();
+  if (kern && kern.toUpperCase() === name.toUpperCase() && !kbUnvoll(z)) return;
+  const anfang = kern.toUpperCase().slice(0, Math.max(3, kern.length - 2));
+  const passt = !kern || kbUnvoll(z) || name.toUpperCase().startsWith(anfang);
+  if (!passt){ KB.status = `Mouse-over says ${tag} - ${name}; line ${z.i + 1} reads ${alt} - not taken over.`; kbZeichnen(); return; }
+  z.name = name; z.nameVoll = true; z.nameZuv = Math.max(+z.nameZuv || 0, zuv);
+  KB.status = `Line ${z.i + 1}: full name from the mouse-over window - ${name}.`;
+  kbZeichnen();
+}
 async function kbSchlange(){
   if (!KB || KB.werkt) return;
   KB.werkt = true;
@@ -15464,6 +15693,7 @@ async function kbSchlange(){
   try {
     while (KB && KB.warte.length){
       const job = KB.warte.shift();
+      if (job.art === "tooltip"){ await kbTooltipLesen(job); continue; }
       /* locked since the picture was taken - the reading is not owed */
       if (job.ziel !== null && job.ziel >= 0 && KB.zeilen[job.ziel] && kbFestName(KB.zeilen[job.ziel])){
         if (job.bmp && job.bmp.close) job.bmp.close();
@@ -15532,6 +15762,9 @@ function kbKarteBei(streifen, x, y){
 function kbHandSetzen(i, klack){
   if (i === null || i === undefined || i < 0 || i >= KB.N) return false;
   const anders = !KB.handAn || KB.handWahl !== i;
+  /* the line just left is confirmed when the pick moves on - not while the
+     frame is being dragged; the drag settles that at pointer-up */
+  if (anders && !KB.handZieht) kbVorrueckSchliessen(kbWahl(), i);
   KB.handAn = true; KB.handWahl = i;
   /* the box in the head may now be taken after all - offer it again */
   KB.kastenLetzte = null;
@@ -15548,6 +15781,7 @@ function kbSpangeVerdrahten(r, streifen){
     e.preventDefault();
     try { r.setPointerCapture(e.pointerId); } catch(err){}
     KB.handZieht = true;
+    r.dataset.vorher = (() => { const v = kbWahl(); return v === null || v === undefined ? "" : String(v); })();
     document.body.classList.add("kb-zieht");
     r.classList.add("hand");
     const t = stelle(e); if (t) kbHandSetzen(t.i, false);
@@ -15565,6 +15799,7 @@ function kbSpangeVerdrahten(r, streifen){
     if (!KB.handZieht) return;
     KB.handZieht = false;
     document.body.classList.remove("kb-zieht");
+    if (r.dataset.vorher !== undefined) kbVorrueckSchliessen(r.dataset.vorher === "" ? null : +r.dataset.vorher, kbWahl());
     kbZeichnen();
   };
   r.addEventListener("pointerup", los);
@@ -15942,11 +16177,13 @@ function kbZeichnen(){
       }
     }
   }
+  kbSchwebeZeichnen();
   kbPult();
 }
 function kbPult(){
   const pult = document.getElementById("kb-pult");
   const live = !!KB.live;
+  const pipDa = ("documentPictureInPicture" in window);
   pult.innerHTML = `
     <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="kb-kraft">${ICO_CAPTURE}${live ? "Capture running" : "Capture the game"}</button>
     <div class="kb-abstand"></div>
@@ -15955,6 +16192,9 @@ function kbPult(){
     <button class="rd-schalter" id="kb-keep" ${KB.zeilen.some(z => z.status === "erfasst" && !z.gespeichert) ? "" : "disabled"}>Keep the sheet</button>
     <div class="kb-abstand"></div>
     <button class="rd-schalter" id="kb-leer">New sheet</button>
+    <div class="kb-abstand"></div>
+    <button class="rd-schalter ${kbSchwebe ? "an" : ""}" id="kb-schweben" ${pipDa ? "" : "disabled"} title="${pipDa ? "A small window that stays over the game: the strip at the card pitch of the game, the unit under the frame, and the confirm buttons" : "Needs Chrome or Edge 116 or newer"}">${kbSchwebe ? "Strip floating - close it" : "Float the strip"}</button>
+    <button class="rd-schalter ${kbVorrueckt ? "an" : ""}" id="kb-vorrueckt" title="When on, stepping the frame to the next card locks name and type of the line just left">Advancing confirms${kbVorrueckt ? "" : ": off"}</button>
     <div class="kb-abstand"></div>
     <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run borderless or windowed. Your own units are shown but not kept.</div>`;
   /* the user's own switch: off means off, sharing included */
@@ -15983,6 +16223,141 @@ function kbPult(){
     kbNeuesBlatt();
   });
   document.getElementById("kb-leer").addEventListener("click", kbNeuesBlatt);
+  const schw = document.getElementById("kb-schweben");
+  if (schw && !schw.disabled) schw.addEventListener("click", ()=>{ if (kbSchwebe) kbSchwebeZu(); else kbSchwebeAuf(); });
+  document.getElementById("kb-vorrueckt").addEventListener("click", ()=>{ kbVorruecktSetzen(!kbVorrueckt); });
+}
+
+/* ---- the floating strip (Document Picture-in-Picture) ---------------------
+   Chrome/Edge 116+: window.documentPictureInPicture.requestWindow() gives an
+   always-on-top window with an empty same-origin document. The page's one
+   stylesheet is copied in, the strip is built there at the game's own card
+   pitch, and every draw of the room refreshes it. Module-level, not on KB:
+   "New sheet" replaces KB (kbNeuesBlatt). */
+let kbSchwebe = null;
+let kbVorrueckt = (() => { try { return localStorage.getItem("kb_vorrueckt") === "1"; } catch(e){ return false; } })();
+/* the pitch as the game shows it: 105 capture points per card, the capture
+   is KB.frame.w points wide (the window's own size), CSS points are device
+   points over the ratio */
+function kbSchwebeTeilung(){
+  const dpr = (kbSchwebe && kbSchwebe.devicePixelRatio) || window.devicePixelRatio || 1;
+  const w = KB && KB.frame && KB.frame.w ? KB.frame.w : UNITS_W;
+  return UNITS_RASTER * w / UNITS_W / dpr;
+}
+async function kbSchwebeAuf(){
+  if (kbSchwebe || !KB || !("documentPictureInPicture" in window)) return;
+  const t = kbSchwebeTeilung();
+  const breite = Math.max(380, Math.min(screen.availWidth - 60, Math.round(t * Math.max(6, Math.min(KB.N || 8, 16)) + 28)));
+  let w;
+  try { w = await window.documentPictureInPicture.requestWindow({width: breite, height: 240}); }   /* must be the first await after the click */
+  catch(e){ KB.status = "The floating window could not be opened - " + ((e && e.message) || e); kbZeichnen(); return; }
+  kbSchwebe = w;
+  const doc = w.document;
+  for (const sh of document.styleSheets){
+    try { const st = doc.createElement("style"); st.textContent = [...sh.cssRules].map(r => r.cssText).join("\n"); doc.head.appendChild(st); }
+    catch(e){ if (sh.href){ const l = doc.createElement("link"); l.rel = "stylesheet"; l.href = sh.href; doc.head.appendChild(l); } }
+  }
+  if (document.documentElement.dataset.theme) doc.documentElement.dataset.theme = document.documentElement.dataset.theme;
+  doc.body.className = "kb-schwebe";
+  doc.body.innerHTML = `<div class="kb-streifen" id="kb-schwebe-streifen"></div>
+    <div class="kb-jetzt" id="kb-schwebe-jetzt"></div>
+    <div class="kb-knoepfe">
+      <button class="rd-schalter" id="kb-schwebe-sichtbar" title="Tick every line that stands in the part of the bar you see right now">\u2610 visible part</button>
+      <button class="rd-schalter" id="kb-schwebe-bestaetigen" title="Lock name, owner and type of the line under the frame">\u2713 confirm</button>
+      <button class="rd-schalter" id="kb-schwebe-vorrueckt" title="When on, stepping to the next card locks the line just left">advancing confirms</button>
+    </div>`;
+  doc.getElementById("kb-schwebe-sichtbar").addEventListener("click", ()=>{
+    if (!KB) return;
+    const von = KB.erste || 0, bis = von + Math.max(1, KB.sichtbar || 0) - 1;
+    kbHakenAlle(KB.zeilen.filter(u => u.i >= von && u.i <= bis));
+  });
+  doc.getElementById("kb-schwebe-bestaetigen").addEventListener("click", ()=>{ const i = kbWahl(); if (i !== null && i !== undefined) kbBestaetigen(i); });
+  doc.getElementById("kb-schwebe-vorrueckt").addEventListener("click", ()=>{ kbVorruecktSetzen(!kbVorrueckt); });
+  w.addEventListener("resize", ()=>{ kbSchwebeZeichnen(); });
+  /* closed from its own corner or by the browser: forget it, relabel the pult */
+  w.addEventListener("pagehide", ()=>{ if (kbSchwebe === w){ kbSchwebe = null; if (KB) kbZeichnen(); } });
+  kbZeichnen();
+}
+function kbSchwebeZu(){
+  const w = kbSchwebe; kbSchwebe = null;
+  if (w){ try { w.close(); } catch(e){} }
+}
+function kbSchwebeZeichnen(){
+  if (!kbSchwebe || !KB) return;
+  const doc = kbSchwebe.document;
+  const st = doc.getElementById("kb-schwebe-streifen"), jf = doc.getElementById("kb-schwebe-jetzt");
+  if (!st || !jf) return;
+  const t = kbSchwebeTeilung();
+  const karte = Math.max(24, Math.round(t * 72 / UNITS_RASTER)), luecke = Math.max(2, Math.round(t) - karte);
+  doc.body.style.setProperty("--kb-karte", karte + "px");
+  doc.body.style.setProperty("--kb-luecke", luecke + "px");
+  doc.body.style.setProperty("--kb-hoehe", Math.round(karte * 34 / 46) + "px");
+  const wahl = kbWahl();
+  /* the same cards as the room's strip, rebuilt only when they changed */
+  const html = KB.zeilen.map((z, i) => {
+    const imFenster = i >= KB.erste && i < KB.erste + KB.sichtbar;
+    const kl = ["kb-k", z.eigen ? "eigen" : kbSeiteKlasse(z.seite), imFenster ? "fenster" : "",
+                z.status === "wartet" ? "wartet" : "", z.status === "liest" ? "liest" : "",
+                KB.schreibt && KB.schreibt.i === i ? "jetzt" : ""].join(" ");
+    return `<div class="${kl}" data-i="${i}" data-typ="${kbEsc(z.typ || "")}" title="${kbEsc(z.status === "erfasst" ? `${z.tag} ${z.name} - ${z.besitzer}` : "not read yet")}">${
+      z.typ && kbSymbolDa(z.typ) ? "" : "?"}${
+      z.status === "wartet" ? `<span class="uhr">\u22ef</span>` : ""}${
+      z.status === "erfasst" ? `<span class="fg">\u25ce</span>` : ""}<span class="nr">${i+1}</span></div>`;
+  }).join("");
+  if (st.dataset.html !== html){
+    st.dataset.html = html;
+    st.innerHTML = html;
+    st.querySelectorAll(".kb-k").forEach(el => {
+      const z = KB.zeilen[+el.dataset.i];
+      if (z && z.typ){ const q = kbSymbol(z.typ); if (q){ const c = doc.createElement("canvas"); c.width = q.width; c.height = q.height; c.getContext("2d").drawImage(q, 0, 0); el.insertBefore(c, el.firstChild); } }
+      el.style.cursor = "pointer";
+      el.onclick = () => { if (KB){ kbHandSetzen(+el.dataset.i, true); kbZeichnen(); } };
+    });
+  }
+  /* the frame, moved rather than rebuilt so its stepped transition shows */
+  let r = st.querySelector(".kb-rahmen");
+  const ziel = wahl !== null && wahl !== undefined ? st.querySelector(`.kb-k[data-i="${wahl}"]`) : null;
+  if (ziel){
+    if (!r){ r = doc.createElement("div"); st.appendChild(r); }
+    r.className = "kb-rahmen" + (KB.handAn ? " hand" : "");
+    r.title = KB.handAn ? "Led by hand - double-click hands it back to the game" : "The unit the game has picked";
+    r.ondblclick = () => { if (KB){ KB.handAn = false; KB.handWahl = null; kbZeichnen(); } };
+    r.style.left = ziel.offsetLeft + "px"; r.style.top = ziel.offsetTop + "px";
+    r.style.width = ziel.offsetWidth + "px"; r.style.height = ziel.offsetHeight + "px";
+    if (String(wahl) !== st.dataset.gerollt && ziel.scrollIntoView){ st.dataset.gerollt = String(wahl); ziel.scrollIntoView({inline: "nearest", block: "nearest"}); }
+  } else if (r) r.remove();
+  /* the reading of the unit under the frame */
+  const z = wahl !== null && wahl !== undefined ? KB.zeilen[wahl] : null;
+  const soll = z
+    ? `<b>${kbEsc(z.tag)}</b> ${kbEsc(z.name)}<br>${kbEsc(z.besitzer)}<br><small>${z.typ ? kbEsc(atName(z.typ)) : "type ?"} \u00b7 ${z.eigen ? "own" : kbSeiteName(z.seite)} \u00b7 line ${wahl + 1}${kbFestName(z) && kbFestTyp(z) ? " \u00b7 \u{1F512}" : ""}</small><div class="hp">${kbStaerkeHTML(z)}</div>`
+    : kbEsc(KB.status);
+  if (jf.innerHTML !== soll) jf.innerHTML = soll;
+  const vb = doc.getElementById("kb-schwebe-vorrueckt"); if (vb) vb.classList.toggle("an", kbVorrueckt);
+  const bb = doc.getElementById("kb-schwebe-bestaetigen"); if (bb) bb.disabled = !z || z.status !== "erfasst" || z.eigen;
+}
+/* CONFIRM: name, owner and type of one line locked by hand - one line only,
+   unlike kbFrieren, which spreads to every ticked line */
+function kbBestaetigen(i){
+  const z = KB && KB.zeilen[i];
+  if (!z) return;
+  z.festTyp = true; z.festName = true;
+  KB.status = `Line ${i + 1} confirmed - name, owner and type locked.`;
+  kbZeichnen();
+}
+function kbVorruecktSetzen(an){
+  kbVorrueckt = !!an;
+  try { localStorage.setItem("kb_vorrueckt", kbVorrueckt ? "1" : "0"); } catch(e){}
+  if (KB){ KB.status = kbVorrueckt ? "Advancing confirms: stepping to the next card locks the line just left." : "Advancing confirms: off."; kbZeichnen(); }
+}
+/* the line just left is locked when the pick moves on - only a written
+   line, never one's own, never one that is being read afresh on order */
+function kbVorrueckSchliessen(vorher, neu){
+  if (!kbVorrueckt || !KB) return;
+  if (vorher === null || vorher === undefined || vorher === neu) return;
+  const z = KB.zeilen[vorher];
+  if (!z || z.status !== "erfasst" || z.eigen || z.neuLesen || z.typNeu) return;
+  if (!z.tag && !z.name) return;
+  z.festTyp = true; z.festName = true;
 }
 
 /* ---- editing the sheet ---------------------------------------------------- */
@@ -16270,6 +16645,7 @@ async function kbTick(){
     /* a box sighted once is waiting for its second look - that look must
        get through, or it would only come with the twentieth */
     const kastenWartet = !!(KB.kastenRuhe && KB.kastenRuhe.offen && performance.now() - KB.kastenRuhe.seit < KB_KASTEN_RUHE_MAX);
+    const tooltipWartet = !!(KB.tooltipRuhe && KB.tooltipRuhe.offen && performance.now() - KB.tooltipRuhe.seit < KB_KASTEN_RUHE_MAX);
     /* AND THE DOORMAN GUARDS THE START TOO. There used to be "&&
        KB.zeilen.length" here, so that while the sheet was still EMPTY every
        single look read the whole strip and worked out the whole geometry -
@@ -16280,7 +16656,7 @@ async function kbTick(){
        compare against and reports every cell as changed. And when the
        detail list opens, that is a large change in the bar - he fires, the
        look goes through, the sheet comes about. */
-    if (geregt < 3 && KB.wacheZaehler % 20 !== 0 && !zahlOffen && !kastenWartet){
+    if (geregt < 3 && KB.wacheZaehler % 20 !== 0 && !zahlOffen && !kastenWartet && !tooltipWartet){
       KB.fehlschlaege = 0;
       return;
     }
@@ -16366,6 +16742,8 @@ async function kbTick(){
         if (KB.kastenRuhe) KB.kastenRuhe.offen = false;
       }
     }
+    /* the mouse-over window, whenever it stands in the picture */
+    kbTooltipPruefen(F, d);
     /* THE TOWN RUNS BESIDE THE TICK, NOT INSIDE IT. Measured on the whole
        tick instead of on its pieces: in four and a half seconds exactly ONE
        look came about. Not because of the picture and not because of the
@@ -17089,7 +17467,9 @@ async function gfName(c, spalte, ay, melde){
      read worse (59 against 74 of 100). A name field is five hundred points
      wide; in the cabin the fields are small, which is why the second pass
      pays off there and not here. */
-  const beste = await unitsText(c, x0, y0, breit, y1 - y0, null);
+  /* light letters on the dark list - the tool's own ink test counts bright
+     points - so the preparation is told, not left to guess */
+  const beste = await unitsText(c, x0, y0, breit, y1 - y0, null, "hell");
   /* THE OTHER ALPHABETS. Without this pass only the Latin model ever ran,
      and a Latin model cannot return anything but Latin letters - a Cyrillic
      name came back transliterated, every time. The pass costs nothing on a
@@ -17126,7 +17506,7 @@ async function gfName(c, spalte, ay, melde){
     ? (nimmFremd ? {text: beste.text, zuv: beste.zuv, schrift: null}
                  : {text: fremd.text, zuv: fremd.zuv, schrift: fremd.schrift})
     : null;
-  let name = (t.text || "").trim().replace(/\s+/g, " ");
+  let name = unitsCjkEng(t.text || "", t.schrift || null).trim().replace(/\s+/g, " ");
   /* ONLY REAL SCRIBBLE GOES. The old trim used "\w", which is ASCII: it
      threw away a leading dot, and it ate the first letter of every
      Cyrillic, Greek, Korean or Arabic name as well, because those are not
@@ -17139,7 +17519,7 @@ async function gfName(c, spalte, ay, melde){
   if (name.length < 2) return null;
   let zweit = null;
   if (andere){
-    const n2 = (andere.text || "").trim().replace(/\s+/g, " ")
+    const n2 = unitsCjkEng(andere.text || "", andere.schrift || null).trim().replace(/\s+/g, " ")
       .replace(/^[\s"'`´,;]+|[\s"'`´,;]+$/g, "").replace(/\s*_\s*/g, "_");
     if (n2.length >= 2 && n2 !== name) zweit = {name: n2, zuv: andere.zuv, schrift: andere.schrift};
   }
@@ -17533,6 +17913,7 @@ function kabineZu(){
   kbOffen = false;
   kbLiveStop(true); kbRauschenAus(); kbOszAus();
   document.getElementById("kabine").classList.remove("an");
+  kbSchwebeZu();
   KB = null;
   unitsFremdSchliessen();
 }
@@ -27489,7 +27870,13 @@ async function depotAusRaster(quelle, melde){
                             rNam - r.textX, k.name[1]-k.name[0]+4, 0, false, dunkel);
         if (!nb) continue;
         const a = await ocrMitZuv(nb, 7, ()=>{});
-        const txt = saeubern(a.text);
+        /* the AT-Grabber's lessons: the glyph book's doorman (check only,
+           the book stays the AT box's), the separator written the game's
+           way, bars to I - and the ellipsis rule on the RAW text, before
+           saeubern strips the dots */
+        if (a.symbole && a.symbole.length) a.text = ocrSchriftPruefen(nb, a.text, a.symbole);
+        const roh = atStrichZuI(String(a.text || "").replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ")).trim();
+        const txt = saeubern(atPunkteErgaenzen(roh, (typeof S !== "undefined" && S.name) || null, unitsBekannteBesitzer) || roh);
         if (txt && a.zuv > bestZ){ bestZ = a.zuv; name = txt; }
         if (bestZ >= 85) break;
       }
@@ -35261,7 +35648,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f5536d80e6</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 63978eff02</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -35403,7 +35790,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f5536d80e6";
+const BAU = "63978eff02";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
