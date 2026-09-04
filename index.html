@@ -13568,7 +13568,7 @@ function kbOrtSetzen(i, linie){
     if (offen) kbBehalten();
     const live = KB.live, ton = kbTon;
     KB.zeilen = []; KB.N = 0; KB.erste = 0; KB.sichtbar = 0; KB.karten = []; KB.reiheKennung = null; KB.reiheAlt = null;
-    KB.auswahl = null; KB.wandel = null; KB.nRing = null; KB.nSchaetzung = null; KB.hatteBahn = false; KB.hakenAnker = null; KB.gerollt = null;
+    KB.auswahl = null; KB.wandel = null; KB.nRing = null; KB.nSchaetzung = null; KB.hatteBahn = false; KB.hakenAnker = null; KB.gerollt = null; KB.reiheSeite = null;
     KB.handAn = false; KB.handWahl = null; KB.handZieht = false;
     kbSchlangeLeeren(); KB.kastenLetzte = null; KB.gesamt = null;
     KB.letzte = null; KB.vorige = null; KB.schreibt = null;
@@ -13691,7 +13691,7 @@ function unitsZeileAus(R){
 function kbNeu(){
   kbSchreibrecht = {typ: true, name: true};
   return {live: null, laeuft: false, letzte: null, vorige: null, hatteBahn: false,
-          ort: null, linie: null, ziel: null, halter: null, merk: null,
+          ort: null, linie: null, ziel: null, halter: null, merk: null, reiheSeite: null,
           N: 0, erste: 0, sichtbar: 0, karten: [], zeilen: [],
           auswahl: null, hakenAnker: null, wandel: null, gemeldet: null, scan: false, reiheKennung: null,
           handAn: false, handWahl: null, handZieht: false, ortKennung: null, blick: 0, ortLaeuft: false, ortHand: false,
@@ -14241,14 +14241,26 @@ function kbVerarbeiten(R, vorgabe){
        runner-up. The Kommodore's rule: correcting is fine, and the look
        is stricter where he has clicked. */
     const KB_KORREKTUR_ABSTAND = 0.08;
+    /* ONE BAR, ONE FACTION - the game's promise, the Kommodore's rule:
+       neighbouring cards are always of one side, only one's own (yellow)
+       units mix in. The reader already lets the majority name the side
+       and unreadable cards inherit it; here that side goes on EVERY line
+       of the window, captured or not, whatever the type lock - a line the
+       box had written before its card was ever seen in colour stayed at
+       "?" next to its neighbours. */
+    const reihenSeite = R.reiheFarbe && R.reiheFarbe.seite ? ["US","GE","SU"].indexOf(R.reiheFarbe.seite) : -1;
+    if (reihenSeite >= 0) KB.reiheSeite = reihenSeite;
     R.karten.forEach((k, j) => {
       const z = KB.zeilen[KB.erste + j];
-      if (!z || kbFestTyp(z)) return;
+      if (!z) return;
+      z.eigen = k.seite === "gelb";
+      if (!z.eigen){
+        const s = k.seite === "US" ? 0 : k.seite === "GE" ? 1 : k.seite === "SU" ? 2 : (reihenSeite >= 0 ? reihenSeite : null);
+        if (s !== null) z.seite = s;
+      }
+      if (kbFestTyp(z)) return;
       const gewaehlt = R.auswahl === j;
-      if (z.status !== "erfasst"){
-        z.seite = k.seite === "US" ? 0 : k.seite === "GE" ? 1 : k.seite === "SU" ? 2 : z.seite;
-        z.eigen = k.seite === "gelb";
-      } else if (!gewaehlt && z.typ) return;
+      if (z.status === "erfasst" && !gewaehlt && z.typ) return;
       const t = kbTypAusListe(k);
       if (!t) return;
       if (!z.typ) z.typ = t;
@@ -14386,7 +14398,9 @@ function kbVerarbeiten(R, vorgabe){
                           schrift: e.schrift || z.schrift || null});
       else if (e.bild) z.bild = e.bild;      // the print stays fresh either way
       Object.assign(z, {status: "erfasst", besitzer: e.besitzer, hp: e.hp,
-                        eigen: !!e.eigen, seite: e.seite !== null && e.seite !== undefined ? e.seite : z.seite,
+                        eigen: !!e.eigen, seite: e.seite !== null && e.seite !== undefined ? e.seite
+                                              : (z.seite !== null && z.seite !== undefined ? z.seite
+                                              : (KB.reiheSeite !== null && KB.reiheSeite !== undefined ? KB.reiheSeite : null)),
                         zwilling: zwilling ? da.i + 1 : null});
       if (z.riegel === null || z.riegel === undefined) z.riegel = KB.erste;
       /* what the clan already knows about this one - looked up once, when
@@ -34634,7 +34648,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build fdeca2a521</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b84bf05802</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34776,7 +34790,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "fdeca2a521";
+const BAU = "b84bf05802";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
