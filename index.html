@@ -12783,6 +12783,16 @@ async function unitsTagNachlesen(c, x, y, w, h, schrift, tagZuv, feld){
   const tag = rf.split(AT_TRENNER)[0].trim();
   return tag ? {tag, zuv: r.zuv, schrift, ganz: bw === w} : null;
 }
+/* CHINESE AND JAPANESE SET NO SPACES - the model does, between every
+   character ("杨 靖 宇 -001"). Taken out between two such characters and
+   next to a dash or digit; Korean keeps its spaces, they are real there. */
+const UNITS_CJK_LUECKE = /([\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff])\s+(?=[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\-\u2010-\u2015\u2212\d])/gu;
+function unitsCjkEng(text, schrift){
+  if (!text || (schrift !== "chi_sim" && schrift !== "jpn")) return text;
+  let t = String(text), vorher;
+  do { vorher = t; t = t.replace(UNITS_CJK_LUECKE, "$1"); } while (t !== vorher);
+  return t;
+}
 /* Is there writing here that no Latin alphabet holds? */
 const unitsFremdSchrift = t => /[^\u0000-\u024F\u2010-\u2015\u2212]/.test(t || "");
 /* Town lookup with one difference to findeStadt: "ß" counts as "ss". The
@@ -13419,8 +13429,8 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
       unlesbar: unlesbar || undefined,
       bild: unlesbar ? bildKennung(name.feld) : undefined,
       schrift: name.schrift || bes.schrift || null,
-      tag: tagRoh, tagInfo,
-      name: nameText,
+      tag: unitsCjkEng(tagRoh, tagSchrift), tagInfo,
+      name: unitsCjkEng(nameText, name.schrift || (fremd && fremd.schrift) || null),
       nameZuv: name.zuv,
       besitzer: bzName, besitzerRoh: bes.text, besitzerZuv: bes.zuv,
       hp, form: R.form
@@ -34742,7 +34752,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 3abeb6c8da</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 96d2209812</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34884,7 +34894,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "3abeb6c8da";
+const BAU = "96d2209812";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
