@@ -11188,10 +11188,10 @@ function unitsReihe(d){
 /* Runs of saturated pixels along one row: each card rim is one run of
    60..80 px. The row is searched a little up and down from the raster row,
    because the rim's top edge is not the row that repeats most strongly. */
-function unitsLaeufe(d, y, minL, maxL, x0=1250, x1=2640){
+function unitsLaeufe(d, y, minL, maxL, x0=1250, x1=2640, schwelle=60){
   const r = []; let s = null;
   for (let x=x0; x<=x1; x++){
-    const p = (y*UNITS_W + x)*4, v = (unitsMax(d,p) - unitsMin(d,p)) > 60;
+    const p = (y*UNITS_W + x)*4, v = (unitsMax(d,p) - unitsMin(d,p)) > schwelle;
     if (v && s === null) s = x;
     if ((!v || x === x1) && s !== null){ if (x-s >= minL && x-s <= maxL) r.push([s, x]); s = null; }
   }
@@ -11233,6 +11233,7 @@ function unitsLaeufe(d, y, minL, maxL, x0=1250, x1=2640){
      Colmar            105 eleven times
    Not one outlier, three cards included - while the diamond row scores
    nought, because none of its gaps is 105. */
+const UNITS_LAUF_BLASS = 32;   /* rim saturation at the crest of the glow: 42-48 */
 function unitsKartenFinden(d, yReihe){
   const aufRaster = runs => {
     let n = 0;
@@ -11240,10 +11241,10 @@ function unitsKartenFinden(d, yReihe){
       if (Math.abs((runs[i][0] - runs[i-1][0]) - UNITS_RASTER) <= 4) n++;
     return n;
   };
-  const suche = (von, bis) => {
+  const suche = (von, bis, schwelle=60) => {
     let best = {paare: -1, n: 0, y: 0, runs: []};
     for (let y = von; y <= bis; y++){
-      const runs = unitsLaeufe(d, y, 60, 80);
+      const runs = unitsLaeufe(d, y, 60, 80, 1250, 2640, schwelle);
       const paare = aufRaster(runs);
       if (paare > best.paare || (paare === best.paare && runs.length > best.n))
         best = {paare, n: runs.length, y, runs};
@@ -11257,6 +11258,21 @@ function unitsKartenFinden(d, yReihe){
     const weit = suche(1700, 2050);
     if (weit.paare > best.paare || (weit.paare === best.paare && weit.n > best.n)) best = weit;
   }
+  /* A FIGHTING UNIT'S CARD GLOWS, AND THE GLOW WASHES THE COLOUR OUT.
+     Measured on the Kommodore's videos, at the tool's own eight looks a
+     second: at the crest of the glow the rim's saturation falls from
+     114-128 to 42-48 - under the 60 the run test asks for - and the run
+     is gone, four looks in a row, every two seconds. With every card of
+     the bar glowing together the whole row collapsed to ONE card:
+       11 11 11 11 11 11 11 1 1 1 1 1 11 11 ... 1 1 1 1 11
+     and with several battles glowing out of step, single cards dropped
+     out (10-12 found of 12). So a second, paler tier: where the strong
+     search yields no better, the row is searched again at 32 - the rim at
+     the crest still stands at 42 - and taken when it finds MORE pairs on
+     the 105 grid. A false run would have to be 60..80 long AND 105 from
+     its neighbour; the grid is the fence. */
+  const blass = suche(yReihe-56, yReihe+24, UNITS_LAUF_BLASS);
+  if (blass.paare > best.paare) best = blass;
   const fy = best.n ? best.y : yReihe;
   return {fy, rahmen: unitsReiheFuellen(d, fy, best.runs)};
 }
@@ -11477,7 +11493,11 @@ function unitsQuotient(d, x0, oben){
    evenly as the measurements allow.
    With one card there is nothing to compare against, and only there does
    the old absolute test still serve. */
-const UNITS_WAHL_ABSTAND = 0.06, UNITS_WAHL_NAH = 0.05, UNITS_WAHL_ABS = 0.66;
+/* 0,055 since the Kommodore's videos: with several battles glowing out of
+   step the gap between the darkest and the second card reaches 0,051 -
+   above the old 0,05, still under the 0,06 of a sure pick, which stayed
+   without a false alarm in 125 glowing looks. */
+const UNITS_WAHL_ABSTAND = 0.06, UNITS_WAHL_NAH = 0.055, UNITS_WAHL_ABS = 0.66;
 function unitsAuswahl(quoten){
   if (!quoten.length) return null;
   let iMin = 0;
@@ -11503,6 +11523,9 @@ function unitsAuswahl(quoten){
    against the whole template, frame and margin included, the same cards
    correlated at 0.1 instead of 0.96. */
 let unitsTypVorlagen = null, unitsTypB = 38, unitsTypH = 25;
+/* share of saturated points below which a card counts as washed out -
+   normal cards carry 19 to 36 hundredths, a glowing one under one */
+const UNITS_TYP_TINTE = 0.06;
 /* set by the tick from the stage the cabin is in - see kbStufe */
 let unitsTypenAn = true;
 /* what the signs were at each card position in the look before */
@@ -11767,6 +11790,22 @@ function unitsTypVon(c, x0, fy){
     return rang.length ? {key: rang[0].key, k: rang[0].k, zweit: rang.length > 1 ? rang[1].k : 0,
                           liste: rang.slice(0, 6), spitze, dx, dy} : null;
   };
+  /* A WASHED-OUT CARD IS NOT MATCHED. At the crest of the glow the ink in
+     the sign's window falls from 462-886 saturated points to 0-24 (of
+     2480): the card is a near-white plate, and whatever the comparer finds
+     on it is chance - and would be remembered as the type. Under six
+     hundredths of saturated points the look is skipped; the next one
+     reads the sign. */
+  {
+    g.drawImage(c, x0+9+5, fy+5, 62, 40, 0, 0, unitsTypB, unitsTypH);
+    const px = g.getImageData(0, 0, unitsTypB, unitsTypH).data;
+    let tinte = 0;
+    for (let i = 0; i < px.length; i += 4){
+      const mx = Math.max(px[i], px[i+1], px[i+2]), mn = Math.min(px[i], px[i+1], px[i+2]);
+      if (mx - mn > 60) tinte++;
+    }
+    if (tinte < UNITS_TYP_TINTE * unitsTypB * unitsTypH) return null;
+  }
   let best = null;
   for (const dy of [-2, 0, 2]) for (const dx of [-2, 0, 2]){
     const r = einSchritt(dx, dy);
@@ -13414,7 +13453,7 @@ function kbOrtSetzen(i, linie){
     const offen = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen && !z.gespeichert).length;
     if (offen) kbBehalten();
     const live = KB.live, ton = kbTon;
-    KB.zeilen = []; KB.N = 0; KB.erste = 0; KB.sichtbar = 0; KB.karten = []; KB.reiheKennung = null;
+    KB.zeilen = []; KB.N = 0; KB.erste = 0; KB.sichtbar = 0; KB.karten = []; KB.reiheKennung = null; KB.reiheAlt = null;
     KB.auswahl = null; KB.wandel = null; KB.nRing = null; KB.nSchaetzung = null; KB.hatteBahn = false;
     KB.handAn = false; KB.handWahl = null; KB.handZieht = false;
     kbSchlangeLeeren(); KB.kastenLetzte = null; KB.gesamt = null;
@@ -13544,6 +13583,7 @@ function kbNeu(){
           handAn: false, handWahl: null, handZieht: false, ortKennung: null, blick: 0, ortLaeuft: false, ortHand: false,
           fehlschlaege: 0, letzterFehler: null,
           warte: [], werkt: false, arbeit: null, kastenLetzte: null, dauerMittel: 850,
+          reiheAlt: null,
           gesamt: null,
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null};
 }
@@ -13859,8 +13899,45 @@ function kbTuersteher(e, ziel, ohneLeiste){
 }
 
 /* One reading -> the sheet. */
+/* A CARD AT THE ROW'S EDGE IS CARRIED OVER THE CREST OF ITS GLOW. With
+   several battles glowing out of step, the finder saw 10 to 12 of 12
+   cards (measured, 87 looks): the middle ones the grid puts back, the
+   ones at the EDGES drop out for four or five looks at the crest of their
+   glow. And the cabin binds by index - the pick is KB.erste + R.auswahl,
+   the types go to KB.zeilen[KB.erste + j] - so a missing first card
+   shifts everything by one line. So: a card that stood at the same place
+   (x0 within 4) no more than eight looks ago is put back, provided every
+   card found NOW stands on a remembered place (otherwise the row moved -
+   scroll, new town, a unit gone) and the missing ones lie at the edges
+   only. It cannot be the pick (q = 9, like a clipped card) and keeps its
+   type. After eight looks without it, it is really gone. */
+const KB_REIHE_MERK = 8;
+function kbReiheErgaenzen(R){
+  const jetztK = R.karten || [], alt = KB.reiheAlt;
+  const nah = (a, b) => Math.abs(a.x0 - b.x0) <= 4;
+  const frisch = alt && (KB.blick || 0) - alt.blick <= KB_REIHE_MERK;
+  if (frisch && alt.karten.length > jetztK.length && jetztK.length
+      && jetztK.every(k => alt.karten.some(a => nah(a, k)))){
+    const fehlend = alt.karten.filter(a => !jetztK.some(k => nah(a, k)));
+    const links = jetztK[0].x0, rechts = jetztK[jetztK.length - 1].x0;
+    if (fehlend.every(a => a.x0 < links - 50 || a.x0 > rechts + 50)){
+      const xWahl = R.auswahl !== null && R.auswahl !== undefined && jetztK[R.auswahl] ? jetztK[R.auswahl].x0 : null;
+      const xKnapp = R.wahlKnapp && jetztK[R.wahlKnapp.i] ? jetztK[R.wahlKnapp.i].x0 : null;
+      R.karten = alt.karten.map(a => jetztK.find(k => nah(k, a)) || Object.assign({}, a, {gemerkt: true, q: 9}));
+      R.ergaenzt = fehlend.length;
+      if (xWahl !== null) R.auswahl = R.karten.findIndex(k => Math.abs(k.x0 - xWahl) <= 4);
+      if (xKnapp !== null) R.wahlKnapp = Object.assign({}, R.wahlKnapp, {i: R.karten.findIndex(k => Math.abs(k.x0 - xKnapp) <= 4)});
+      return;
+    }
+  }
+  /* what stands now becomes the memory - unless a fresher, fuller memory
+     is still being carried */
+  if (jetztK.length >= 2 && !(frisch && alt.karten.length > jetztK.length))
+    KB.reiheAlt = {karten: jetztK.map(k => Object.assign({}, k)), blick: KB.blick || 0};
+}
 function kbVerarbeiten(R, vorgabe){
   KB.frame = R.gross; KB.hell = R.hell; KB.gain = R.gain;
+  if (R.leiste && !R.dialog) kbReiheErgaenzen(R);
   if (R.dialog){
     if (R.stadt){ KB.merk = {stadt: R.stadt.i, linie: R.linie || null}; kbOrtSetzen(R.stadt.i, R.linie || null); }
     KB.status = R.stadt ? `Battle window: ${MAP.n[R.stadt.i][0]}${R.linie ? " - line " + R.linie : ""}. Now click the units.`
@@ -14568,10 +14645,24 @@ function kbKastenGleich(a, b){
    FIELD, though, is a few thousand points and can be fingerprinted in a
    fraction of a thousandth. When it changes, the name is read at once
    instead of waiting - so the sheet follows the click, not the reader. */
+/* THE NAME FIELD ENDS WHERE THE FIRST CARD BEGINS. The hash used to run
+   to x 1700 - and the cards begin at 1290 to 1450, so it took the first
+   two or three of them in. A fighting unit's card glows by nineteen
+   steps, the hash changed on every look, the tool took the town for
+   changed on every look, and the town pass ran with a full picture
+   fourteen times a second. That was the flicker between "Reading the
+   town's name" and "strength". Now the field ends 24 points before the
+   first card the last look found; before the first look, at 1285, which
+   is short of the earliest card ever seen (1290, "AALEN"). */
+function kbNameEnde(){
+  const k = KB && KB.karten && KB.karten.length ? KB.karten[0].x0 - 24 : 1285;
+  return Math.max(UNITS_NAME_X + 40, Math.min(1700, k));
+}
 function kbOrtKennung(d){
   let h = 2166136261;
+  const bis = kbNameEnde();
   for (let y = 1838; y < 1900; y += 4)
-    for (let x = UNITS_NAME_X; x < 1700; x += 7){
+    for (let x = UNITS_NAME_X; x < bis; x += 7){
       h ^= unitsMax(d, (y*UNITS_W + x)*4);
       h = (h * 16777619) >>> 0;
     }
@@ -15223,7 +15314,24 @@ function kbKennung(d){
     for (let y = 1822; y < 1892; y += 6){ const p = (y*UNITS_W + x)*4; if (unitsMax(d,p) - unitsMin(d,p) > 60) n++; }
     out.push(n);
   }
-  return out.join(",");
+  return out;
+}
+/* STILL, OR ONLY GLOWING? The town pass waits for two looks with the same
+   fingerprint - and a glowing card moves the counts by up to 8 in a
+   column and 101 over the row (measured on the Kommodore's videos), so
+   under fighting units two looks were never the same and the town was
+   never read again. A scroll moves the counts by far more in a column
+   than that; the tolerance is set above the glow and under the scroll. */
+const KB_KENNUNG_SPALTE = 10, KB_KENNUNG_SUMME = 130;
+function kbKennungStill(a, b){
+  if (!a || !b || a.length !== b.length) return false;
+  let summe = 0;
+  for (let i = 0; i < a.length; i++){
+    const dv = Math.abs(a[i] - b[i]);
+    if (dv > KB_KENNUNG_SPALTE) return false;
+    summe += dv;
+  }
+  return summe <= KB_KENNUNG_SUMME;
 }
 /* HAS ANYTHING MOVED IN THE BAR? The strip is read on every look, and
    that is twenty-three thousandths fourteen times a second - a third of a
@@ -15237,6 +15345,17 @@ function kbKennung(d){
    plainly as in eight million. */
 let kbWacheC = null, kbWacheG = null;
 const kbWacheStand = {alt: null};
+/* HOW FAR A CELL MAY MOVE BEFORE IT COUNTS. Eight steps, until the
+   Kommodore's videos of fighting units: their cards glow, and at eight
+   the doorman let 55 % of the looks through with one battle glowing and
+   89 % with several - the whole rest of the cabin gone for as long as
+   anything fought. Measured per look at the tool's eight a second: the
+   glow moves a cell by 14 at the 99th hundredth, 21 at most on the cards
+   and 28 on the map's halos. A card taken away moves cells by 35-48, a
+   head box appearing by 101-103. Twenty-four lets 2 % and 0 % of the
+   glowing looks through, and still counts 4 cells for the card and 100
+   for the box. */
+const KB_WACHE_STUFE = 24;
 /* THE SAME EYE FOR MORE THAN ONE ROOM. (bild, stand, y0f, hf): the strip
    of the picture to watch, as fractions of its height, and the place the
    last thumbnail is kept. The cabin watches the bar, the player's room the
@@ -15246,6 +15365,15 @@ function bildWache(bild, stand, y0f, hf){
     kbWacheC = document.createElement("canvas");
     kbWacheC.width = 96; kbWacheC.height = 24;
     kbWacheG = kbWacheC.getContext("2d", {willReadFrequently:true});
+    /* AVERAGED, NOT SAMPLED. Shrinking 3840 by 730 points to 96 by 24 at the
+       default quality picks a few source points per cell and leaves the
+       rest out - so a cell jumps with whatever those few points do, and a
+       glowing card moved it past 24 on 30 % of the looks with one battle
+       and 72 % with several. At "high" the browser averages the area:
+       measured on the same looks, 0 of 37 and 0 of 43 - while a card taken
+       away still moves 6 cells and a head box 113. */
+    kbWacheG.imageSmoothingEnabled = true;
+    kbWacheG.imageSmoothingQuality = "high";
   }
   const H = bild.height || UNITS_H, W = bild.width || UNITS_W;
   const y0 = Math.round(H*y0f), hh = Math.round(H*hf);
@@ -15263,7 +15391,7 @@ function bildWache(bild, stand, y0f, hf){
   for (let i = 0, j = 0; j < n; i += 4, j++) jetztB[j] = (d[i] + d[i+1] + d[i+2])/3;
   let anders = 0;
   if (stand.alt){
-    for (let j = 0; j < n; j++) if (Math.abs(jetztB[j] - stand.alt[j]) > 8) anders++;
+    for (let j = 0; j < n; j++) if (Math.abs(jetztB[j] - stand.alt[j]) > KB_WACHE_STUFE) anders++;
   } else anders = n;
   stand.alt = jetztB;
   return anders;
@@ -15325,7 +15453,7 @@ async function kbTick(){
        be read at once, so a new town closes the sheet without delay */
     const ok = kbOrtKennung(d);
     if (KB.ortKennung !== null && KB.ortKennung !== undefined && ok !== KB.ortKennung){
-      KB.letzte = null; KB.vorige = null; KB.reiheKennung = null;
+      KB.letzte = null; KB.vorige = null; KB.reiheKennung = null; KB.reiheAlt = null;
     }
     KB.ortKennung = ok;
     /* THE QUICK LOOK, every time. It reads no text at all: which cards
@@ -15418,7 +15546,7 @@ async function kbTick(){
        "strength" that the Kommodore sees, and every one of those costs a
        full picture. */
     const ortFaellig = KB.stufe === "ort" || jetzt() - (KB.ortZuletzt || 0) > 15000;
-    if (ortFaellig && ruhe && kn !== KB.letzte && (kn === KB.vorige || KB.letzte === null) && !KB.ortLaeuft){
+    if (ortFaellig && ruhe && !kbKennungStill(kn, KB.letzte) && (kbKennungStill(kn, KB.vorige) || KB.letzte === null) && !KB.ortLaeuft){
       KB.letzte = kn; KB.ortZuletzt = jetzt();
       /* on the standing surface: the town pass holds it until it is done
          (KB.ortLaeuft), and no second pass starts before that */
@@ -34147,7 +34275,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b2373aee35</span></p></div>
+         installation. <span style="color:var(--dim2)">· build d02ee4d0e0</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34289,7 +34417,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b2373aee35";
+const BAU = "d02ee4d0e0";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
