@@ -13721,8 +13721,23 @@ function kbFenster(R){
        then every name landed on its neighbour. The cards settle it
        themselves: n of them ending at N means the first one is N-n. */
     const nk = R.karten ? R.karten.length : 0;
+    /* THE FIRST CARD ANCHORS THE INDEX. From the thumb alone the first
+       place was ceil(V/105 - 0.02) - and a thumb measured one point right
+       of its stop (1510 against 1509,06 at Schwaebisch Hall) is 3,3 points
+       of content at 37 units, which rounded UP to place 1: a "?" line stood
+       before the first real card, and deleting it only moved every name by
+       one until the next look put it back. So the first card found says
+       where the row begins: its run starts at the window's edge (tL + 6,06)
+       when V is 0, and card.x0 is that run less 9 - so V plus the card's
+       offset from the edge, in slots, rounded, is its index. A first card
+       half hidden by the edge is not found at all; the next one lies 105
+       further and lands on the right index the same way. */
     let erste = Math.max(0, Math.min(N - plaetze, Math.ceil(V / UNITS_RASTER - 0.02)));
-    if (nk) erste = Math.min(erste, Math.max(0, N - nk));
+    if (nk){
+      const versatz = R.karten[0].x0 + 9 - (tL + 6.06);
+      erste = Math.max(0, Math.min(N - plaetze, Math.round((V + versatz) / UNITS_RASTER)));
+      erste = Math.min(erste, Math.max(0, N - nk));
+    }
     return {N, erste, sichtbar: Math.max(plaetze, nk), ungenau: N >= 45};
   }
   return {N: n, erste: 0, sichtbar: n};
@@ -34469,7 +34484,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build a1253538fe</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 64c937597a</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34611,7 +34626,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "a1253538fe";
+const BAU = "64c937597a";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
