@@ -8864,7 +8864,33 @@ async function bildVideoHolen(){
   });
   if (!v.videoWidth) throw new Error("The picture came back empty.");
   bildVideo = v;
+  bildBilderZaehlen(v);
   return v;
+}
+/* COUNTING THE PICTURES AS THEY COME. The video element says when a new
+   picture is shown (requestVideoFrameCallback); the count and the time of
+   the last one are kept here. A room that ticks faster than the share
+   delivers asks bildNeu whether there is anything new to look at. */
+let bildNr = 0, bildNrZeit = 0;
+function bildBilderZaehlen(v){
+  if (!v.requestVideoFrameCallback) return;
+  const weiter = () => {
+    if (bildVideo !== v) return;           /* replaced or ended - this count is over */
+    bildNr++; bildNrZeit = performance.now();
+    v.requestVideoFrameCallback(weiter);
+  };
+  v.requestVideoFrameCallback(weiter);
+}
+/* Has a picture arrived since this room (st) last looked? Falls OPEN when
+   the counter is not running - no video yet, a browser without the
+   callback, or a covered window where the callback sleeps for two seconds
+   or more - so that no room can be starved; the doorman takes over then. */
+function bildNeu(st){
+  if (!bildVideo || !bildVideo.requestVideoFrameCallback) return true;
+  if (performance.now() - bildNrZeit > 2000) return true;
+  if (st.bildNr === bildNr) return false;
+  st.bildNr = bildNr;
+  return true;
 }
 /* ONE FRAME, WITHOUT THE DETOUR THROUGH PNG. The old way drew the video
    into a canvas, made a PNG of it with toBlob, wrapped that in a File -
@@ -8927,7 +8953,7 @@ async function bildAufnehmen(){
   const c = document.createElement("canvas");
   c.width = v.videoWidth; c.height = v.videoHeight;
   if (!c.width || !c.height) throw new Error("The picture came back empty.");
-  c.getContext("2d").drawImage(v, 0, 0);
+  c.getContext("2d", {willReadFrequently:true}).drawImage(v, 0, 0);
   const blob = await new Promise(ok => c.toBlob(ok, "image/png"));
   if (!blob) throw new Error("The picture could not be built.");
   return new File([blob], "aufnahme.png", {type: "image/png"});
@@ -11014,16 +11040,32 @@ const UNITS_LOCAL = "units_seen";   /* browser-side store, see unitsBehalten */
 
 /* A frame of any size, normalised to the measured size. Returns the canvas
    and its pixels; both are reused by every reading step. */
-async function unitsRahmen(quelle){
-  const bm = await createImageBitmap(quelle);
-  const c = document.createElement("canvas");
-  c.width = UNITS_W; c.height = UNITS_H;
-  const g = c.getContext("2d", {willReadFrequently:true});
-  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+async function unitsRahmen(quelle, ziel){
+  /* A BITMAP IS NOT WRAPPED IN A BITMAP. bildLive hands over an
+     ImageBitmap already; making another one out of it copied 3840 by 2160
+     points - 33 megabytes - for nothing, and then closed the copy. What
+     comes in as a bitmap is drawn as it is, and the CALLER closes it, as
+     before. A file or a blob still has to be decoded here. */
+  const eigen = !(typeof ImageBitmap !== "undefined" && quelle instanceof ImageBitmap);
+  const bm = eigen ? await createImageBitmap(quelle) : quelle;
+  /* AND THE SURFACE MAY STAND. Every call used to make a fresh 3840 by 2160
+     canvas - another 33 megabytes - although the strip path and the working
+     frame keep theirs. A caller that looks again and again hands in its own
+     standing surface (ziel, filled on first use); one that reads a file
+     once still gets a fresh one. */
+  let c, g;
+  if (ziel && ziel.c){ c = ziel.c; g = ziel.g; }
+  else {
+    c = document.createElement("canvas");
+    c.width = UNITS_W; c.height = UNITS_H;
+    g = c.getContext("2d", {willReadFrequently:true});
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+    if (ziel){ ziel.c = c; ziel.g = g; }
+  }
   g.drawImage(bm, 0, 0, UNITS_W, UNITS_H);
   const quer = Math.abs(bm.width/bm.height - 16/9) > 0.02;
   const gross = {w: bm.width, h: bm.height};
-  if (bm.close) bm.close();
+  if (eigen && bm.close) bm.close();
   const id = g.getImageData(0, 0, UNITS_W, UNITS_H), d = id.data;
   /* SELF-HEALING OF DARK CAPTURES, the way the radar does it. A window
      shared under Windows HDR arrives up to four times darker than the
@@ -11075,7 +11117,9 @@ async function unitsRahmenSchnell(quelle){
     unitsSchnellG.imageSmoothingQuality = "high";
     unitsPuffer = new Uint8ClampedArray(UNITS_W * UNITS_H * 4);
   }
-  const bm = await createImageBitmap(quelle);
+  /* a bitmap is drawn as it is - see unitsRahmen; the caller closes it */
+  const eigen = !(typeof ImageBitmap !== "undefined" && quelle instanceof ImageBitmap);
+  const bm = eigen ? await createImageBitmap(quelle) : quelle;
   const quer = Math.abs(bm.width/bm.height - 16/9) > 0.02;
   const gross = {w: bm.width, h: bm.height};
   /* only the strip is drawn as well, not just read - measured, moving the
@@ -11084,7 +11128,7 @@ async function unitsRahmenSchnell(quelle){
   const qy = bm.height * SCHNELL.y / UNITS_H, qh = bm.height * SCHNELL.h / UNITS_H;
   const qx = bm.width * SCHNELL.x / UNITS_W,  qw = bm.width * SCHNELL.w / UNITS_W;
   unitsSchnellG.drawImage(bm, qx, qy, qw, qh, SCHNELL.x, SCHNELL.y, SCHNELL.w, SCHNELL.h);
-  if (bm.close) bm.close();
+  if (eigen && bm.close) bm.close();
   const id = unitsSchnellG.getImageData(SCHNELL.x, SCHNELL.y, SCHNELL.w, SCHNELL.h);
   const q = id.data;
   /* THE BRIGHTNESS IS A PROPERTY OF THE SHARING, NOT OF THE PICTURE. The
@@ -12277,7 +12321,7 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
   const feld = unitsSchlicht(c, {x, y, w, h}, 3);
   const feldRoh = document.createElement("canvas");
   feldRoh.width = w; feldRoh.height = h;
-  feldRoh.getContext("2d").drawImage(c, x, y, w, h, 0, 0, w, h);
+  feldRoh.getContext("2d", {willReadFrequently:true}).drawImage(c, x, y, w, h, 0, 0, w, h);
   let top = beste;
   /* the expected one first, and it may pass with a lower bar - an
      expectation that has carried before earns more than a model tried at
@@ -12327,8 +12371,10 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
    exactly 86 times with the plain threshold and 76 with the other, the
    owner line does fine with the tool's path (85 of 90). */
 async function unitsText(c, x, y, w, h, melde, art){
+  /* art "dunkel": the caller knows the text is dark on a light field and
+     the preparation must not guess - see bildAufbereiten */
   const feld = art === "schlicht" ? unitsSchlicht(c, {x, y, w, h})
-                                  : await bildAufbereiten(c, unitsBox(x, y, w, h));
+                                  : await bildAufbereiten(c, unitsBox(x, y, w, h), art === "dunkel" ? true : undefined);
   const r = await ocrMitZuv(feld, 7, melde || (()=>{}), "");
   return {text: (r.text || "").trim().replace(/\s+/g, " "), zuv: r.zuv, symbole: r.symbole, feld};
 }
@@ -12990,7 +13036,8 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
        came out right 85 times in 90 that way. The second pass now only runs
        when the first leaves a doubt, and that is half of what a unit costs. */
     const besser = async (x, y, w, hh, bevorzugt) => {
-      const a = await unitsText(c, x, y, w, hh);
+      /* the box: dark text on a light field, always - said, not guessed */
+      const a = await unitsText(c, x, y, w, hh, null, "dunkel");
       if (a.zuv >= 80) return unitsTextSchriften(c, x, y, w, hh, a, sag, bevorzugt);
       const b = await unitsText(c, x, y, w, hh, null, "schlicht");
       return unitsTextSchriften(c, x, y, w, hh, b.zuv > a.zuv + 5 ? b : a, sag, bevorzugt);
@@ -13027,7 +13074,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
     if (bes.schrift && !unitsFremdSchrift(name.text))
       fremd = await unitsFremdLesen(c, UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h, bes.schrift);
     let bes2 = null;
-    if (Z.besitzer2) bes2 = await unitsText(c, UNITS_KASTEN.x0, o+Z.besitzer2.dy, B, Z.besitzer2.h);
+    if (Z.besitzer2) bes2 = await unitsText(c, UNITS_KASTEN.x0, o+Z.besitzer2.dy, B, Z.besitzer2.h, null, "dunkel");
     const hp = await unitsStaerke(c, d, o);
     /* "GE-008 - AT008 - KATSARIDAS": the tag is what stands before the first
        dash, the rest is the name */
@@ -14537,17 +14584,42 @@ function kbSchlangeLeeren(){
 }
 /* The set-aside picture back in its place on one working surface, so that
    every measurement taken on a whole screen still holds. */
+let kbArbeitPuffer = null, kbArbeitVorig = null;
 function kbArbeitsRahmen(job){
   if (!kbArbeitC){
     kbArbeitC = document.createElement("canvas");
     kbArbeitC.width = UNITS_W; kbArbeitC.height = UNITS_H;
     kbArbeitG = kbArbeitC.getContext("2d", {willReadFrequently:true});
+    kbArbeitG.fillStyle = "#000";
+    kbArbeitG.fillRect(0, 0, UNITS_W, UNITS_H);
+    /* the standing pixel buffer: black everywhere but under the box */
+    kbArbeitPuffer = new Uint8ClampedArray(UNITS_W * UNITS_H * 4);
   }
-  kbArbeitG.fillStyle = "#000";
-  kbArbeitG.fillRect(0, 0, UNITS_W, UNITS_H);
+  /* ONLY THE BOX IS COPIED, NOT THE SCREEN AROUND IT. This used to read
+     the whole 3840 by 2160 surface back - 33 megabytes - for every job in
+     the queue, though a job carries 900 by 340 points; thirteen units of a
+     town were 431 megabytes copied one after the other, and all of it
+     before the await, with the main thread standing still. Now the box
+     alone comes back - 1,2 megabytes - and is laid into a buffer that
+     stands. The readers still address a whole screen and still find black
+     around the box, as they expect: the place the LAST box stood is
+     blackened first, on the surface and in the buffer. */
+  const w = job.bmp.width, h = job.bmp.height;
+  if (kbArbeitVorig){
+    const v = kbArbeitVorig;
+    kbArbeitG.fillStyle = "#000";
+    kbArbeitG.fillRect(v.x, v.y, v.w, v.h);
+    for (let r = 0; r < v.h; r++){
+      const von = ((v.y + r) * UNITS_W + v.x) * 4;
+      kbArbeitPuffer.fill(0, von, von + v.w*4);
+    }
+  }
   kbArbeitG.drawImage(job.bmp, job.sx, job.sy);
-  const id = kbArbeitG.getImageData(0, 0, UNITS_W, UNITS_H);
-  return {rahmen: true, c: kbArbeitC, d: id.data, quer: false,
+  const q = kbArbeitG.getImageData(job.sx, job.sy, w, h).data;
+  for (let r = 0; r < h; r++)
+    kbArbeitPuffer.set(q.subarray(r*w*4, (r+1)*w*4), ((job.sy + r) * UNITS_W + job.sx) * 4);
+  kbArbeitVorig = {x: job.sx, y: job.sy, w, h};
+  return {rahmen: true, c: kbArbeitC, d: kbArbeitPuffer, quer: false,
           gross: job.gross, hell: job.hell, gain: job.gain};
 }
 async function kbEinreihen(F, G){
@@ -15163,15 +15235,20 @@ function kbKennung(d){
    counts: a head box appearing or going, a card turning dark, a row
    rolling - all of them are large areas and stand in 96 by 24 points as
    plainly as in eight million. */
-let kbWacheC = null, kbWacheG = null, kbWacheAlt = null;
-function kbWache(bild){
+let kbWacheC = null, kbWacheG = null;
+const kbWacheStand = {alt: null};
+/* THE SAME EYE FOR MORE THAN ONE ROOM. (bild, stand, y0f, hf): the strip
+   of the picture to watch, as fractions of its height, and the place the
+   last thumbnail is kept. The cabin watches the bar, the player's room the
+   battle window; the 96 by 24 scratch surface is shared, the memory is not. */
+function bildWache(bild, stand, y0f, hf){
   if (!kbWacheC){
     kbWacheC = document.createElement("canvas");
     kbWacheC.width = 96; kbWacheC.height = 24;
     kbWacheG = kbWacheC.getContext("2d", {willReadFrequently:true});
   }
   const H = bild.height || UNITS_H, W = bild.width || UNITS_W;
-  const y0 = Math.round(H*0.639), hh = Math.round(H*0.338);   /* y 1380..2110 at 2160 */
+  const y0 = Math.round(H*y0f), hh = Math.round(H*hf);
   kbWacheG.drawImage(bild, 0, y0, W, hh, 0, 0, 96, 24);
   const d = kbWacheG.getImageData(0, 0, 96, 24).data;
   /* AN EYE, NOT A HASH. It used to compare number against number - equal or
@@ -15185,17 +15262,26 @@ function kbWache(bild){
   const jetztB = new Uint8Array(n);
   for (let i = 0, j = 0; j < n; i += 4, j++) jetztB[j] = (d[i] + d[i+1] + d[i+2])/3;
   let anders = 0;
-  if (kbWacheAlt){
-    for (let j = 0; j < n; j++) if (Math.abs(jetztB[j] - kbWacheAlt[j]) > 8) anders++;
+  if (stand.alt){
+    for (let j = 0; j < n; j++) if (Math.abs(jetztB[j] - stand.alt[j]) > 8) anders++;
   } else anders = n;
-  kbWacheAlt = jetztB;
+  stand.alt = jetztB;
   return anders;
 }
+/* the cabin's doorman: the lower strip, y 1380..2110 at 2160 */
+function kbWache(bild){ return bildWache(bild, kbWacheStand, 0.639, 0.338); }
+const kbOrtFlaeche = {};
 async function kbTick(){
   if (!KB || !KB.live || KB.laeuft) return;
   /* breathing space after a run of failures - see the catch below */
   if (KB.pause && jetzt() < KB.pause) return;
   KB.pause = 0;
+  /* NO NEW PICTURE, NO LOOK. The tick asks fourteen times a second, the
+     share delivers eight: six looks in fourteen used to turn the same
+     picture into a fresh 33-megabyte bitmap and run the doorman over it.
+     The counter in bildNeu says whether a picture has arrived since this
+     room last looked. */
+  if (!bildNeu(KB)) return;
   KB.laeuft = true;
   /* THE PICTURE OF THIS MOMENT, held still. The look uses it twice - once
      for the quick strip and once, further down, for the town pass. A video
@@ -15334,7 +15420,9 @@ async function kbTick(){
     const ortFaellig = KB.stufe === "ort" || jetzt() - (KB.ortZuletzt || 0) > 15000;
     if (ortFaellig && ruhe && kn !== KB.letzte && (kn === KB.vorige || KB.letzte === null) && !KB.ortLaeuft){
       KB.letzte = kn; KB.ortZuletzt = jetzt();
-      const V = await unitsRahmen(f);
+      /* on the standing surface: the town pass holds it until it is done
+         (KB.ortLaeuft), and no second pass starts before that */
+      const V = await unitsRahmen(f, kbOrtFlaeche);
       if (!KB || !KB.live) return;
       kbOrtArbeit(V);
     }
@@ -15394,6 +15482,12 @@ async function kbOrtArbeit(V){
    chance; five in a row at fourteen looks a second is a third of a second
    in which nothing at all worked, and that is a reason. */
 const KB_FEHLER_MAX = 5;
+const KB_TAKT = (() => {
+  try {
+    const t = +new URLSearchParams(location.search).get("takt");
+    return t >= 20 && t <= 5000 ? t : 70;
+  } catch(e){ return 70; }
+})();
 function kbLiveStart(){
   if (!KB || KB.live) return;
   /* Nearly seven looks a second. Every one of them does the quick half -
@@ -15403,7 +15497,12 @@ function kbLiveStart(){
      that overlaps a running one is skipped (KB.laeuft), so the rate costs
      nothing while a reading is under way. */
   KB.fehlschlaege = 0; KB.letzterFehler = null;
-  KB.live = setInterval(kbTick, 70);
+  /* THE ONE MEASUREMENT THAT DECIDES. Does the machine still stutter at
+     one look a second instead of fourteen? If so, it is the capture outside
+     the page; if not, it is the tick. The Kommodore runs it from the
+     address bar - index.html?takt=1000 - without a rebuild. Without the
+     parameter the tick stays at seventy. */
+  KB.live = setInterval(kbTick, KB_TAKT);
   KB.status = "Live - click the units in the game's detail bar, left to right.";
   kbRauschenAn(); kbZeichnen(); kbTick();
 }
@@ -15423,7 +15522,9 @@ function kbLiveStop(auchFreigabe){
   if (!KB || !KB.live) return;
   clearInterval(KB.live); KB.live = null;
   kbRauschenAus();
-  if (auchFreigabe && !(typeof PG !== "undefined" && PG && PG.live)) bildFreigabeBeenden();
+  kbOrtFlaeche.c = null; kbOrtFlaeche.g = null;
+  /* the share is the page's: it ends only when no room is watching */
+  if (auchFreigabe && !(typeof PG !== "undefined" && PG && PG.live) && !wacheLaeuft()) bildFreigabeBeenden();
   kbZeichnen();
 }
 /* one picture, for checks without the game */
@@ -15842,8 +15943,8 @@ function gfKennung(d){
 }
 /* One look at the picture: geometry only, no text. Reading the names costs
    a second each and happens one row at a time, in the room's own beat. */
-async function gfLesen(quelle){
-  const {c, d, gross, hell, gain} = await unitsRahmen(quelle);
+async function gfLesen(quelle, ziel){
+  const {c, d, gross, hell, gain} = await unitsRahmen(quelle, ziel);
   const R = {c, d, gross, hell, gain, da: false, seiten: [], N: 0, erste: 0,
              anker: GF_FENSTER.y, sichtbar: 0, kennung: 0};
   if (!gfRahmenDa(d)) return R;
@@ -16025,17 +16126,35 @@ function pgVerarbeiten(R){
   }
   PG.N = Math.max(PG.N, ...Object.values(PG.ende).map(v => v || 0));
 }
+const pgWacheStand = {alt: null}, pgFlaeche = {};
 /* One beat: look, and read at most one line - so the sheet fills up before
    your eyes and the room stays answerable. */
 async function pgTick(){
   if (!PG || !PG.live || PG.laeuft) return;
+  /* no new picture since the last beat - nothing to look at (see bildNeu) */
+  if (!bildNeu(PG)) return;
   PG.laeuft = true;
   let bild = null;
   try {
     const f = bild = await bildLive();
     if (!PG || !PG.live) return;
-    const R = await gfLesen(f);
-    if (!PG || !PG.live) return;
+    /* THE DOORMAN, HERE TOO. The room read the whole 3840 by 2160 picture
+       four times a second - 65 thousandths and 33 megabytes each time -
+       whether anything had changed or not. The cabin's doorman guards the
+       bar; this one watches the battle window, and when he reports it
+       standing still, the LAST reading serves again: the same picture, the
+       same lines, only the next unread one is taken from it. Every
+       twentieth look goes through regardless, so a window that never
+       changes is still refreshed. */
+    const geregt = bildWache(f, pgWacheStand, GF_FENSTER.y/UNITS_H, GF_FENSTER.h/UNITS_H);
+    PG.wacheZaehler = (PG.wacheZaehler || 0) + 1;
+    let R;
+    if (PG.R && geregt < 3 && PG.wacheZaehler % 20 !== 0) R = PG.R;
+    else {
+      R = await gfLesen(f, pgFlaeche);
+      if (!PG || !PG.live) return;
+      PG.R = R;
+    }
     pgVerarbeiten(R);
     if (!R.da){ pgZeichnen(); return; }
     /* the town, once per battle */
@@ -16117,7 +16236,11 @@ function pgLiveStop(auchFreigabe){
   if (!PG || !PG.live) return;
   clearInterval(PG.live); PG.live = null;
   kbRauschenAus();
-  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)) bildFreigabeBeenden();
+  /* the last reading and the standing surface go with the room - 33
+     megabytes each, nothing to keep while nobody looks */
+  PG.R = null; pgFlaeche.c = null; pgFlaeche.g = null;
+  /* the share is the page's: it ends only when no room is watching */
+  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live) && !wacheLaeuft()) bildFreigabeBeenden();
   pgZeichnen();
 }
 async function pgBild(datei){
@@ -20055,7 +20178,7 @@ function ortAnlauf(video){
       || sx + sw > a.bw || sy + sh > a.bh) return ortNein("schnitt_ausserhalb");
   const roh = document.createElement("canvas");
   roh.width = sw; roh.height = sh;
-  roh.getContext("2d").drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+  roh.getContext("2d", {willReadFrequently:true}).drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
   /* Zielhoehe rund 100 Bildpunkte fuer das ganze Band - "Tesseract liest
      eine Zeile am besten bei etwa 50 px Schrifthoehe" (feldBild), und das
      Band ist gut doppelt so hoch wie die Schrift darin. */
@@ -22443,14 +22566,15 @@ async function wacheStart(sek){
   }
   let stream;
   try {
-    /* displaySurface: "window" oeffnet die Auswahl gleich beim Reiter
-       "Fenster" statt bei "Tab" - man sucht sonst jedes Mal von Hand. */
-    /* Zehn Bilder je Sekunde: bei zwei bekaeme die Peilung fuenfmal je
-       Sekunde dreimal dasselbe Bild zu sehen. */
-    stream = await navigator.mediaDevices.getDisplayMedia({
-      video: {frameRate: 10, displaySurface: "window"}, audio: false,
-      selfBrowserSurface: "exclude", surfaceSwitching: "include",
-      monitorTypeSurfaces: "exclude"});
+    /* ONE SHARE FOR THE WHOLE PAGE. The radar used to open a share of its
+       own, next to the one the cabin and the player's room use - two shares
+       of the same window, and the operating system copied 3840 by 2160
+       points twice, eighteen times a second, about six hundred megabytes
+       every second, whether anybody looked or not. Now it takes the page's
+       one share: whoever opens it first picks the window, the others join.
+       Eight pictures a second instead of ten - the bearing runs five times
+       a second and still sees a fresh picture nearly every time. */
+    stream = await bildStromHolen();
   } catch(e){ toast("Nothing picked — nothing is being watched."); return false; }
   /* Dasselbe Videoelement, das ausgelesen wird, ist auch das angezeigte -
      zwei Stroeme desselben Fensters waeren doppelte Arbeit fuer nichts. */
@@ -22479,8 +22603,11 @@ async function wacheStart(sek){
 function wacheStop(vonAussen){
   if (!wache) return;
   clearInterval(wache.uhr);
-  try { wache.stream.getTracks().forEach(x => x.stop()); } catch(e){}
   try { wache.video.srcObject = null; } catch(e){}
+  /* the share is the page's, not the radar's: it ends only when no other
+     room is watching through it */
+  const andere = (typeof KB !== "undefined" && KB && KB.live) || (typeof PG !== "undefined" && PG && PG.live);
+  if (!andere) bildFreigabeBeenden();
   document.querySelector(".rd-schirm")?.classList.remove("live");
   const gesehen = wache.gesehen ? wache.gesehen.size : 0, geaendert = wache.gesamt;
   wache = null;
@@ -24990,12 +25117,34 @@ async function ocrMitZuv(quelle, psm, melde, weiss){
    ueber der Karte, und dann bestimmt die Karte die Spanne und das Panel
    verschwindet darin. Entscheidend ist der Abstand jedes Punktes zu seiner
    eigenen Umgebung - der bleibt gross, egal was hinter dem Panel liegt. */
-async function bildAufbereiten(datei, box){
-  const bm = await createImageBitmap(datei);
+/* THE FIELD, CUT AT THE SOURCE. A canvas or a bitmap knows its size before
+   anything is copied, so only the field itself becomes a bitmap - not the
+   3840 by 2160 surface it sits on. That used to be 33 megabytes copied, and
+   closed again, for a name line 780 points wide. A file is only known once
+   decoded; that path stays as it was. Returns the bitmap and where in it
+   the field lies. */
+async function bildFeldBitmap(datei, box){
   const bx = box || {x:0, y:0, w:1, h:1};
+  const bekannt = (typeof HTMLCanvasElement !== "undefined" && datei instanceof HTMLCanvasElement)
+               || (typeof ImageBitmap !== "undefined" && datei instanceof ImageBitmap);
+  if (bekannt && datei.width && datei.height){
+    const qw = datei.width, qh = datei.height;
+    const sx = Math.round(bx.x*qw), sy = Math.round(bx.y*qh);
+    const sw = Math.max(16, Math.min(qw - sx, Math.round(bx.w*qw)));
+    const sh = Math.max(16, Math.min(qh - sy, Math.round(bx.h*qh)));
+    return {bm: await createImageBitmap(datei, sx, sy, sw, sh), ox: 0, oy: 0, sw, sh};
+  }
+  const bm = await createImageBitmap(datei);
   const sx = Math.round(bx.x*bm.width), sy = Math.round(bx.y*bm.height);
   const sw = Math.max(16, Math.min(bm.width  - sx, Math.round(bx.w*bm.width)));
   const sh = Math.max(16, Math.min(bm.height - sy, Math.round(bx.h*bm.height)));
+  return {bm, ox: sx, oy: sy, sw, sh};
+}
+/* dunkel: true where the caller KNOWS the text is dark on a light ground,
+   false where it knows it is light on dark, undefined where nobody knows
+   and the picture has to say - see the polarity line below */
+async function bildAufbereiten(datei, box, dunkel){
+  const {bm, ox, oy, sw, sh} = await bildFeldBitmap(datei, box);
   /* Auf etwa 1400 px Breite bringen - darunter liest Tesseract Spielschrift
      schlecht -, aber die Flaeche deckeln, damit das Integralbild nicht
      ausufert. */
@@ -25004,7 +25153,7 @@ async function bildAufbereiten(datei, box){
   const W = c.width = Math.round(sw*f), H = c.height = Math.round(sh*f);
   const g = c.getContext("2d", {willReadFrequently:true});
   g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
-  g.drawImage(bm, sx, sy, sw, sh, 0, 0, W, H);
+  g.drawImage(bm, ox, oy, sw, sh, 0, 0, W, H);
   if (bm.close) bm.close();
 
   const bd = g.getImageData(0, 0, W, H), d = bd.data, n = W*H;
@@ -25021,7 +25170,21 @@ async function bildAufbereiten(datei, box){
      An beiden vorliegenden Bildern nachgemessen liegt diese Regel richtig. */
   let s = 0, mitte = 128;
   for (let v=0; v<256; v++){ s += hist[v]; if (s >= n*0.5){ mitte = v; break; } }
-  const schriftHell = mitte < 128;      // dunkler Grund, helle Schrift
+  /* THE POLARITY IS NOT GUESSED WHERE IT IS KNOWN. The median decides
+     whether the text is light or dark - and the field lies see-through over
+     the map, so the MAP decides the median. Measured on the Kommodore's own
+     captures of the unit box (dark text on a light field):
+       brown ground   median 124   "light text"   WRONG - the text came out
+                                                  white, the red front lines
+                                                  as dark strokes, and the
+                                                  reader read noise
+       grey ground    median 131   "dark text"    right
+     Four counts of brightness decided it, and the ground behind the field
+     picked the side. The box always carries dark text on a light field -
+     that is the game's layout, not a measurement - so the caller says so,
+     and the median only speaks where nobody knows (a file from the user,
+     the battle screen, the bar's own line). */
+  const schriftHell = dunkel === undefined ? mitte < 128 : !dunkel;   // dunkler Grund, helle Schrift
 
   // Integralbild -> Mittelwert eines Fensters in einem Zugriff
   const ii = new Float64Array((W+1)*(H+1));
@@ -25064,17 +25227,13 @@ async function bildAufbereiten(datei, box){
    braucht das Gruen der Balken, und die Einzelfelder werden erst danach
    vergroessert, damit sie nicht zweimal durch eine Skalierung laufen. */
 async function farbAusschnitt(datei, box){
-  const bm = await createImageBitmap(datei);
-  const b = box || {x:0, y:0, w:1, h:1};
-  const sx = Math.round(b.x*bm.width), sy = Math.round(b.y*bm.height);
-  const sw = Math.max(16, Math.min(bm.width  - sx, Math.round(b.w*bm.width)));
-  const sh = Math.max(16, Math.min(bm.height - sy, Math.round(b.h*bm.height)));
+  const {bm, ox, oy, sw, sh} = await bildFeldBitmap(datei, box);
   const f = Math.max(1, Math.min(3, 600/sw));
   const c = document.createElement("canvas");
   c.width = Math.round(sw*f); c.height = Math.round(sh*f);
   const g = c.getContext("2d", {willReadFrequently:true});
   g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
-  g.drawImage(bm, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  g.drawImage(bm, ox, oy, sw, sh, 0, 0, c.width, c.height);
   if (bm.close) bm.close();
   return c;
 }
@@ -33988,7 +34147,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d8c9a46914</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b2373aee35</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34130,7 +34289,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d8c9a46914";
+const BAU = "b2373aee35";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
