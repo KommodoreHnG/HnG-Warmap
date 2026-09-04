@@ -16703,6 +16703,9 @@ function kbBehalten(){
                                  /* on an attack line the unit is not IN the town - it stands on
                                     the line named by the letter, attacking it */
                                  KB.linie ? {l: KB.linie} : {},
+                                 /* THE MEASURED STRENGTH, one pair per unit part [now, max] -
+                                    the Kommodore's "current strength" at time t in town o */
+                                 (z.hp && z.hp.length) ? {st: z.hp.map(h => h ? [h[0], h[1]] : null)} : {},
                                  /* the print rides along only where it is needed - for a
                                     name nobody can read, it is the only identity there is */
                                  z.schrift ? {schrift: z.schrift} : {},
@@ -16720,9 +16723,11 @@ function kbBehalten(){
           (z.schrift && da.schrift !== z.schrift) ? {schrift: z.schrift} : {},
           /* the full name replaces a cut one on file, never the other way */
           (da.unvoll && !kbUnvoll(z) && neu.name) ? {name: neu.name, unvoll: 0} : {});
-        if (da.o !== ort || da.t !== jetztS || Object.keys(besser).length)
+        const stNeu = (z.hp && z.hp.length) ? z.hp.map(h => h ? [h[0], h[1]] : null) : null;
+        const stAnders = !!stNeu && JSON.stringify(stNeu) !== JSON.stringify(da.st || null);
+        if (da.o !== ort || da.t !== jetztS || Object.keys(besser).length || stAnders)
           setFeindDepot(key, depot.map(d => d === da
-            ? Object.assign({}, d, {o: ort, t: jetztS, l: KB.linie || null}, besser) : d));
+            ? Object.assign({}, d, {o: ort, t: jetztS, l: KB.linie || null}, stNeu ? {st: stNeu} : {}, besser) : d));
       }
     }
     if (seite !== null){
@@ -35112,7 +35117,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 1818a9e628</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 60049905ce</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -35254,7 +35259,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "1818a9e628";
+const BAU = "60049905ce";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
