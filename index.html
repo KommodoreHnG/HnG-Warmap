@@ -12925,8 +12925,37 @@ function unitsStadt(text){
     const rel = best.d / Math.max(4, unitsKeys[best.i][0].length);
     return rel <= 0.25 ? {...best, sicher: rel <= 0.12} : null;
   };
-  /* the game appends " - C" or " - E" to some names; not part of the town */
-  return versuch(unitsKey(text || "")) || versuch(unitsKey((text || "").replace(/\s*[-–]\s*[A-Z]\s*$/, "")));
+  /* the game appends " - C" or " - E" to some names; not part of the town.
+     BOTH readings are tried and the nearer one counts: with the letter on,
+     "NURNBERG - D" stood one character off "Nuernberg" - unsure by a hair -
+     and the version without the letter was never tried at all. */
+  const roh = versuch(unitsKey(text || ""));
+  const ohne = (text || "").replace(/\s*[-–]\s*[A-Z]\s*$/, "");
+  const kurz = ohne !== (text || "") ? versuch(unitsKey(ohne)) : null;
+  if (roh && kurz) return kurz.d < roh.d ? kurz : roh;
+  return roh || kurz;
+}
+/* B OR D? The bar's title font makes the two alike for the reader, and a
+   line letter is one character with nothing around it to help. The shape
+   tells them apart: measured on the prepared field, a B's right edge
+   dents inward at mid-height by 12 of 67 points, a D's not at all (three
+   D's: 0, -1, 0). A dent of a tenth of the width or more is a B, under
+   three hundredths a D, in between the reader's word stands. */
+function unitsLinieBD(feld, symbole, gelesen){
+  const sy = [...(symbole || [])].reverse().find(y => y && (y.t === "B" || y.t === "D") && y.b);
+  if (!sy || !feld) return gelesen;
+  const b = sy.b, w = b.x1 - b.x0, h = b.y1 - b.y0;
+  if (w < 8 || h < 12) return gelesen;
+  let px;
+  try { px = feld.getContext("2d", {willReadFrequently: true}).getImageData(b.x0, b.y0, w, h).data; } catch(e){ return gelesen; }
+  const rechts = [];
+  for (let y = 0; y < h; y++){ let r = -1; for (let x = 0; x < w; x++) if (px[(y*w + x)*4] < 128) r = x; rechts.push(r); }
+  const teil = (a, z) => rechts.slice(Math.round(h*a), Math.round(h*z));
+  const oben = Math.max(...teil(0.15, 0.35)), mitte = Math.min(...teil(0.42, 0.58)), unten = Math.max(...teil(0.65, 0.85));
+  const delle = Math.min(oben, unten) - mitte;
+  if (delle >= w * 0.1) return "B";
+  if (delle <= w * 0.03) return "D";
+  return gelesen;
 }
 async function unitsStaerke(c, d, oben, melde){
   const {bl} = unitsStaerkeBloecke(d, oben, oben+UNITS_BAND);
@@ -13228,15 +13257,16 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
          still serves. */
       const lies = async (modus) => {
         if (!zl) return unitsText(c, UNITS_NAME_X, fy + 8, nb, 62, null, modus);
-        let text = "", zuv = 0;
+        let text = "", zuv = 0, symbole = null, feld = null;
         for (const [a, b] of zl){
           const r = await unitsText(c, UNITS_NAME_X, a - 6, nb, (b - a) + 12, null, modus);
           const t = (r.text || "").trim();
           if (!t) continue;
           text = text ? text + " " + t : t;
           zuv = zuv ? Math.min(zuv, r.zuv) : r.zuv;
+          symbole = r.symbole || null; feld = r.feld || null;   /* the last line carries the letter */
         }
-        return {text, zuv};
+        return {text, zuv, symbole, feld};
       };
       const o1 = await lies("schlicht");
       const s1 = unitsStadt(o1.text);
@@ -13244,7 +13274,13 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
       if (!s1 || !s1.sicher){
         const o2 = await lies(null);
         const s2 = unitsStadt(o2.text);
-        if (s2 && (!s1 || s2.sicher || s2.d < s1.d)){ ort = o2; stadt = s2; }
+        /* THE SAME TOWN TWICE: THE BETTER READING STANDS. "NURNBERG - D"
+           at 76 was dropped for "NURNBERG" at 5, because only the second
+           matched the town to the letter - and the attack line went with
+           it. When both name the same town, the surer match may count,
+           but the text is the one read better. */
+        if (s2 && s1 && s2.i === s1.i){ if (s2.sicher) stadt = s2; if (o2.zuv > o1.zuv) ort = o2; }
+        else if (s2 && (!s1 || s2.sicher || s2.d < s1.d)){ ort = o2; stadt = s2; }
       }
       R.ortZeilen = zl ? zl.length : 0;
       R.ortText = ort.text; R.ortZuv = ort.zuv;
@@ -13264,7 +13300,9 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
          units stand on. They are not in the town - they are attacking it
          from that line. Kept, because it says where they are. */
       const lm = /[-–]\s*([A-E])\s*$/.exec(ort.text.trim());
-      R.linie = lm ? lm[1] : null;
+      let linie = lm ? lm[1] : null;
+      if ((linie === "B" || linie === "D") && ort.symbole && ort.feld) linie = unitsLinieBD(ort.feld, ort.symbole, linie);
+      R.linie = linie;
       }
     }
   }
@@ -14190,7 +14228,7 @@ function kbBekanntText(b){
   const d = b.e;
   const teile = [];
   if (d.k) teile.push(atName(d.k) + (d.ung ? " (not confirmed)" : ""));
-  if (d.o !== undefined && d.o !== null && MAP.n[d.o]) teile.push("last seen in " + MAP.n[d.o][0]);
+  if (d.o !== undefined && d.o !== null && MAP.n[d.o]) teile.push("last seen " + (d.l ? "on line " + d.l + " at " : "in ") + MAP.n[d.o][0]);
   return teile.join(" \u00b7 ");
 }
 /* Already on the sheet?
@@ -15636,7 +15674,7 @@ function kbZeichnen(){
       : "read from the bar, or type it";
   }
   if (ortFeldLinks && !KB.ortHand && document.activeElement !== ortFeldLinks){
-    const soll = ortName || "";
+    const soll = ortName ? ortName + (KB.linie ? " - " + KB.linie : "") : "";
     if (ortFeldLinks.value !== soll) ortFeldLinks.value = soll;
   }
   /* the strip */
@@ -16662,6 +16700,9 @@ function kbBehalten(){
       if (!treffer.length || weitere){
         depot.push(Object.assign({id: Math.random().toString(36).slice(2,9), k, name: neu.name, tag: neu.tag, kurz: 0,
                                   o: ort, t: jetztS},
+                                 /* on an attack line the unit is not IN the town - it stands on
+                                    the line named by the letter, attacking it */
+                                 KB.linie ? {l: KB.linie} : {},
                                  /* the print rides along only where it is needed - for a
                                     name nobody can read, it is the only identity there is */
                                  z.schrift ? {schrift: z.schrift} : {},
@@ -16681,7 +16722,7 @@ function kbBehalten(){
           (da.unvoll && !kbUnvoll(z) && neu.name) ? {name: neu.name, unvoll: 0} : {});
         if (da.o !== ort || da.t !== jetztS || Object.keys(besser).length)
           setFeindDepot(key, depot.map(d => d === da
-            ? Object.assign({}, d, {o: ort, t: jetztS}, besser) : d));
+            ? Object.assign({}, d, {o: ort, t: jetztS, l: KB.linie || null}, besser) : d));
       }
     }
     if (seite !== null){
@@ -17352,7 +17393,13 @@ document.getElementById("b-units").addEventListener("click", kabineAuf);
 document.getElementById("kb-zu").addEventListener("click", kabineZu);
 document.getElementById("kb-blatt").addEventListener("click", ev => { if (KB) kbBearbeiten(ev); });
 document.getElementById("kb-links").addEventListener("change", ev => {
-  if (ev.target && ev.target.id === "kb-ort" && KB){ const f = unitsStadt(ev.target.value); if (f){ KB.ort = f.i; KB.ziel = KB.linie ? linieZiel(KB.ort, KB.linie) : null; kbZeichnen(); } }
+  if (ev.target && ev.target.id === "kb-ort" && KB){
+    const f = unitsStadt(ev.target.value);
+    /* "Muensingen - C" typed by hand: the letter is the attack line */
+    const lm = /[-–]\s*([A-Ea-e])\s*$/.exec(ev.target.value.trim());
+    if (lm) KB.linie = lm[1].toUpperCase(); else if (f) KB.linie = null;   /* typed without a letter: no line */
+    if (f){ KB.ort = f.i; KB.ziel = KB.linie ? linieZiel(KB.ort, KB.linie) : null; kbZeichnen(); }
+  }
 });
 document.addEventListener("keydown", ev => { if (ev.key === "Escape" && kbOffen) kabineZu(); });
 
@@ -35065,7 +35112,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 308df42f5f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 1818a9e628</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -35207,7 +35254,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "308df42f5f";
+const BAU = "1818a9e628";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
