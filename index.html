@@ -449,6 +449,7 @@ body.zieht #mapwrap canvas{pointer-events:none}
 .pick{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--panel2);
   border:1px solid var(--line);border-radius:2px;padding:7px 4px;cursor:pointer;color:var(--text)}
 .pick:hover{border-color:var(--accent);background:rgba(226,172,72,.1)}
+.pick:disabled{opacity:.45;cursor:not-allowed;border-color:var(--line);background:var(--panel2)}
 .pick span{font-size:10.5px;text-align:center;line-height:1.15}
 .pick em{font-style:normal;font-size:10px;color:var(--dim2)}
 .mini{background:var(--panel2);border:1px solid var(--line);border-radius:2px;padding:1px 3px;
@@ -746,7 +747,7 @@ body.meld-modus{cursor:help}
   text-transform:uppercase;color:#7a6a48;display:flex;align-items:center;gap:6px}
 .sp-liste h4 b{color:#2b2416;font-size:13px;letter-spacing:0}
 .sp-n{margin-left:auto;font-size:11px;color:#8a7a52}
-.sp-z{display:grid;grid-template-columns:26px 1fr 20px;gap:6px;align-items:center;
+.sp-z{display:grid;grid-template-columns:26px 1fr auto 20px;gap:6px;align-items:center;
   border-top:1px solid rgba(122,106,72,.28);padding:3px 0;font-size:13px;min-height:24px}
 .sp-z.leer{color:#a2937012}
 .sp-z .nr{font-size:10px;color:#8a7a52;text-align:right}
@@ -756,6 +757,10 @@ body.meld-modus{cursor:help}
 .sp-z .nm input{width:100%;font:inherit;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 4px}
 .sp-z.wartet .nm{color:#9a8a63;font-style:italic}
 .sp-z .ok{color:#4f7a3a;font-size:12px}
+/* what the register knows about the name: clan tag, scouted teams or side */
+.sp-z .cl{font-size:11px;color:#7a6a48;max-width:84px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;cursor:default}
+.sp-z .cl:empty{display:none}
 .sp-fahne{width:16px;height:11px;border:1px solid rgba(0,0,0,.35);flex:none}
 /* a line that two models read differently - one click swaps the reading */
 .sp-tausch{cursor:pointer;color:#b98a2c;font-size:12px;padding:0 3px;border-radius:2px}
@@ -812,20 +817,25 @@ body.meld-modus{cursor:help}
 /* the little screen under the set */
 .kb-osz{display:block;width:100%;height:auto;margin-top:7px;border:1px solid #2a2e36;
   border-radius:3px;background:#0d1410}
-/* the morse tape */
+/* the morse tape: the whole line in clear text, its Morse underneath.
+   What is wider than the window runs through it once, at the clerk's
+   pace (the roll's animation-duration is set to the writing time); a
+   short line just stands. 100cqw is the window, 100% the roll itself. */
 .kb-band{position:relative;margin-top:7px;height:26px;overflow:hidden;border-radius:2px;
   background:repeating-linear-gradient(90deg,#e9dfc6 0 15px,#e2d7ba 15px 16px);
-  border:1px solid #3a414b;display:flex;align-items:center}
+  border:1px solid #3a414b;display:flex;align-items:center;container-type:inline-size}
 .kb-band.leer{background:#171a20}
-.kb-bandtext{position:absolute;left:6px;top:1px;font-family:var(--schmal);font-size:9px;
-  letter-spacing:.16em;color:#8a7a52;text-transform:uppercase;z-index:2}
-.kb-band.leer .kb-bandtext{color:#4e565f}
-.kb-marken{display:flex;align-items:center;gap:3px;padding-left:8px;animation:kbBand 2.4s linear infinite}
-.kb-marken i{display:block;height:7px;background:#2b2416;border-radius:1px}
+.kb-rolle{position:relative;flex:none;width:max-content;height:100%;padding:0 6px;
+  animation:kbRolle 1.5s linear forwards}
+.kb-bandtext{display:block;white-space:nowrap;padding-top:1px;font-family:var(--schmal);font-size:9px;
+  letter-spacing:.16em;color:#8a7a52}
+.kb-band.leer .kb-bandtext{position:absolute;left:6px;top:1px;color:#4e565f;text-transform:uppercase}
+.kb-marken{position:absolute;left:6px;bottom:4px;display:flex;align-items:center;gap:3px}
+.kb-marken i{display:block;flex:none;height:7px;background:#2b2416;border-radius:1px}
 .kb-marken i.pt{width:7px}
 .kb-marken i.st{width:19px}
 .kb-marken i.lu{width:8px;background:transparent}
-@keyframes kbBand{from{transform:translateX(24px)}to{transform:translateX(-24px)}}
+@keyframes kbRolle{from{transform:translateX(0)}to{transform:translateX(min(0px, 100cqw - 100%))}}
 .kb-schirm{grid-area:schirm;position:relative;overflow:auto;padding:16px 18px;
   background:radial-gradient(ellipse at 50% 30%, #15171c 0%, #0b0c10 75%)}
 /* the strip: one box per unit in town, in the side's colour, a question mark
@@ -944,6 +954,8 @@ body.kb-zieht{user-select:none}
 /* and a long unit name goes on two lines inside its ruling instead of
    being cut - the Kommodore: "die Namen muessen immer ganz sichtbar sein" */
 .kb-z .f.nam.lang{white-space:normal;font-size:11.5px;line-height:15px;max-height:34px;text-overflow:clip;overflow:hidden;word-break:break-word}
+/* the name line as the game shows it, where no reader can hold on to its characters */
+.kb-z .f.nam .kb-nbild{height:20px;max-width:60%;object-fit:contain;object-position:left center;vertical-align:middle;margin-right:5px;border:1px solid #b9ab8a;border-radius:2px;background:#fff}
 .kb-z .f input,.kb-z .f select{width:100%;font:inherit;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 4px}
 .kb-z .weg{background:transparent;border:0;color:#9b3b2e;font-size:16px;cursor:pointer;line-height:1}
 .kb-z .weg:hover{color:#d0392a}
@@ -956,6 +968,10 @@ body.kb-zieht{user-select:none}
 .kb-raute{width:15px;height:15px;flex:none;stroke:#5c5137;fill:none;stroke-width:calc(var(--ico-strich)*24/15);
   stroke-linecap:round;stroke-linejoin:round}
 .kb-z.vermutet .kb-raute{stroke:#93855f}
+/* the same diamonds outside the cabin - depot list, town panel, player
+   window: inline in the text, in the text's colour */
+.st-paar{white-space:nowrap}
+.st-paar .kb-raute{width:13px;height:13px;vertical-align:-3px;stroke:currentColor;stroke-width:calc(var(--ico-strich)*24/13)}
 /* the lock on a line, and the note a locked line collects */
 .kb-schluss{display:flex;align-items:center;gap:3px;justify-content:flex-end}
 /* THE LOCK IS A BUTTON, not a hint. It used to be a pale eleven-point
@@ -2870,6 +2886,25 @@ function soldatenUmziehen(){
 }
 const meineSoldaten = () => anonAn() ? anonSoldaten(anonKennung())
                                      : soldatenVon(S.me);
+/* War badge reminder. Badges reset with every war, so the rank list is
+   worth a look once per war. Only for players with soldiers of their own,
+   and only once per war epoch (epoche()), remembered in this browser. */
+const SPANGEN_STORE = "hng-warmap-spangen";
+const SPANGEN_TEXT = "New war: check your soldiers' war badges (rank list).";
+/* Says whether the reminder is due, and marks it as given. */
+function spangenFaellig(){
+  try {
+    const ep = epoche();
+    if (!ep || !meineSoldaten().length) return false;
+    if (lies(SPANGEN_STORE, "") === String(ep)) return false;
+    schreib(SPANGEN_STORE, String(ep));
+    return true;
+  } catch(e){ return false; }
+}
+/* Shown after the war toast has faded: toast() replaces its text. */
+function spangenErinnern(){
+  if (spangenFaellig()) setTimeout(() => toast(SPANGEN_TEXT), 2700);
+}
 function anonSchreiben(liste){
   S.anon ||= {};
   const k = anonKennung(), l = soldatenListe(liste);
@@ -3924,6 +3959,17 @@ function messStaerkeAt(i){
     if (hat){ n++; if (g.t > t) t = g.t; }
   }
   return {ist, max, n, t};
+}
+/* One unit's measured strength with the diamonds of the game's display in
+   front of the pairs - the crew groups from the known type, else from the
+   one type the maxima can belong to (the cabin's rule, kbCrewNamen). */
+function stSymbole(k, st){
+  if (!Array.isArray(st) || !st.length) return "";
+  let typ = k;
+  if (!typ){ const kand = kbTypKandidaten(st); if (kand.length === 1) typ = kand[0]; }
+  const namen = (typ && AT[typ] && AT[typ].crew) ? AT[typ].crew.map(c => c[0]) : [];
+  return st.map((h, j) => `<span class="st-paar">${namen[j] ? kbRaute(namen[j]) : ""}${
+    h ? `${h[0]}/${h[1]}` : "?"}</span>`).join(" ");
 }
 /* ---- Aufmarsch: what was last seen in each town -------------------------
    Three sources, per town and side to ONE number:
@@ -5563,9 +5609,15 @@ function drawArea(a, eintrag, entwurf, id){
   if (!a || !Array.isArray(a.pts) || a.pts.length < 3) return;
   const f = col(FACTIONS[a.f]);
   const p = a.pts.map(q => toScr(q[0], q[1]));
+  /* smooth outline: a quadratic curve from edge midpoint to edge midpoint,
+     each corner only steering the bend. Hit testing keeps the raw polygon. */
+  const n = p.length;
   ctx.beginPath();
-  ctx.moveTo(p[0][0], p[0][1]);
-  for (let i=1;i<p.length;i++) ctx.lineTo(p[i][0], p[i][1]);
+  ctx.moveTo((p[n-1][0] + p[0][0])/2, (p[n-1][1] + p[0][1])/2);
+  for (let i=0;i<n;i++){
+    const q = p[(i+1)%n];
+    ctx.quadraticCurveTo(p[i][0], p[i][1], (p[i][0] + q[0])/2, (p[i][1] + q[1])/2);
+  }
   ctx.closePath();
   const vorA = a.art === 0 && !bestaetigt(id);
   ctx.globalAlpha = entwurf ? .18 : (vorA ? .07 : .14); ctx.fillStyle = f; ctx.fill();
@@ -7229,8 +7281,12 @@ async function kriegsschnittServer(){
       return;
     }
     try { localStorage.removeItem(STORE); localStorage.removeItem(OFFEN_STORE); } catch(e){}
+    /* The page reloads right after this, so a toast would never be seen:
+       the badge reminder goes into the alert. Marking it here keeps the
+       sync toast after the reload from repeating it. */
     alert(`New war — ${weg} entries cleared for everyone. Depots, the arsenal, `
-        + `the player list and everything about the enemy are kept.`);
+        + `the player list and everything about the enemy are kept.`
+        + (spangenFaellig() ? `\n\n${SPANGEN_TEXT}` : ""));
     location.reload();
   } catch(e){
     toast(`The war was not started: ${String(e.message || e).slice(0,140)}`);
@@ -7292,6 +7348,12 @@ function neuerKrieg(){
      meldet sich am Ende SELBST - mit alert() und einem Neuladen, im
      Fehlerfall mit einem eigenen Toast. Ein Erfolgstoast des Aufrufers
      waere hier eine Behauptung ueber etwas, das noch laeuft. */
+  /* THE BACKUP IS TAKEN ONLY NOW, behind the three refusals above. There is
+     exactly one backup slot, and it survives exactly one step. Taking it
+     earlier meant every refusal still overwrote it, and the backup from
+     "Forget the local copy" was gone for nothing. From here on the cut
+     really happens, so this is the last moment the old state exists. */
+  sicherungAnlegen("new war");
   if (CFG){ kriegsschnittServer(); return null; }
   const linien = liveLines().map(([id]) => id);
   const briefe = livePosts().map(([id]) => id);
@@ -7525,9 +7587,9 @@ window.addEventListener("mouseup", e => {
       vorher[p] = alt === undefined ? null : alt;
       n++;
     }
-    if (n){ besitzRueck = {vorher, t: jetzt()}; save(); tally(); draw(); side(); }
+    if (n){ pinselRueck = {vorher, t: jetzt()}; save(); tally(); draw(); side(); tips(); }
     toast(n
-      ? `${n} town${n === 1 ? "" : "s"} set to ${FACTIONS[faction].name}${zieh.pts.length > l.length ? ` — ${zieh.pts.length - l.length} more were under the brush, capped at ${PINSEL_ZUG_MAX} per stroke` : ""}. Undo: Tools – War.`
+      ? `${n} town${n === 1 ? "" : "s"} set to ${FACTIONS[faction].name}${zieh.pts.length > l.length ? ` — ${zieh.pts.length - l.length} more were under the brush, capped at ${PINSEL_ZUG_MAX} per stroke` : ""}. Undo: tip box or radar room.`
       : "Nothing changed under the brush");
   } else if (zieh.art === "para"){
     /* Eine Handbewegung erzeugt so viele Zeilen wie beruehrte Staedte. Ein
@@ -7798,7 +7860,7 @@ function tips(){
     arrow:  `<b>Move</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
     line:   `<b>Defence</b> — drag across the towns. For <b>${p}</b>.`,
     para:   `<b>Para</b> — drag across the towns. Hold <kbd>P</kbd> for planned only.`,
-    brush:  `<b>Paint</b> — drag over the map; every town under the brush goes to <b>${FACTIONS[faction].name}</b>. Up to ${PINSEL_ZUG_MAX} per stroke, undo under Tools – War.`,
+    brush:  `<b>Paint</b> — drag over the map; every town under the brush goes to <b>${FACTIONS[faction].name}</b>. Up to ${PINSEL_ZUG_MAX} per stroke.${pinselRueck ? ` <button class="btn" id="tip-rueck" style="padding:1px 7px;font-size:10.5px">Undo last stroke</button>` : ""}`,
     area:   `<b>Area</b> — draw a shape, then label it. For <b>${p}</b>.`,
     spot:   "<b>Sighting</b> — click the town, then record what you saw.",
     battle: "<b>Battle</b> — click marks a town contested, again clears it.",
@@ -7807,6 +7869,7 @@ function tips(){
               : "<b>Clear</b> — removes your own teams and arrows here. "
               + "Control and battles stay as they are."
   }[tool];
+  document.getElementById("tip-rueck")?.addEventListener("click", pinselZurueck);
 }
 document.getElementById("b-obj").addEventListener("click", function(){
   objOnly = !objOnly; this.setAttribute("aria-pressed", String(objOnly)); draw();
@@ -8205,9 +8268,18 @@ function depotZeichnen(){
        es nicht das der Kriegsseite ist. */
     const bl = aktiveSeite(), wf = clanFaktion();
     const kopf = document.getElementById("depot-sum");
+    /* The ceiling in depotSchreiben counts the whole row, all three depots
+       together, so the tally shown against it counts the same way. At the
+       limit the add button greys out with the reason, the way the arsenal
+       does it for soldiers. */
+    const gesamt = myDepotAlle().length, voll = gesamt >= TEAM_MAX;
     kopf.innerHTML = `<span style="color:${col(FACTIONS[bl])}">${FACTIONS[bl].tag}</span>${
       bl !== wf ? ` <span style="color:var(--accent)">· viewing only</span>` : ""}${
-      alle.length ? ` · ${raus.size}/${alle.length} deployed` : ""}`;
+      alle.length ? ` · ${raus.size}/${alle.length} deployed` : ""} · ${
+      voll ? `<span style="color:var(--su)">${gesamt} of ${TEAM_MAX}</span>` : `${gesamt} of ${TEAM_MAX}`}`;
+    const add = document.getElementById("dep-add");
+    add.disabled = voll;
+    add.title = voll ? `You have ${gesamt} of ${TEAM_MAX} teams. Remove one before adding another.` : "";
   }
   liste.innerHTML = mein.length ? mein.map(d => {
     const town = townOfTeam(d.id);
@@ -8224,7 +8296,7 @@ function depotZeichnen(){
             <input class="ttag" data-id="${esc(d.id)}" value="${esc(d.tag||"")}"
               placeholder="TAG" spellcheck="false" maxlength="10"
               ${d.tag ? 'readonly title="Double-click to change"' : ""}></span>
-          <em>${esc(atName(d.k))} · ${atText(d.k)}${drin?` · ${esc(MAP.n[town][0])}`:""}${Array.isArray(d.st) && d.st.length ? ` · <b>${d.st.map(h => h ? `${h[0]}/${h[1]}` : "?").join(" ")}</b>${d.stT ? ` ${alterText(d.stT*1000)}` : ""}` : ""}</em></span>
+          <em>${esc(atName(d.k))} · ${atText(d.k)}${drin?` · ${esc(MAP.n[town][0])}`:""}${Array.isArray(d.st) && d.st.length ? ` · <b>${stSymbole(d.k, d.st)}</b>${d.stT ? ` ${alterText(d.stT*1000)}` : ""}` : ""}</em></span>
         <span class="rechts">
           ${atKinder(d.k).length ? `<button class="hoch" data-hoch="${esc(d.id)}"
              title="Upgrade this team to ${esc(atKinder(d.k).map(atName).join(" or "))}">▲</button>` : ""}
@@ -8459,9 +8531,19 @@ document.getElementById("dep-add").addEventListener("click", ()=>{
     <div class="dlg-f"><button class="btn primary" id="d-close">Done</button></div>`, true);
   document.getElementById("d-close").addEventListener("click", closeDlg);
   const qaN = document.getElementById("qa-n"), qaName = document.getElementById("qa-name");
-  const wieviel = () => Math.max(1, Math.min(50, Math.round(+qaN.value) || 1));
+  /* Room left under the ceiling, counted over all three depots like the
+     ceiling itself. One click never adds more than that. */
+  const frei = () => Math.max(0, TEAM_MAX - myDepotAlle().length);
+  const wieviel = () => Math.max(1, Math.min(50, frei(), Math.round(+qaN.value) || 1));
   const vorschau = () => {
     const feld = document.getElementById("qa-vor");
+    const platz = frei();
+    qaN.max = Math.max(1, Math.min(50, platz));
+    document.querySelectorAll(".pick").forEach(b => { b.disabled = !platz; });
+    if (!platz){
+      feld.innerHTML = `You have ${myDepotAlle().length} of ${TEAM_MAX} teams. Remove one before adding another.`;
+      return;
+    }
     if (!qaName.checked){
       feld.innerHTML = `Added without a name — the type stands in for it until you type one.`;
       return;
@@ -8830,6 +8912,10 @@ function side(){
       <h3>Strength <span class="sub">measured · ${m.n} unit${m.n===1?"":"s"}</span></h3>
       <div class="unit" style="--f:var(--accent)"><span class="sym" style="text-align:center;font-size:15px">Σ</span>
         <span class="n"><b>${m.ist.toLocaleString("en")}</b> / ${m.max.toLocaleString("en")}<em>${alterText(m.t)}</em></span></div>
+      ${spo.flatMap(g => g.list.flatMap(u => (Array.isArray(u.st) ? u.st : []).filter(st => Array.isArray(st) && st.some(Boolean)).map(st => `
+      <div class="unit" style="--f:${u.f != null ? col(FACTIONS[u.f]) : "var(--dim2)"}">
+        <span class="sym">${symbolSVG(u.k, c)}</span>
+        <span class="n">${stSymbole(u.k, st)}<em>${esc(atName(u.k))}${u.owner ? ` · ${nameMitClan(u.owner)}` : ""} · ${alterText(g.t)}</em></span></div>`))).join("")}
     </div>` : ""; })()}
     <div class="sec">
       <h3>Rough strength <span class="sub">${messStaerkeAt(i).n ? "notes" : "not confirmed"}</span></h3>
@@ -9380,11 +9466,21 @@ async function bildStromHolen(){
        Luecke, die die ganze Regel verhindern soll. Ob ueberhaupt ein Fenster
        oder ein ganzer Bildschirm geteilt wird, steht aber im Datenstrom, und
        ein ganzer Bildschirm liest sich deutlich schlechter. */
-    try {
-      const art = spur && spur.getSettings && spur.getSettings().displaySurface;
-      if (art && art !== "window")
-        toast("A whole screen is being shared — picking just the game window reads better.");
-    } catch(e){}
+    let art = "";
+    try { art = (spur && spur.getSettings && spur.getSettings().displaySurface) || ""; } catch(e){}
+    /* A WHOLE SCREEN IS NOT TAKEN. The rule is: only the game window is
+       captured, never the desktop. When the dialog handed over a monitor,
+       the share ends on the spot and the caller gets a marked error whose
+       text is the hint, so no room reads on from a screen. */
+    if (art === "monitor"){
+      bildFreigabeBeenden();
+      const hinweis = "Only the game window is captured, not a whole screen. The sharing was stopped.";
+      toast(hinweis);
+      const err = new Error(hinweis); err.nurFenster = true;
+      throw err;
+    }
+    if (art && art !== "window")
+      toast("A whole screen is being shared — picking just the game window reads better.");
   }
   return bildStrom;
 }
@@ -12885,8 +12981,10 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
     try {
       if (melde) melde(`Trying ${sp} …`);
       const wk = await unitsFremdWorker(sp);
+      const uhr = ocrZeiten, t0 = performance.now();
       const rA = await wk.recognize(feld);
       const rB = await wk.recognize(feldRoh);
+      ocrZeitNehmen(uhr, sp, t0);
       const zA = Math.round((rA.data && rA.data.confidence) || 0);
       const zB = Math.round((rB.data && rB.data.confidence) || 0);
       const r = zB > zA ? rB : rA;
@@ -13206,13 +13304,80 @@ function unitsUnlesbar(text, symbole, feld){
      how long the tool has been running is no witness. */
   return false;
 }
+/* ---- A SMALL PICTURE OF THE NAME LINE, for the sheet alone -------------
+   Where no reader can hold on to the characters - a row of currency signs,
+   stars, clown faces - the print above says WHO this is, but not what the
+   game shows. So the prepared name line is kept as a picture as well: cut
+   down to the name behind the tag where the symbols show where that
+   begins, cropped to its ink, brought to sheet height and packed as a PNG
+   of a few kilobytes. It rides on the sheet row only and never goes into
+   the depot record - that record has a line limit. */
+const NBILD_H = 20, NBILD_MAX = 4200;
+function nameBildKlein(feld, text, symbole){
+  if (!feld || !feld.width || !feld.height) return "";
+  try {
+    /* 1 where the name begins: the first symbol behind the separator */
+    let von = 0;
+    const l = String(text || "").replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ");
+    const m = AT_TRENNER.exec(l);
+    if (m && symbole && symbole.length){
+      const k = l.slice(0, m.index + m[0].length).replace(/\s/g, "").length;
+      const y = symbole[k];
+      if (y && y.b && y.b.x0 > 0 && y.b.x0 < feld.width - 8) von = Math.max(0, y.b.x0 - 6);
+    }
+    /* 2 the ink's extent, measured on a small copy */
+    const f = Math.max(1, Math.ceil((feld.width - von) / 800));
+    const w = Math.max(1, Math.floor((feld.width - von) / f)), h = Math.max(1, Math.floor(feld.height / f));
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    const g = c.getContext("2d", {willReadFrequently:true});
+    g.drawImage(feld, von, 0, w*f, h*f, 0, 0, w, h);
+    const px = g.getImageData(0, 0, w, h).data, n = w*h;
+    const dunkel = new Uint8Array(n);
+    let nd = 0;
+    for (let i = 0, j = 0; j < n; i += 4, j++){ dunkel[j] = (299*px[i] + 587*px[i+1] + 114*px[i+2]) < 128000 ? 1 : 0; nd += dunkel[j]; }
+    const tinte = nd*2 > n ? 0 : 1;          /* the ink is the rarer shade */
+    let x0 = w, x1 = -1, y0 = h, y1 = -1;
+    for (let y = 0, j = 0; y < h; y++) for (let x = 0; x < w; x++, j++){
+      if (dunkel[j] !== tinte) continue;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    if (x1 < 0) return "";
+    x0 = Math.max(0, x0 - 2); y0 = Math.max(0, y0 - 2); x1 = Math.min(w - 1, x1 + 2); y1 = Math.min(h - 1, y1 + 2);
+    const bw = (x1 - x0 + 1)*f, bh = (y1 - y0 + 1)*f;
+    /* 3 down to sheet height, and smaller still until it fits the budget */
+    let hh = NBILD_H, ww = Math.max(1, Math.round(bw*hh/bh));
+    if (ww > 240){ ww = 240; hh = Math.max(6, Math.round(bh*ww/bw)); }
+    const o = document.createElement("canvas");
+    for (let st = 0; st < 4; st++){
+      o.width = ww; o.height = hh;
+      const og = o.getContext("2d");
+      og.imageSmoothingEnabled = true; og.imageSmoothingQuality = "high";
+      og.fillStyle = "#fff"; og.fillRect(0, 0, ww, hh);
+      og.drawImage(feld, von + x0*f, y0*f, bw, bh, 0, 0, ww, hh);
+      /* four shades of grey are plenty for a glance, and the PNG shrinks by half */
+      const im = og.getImageData(0, 0, ww, hh), d = im.data;
+      for (let i = 0; i < d.length; i += 4){
+        const v = Math.round((299*d[i] + 587*d[i+1] + 114*d[i+2]) / 85000) * 85;
+        d[i] = d[i+1] = d[i+2] = v; d[i+3] = 255;
+      }
+      og.putImageData(im, 0, 0);
+      const url = o.toDataURL("image/png");
+      if (url.length <= NBILD_MAX) return url;
+      ww = Math.max(1, Math.round(ww/2)); hh = Math.max(1, Math.round(hh/2));
+    }
+  } catch(e){}
+  return "";
+}
 let bildKennFeld = null;      // the prepared name line the witnesses look at
 /* One line, read with one named model. Used when the owner's line has
    already shown which script this clan writes in. */
 async function unitsFremdLesen(c, x, y, w, h, schrift){
   try {
     const wk = await unitsFremdWorker(schrift);
-    const r = await wk.recognize(unitsSchlicht(c, {x, y, w, h}, 3));
+    const feld = unitsSchlicht(c, {x, y, w, h}, 3);
+    const uhr = ocrZeiten, t0 = performance.now();
+    const r = await wk.recognize(feld);
+    ocrZeitNehmen(uhr, schrift, t0);
     return {text: ((r.data && r.data.text) || "").trim().replace(/\s+/g, " "),
             zuv: Math.round((r.data && r.data.confidence) || 0), schrift};
   } catch(e){ return null; }
@@ -13274,10 +13439,10 @@ function unitsCjkEng(text, schrift){
 }
 /* Is there writing here that no Latin alphabet holds? */
 const unitsFremdSchrift = t => /[^\u0000-\u024F\u2010-\u2015\u2212]/.test(t || "");
-/* Town lookup with one difference to findeStadt: "ß" counts as "ss". The
-   game prints names in capitals, so Gießen appears as GIESSEN - read with
-   96 % and, with the plain key, two edits away from its town, one too many
-   for a name that short. */
+/* Town key, shared with findeStadt and STADT_KEYS: "ß" counts as "ss".
+   The game prints names in capitals, so Gießen appears as GIESSEN - read
+   with 96 % and, with the plain key, two edits away from its town, one
+   too many for a name that short. */
 const unitsKey = t => namKey(t).replace(/ß/g, "ss");
 let unitsKeys = null;
 /* WHERE THE TOWN'S NAME ACTUALLY STANDS. The reader used to take a fixed
@@ -13747,6 +13912,8 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
   if (art === "bild" || art === "ort") return R;
   if (kasten){
     const Z = UNITS_ZEILEN[kasten.form], B = UNITS_KASTEN.x1-UNITS_KASTEN.x0, o = kasten.oben;
+    /* the clock for this box: every reading from here on adds its time */
+    const uhr = ocrZeiten = {};
     sag("Reading the unit …");
     /* both preparations, the more confident one counts: the tool's
        local-contrast path reads the PNGs well, the plain threshold held up
@@ -13965,13 +14132,18 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
     R.einheit = {
       unlesbar: unlesbar || undefined,
       bild: unlesbar ? bildKennung(name.feld) : undefined,
+      /* and the picture itself, for the sheet - the print is an identity, not a view */
+      nameBild: unlesbar ? nameBildKlein(name.feld || name.lateinFeld, name.feld ? name.text : name.latein,
+                                         name.feld ? name.symbole : name.lateinSymbole) : undefined,
       schrift: name.schrift || bes.schrift || null,
       tag: unitsCjkEng(tagRoh, tagSchrift), tagInfo,
       name: unitsCjkEng(nameText, name.schrift || (fremd && fremd.schrift) || null),
       nameZuv: name.zuv,
       besitzer: bzName, besitzerRoh: bes.text, besitzerZuv: bes.zuv,
-      hp, form: R.form
+      hp, form: R.form,
+      zeiten: uhr
     };
+    ocrZeiten = null;
   }
   return R;
 }
@@ -14334,6 +14506,11 @@ function unitsZeileAus(R){
   return {tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp,
           seite: rs !== null ? rs : R.seite, linie: R.linie || null, stadt: R.stadt ? R.stadt.i : null,
           nameZuv: e.nameZuv, besitzerZuv: e.besitzerZuv,
+          /* WHAT THE READER SAYS ABOUT THE LETTERS goes with the reading. The
+             sheet takes unlesbar, bild and schrift off this object, and they
+             were never handed over here - so a row never learned that its
+             name could not be read. */
+          unlesbar: e.unlesbar, bild: e.bild, schrift: e.schrift, nameBild: e.nameBild,
           eigen: !!(S.name && e.besitzer && namKey(e.besitzer) === namKey(S.name)) || e.form === "erweitert"};
 }
 
@@ -14589,7 +14766,9 @@ function kbAbweichungNehmen(i){
                     nameZuv: a.nameZuv, status: "erfasst", gespeichert: false,
                     seite: a.seite !== null && a.seite !== undefined ? a.seite : z.seite});
   z.abweichung = null;
-  KB.status = `Line ${i + 1} taken over: ${a.tag || a.name}.`;
+  kbBekanntSetzen(z);
+  KB.status = a.buch ? `Line ${i + 1}: owner as read again, ${a.besitzer || "none"}.`
+                     : `Line ${i + 1} taken over: ${a.tag || a.name}.`;
   kbZeichnen();
 }
 function kbSchluessel(z){ return namKey((z.tag || "") + " " + (z.name || "")); }
@@ -14650,6 +14829,65 @@ function kbBekannt(z){
   return (treffer && !mehrere) ? {stand: "aehnlich", e: treffer, warum: "one letter apart"} : null;
 }
 const kbBekanntSetzen = z => { if (z) z.bekannt = kbBekannt(z); };
+/* ---- THE BOOK KNOWS THE OWNER. -----------------------------------------
+   The owner line is the worst read of the three, and by the eleventh unit
+   of a player his name stands on file ten times over (the Kommodore's
+   remark). So the tag just read is held against EVERY owner's depot, not
+   only the one the box seemed to name. Where exactly one owner carries
+   the tag, the book is asked before the reading is believed:
+     - tag AND name stand word for word under that one owner: the owner is
+       written, the status line says so, and the owner as read stays on
+       the line behind the red "!" so one click takes it back.
+     - only the tag fits, and the owner reading is doubtful (below the
+       doubt line) or looks like the one on file (skeleton two steps off at
+       most): a proposal only, the same "\u2248" the similar-tag case uses.
+   Bolts: two owners carrying the tag settle nothing; an owner whose side
+   contradicts the card is not this unit; a confidently read owner who is
+   himself on the register and looks nothing like the one on file is not
+   overruled, only offered the proposal. Locked lines never get here, the
+   write path returns before this for them. */
+function kbBesitzerAusBuch(z, e){
+  if (!z || !e || z.eigen) return;
+  const tk = atTagKey(z.tag);
+  if (tk.length < 3) return;
+  const nk = namKey(String(z.name || ""));
+  const gelesen = String(z.besitzer || "").trim();
+  let key = null, name = null, treffer = null, genau = false;
+  for (const [k, akte] of Object.entries(S.edep || {})){
+    if (!akte || !Array.isArray(akte.v)) continue;
+    const r = (S.roster || {})[k], f = r && r.v ? r.v.f : null;
+    if (f !== null && f !== undefined && z.seite !== null && z.seite !== undefined && f !== z.seite) continue;
+    let d = null, dg = false;
+    for (const u of akte.v){
+      if (!u || atTagKey(u.tag) !== tk) continue;
+      const g = nk.length >= 3 && namKey(String(u.name || "")) === nk;
+      if (!d || (g && !dg)){ d = u; dg = g; }
+    }
+    if (!d) continue;
+    if (key !== null && key !== k) return;          // two owners carry the tag
+    key = k; name = r && r.v && r.v.name ? String(r.v.name) : null; treffer = d; genau = dg;
+  }
+  if (!treffer || !name || namKey(name) === namKey(gelesen)) return;
+  const zuv = +e.besitzerZuv || 0;
+  const nahe = !gelesen || levenshtein(namVerwechsel(gelesen), namVerwechsel(name)) <= 2;
+  const fremd = !!gelesen && zuv >= KB_ZWEIFEL && !nahe && !!(S.roster || {})[spielerKey(gelesen)];
+  if (genau && !fremd){
+    /* the reading as read stays behind the "!" - only the owner changes,
+       so taking it back changes only the owner */
+    z.abweichung = {tag: z.tag || "", name: z.name || "", besitzer: gelesen,
+                    hp: z.hp || null, seite: z.seite, nameZuv: z.nameZuv || 0, buch: true};
+    z.besitzer = name;
+    z.bekannt = {stand: "gleich", e: treffer};
+    return;
+  }
+  if (!(genau || zuv < KB_ZWEIFEL || nahe)) return;
+  if (!z.bekannt) z.bekannt = {stand: "aehnlich", e: treffer, warum: "owner on file", besitzer: name};
+}
+/* the note for the status line, while the clerk writes and when he is done */
+const kbBuchHinweis = z => !z ? ""
+  : (z.abweichung && z.abweichung.buch) ? `owner ${z.besitzer} from the clan's book, "!" takes the reading back`
+  : (z.bekannt && z.bekannt.besitzer) ? `the book has this tag under ${z.bekannt.besitzer}, see \u2248`
+  : "";
 /* the hint a known unit carries: what kind it is and where it was last seen */
 function kbBekanntText(b){
   if (!b || !b.e) return "";
@@ -14873,6 +15111,7 @@ function kbReiheErgaenzen(R){
 }
 function kbVerarbeiten(R, vorgabe){
   KB.frame = R.gross; KB.hell = R.hell; KB.gain = R.gain;
+  if (R.einheit && R.einheit.zeiten) KB.ocrZeiten = R.einheit.zeiten;
   if (R.leiste && !R.dialog) kbReiheErgaenzen(R);
   if (R.dialog){
     if (R.stadt){ KB.merk = {stadt: R.stadt.i, linie: R.linie || null}; kbOrtSetzen(R.stadt.i, R.linie || null); }
@@ -15145,6 +15384,7 @@ function kbVerarbeiten(R, vorgabe){
                           tag: e.tag, name: e.name, nameZuv: e.nameZuv,
                           schrift: e.schrift || z.schrift || null});
       else if (e.bild) z.bild = e.bild;      // the print stays fresh either way
+      if (e.nameBild) z.nameBild = e.nameBild;   // the picture too - sheet only, never the depot
       Object.assign(z, {status: "erfasst", besitzer: e.besitzer, hp: e.hp,
                         eigen: !!e.eigen, seite: e.seite !== null && e.seite !== undefined ? e.seite
                                               : (z.seite !== null && z.seite !== undefined ? z.seite
@@ -15160,6 +15400,8 @@ function kbVerarbeiten(R, vorgabe){
       /* what the clan already knows about this one - looked up once, when
          the line is written, not on every draw */
       kbBekanntSetzen(z);
+      /* and what the book knows about the OWNER - see kbBesitzerAusBuch */
+      kbBesitzerAusBuch(z, e);
       /* the side, if the picture did not give it: what we already know
          about this player counts for more than nothing */
       if ((z.seite === null || z.seite === undefined) && z.besitzer){
@@ -15167,7 +15409,8 @@ function kbVerarbeiten(R, vorgabe){
         if (e2 && e2.v && e2.v.f !== null && e2.v.f !== undefined) z.seite = e2.v.f;
       }
       if (KB.ort === null && e.stadt !== null && e.stadt !== undefined) kbOrtSetzen(e.stadt);
-      KB.status = `Writing down ${e.tag || ""} ${e.name} …`;
+      const hinweisBuch = kbBuchHinweis(z);
+      KB.status = `Writing down ${e.tag || ""} ${e.name}${hinweisBuch ? ", " + hinweisBuch : ""} …`;
       kbSchreiben(z);
     }
   }
@@ -15185,7 +15428,11 @@ function kbSchreiben(z){
   const takt = setInterval(() => {
     if (!KB || !KB.schreibt || KB.schreibt.i !== z.i){ clearInterval(takt); return; }
     const p = (jetzt() - KB.schreibt.ab) / KB.schreibt.dauer;
-    if (p >= 1){ KB.schreibt = null; clearInterval(takt); KB.status = `${z.tag || z.name} is on the sheet - click the next unit.`; }
+    if (p >= 1){
+      KB.schreibt = null; clearInterval(takt);
+      const buch = kbBuchHinweis(z);
+      KB.status = buch ? `${z.tag || z.name} is on the sheet, ${buch}.` : `${z.tag || z.name} is on the sheet - click the next unit.`;
+    }
     kbZeichnen();
   }, 60);
 }
@@ -15846,9 +16093,17 @@ function kbTooltipPruefen(F, d){
   KB.tooltipLetzte = kenn;
   if (KB.warte.length >= 24) return;
   const sx = t.x0, sy = Math.max(0, t.zeile[0] - 8), sw = t.x1 - t.x0, sh = Math.min(UNITS_H - sy, (t.zeile[1] - t.zeile[0]) + 16);
-  createImageBitmap(F.c, sx, sy, sw, sh).then(bmp => {
-    if (!KB){ if (bmp.close) bmp.close(); return; }
-    KB.warte.push({art: "tooltip", bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel: null, schrift: null});
+  /* THE ROWS BELOW THE NAME - the crew parts - go in as a second picture
+     right behind the first, under the same key, so the type witness finds
+     the line the name was written to (kbTooltipTeileLesen). Four rows at
+     most: a wrapped name, two crew groups, the game's hint. */
+  const reihen = t.zeilen.slice(1, 5);
+  const ty = reihen.length ? Math.max(0, reihen[0][0] - 6) : 0;
+  const th = reihen.length ? Math.min(UNITS_H - ty, reihen[reihen.length - 1][1] + 6 - ty) : 0;
+  Promise.all([createImageBitmap(F.c, sx, sy, sw, sh), th > 8 ? createImageBitmap(F.c, sx, ty, sw, th) : null]).then(([bmp, bmp2]) => {
+    if (!KB){ if (bmp.close) bmp.close(); if (bmp2 && bmp2.close) bmp2.close(); return; }
+    KB.warte.push({art: "tooltip", bmp, sx, sy, hell: F.hell, gain: F.gain, gross: F.gross, ziel: null, schrift: null, kenn});
+    if (bmp2) KB.warte.push({art: "tooltipTeile", bmp: bmp2, sx, sy: ty, hell: F.hell, gain: F.gain, gross: F.gross, ziel: null, schrift: null, kenn, reihen});
     kbSchlange();
   }).catch(() => {});
 }
@@ -15876,12 +16131,123 @@ async function kbTooltipLesen(job){
   if (!z){ KB.status = `Mouse-over read: ${tag} - ${name}, no line with that tag.`; kbZeichnen(); return; }
   const alt = String(z.name || "");
   const kern = alt.replace(/\s*(?:\u2026|\.{2,})\s*$/, "").trim();
-  if (kern && kern.toUpperCase() === name.toUpperCase() && !kbUnvoll(z)) return;
+  /* the line this window belongs to, for the crew rows read after it -
+     only once the name agrees, a refused name is no proof of the line */
+  if (kern && kern.toUpperCase() === name.toUpperCase() && !kbUnvoll(z)){ KB.tooltipZeile = {kenn: job.kenn, i: z.i}; return; }
   const anfang = kern.toUpperCase().slice(0, Math.max(3, kern.length - 2));
   const passt = !kern || kbUnvoll(z) || name.toUpperCase().startsWith(anfang);
   if (!passt){ KB.status = `Mouse-over says ${tag} - ${name}; line ${z.i + 1} reads ${alt} - not taken over.`; kbZeichnen(); return; }
+  KB.tooltipZeile = {kenn: job.kenn, i: z.i};
   z.name = name; z.nameVoll = true; z.nameZuv = Math.max(+z.nameZuv || 0, zuv);
   KB.status = `Line ${z.i + 1}: full name from the mouse-over window - ${name}.`;
+  kbZeichnen();
+}
+/* THE CREW PARTS BELOW THE NAME, a second witness for the type. The
+   window names every crew group of the unit in the game's own words -
+   "Panzerbesatzungen 12/12", "Jagdpanzer 10/10" - and those words name
+   the type as surely as the sign on the card does. The rows after the
+   name are read one by one, dark on grey; every row that reads as
+   "<group> n/m" is turned into a crew name through the word table below,
+   and the types whose crew consists of exactly these groups are the
+   candidates. Where the words leave more than one, the maxima decide.
+   Exactly one candidate sets the type of the line the name was written
+   to; a locked type only gets a note. The rows are the game's own words,
+   German or English; the table maps them onto the crew names of the type
+   table (MAP.at), which stand in as English keys of their own. */
+const KB_TRUPPENTEILE = {
+  "Infantry": ["infanterie"],
+  "Motorcycles": ["motorcycle", "motorraeder", "motorrad", "kraftraeder", "kraftrad"],
+  "Terrain Vehicles": ["terrain vehicle", "gelaendefahrzeuge", "gelaendefahrzeug", "gelaendewagen"],
+  "Infantry Support Vehicles": ["infantry support vehicle", "infanterie-unterstuetzungsfahrzeuge", "unterstuetzungsfahrzeuge", "unterstuetzungsfahrzeug", "schuetzenpanzer"],
+  "Recon": ["aufklaerer", "aufklaerung", "aufklaerungstruppen"],
+  "Armored Recon Vehicles": ["armoured recon vehicles", "armored recon vehicle", "gepanzerte aufklaerungsfahrzeuge", "aufklaerungsfahrzeuge", "aufklaerungsfahrzeug", "spaehpanzer", "panzerspaehwagen"],
+  "Tank Crew": ["tank crews", "panzerbesatzungen", "panzerbesatzung"],
+  "Light Armor": ["light armour", "leichte panzer", "leichter panzer"],
+  "Medium Armor": ["medium armour", "mittlere panzer", "mittlerer panzer"],
+  "Heavy Armor": ["heavy armour", "schwere panzer", "schwerer panzer"],
+  "Tank Destroyers": ["tank destroyer", "jagdpanzer", "panzerjaeger"],
+  "Heavy Tank Destroyers": ["heavy tank destroyer", "schwere jagdpanzer", "schwerer jagdpanzer", "schwere panzerjaeger"],
+  "Paratroopers": ["paratrooper", "fallschirmjaeger", "fallschirmspringer"],
+  "Transport Planes": ["transport plane", "transportflugzeuge", "transportflugzeug", "transporter"],
+  "Fighter Pilots": ["fighter pilot", "jagdflieger", "piloten", "jagdpiloten", "kampfpiloten"],
+  "Fighter Planes": ["fighter plane", "jagdflugzeuge", "jagdflugzeug", "jaeger"],
+  "Heavy Fighter Planes": ["heavy fighter plane", "schwere jagdflugzeuge", "schwere jaeger", "zerstoerer"],
+  "Reconnaissance Planes": ["reconnaissance plane", "recon planes", "recon plane", "aufklaerungsflugzeuge", "aufklaerungsflugzeug", "aufklaerungsflieger"]
+};
+let kbTruppenteilBuch = null;
+/* letters only, umlauts folded - the reader's spacing and punctuation
+   may not decide a match */
+function kbTruppenteilNorm(s){
+  return String(s || "").toLowerCase().replace(/\u00e4/g, "ae").replace(/\u00f6/g, "oe").replace(/\u00fc/g, "ue").replace(/\u00df/g, "ss").replace(/[^a-z]/g, "");
+}
+function kbTruppenteilGruppe(wort){
+  if (!kbTruppenteilBuch){
+    kbTruppenteilBuch = {};
+    const merk = (w, g) => { const n = kbTruppenteilNorm(w); if (n) kbTruppenteilBuch[n] = g; };
+    for (const a of (MAP.at || [])) for (const c of (a.crew || [])) merk(c[0], c[0]);
+    for (const g of Object.keys(KB_TRUPPENTEILE)) for (const w of KB_TRUPPENTEILE[g]) merk(w, g);
+  }
+  const n = kbTruppenteilNorm(wort);
+  if (!n) return null;
+  if (kbTruppenteilBuch[n]) return kbTruppenteilBuch[n];
+  /* a slip of one letter, two on a long word - but never one that could
+     mean two groups */
+  if (n.length < 6) return null;
+  const spiel = n.length >= 12 ? 2 : 1, treffer = new Set();
+  for (const k of Object.keys(kbTruppenteilBuch))
+    if (Math.abs(k.length - n.length) <= spiel && levenshtein(k, n) <= spiel) treffer.add(kbTruppenteilBuch[k]);
+  return treffer.size === 1 ? [...treffer][0] : null;
+}
+/* the types whose crew is exactly these groups; among several, those
+   whose maxima agree with the figures read */
+function kbTooltipTypen(teile){
+  const gruppen = teile.map(t => t.gruppe);
+  let kand = (MAP.at || []).filter(a => (a.crew || []).length === gruppen.length && a.crew.every(c => gruppen.indexOf(c[0]) >= 0));
+  if (kand.length > 1){
+    const eng = kand.filter(a => a.crew.every(c => teile.some(t => t.gruppe === c[0] && t.max === c[1])));
+    if (eng.length) kand = eng;
+  }
+  return kand.map(a => a.k);
+}
+async function kbTooltipTeileLesen(job){
+  const teile = [];
+  try {
+    const R = kbArbeitsRahmen(job);
+    const oben = job.sy, unten = job.sy + job.bmp.height;
+    for (const reihe of (job.reihen || [])){
+      const y0 = Math.max(oben, reihe[0] - 4), y1 = Math.min(unten, reihe[1] + 4);
+      if (y1 - y0 < 8) continue;
+      let text = "";
+      try { const r = await unitsText(R.c, job.sx, y0, job.bmp.width, y1 - y0, null, "dunkel"); text = (r.text || "").trim().replace(/\s+/g, " "); }
+      catch(e){ text = ""; }
+      if (!KB) break;
+      const m = /^(\D+?)\s*(\d{1,3})\s*\D{0,2}\s*(\d{1,3})\s*$/.exec(text);
+      /* the crew rows stand together right under the name; the game's
+         hint after them is not worth a reading */
+      if (!m){ if (teile.length) break; continue; }
+      teile.push({wort: m[1].trim(), gruppe: kbTruppenteilGruppe(m[1]), max: +m[3]});
+    }
+  } catch(e){}
+  if (job.bmp && job.bmp.close) job.bmp.close();
+  if (!KB || !teile.length) return;
+  const merk = KB.tooltipZeile;
+  const z = (merk && merk.kenn === job.kenn) ? KB.zeilen[merk.i] : null;
+  if (!z || z.status !== "erfasst") return;
+  const fremd = teile.filter(t => !t.gruppe);
+  if (fremd.length){ KB.status = `Mouse-over parts not in the word table: ${fremd.map(t => t.wort).join(", ")}.`; kbZeichnen(); return; }
+  const kand = kbTooltipTypen(teile);
+  if (kand.length !== 1){
+    if (!kand.length){ KB.status = `Mouse-over parts fit no type: ${teile.map(t => t.gruppe + " " + t.max).join(", ")}.`; kbZeichnen(); }
+    return;
+  }
+  const t = kand[0];
+  if (z.typ === t) return;
+  if (kbFestTyp(z)){ KB.status = `Line ${z.i + 1}: mouse-over says ${atName(t)}, type is locked.`; kbZeichnen(); return; }
+  const vorher = z.typ;
+  z.typ = t;
+  KB.status = vorher
+    ? `Line ${z.i + 1}: type ${atName(vorher)} corrected to ${atName(t)} by the mouse-over window.`
+    : `Line ${z.i + 1}: type ${atName(t)} from the mouse-over window.`;
   kbZeichnen();
 }
 async function kbSchlange(){
@@ -15892,6 +16258,7 @@ async function kbSchlange(){
     while (KB && KB.warte.length){
       const job = KB.warte.shift();
       if (job.art === "tooltip"){ await kbTooltipLesen(job); continue; }
+      if (job.art === "tooltipTeile"){ await kbTooltipTeileLesen(job); continue; }
       /* locked since the picture was taken - the reading is not owed */
       if (job.ziel !== null && job.ziel >= 0 && KB.zeilen[job.ziel] && kbFestName(KB.zeilen[job.ziel])){
         if (job.bmp && job.bmp.close) job.bmp.close();
@@ -16038,6 +16405,16 @@ function kbTastenSchritt(e){
 /* document.addEventListener("keydown", kbTastenSchritt); */
 
 /* ---- drawing ----------------------------------------------------------- */
+/* the last box reading's recogniser time, summed per model, for the head
+   line next to the picture rate: "OCR 1.8 s (eng 0.6, kor 1.2)" */
+function kbOcrText(){
+  const z = KB && KB.ocrZeiten; if (!z) return "";
+  const namen = Object.keys(z); if (!namen.length) return "";
+  const sek = ms => (ms/1000).toFixed(1);
+  let summe = 0; for (const k of namen) summe += z[k];
+  const teile = namen.length > 1 ? ` (${namen.map(k => `${k} ${sek(z[k])}`).join(", ")})` : "";
+  return `, OCR ${sek(summe)} s${teile}`;
+}
 function kbZeichnen(){
   if (!KB) return;
   /* while the frame is being dragged the strip must not be rebuilt under
@@ -16077,7 +16454,7 @@ function kbZeichnen(){
         <div class="v">${w ? `${w}<small> waiting</small>` : "<small>clear</small>"}</div>
         ${w ? `<div class="kb-scan"><i></i></div>` : `<div class="bar"></div>`}</div>`; })()}
     <div class="rd-kf ${KB.scan ? "scannt" : ""}"><div class="t">${KB.scan ? "Reading" : "Capture"}</div>
-      <div class="v"><small>${KB.frame ? `${KB.frame.w}×${KB.frame.h}, brightness ${KB.hell}, ${bildRate().toFixed(0)} pictures/s${KB.gain > 1 ? `, ×${KB.gain.toFixed(1)}` : ""}` : "—"}</small></div>
+      <div class="v"><small>${KB.frame ? `${KB.frame.w}×${KB.frame.h}, brightness ${KB.hell}, ${bildRate().toFixed(0)} pictures/s${KB.gain > 1 ? `, ×${KB.gain.toFixed(1)}` : ""}${kbOcrText()}` : "—"}</small></div>
       ${KB.scan ? `<div class="kb-scan"><i></i></div>` : `<div class="bar"></div>`}</div>`;
   /* LEFT: BUILT ONCE, THEN ONLY WHAT CHANGES. The whole wall used to be
      written afresh out of one string on every look - fourteen times a
@@ -16299,8 +16676,9 @@ function kbZeichnen(){
       }" style="${z.unlesbar && !z.beschrieben ? "color:#c0803a;font-style:italic"
                 : z.nameZuv && z.nameZuv < 60 ? "color:#9b3b2e" : ""}">${
         z.status !== "erfasst" ? ""
-        : (z.unlesbar && !z.beschrieben) ? "unreadable — click and describe it"
-        : zeig(z, "name", z.name)}</div>
+        : (z.unlesbar && z.nameBild ? `<img class="kb-nbild" src="${z.nameBild}" alt="">` : "")
+          + ((z.unlesbar && !z.beschrieben) ? "unreadable — click and describe it"
+             : zeig(z, "name", z.name))}</div>
       <div class="f bes ${(z.besitzer || "").length > 17 ? "sehrlang" : (z.besitzer || "").length > 13 ? "lang" : ""}" data-f="besitzer" title="${kbEsc(z.besitzer || "")} — click to correct">${z.status === "erfasst" ? zeig(z, "besitzer", z.besitzer || "") : ""}</div>
       <div class="f hp" data-f="hp" title="click to correct">${z.status !== "erfasst" ? ""
         : (KB.schreibt && KB.schreibt.i === z.i) ? zeig(z, "hp", (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  "))
@@ -16322,8 +16700,10 @@ function kbZeichnen(){
         z.bekannt && z.bekannt.stand === "gleich"
           ? `<span class="kb-bek" title="Already in the clan's book — ${kbEsc(kbBekanntText(z.bekannt))}">\u25cf</span>` : ""}${
         z.bekannt && z.bekannt.stand === "aehnlich"
-          ? `<button class="kb-aehnlich" data-i="${z.i}" title="The book has &quot;${kbEsc(z.bekannt.e.tag || z.bekannt.e.name)}&quot; (${kbEsc(z.bekannt.warum)}) — ${kbEsc(kbBekanntText(z.bekannt))}. Click to take that over.">\u2248</button>` : ""}${
-        z.abweichung ? `<button class="kb-nehmen" data-i="${z.i}" title="Read as &quot;${kbEsc(z.abweichung.tag)} ${kbEsc(z.abweichung.name)} — ${kbEsc(z.abweichung.besitzer)}&quot; — click to take that over">!</button>` : ""
+          ? `<button class="kb-aehnlich" data-i="${z.i}" title="The book has &quot;${kbEsc(z.bekannt.e.tag || z.bekannt.e.name)}&quot;${z.bekannt.besitzer ? " under " + kbEsc(z.bekannt.besitzer) : ""} (${kbEsc(z.bekannt.warum)}) — ${kbEsc(kbBekanntText(z.bekannt))}. Click to take that over.">\u2248</button>` : ""}${
+        z.abweichung ? `<button class="kb-nehmen" data-i="${z.i}" title="${z.abweichung.buch
+          ? `Owner ${kbEsc(z.besitzer)} comes from the clan's book, the box read &quot;${kbEsc(z.abweichung.besitzer) || "nothing"}&quot;. Click to take the reading back, right-click to keep the book's owner`
+          : `Read as &quot;${kbEsc(z.abweichung.tag)} ${kbEsc(z.abweichung.name)} — ${kbEsc(z.abweichung.besitzer)}&quot; — click to take that over, right-click to dismiss it as a misread`}">!</button>` : ""
       }<button class="kb-neu ${z.neuLesen ? "an" : ""}" data-i="${z.i}" title="${
         z.neuLesen ? "Waiting for a fresh picture of this unit — click it in the game. Click again to take the order back."
                    : "Read this line afresh: the next picture of its unit overwrites name and owner, whatever stands here"
@@ -16635,13 +17015,15 @@ function kbBearbeiten(ev){
   if (aehnlich){
     const z = KB.zeilen[+aehnlich.dataset.i];
     if (z && z.bekannt && z.bekannt.e){
-      const d = z.bekannt.e;
+      const d = z.bekannt.e, bes = z.bekannt.besitzer || null;
       if (d.tag) z.tag = d.tag;
       if (d.name && !z.name) z.name = d.name;
       if (d.k && !z.typ && !d.ung) z.typ = d.k;
+      /* the owner the book proposed - taken by hand, the Kommodore's doing */
+      if (bes) z.besitzer = bes;
       z.nameZuv = 100;                    // taken by hand - no longer a doubt
       kbBekanntSetzen(z);
-      KB.status = `Line ${z.i + 1} taken from the clan's book: ${z.tag || z.name}.`;
+      KB.status = `Line ${z.i + 1} taken from the clan's book: ${z.tag || z.name}${bes ? ", owner " + bes : ""}.`;
       kbZeichnen();
     }
     return;
@@ -17003,7 +17385,8 @@ async function kbTick(){
     KB.fehlschlaege = (KB.fehlschlaege || 0) + 1;
     KB.letzterFehler = txt;
     if (!bildStrom || !bildStrom.active){
-      KB.status = "The screen sharing has ended.";
+      /* a whole screen was picked: the share was ended on purpose, say why */
+      KB.status = e && e.nurFenster ? txt : "The screen sharing has ended.";
       kbLiveStop(); kbZeichnen();
     } else {
       if (KB.fehlschlaege >= KB_FEHLER_MAX) KB.pause = jetzt() + 800;
@@ -17232,23 +17615,35 @@ function kbOszAn(){
   takt();
 }
 function kbOszAus(){ if (kbOszLauf){ cancelAnimationFrame(kbOszLauf); kbOszLauf = null; } }
-/* The tape: exactly what is being written, in Morse. */
+/* The tape: exactly what is being written - the whole line as it goes on
+   the sheet (tag, name, owner, strength), in clear text; underneath, in
+   Morse, what has a sign for it. Nothing is cut short: what is wider
+   than the window runs through it while the line is written. */
 /* What is being sent right now - the strip is only rebuilt when this
    changes, otherwise its marks would start over on every look. */
 function kbMorseBandText(){
   const z = KB.schreibt !== null && KB.schreibt !== undefined ? KB.zeilen[KB.schreibt.i] : null;
-  return String((z && (z.tag || z.name)) || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  if (!z) return "";
+  return [z.tag, z.name, z.besitzer, (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join(" ")]
+    .map(t => String(t || "").trim()).filter(Boolean).join(" ");
 }
 function kbMorseBand(){
   const txt = kbMorseBandText();
   if (!txt) return `<div class="kb-band leer"><span class="kb-bandtext">— idle —</span></div>`;
+  /* marks only for A-Z and 0-9; a space is a word gap, the rest has no
+     sign and leaves no mark */
   const marken = [];
-  for (const ch of txt){
-    for (const m of (KB_MORSE[ch] || "")) marken.push(`<i class="${m === "." ? "pt" : "st"}"></i>`);
+  for (const ch of txt.toUpperCase()){
+    if (ch === " "){ marken.push(`<i class="lu"></i>`); continue; }
+    const code = KB_MORSE[ch];
+    if (!code) continue;
+    for (const m of code) marken.push(`<i class="${m === "." ? "pt" : "st"}"></i>`);
     marken.push(`<i class="lu"></i>`);
   }
-  return `<div class="kb-band"><span class="kb-bandtext">${kbEsc(txt)}</span>
-    <div class="kb-marken">${marken.join("")}</div></div>`;
+  /* the roll runs at the clerk's pace: the writing time is the animation's */
+  const dauer = KB.schreibt && KB.schreibt.dauer ? Math.round(KB.schreibt.dauer) : 1500;
+  return `<div class="kb-band"><div class="kb-rolle" style="animation-duration:${dauer}ms"><span class="kb-bandtext">${kbEsc(txt)}</span>
+    <div class="kb-marken">${marken.join("")}</div></div></div>`;
 }
 function kbStaerkeHTML(z){
   const hp = z.hp || [];
@@ -17948,6 +18343,31 @@ function pgBehalten(){
           : schon ? "All of them are already on record" : "Nothing to keep yet");
   pgZeichnen();
 }
+/* What the register already knows about a name read off the sheet: one
+   label - the clan tag, else the number of scouted teams, else the side on
+   record - and one tooltip with all three. Read only, nothing is written. */
+function pgEtikett(name){
+  let e, id, dep;
+  try {
+    const key = spielerKey(name);
+    e = S.roster[key]; id = clanIdVon(name); dep = atEcht(feindDepot(key));
+  } catch(err){ return null; }
+  const v = e && e.v;
+  if (!v && !dep.length) return null;
+  const seite = v && (v.f === 0 || v.f === 1 || v.f === 2) ? kbSeiteName(v.f) : "";
+  const clan = id ? clanTitel(id) : "";
+  const teile = [];
+  if (v) teile.push("On record" + (seite ? " as " + seite : ""));
+  if (clan) teile.push("clan " + clan);
+  if (dep.length){
+    const je = new Map();
+    for (const d of dep) je.set(d.k, (je.get(d.k) || 0) + 1);
+    const arten = [...je].map(([k, n]) => atKurz(k) + (n > 1 ? " \u00d7" + n : "")).join(", ");
+    teile.push(`${dep.length} team${dep.length === 1 ? "" : "s"} scouted: ${arten}`);
+  }
+  const text = clan || (dep.length ? `${dep.length} team${dep.length === 1 ? "" : "s"}` : seite || "on record");
+  return {text, tip: teile.join(" \u00b7 ")};
+}
 function pgZeichnen(){
   if (!PG) return;
   /* while a name is being typed the sheet must not be rebuilt under the
@@ -17988,6 +18408,7 @@ function pgZeichnen(){
       for (let i = 0; i < n; i++){
         const k = pgKey(s.platz, i), v = PG.namen.get(k);
         const imFenster = i >= PG.erste && i < PG.erste + PG.sichtbar;
+        const et = v ? pgEtikett(v.name) : null;
         zeilen.push(`<div class="sp-z ${v ? "" : imFenster ? "wartet" : "leer"} ${
           PG.liest === k ? "schreibt" : ""}" data-k="${k}">
           <div class="nr">${i + 1}</div>
@@ -17998,6 +18419,7 @@ function pgZeichnen(){
               : PG.leer.has(k) ? ""
               : PG.liest === k ? "reading …"
               : imFenster ? "not read yet" : "—"}</div>
+          <div class="cl"${et ? ` title="${kbEsc(et.tip)}"` : ""}>${et ? kbEsc(et.text) : ""}</div>
           <div class="ok">${
             v && v.zweit ? `<span class="sp-tausch" data-k="${k}" title="Also read as &quot;${kbEsc(v.zweit.name)}&quot;${
               v.zweit.schrift ? " (" + kbEsc(v.zweit.schrift) + ")" : " (Latin)"} — click to use that one">⇄</span>` : ""
@@ -18118,6 +18540,18 @@ function kabineZu(){
 document.getElementById("b-units").addEventListener("click", kabineAuf);
 document.getElementById("kb-zu").addEventListener("click", kabineZu);
 document.getElementById("kb-blatt").addEventListener("click", ev => { if (KB) kbBearbeiten(ev); });
+/* a right-click on the red "!" throws the differing reading away - it was a
+   misread; the next reading that differs leaves a fresh note */
+document.getElementById("kb-blatt").addEventListener("contextmenu", ev => {
+  const nehmen = ev.target.closest(".kb-nehmen");
+  if (!KB || !nehmen) return;
+  ev.preventDefault();
+  const z = KB.zeilen[+nehmen.dataset.i];
+  if (!z || !z.abweichung) return;
+  z.abweichung = null;
+  KB.status = `Line ${z.i + 1}: the differing reading was dismissed - the line keeps what stands there.`;
+  kbZeichnen();
+});
 document.getElementById("kb-links").addEventListener("change", ev => {
   if (ev.target && ev.target.id === "kb-ort" && KB){
     const f = unitsStadt(ev.target.value);
@@ -18765,27 +19199,44 @@ function kartenAusBild(quelle, melde, opt){
    war. Eine Lesung, die 230 Staedte umfaerbt, muss sich in einem Griff
    zuruecknehmen lassen; von Hand waere das ein verlorener Abend. */
 let besitzRueck = null;
+/* The brush keeps its own slot. A radar reading that lands while the room
+   is open must not bury the stroke the toast just promised to undo. */
+let pinselRueck = null;
 function besitzUebernehmen(besitz){
   const t = jetzt(); let n = 0;
   const vorher = {};
   for (const [idx, f] of Object.entries(besitz)){
     const alt = S.owner[idx] && S.owner[idx].v;
     if (alt === f) continue;
-    vorher[idx] = alt === undefined ? null : alt;
-    S.owner[idx] = {v:f, t, by:S.me}; dirty.add(`owner:${idx}`); n++;
+    /* Through stamp(): the right is checked there, and a refused town
+       must not enter the undo memory. stamp() sets t and by itself. */
+    if (stamp("owner", idx, f, {n: S.name || ""})){
+      vorher[idx] = alt === undefined ? null : alt;
+      n++;
+    }
   }
   if (n){ besitzRueck = {vorher, t}; save(); tally(); draw(); side(); }
   return n;
 }
-function besitzZurueck(){
-  if (!besitzRueck) return 0;
-  const t = jetzt(); let n = 0;
-  for (const [idx, f] of Object.entries(besitzRueck.vorher)){
-    S.owner[idx] = {v: f, t, by: S.me}; dirty.add(`owner:${idx}`); n++;
+function rueckSpielen(vorher){
+  let n = 0;
+  for (const [idx, f] of Object.entries(vorher)){
+    if (stamp("owner", idx, f, {n: S.name || ""})) n++;
   }
-  besitzRueck = null;
   save(); tally(); draw(); side();
   toast(`${n} towns put back`);
+  return n;
+}
+function besitzZurueck(){
+  if (!besitzRueck) return 0;
+  const vorher = besitzRueck.vorher; besitzRueck = null;
+  return rueckSpielen(vorher);
+}
+function pinselZurueck(){
+  if (!pinselRueck) return 0;
+  const vorher = pinselRueck.vorher; pinselRueck = null;
+  const n = rueckSpielen(vorher);
+  tips(); if (radarOffen) radarPult();
   return n;
 }
 /* Eine Kriegskarte, auf der genau eine Fraktion vorkommt und die beiden
@@ -23314,6 +23765,8 @@ function radarPult(){
          Sicherungsnetz. */ ""}
     ${besitzRueck ? `<button class="rd-schalter" id="rd-zurueck"
       style="font-size:10.5px;padding:6px 0">UNDO LAST READING</button>` : ""}
+    ${pinselRueck ? `<button class="rd-schalter" id="rd-pinsel"
+      style="font-size:10.5px;padding:6px 0">UNDO LAST STROKE</button>` : ""}
     ${fern ? "" : `<button class="rd-schalter" id="rd-neu" style="font-size:10.5px;padding:6px 0">SKIP THIS ONE</button>`}
     ${(() => {
       /* Altlasten aufraeumen. Die Regel "Gefechte erst bei voller Karte"
@@ -23401,6 +23854,7 @@ function radarPult(){
     zielZiehen(); radarPult(); radarZeichnen();
   }));
   el.querySelector("#rd-zurueck")?.addEventListener("click", ()=>{ besitzZurueck(); radarPult(); });
+  el.querySelector("#rd-pinsel")?.addEventListener("click", pinselZurueck);
   el.querySelector("#rd-putz")?.addEventListener("click", ()=>{
     /* Zwischen Pultbau und Klick kann ein Scan die Lage aendern -
        derselbe Riegel wie beim Bau des Knopfs. */
@@ -24250,7 +24704,11 @@ async function wacheStart(sek){
        Eight pictures a second instead of ten - the bearing runs five times
        a second and still sees a fresh picture nearly every time. */
     stream = await bildStromHolen();
-  } catch(e){ toast("Nothing picked — nothing is being watched."); return false; }
+  } catch(e){
+    /* a whole screen was picked: the share is already gone, say why */
+    toast(e && e.nurFenster ? e.message : "Nothing picked — nothing is being watched.");
+    return false;
+  }
   /* Dasselbe Videoelement, das ausgelesen wird, ist auch das angezeigte -
      zwei Stroeme desselben Fensters waeren doppelte Arbeit fuer nichts. */
   const video = document.getElementById("rd-vid");
@@ -26807,6 +27265,16 @@ async function ocrText(quelle, psm, melde, weiss){
    869117태: 1500", seen in the probe). The chain keeps parameters and
    picture together. */
 let ocrKette = Promise.resolve();
+/* HOW LONG EACH READING TOOK, per model. The box reader arms the clock
+   with an empty object; every recogniser call that STARTS while it is
+   armed adds its time under the model's name. A call already running
+   from before (the town pass) took the clock as null and adds nothing.
+   Measured only, nothing is made faster by it. */
+let ocrZeiten = null;
+function ocrZeitNehmen(uhr, schrift, t0){
+  if (!uhr) return;
+  uhr[schrift] = (uhr[schrift] || 0) + Math.round(performance.now() - t0);
+}
 async function ocrMitZuv(quelle, psm, melde, weiss){
   const arbeit = ocrKette.then(() => ocrMitZuvEinzeln(quelle, psm, melde, weiss));
   ocrKette = arbeit.catch(() => {});
@@ -26814,7 +27282,9 @@ async function ocrMitZuv(quelle, psm, melde, weiss){
 }
 async function ocrMitZuvEinzeln(quelle, psm, melde, weiss){
   await ocrBereit(psm, weiss, melde);
+  const uhr = ocrZeiten, t0 = performance.now();
   const r = await ocrWorker.recognize(quelle);
+  ocrZeitNehmen(uhr, OCR_SPRACHEN, t0);
   const d = (r && r.data) || {};
   /* THE SINGLE CHARACTERS COME WITH IT. Each one carries its own box and
      its own confidence, and that is what a second look needs. */
@@ -28650,9 +29120,13 @@ function levenshtein(a, b){
   }
   return prev[b.length];
 }
-const STADT_KEYS = MAP.n.map((n,i) => [namKey(n[0]), i]);
+/* Keys through unitsKey, not namKey: the game prints names in capitals,
+   so Gießen arrives as GIESSEN, and with the "ß" kept the two stood two
+   edits apart, one too many for a name that short. namKey itself stays
+   as it is, spielerKey hashes player names with it. */
+const STADT_KEYS = MAP.n.map((n,i) => [unitsKey(n[0]), i]);
 function findeStadt(zeile){
-  const k = namKey(zeile);
+  const k = unitsKey(zeile);
   if (k.length < 4) return null;
   let best = null;
   for (const [sk, i] of STADT_KEYS){
@@ -28662,7 +29136,7 @@ function findeStadt(zeile){
     if (!best || d < best.d) best = {i, d, sicher:false};
   }
   if (!best) return null;
-  const rel = best.d / Math.max(4, namKey(MAP.n[best.i][0]).length);
+  const rel = best.d / Math.max(4, unitsKey(MAP.n[best.i][0]).length);
   return rel <= 0.25 ? {...best, sicher: rel <= 0.12} : null;
 }
 /* "1.4k" -> 1400, "230" -> 230 */
@@ -33590,7 +34064,7 @@ function feindDialog(key, name){
   const anzahl = fk => liste.filter(d => passtFilter(d, fk)).length;
   const stText = d => { const st = Array.isArray(d.st) ? d.st.filter(Boolean) : []; if (!st.length) return "";
     const ist = st.reduce((q,h)=>q+(+h[0]||0),0), max = st.reduce((q,h)=>q+(+h[1]||0),0);
-    return `<span title="${esc(st.map(h=>`${h[0]}/${h[1]}`).join("  "))}">${ist}/${max}</span>`; };
+    return `<span title="total ${ist}/${max}">${stSymbole(d.k, d.st)}</span>`; };
   const wannText = d => d.t ? alterText(d.t * 1000) : "";           /* edep t is in SECONDS */
   const woText = d => (d.o !== undefined && d.o !== null && MAP.n[d.o])
         ? `${d.l ? "line " + esc(d.l) + " at " : ""}${esc(MAP.n[d.o][0])}` : "";
@@ -34461,6 +34935,9 @@ function clanDialog(tab){
 
   const {reihen} = clanVerlauf();
   const anfragen = livePosts().filter(([,e]) => e.v.req);
+  /* Which right a request would fail on, in the order addPost checks them.
+     null means the request may be posted. */
+  const rqFehlt = !darf("brett") ? "brett" : !darf("hilfe") ? "hilfe" : null;
   const zeigeZweige = ZWEIGE.map(z=>z.k).filter(z => reihen.some(r => r.per[z]));
 
   const shareBar = (k) => {
@@ -34710,7 +35187,8 @@ function clanDialog(tab){
           <div id="rq-town" style="width:170px"></div>
           <button class="btn primary" id="rq-add">Request</button>
         </div>
-        <div class="note">A request lands on the board as urgent. Mark it <b>done</b> when it is covered.</div>
+        <div class="note">${rqFehlt ? esc(rechtSatz(rqFehlt)) : "A request lands on the board as urgent."} Mark ${
+          darf("loeschen") ? "any request" : "your own request"} <b>done</b> when it is covered.</div>
       </div>
 
       <div class="tabp" data-tab="people"><div id="cl-people">
@@ -34766,6 +35244,16 @@ The depot of that side becomes the active one.`)) return;
     document.getElementById("rq-txt").value = b.dataset.req;
   }));
   if (document.getElementById("rq-town")) stadtWahl(document.getElementById("rq-town"), sel, "anywhere");
+  /* The surface asks first, like the board window does: nobody types a
+     request that addPost would refuse afterwards. */
+  if (rqFehlt){
+    const satz = rechtSatz(rqFehlt);
+    const feld = document.getElementById("rq-txt");
+    if (feld){ feld.readOnly = true; feld.placeholder = satz; feld.title = satz; }
+    const knopf = document.getElementById("rq-add");
+    if (knopf){ knopf.disabled = true; knopf.title = satz; }
+    document.querySelectorAll("#dlg [data-req]").forEach(b => { b.disabled = true; b.title = satz; });
+  }
   document.getElementById("rq-add")?.addEventListener("click", ()=>{
     const txt = document.getElementById("rq-txt").value.trim();
     if (!txt){ toast("Say what you need first."); return; }
@@ -35585,7 +36073,6 @@ function neuenKriegStarten(){
   if (!confirm("Start a new war?\n\nControl, battles, deployed teams, arrows, defence lines, "
              + "the board and all sightings go — for everyone.\n\nDepots, the arsenal, the "
              + "player list and everything recorded about the enemy are kept.")) return;
-  sicherungAnlegen("new war");
   const stand = neuerKrieg();
   if (stand === false) return;          // die Begruendung steht schon da
   /* NULL HEISST: DER SERVER SCHNEIDET GERADE, und er meldet sich selbst.
@@ -35602,6 +36089,7 @@ function neuenKriegStarten(){
   if (stand === null){ closeDlg(); return; }
   after(); closeDlg();
   toast("New war — depots kept");
+  spangenErinnern();
 }
 document.getElementById("b-reset").addEventListener("click", neuenKriegStarten);
 
@@ -35746,13 +36234,17 @@ document.getElementById("b-war").addEventListener("click", ()=>{
        Startstaedte dem Verwalter. */
     /* Und melden, was WIRKLICH geschrieben wurde. "Saved" fiel bisher
        unbedingt, ohne einen der Rueckgabewerte anzusehen. */
-    let n = 0;
+    /* Two separate flags, one per row written. A single counter hid
+       which of the two the server refused. */
+    let kriegOk = false, startOk = false;
     if (istAdmin()){
-      if (setMeta("war", document.getElementById("set-war").value.trim())) n++;
-      if (setStartStaedte(startNeu)) n++;
+      kriegOk = setMeta("war", document.getElementById("set-war").value.trim());
+      startOk = setStartStaedte(startNeu);
     }
     closeDlg();
-    if (n) toast("Saved");
+    if (kriegOk && startOk) toast("War name and start towns saved");
+    else if (kriegOk) toast("War name saved, start towns were refused");
+    else if (startOk) toast("Start towns saved, war name was refused");
     else toast("Nothing was saved. Only an admin can set the war name and start towns.");
   });
   document.getElementById("d-merge")?.addEventListener("click", async ()=>{
@@ -35802,7 +36294,8 @@ document.getElementById("b-war").addEventListener("click", ()=>{
      korrekt der volle Stand gesichert, und ein Fehlklick hier ersetzte
      ihn durch den eben geleerten.
      Der Nachbarknopf d-wipe macht es seit jeher richtig herum.
-     Die Reihenfolge steht jetzt in neuenKriegStarten, fuer beide Knoepfe. */
+     Die Rueckfrage steht in neuenKriegStarten, fuer beide Knoepfe; die
+     Sicherung legt neuerKrieg erst hinter seinen drei Absagen an. */
   document.getElementById("d-newwar").addEventListener("click", neuenKriegStarten);
   {
     const ub = document.getElementById("d-undo"), st = sicherungStand();
@@ -35890,7 +36383,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 1a21430f55</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 252df0a17b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -36032,7 +36525,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "1a21430f55";
+const BAU = "252df0a17b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -36294,6 +36787,7 @@ async function syncPull(){
       kriegNeuGesehen = false;
       kriegsstandWegwerfen();
       toast("A new war has started — the old map is gone.");
+      spangenErinnern();
     }
     if (n){ rebuildUnits(); save(); side(); tally(); draw(); kopfzeile(); boardZahl();
             kraftLeiste(); if (showDepot) depotZeichnen(); }
@@ -37112,21 +37606,24 @@ async function mitgliederDialog(meldung){
        Kampfeinheiten wussten, nuetzt uns ohnehin nichts mehr, sobald sie mit
        uns spielt. */
     const schon = spielerListe().find(p => namKey(p.name) === namKey(nm));
-    if (schon && !uebergelaufen(schon.key)){
-      const dep = atEcht(feindDepot(schon.key)).length;
-      /* Nicht loeschen - umdeuten. Was wir ueber die Aufstellung wissen, fehlt
-         ab sofort dem Gegner, und wir wissen genau, was. */
-      setFeindTeil(schon.key, {ueber: 1});
-      toast(dep ? `${schon.name} was on record with ${dep} team${dep===1?"":"s"} — kept, now marked as ours`
-                : `${schon.name} was already on record — kept, now marked as ours`);
-      rebuildUnits();
-    }
     const adm = document.getElementById("inv-admin").checked;
     try {
       const r = await rpc("warmap_invite_me", {player_name: nm, make_admin: adm});
       const neu = Array.isArray(r) ? r[0] : r;
       if (!neu || !neu.code) throw new Error("No code came back.");
       await kopiere(einladungsText(neu.name, neu.code), "Invite message");
+      /* Only now, with the code in hand: rebook the scouted enemy as ours.
+         Nicht loeschen - umdeuten. Was wir ueber die Aufstellung wissen, fehlt
+         ab sofort dem Gegner, und wir wissen genau, was. setFeindTeil returns
+         false without the right and has already said why, so stay quiet then. */
+      if (schon && !uebergelaufen(schon.key)){
+        const dep = atEcht(feindDepot(schon.key)).length;
+        if (setFeindTeil(schon.key, {ueber: 1}) !== false){
+          toast(dep ? `${schon.name} was on record with ${dep} team${dep===1?"":"s"} — kept, now marked as ours`
+                    : `${schon.name} was already on record — kept, now marked as ours`);
+          rebuildUnits();
+        }
+      }
       mitgliederDialog(`<div style="border-left:3px solid var(--accent);background:var(--panel2);
         border-radius:2px;padding:9px 11px">
         <div style="font-size:12px;color:var(--dim);margin-bottom:4px">Code for
