@@ -25332,7 +25332,6 @@ function intelDialog(tab, seite){
       <button data-tab="players" aria-pressed="false">Players</button>
       <button data-tab="supply"  aria-pressed="false">Supply</button>
       <button data-tab="gaps"    aria-pressed="false">Gaps</button>
-      <button data-tab="when"    aria-pressed="false">When</button>
       <button data-tab="spots"   aria-pressed="false">Sightings</button>
       <button data-tab="scout"   aria-pressed="false">Scouts</button>
     </div>
@@ -25506,56 +25505,6 @@ function intelDialog(tab, seite){
           Missing is the difference.</div>
       </div>
 
-      <div class="tabp schmal" data-tab="when">
-        <div class="row" style="align-items:center;gap:6px">
-          <select id="ak-f" style="width:110px">
-            ${FACTIONS.map(q=>`<option value="${q.id}">${q.tag}</option>`).join("")}
-          </select>
-          <input type="text" id="ak-clan" placeholder="clan (optional)" style="width:140px" dir="auto">
-          <input type="number" id="ak-n" placeholder="how many" style="width:100px" min="0" max="9999">
-          <button class="btn primary" id="ak-add">Record now</button>
-        </div>
-        ${(()=>{
-          const l = aktListe();
-          if (!l.length) return `<div class="empty">Nothing recorded yet. Enter how many of a side
-            are around right now — the timestamp comes along, and the picture builds itself.</div>`;
-          /* Kein Stunden- und Wochentagsdiagramm mehr. Es bezog sich zwar
-             auf Fraktion und Clan, nicht auf eine Person - aber bei einem
-             kleinen Clan ist das kein Unterschied, der traegt.
-             Die Kopfzahlen selbst bleiben: eine Gruppenzahl ohne
-             Personenbezug, und die Grundlage fuer "wie stark ist diese
-             Seite gerade". */
-          return `<div style="display:flex;gap:18px;flex-wrap:wrap">
-            <div style="flex:1;min-width:200px">
-              <div style="font-size:11px;color:var(--dim);margin:0 0 4px">Last recorded</div>
-              ${l.slice(0,8).map(a=>`<div style="font-size:11px;color:var(--dim2)">
-                ${new Date(a.t).toLocaleString()} · ${FACTIONS[a.f]?FACTIONS[a.f].tag:"?"}${
-                a.clan?` · ${esc(a.clan)}`:""} · <b>${a.n}</b> · <span title="${
-                esc(AKT_HER[a.q]?.lang || AKT_HER.unbekannt.lang)}">${
-                esc(AKT_HER[a.q]?.kurz || AKT_HER.unbekannt.kurz)}</span></div>`).join("")}
-            </div>
-          </div>`;
-        })()}
-        <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
-          <div style="font-size:12px;color:var(--dim);margin-bottom:5px">What changed in the game</div>
-          ${ereignisse().length ? `<div style="display:flex;flex-direction:column;gap:3px">${
-            ereignisse().map((e,i)=>`<div style="display:flex;align-items:center;gap:8px;font-size:11px">
-              <span style="color:var(--accent);width:82px">${esc(e.d||"")}</span>
-              <span style="flex:1" dir="auto">${esc(e.t||"")}</span>
-              <button class="btn" data-erm="${i}" style="font-size:10px;padding:0 5px">×</button>
-            </div>`).join("")}</div>`
-            : `<div style="font-size:11px;color:var(--dim2)">Nothing noted.</div>`}
-          <div class="row" style="margin-top:6px">
-            <input type="date" id="er-d" style="width:150px">
-            <input type="text" id="er-t" placeholder="gold is back, underpopulation bonus gone …"
-              style="flex:1" dir="auto">
-            <button class="btn" id="er-add">Note it</button>
-          </div>
-        </div>
-        <div class="note">Hours are in your local time. Note events beside it — otherwise
-          nobody remembers why a Tuesday changed everything.</div>
-      </div>
-
       <div class="tabp" data-tab="spots">
         ${sicht.length ? `<div class="tw"><table>
           <thead><tr><th>Town</th><th>Faction</th><th>Teams</th><th>What</th><th>Clan</th><th>Reported</th></tr></thead>
@@ -25604,27 +25553,6 @@ function intelDialog(tab, seite){
     s.insertAdjacentHTML("beforebegin", regionSVG(s.value));
   }));
   const neuAuf = reiter => intelDialog(reiter, nurSeite === null ? undefined : nurSeite);
-  {
-    const ab = document.getElementById("ak-add");
-    if (ab) ab.addEventListener("click", ()=>{
-      const n = +document.getElementById("ak-n").value;
-      if (!(n >= 0)){ toast("How many?"); return; }
-      aktMelden(+document.getElementById("ak-f").value,
-                document.getElementById("ak-clan").value, n, "hand");
-      neuAuf("when"); toast("Recorded");
-    });
-    const eb = document.getElementById("er-add");
-    if (eb) eb.addEventListener("click", ()=>{
-      const d = document.getElementById("er-d").value;
-      const x = document.getElementById("er-t").value.trim();
-      if (!d || !x){ toast("Date and what happened, please."); return; }
-      setEreignisse(ereignisse().concat([{d, t:x}]));
-      neuAuf("when");
-    });
-    document.querySelectorAll("[data-erm]").forEach(b => b.addEventListener("click", ()=>{
-      const l = ereignisse(); l.splice(+b.dataset.erm, 1); setEreignisse(l); neuAuf("when");
-    }));
-  }
   /* Einen Clan anlegen - benannt oder ausdruecklich ohne Namen. */
   const knNeu = document.getElementById("cl-neu");
   if (knNeu) knNeu.addEventListener("click", ()=>{
@@ -29928,7 +29856,7 @@ const MENUES = [
      steckt, meldet man oder sieht man nach: Gegner, Schlacht, Brett. */
   /* The board stays in the top bar itself - its "new" badge must be seen
      without opening a menu first. */
-  {id:"lage",  titel:"Reports",  knoepfe:["b-intel"]},
+  {id:"lage",  titel:"Intel",    knoepfe:["b-intel"]},
   /* "War" IS THE WAR, not its settings. What one looks at under that name
      is how the front moved; the settings and the cut belong to whoever
      administers the war, so they sit under Admin. The settings button
@@ -35117,7 +35045,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 60049905ce</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 3815702817</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -35259,7 +35187,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "60049905ce";
+const BAU = "3815702817";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
