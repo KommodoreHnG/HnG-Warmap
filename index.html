@@ -11234,6 +11234,8 @@ function unitsLaeufe(d, y, minL, maxL, x0=1250, x1=2640, schwelle=60){
    Not one outlier, three cards included - while the diamond row scores
    nought, because none of its gaps is 105. */
 const UNITS_LAUF_BLASS = 32;   /* rim saturation at the crest of the glow: 42-48 */
+/* set by the cabin's tick: a full row was seen within the last eight looks */
+let unitsBlassErlaubt = false;
 function unitsKartenFinden(d, yReihe){
   const aufRaster = runs => {
     let n = 0;
@@ -11271,8 +11273,16 @@ function unitsKartenFinden(d, yReihe){
      the crest still stands at 42 - and taken when it finds MORE pairs on
      the 105 grid. A false run would have to be 60..80 long AND 105 from
      its neighbour; the grid is the fence. */
-  const blass = suche(yReihe-56, yReihe+24, UNITS_LAUF_BLASS);
-  if (blass.paare > best.paare) best = blass;
+  /* ONLY AS A BRIDGE, NEVER ON ITS OWN. On a bare map - front lines,
+     terrain, no bar at all - the pale search found two runs of the right
+     length 105 apart, and the Kommodore had two units on his sheet with
+     no town clicked. A crest always follows a normal look, so the pale
+     tier runs only while the cabin remembers a row of two or more cards
+     from the last eight looks (unitsBlassErlaubt, set by the tick). */
+  if (unitsBlassErlaubt){
+    const blass = suche(yReihe-56, yReihe+24, UNITS_LAUF_BLASS);
+    if (blass.paare > best.paare) best = blass;
+  }
   const fy = best.n ? best.y : yReihe;
   return {fy, rahmen: unitsReiheFuellen(d, fy, best.runs)};
 }
@@ -11526,8 +11536,6 @@ let unitsTypVorlagen = null, unitsTypB = 38, unitsTypH = 25;
 /* share of saturated points below which a card counts as washed out -
    normal cards carry 19 to 36 hundredths, a glowing one under one */
 const UNITS_TYP_TINTE = 0.06;
-/* set by the tick from the stage the cabin is in - see kbStufe */
-let unitsTypenAn = true;
 /* what the signs were at each card position in the look before */
 let unitsTypAlt = {};
 function unitsTypVorlagenBauen(){
@@ -12896,14 +12904,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art){
       const alt = unitsTypMerker[x0];
       /* a card cut off by the window's edge shows half a sign, and half a
          sign matches a whole wrong one - so it gets none */
-      /* THE SIGN IS ONLY MATCHED IN THE TYPES STAGE. Matching costs a
-         comparison against eighteen templates at seventeen shifts for
-         every card - by far the most expensive thing in a look. In the
-         town stage nobody needs it yet, and in the names stage the types
-         are settled: what was found stays, and nothing is worked out
-         afresh. */
-      const t = (teil || !unitsTypenAn) ? (alt || null)
-                                        : (alt || unitsTypVon(c, x0-9, rimOben));
+      const t = teil ? null : (alt || unitsTypVon(c, x0-9, rimOben));
       if (!teil) unitsTypNeu[x0] = t;
       return {x0: x0-9, x1: x1+9, seite, teil: !!teil,
               rand: unitsPlattenRand(d, x0-9, plattenOben), q: unitsQuotient(d, x0-9, plattenOben),
@@ -13579,7 +13580,6 @@ function kbNeu(){
           ort: null, linie: null, ziel: null, halter: null, merk: null,
           N: 0, erste: 0, sichtbar: 0, karten: [], zeilen: [],
           auswahl: null, wandel: null, gemeldet: null, scan: false, reiheKennung: null,
-          stufe: "ort", ortZuletzt: 0,
           handAn: false, handWahl: null, handZieht: false, ortKennung: null, blick: 0, ortLaeuft: false, ortHand: false,
           fehlschlaege: 0, letzterFehler: null,
           warte: [], werkt: false, arbeit: null, kastenLetzte: null, dauerMittel: 850,
@@ -14991,8 +14991,12 @@ function kbZeichnen(){
     if (ampelEl.textContent !== ampel[1]) ampelEl.textContent = ampel[1];
   }
   const jetztSoll = sz ? `<b>${kbEsc(sz.tag)}</b><br>${kbEsc(sz.name)}<br>${kbEsc(sz.besitzer)}` : kbEsc(KB.status);
-  const jetzt = links.querySelector(".kb-jetzt");
-  if (jetzt && jetzt.innerHTML !== jetztSoll) jetzt.innerHTML = jetztSoll;
+  /* not "jetzt": that is the clock, and the clerk's progress bar further
+     down asks it for the time - shadowed by this element, kbZeichnen
+     threw "jetzt is not a function" every 60 ms for as long as a line was
+     being written (found 04.09.2026, present since the clerk was built) */
+  const jetztFeld = links.querySelector(".kb-jetzt");
+  if (jetztFeld && jetztFeld.innerHTML !== jetztSoll) jetztFeld.innerHTML = jetztSoll;
   const geraet = links.querySelector(".kb-geraet");
   if (geraet){
     geraet.classList.toggle("sendet", !!KB.schreibt);
@@ -15186,23 +15190,6 @@ function kbPult(){
     <div class="kb-abstand"></div>
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="kb-ton">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
-    ${(() => {
-      /* ONE BUTTON, SHOWING THE NEXT STEP. The cabin works in three
-         stages, and each one leaves out what is not needed yet - that is
-         what keeps the machine quiet. */
-      const st = KB.stufe || "ort";
-      const knopf = st === "ort"   ? ["kb-stufe", "Read AT types", "an"]
-                  : st === "typen" ? ["kb-stufe", "Types are right", "an"]
-                                   : ["kb-stufe", "Read the types again", ""];
-      const satz = st === "ort"
-        ? "Reading the town and how many units stand there. Types and names wait."
-        : st === "typen"
-        ? "Reading the unit signs. Click the units one after another — no names are read yet."
-        : "The types stand. Now the names are read; the bar is only watched.";
-      return `<button class="rd-schalter ${knopf[2]}" id="${knopf[0]}">${kbEsc(knopf[1])}</button>
-        <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:4px 2px 0">${kbEsc(satz)}</div>`;
-    })()}
-    <div class="kb-abstand"></div>
     <button class="rd-schalter" id="kb-keep" ${KB.zeilen.some(z => z.status === "erfasst" && !z.eigen) ? "" : "disabled"}>Keep the sheet</button>
     <div class="kb-abstand"></div>
     <button class="rd-schalter" id="kb-leer">New sheet</button>
@@ -15211,17 +15198,6 @@ function kbPult(){
   /* the user's own switch: off means off, sharing included */
   document.getElementById("kb-kraft").addEventListener("click", ()=>{ KB.live ? kbLiveStop(true) : kbLiveStart(); });
   document.getElementById("kb-ton").addEventListener("click", ()=>{ kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); kbPult(); });
-  document.getElementById("kb-stufe").addEventListener("click", ()=>{
-    const st = KB.stufe || "ort";
-    KB.stufe = st === "ort" ? "typen" : st === "typen" ? "namen" : "typen";
-    /* going back to the types means the signs may be worked out afresh -
-       the remembered ones would otherwise stand in the way */
-    if (KB.stufe === "typen") unitsTypAlt = {};
-    KB.status = KB.stufe === "typen"
-      ? "Types: click the units one after another."
-      : "Names: the types stand, the text reader is running.";
-    kbPult(); kbZeichnen();
-  });
   document.getElementById("kb-keep").addEventListener("click", kbBehalten);
   document.getElementById("kb-leer").addEventListener("click", ()=>{ const t = KB.ton; const live = KB.live; kbLiveStop(); KB = kbNeu(); if (live) kbLiveStart(); kbZeichnen(); });
 }
@@ -15429,6 +15405,15 @@ async function kbTick(){
        that a display which never changes still gets refreshed. */
     const geregt = kbWache(f);
     KB.wacheZaehler = (KB.wacheZaehler || 0) + 1;
+    /* UNFINISHED BUSINESS IS NO TIME TO REST. The count on the sheet is
+       voted on - 25 measurements, 21 alike - and a measurement only comes
+       from a look that gets through. With the doorman really resting
+       (every twentieth look, and the quick look in every fourth of those)
+       the ring took minutes to fill: the Kommodore saw two units for a
+       long while before the other four were written. So while the
+       estimate and the sheet disagree and the ring is not yet full, every
+       look goes through - at most twenty-five of them, three seconds. */
+    const zahlOffen = !!(KB.nSchaetzung && KB.nSchaetzung.n !== KB.N && (KB.nRing || []).length < KB_RING);
     /* AND THE DOORMAN GUARDS THE START TOO. There used to be "&&
        KB.zeilen.length" here, so that while the sheet was still EMPTY every
        single look read the whole strip and worked out the whole geometry -
@@ -15439,7 +15424,7 @@ async function kbTick(){
        compare against and reports every cell as changed. And when the
        detail list opens, that is a large change in the bar - he fires, the
        look goes through, the sheet comes about. */
-    if (geregt < 3 && KB.wacheZaehler % 20 !== 0){
+    if (geregt < 3 && KB.wacheZaehler % 20 !== 0 && !zahlOffen){
       KB.fehlschlaege = 0;
       return;
     }
@@ -15466,9 +15451,8 @@ async function kbTick(){
        The whole geometry - cards, sides, signs, the picked one - is only
        worth its forty thousandths when something happened, or every fourth
        look so the strip stays fresh. */
-    /* WHICH STAGE ARE WE IN? The type matching only runs in the middle
-       one, and the text reader only in the last. */
-    unitsTypenAn = KB.stufe === "typen";
+    unitsBlassErlaubt = !!(KB.reiheAlt && KB.reiheAlt.karten.length >= 2
+                           && (KB.blick || 0) - KB.reiheAlt.blick <= KB_REIHE_MERK);
     const kasten = unitsForm(d);
     const kk = kasten ? kbKastenKennung(d, kasten.oben, kasten.form) : null;
     let neu = kk !== null && !kbKastenGleich(kk, KB.kastenLetzte);
@@ -15496,7 +15480,7 @@ async function kbTick(){
        With a sheet of one captured line it fell silent and stayed at one,
        while eleven cards stood in the game. A sheet is never "finished"
        while the bar can still grow. */
-    if (neu || KB.blick % 4 === 0 || !KB.zeilen.length){
+    if (neu || KB.blick % 4 === 0 || !KB.zeilen.length || zahlOffen){
       const G = await unitsLesen(F, null, null, "bild");
       if (!KB || !KB.live) return;
       kbVerarbeiten(G);
@@ -15505,8 +15489,7 @@ async function kbTick(){
          reading. Only what was really taken is marked as dealt with - it
          used to be marked beforehand, and a box refused for want of a
          picked card was then never offered again. */
-      /* the text reader only wakes in the last stage */
-      if (neu && G.form && KB.stufe === "namen"){
+      if (neu && G.form){
         const genommen = await kbEinreihen(F, G);
         if (!KB || !KB.live) return;
         if (genommen){ KB.kastenLetzte = kk; KB.kastenAbgelehnt = null; }
@@ -15538,16 +15521,14 @@ async function kbTick(){
        is being read. The town does not run away; it is caught up as soon
        as there is quiet. */
     const ruhe = !(KB.warte && KB.warte.length) && !KB.arbeit && !KB.werkt;
-    /* THE TOWN PASS IS NOT A PERMANENT JOB. In the first stage it is the
-       whole point and runs as soon as the bar settles. Afterwards it is
-       only a watchman - has the town changed under us? - and fifteen
-       seconds is often enough for that. Running it on every change of the
-       bar is exactly the flicker between "Reading the town's name" and
-       "strength" that the Kommodore sees, and every one of those costs a
-       full picture. */
-    const ortFaellig = KB.stufe === "ort" || jetzt() - (KB.ortZuletzt || 0) > 15000;
-    if (ortFaellig && ruhe && !kbKennungStill(kn, KB.letzte) && (kbKennungStill(kn, KB.vorige) || KB.letzte === null) && !KB.ortLaeuft){
-      KB.letzte = kn; KB.ortZuletzt = jetzt();
+    /* THE TOWN PASS RUNS WHEN THE BAR HAS CHANGED AND STANDS STILL - both
+       judged beyond the glow of a fighting unit (kbKennungStill). The
+       flicker between "Reading the town's name" and "strength" that the
+       stages were built against came from the name field's hash reaching
+       into the cards; that is mended at its source (kbNameEnde), so the
+       pass needs no clock any more. */
+    if (ruhe && !kbKennungStill(kn, KB.letzte) && (kbKennungStill(kn, KB.vorige) || KB.letzte === null) && !KB.ortLaeuft){
+      KB.letzte = kn;
       /* on the standing surface: the town pass holds it until it is done
          (KB.ortLaeuft), and no second pass starts before that */
       const V = await unitsRahmen(f, kbOrtFlaeche);
@@ -34275,7 +34256,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d02ee4d0e0</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0c99960b1b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -34417,7 +34398,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d02ee4d0e0";
+const BAU = "0c99960b1b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
