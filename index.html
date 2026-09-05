@@ -4454,8 +4454,11 @@ function befehlAutoAbschluss(){
   /* the assignments follow the chain, see zuordNachruecken below */
   let bewegt = false;
   try { bewegt = zuordNachruecken(); } catch (e){}
+  /* enemy paras within reach of one of our capitals, see PARA SUPPLY AND THREAT */
+  let drohung = false;
+  try { drohung = paraBedrohungPruefen(); } catch (e){}
   if (getan || bewegt) ordersZahl();
-  return getan > 0 || bewegt;
+  return getan > 0 || bewegt || drohung;
 }
 /* the badge is counted afresh every minute whatever happened */
 setInterval(() => { try { if (befehlAutoAbschluss()) draw(); ordersZahl(); } catch(e){} }, 60000);
@@ -4871,6 +4874,265 @@ function ordersDialog(tab){
   }));
 }
 document.getElementById("b-orders").addEventListener("click", ()=>ordersDialog("units"));
+
+/* ---- PARA SUPPLY AND THREAT (05.09.2026) ----
+   Three sums over data the map already holds, nothing new is stored:
+   A. the clan's para supply: airborne teams in every member's depot on the
+      war side, less the ones deployed and the ones accepted on a live drop
+      (committed counts are the fallback for a drop without assignments);
+   B. enemy paras sighted on an enemy airfield (spot rows and the enemy
+      depot's last-seen town, a day at most), their reach as a ring, and
+      one board post per airfield and count when one of our capitals lies
+      inside;
+   C. how many members could meet an order that asks for a unit type: a
+      free team of that type in the depot, free being neither deployed nor
+      in a live assignment.
+   Members without a depot row are counted as unknown, never as zero. */
+const paraTypIst = k => zweigVon(k) === LUFT_ZWEIG;
+/* a line for a dialog: never lets a counting error take the window down */
+const paraTextSicher = f => { try { return esc(f()); } catch (e){ return ""; } };
+/* everyone we know of: the depots, the rank map, the member list when the
+   roles tab has loaded it, and ourselves */
+function paraMitglieder(){
+  const alle = new Set();
+  if (S.me) alle.add(S.me);
+  for (const who of depotIdx.keys()) alle.add(who);
+  for (const who of Object.keys(rangKarte())) alle.add(who);
+  let leute = [];
+  try { leute = Array.isArray(leuteListe) ? leuteListe : []; } catch (e){ leute = []; }
+  for (const m of leute) if (m && m.player && m.approved !== false) alle.add(m.player);
+  return [...alle];
+}
+/* a member's teams on the war side; null when no depot row exists */
+function paraDepotVon(who){
+  const e = S.depot[who];
+  if (!e || !Array.isArray(e.v)) return null;
+  return aufSeite(depotListe(e.v), clanFaktion());
+}
+/* team ids sitting in a live assignment on an order that is not done */
+function paraBelegteTeams(ausser){
+  const alle = alleBefehle(true), belegt = new Set();
+  for (const z of zuordAlle()){
+    if (ausser && z.art === ausser.art && String(z.id) === String(ausser.id)) continue;   // this very order
+    const b = zuordBefehl(z, alle);
+    if (!b || b.zs === "fertig") continue;
+    for (const id of z.ats) belegt.add(id);
+  }
+  return belegt;
+}
+/* A. the supply */
+function paraVorrat(){
+  const teams = new Map(), raus = new Map();
+  let gesamt = 0, drin = 0, unbekannt = 0;
+  for (const who of paraMitglieder()){
+    const liste = paraDepotVon(who);
+    if (!liste){ unbekannt++; continue; }
+    const weg = deployedIds(who); raus.set(who, weg);
+    for (const t of liste){
+      if (!t || !paraTypIst(t.k)) continue;
+      gesamt++;
+      if (weg.has(t.id)) drin++;
+      teams.set(t.id, who);
+    }
+  }
+  /* planned: accepted teams on live drops of our side, the committed
+     counts when a drop has no assignment at all */
+  let geplant = 0, drops = 0, gedeckt = 0;
+  const alle = alleBefehle(true), zeilen = zuordAlle();
+  for (const b of alle){
+    if (b.art !== "arrow" || !b.v || !b.v.luft || b.fremd || b.zs === "fertig") continue;
+    drops++;
+    let fest = 0, unterwegs = 0, zeile = false;
+    for (const z of zeilen){
+      if (z.art !== "arrow" || String(z.id) !== String(b.id) || z.st !== 1) continue;
+      zeile = true;
+      const weg = raus.get(z.who) || deployedIds(z.who);
+      for (const id of z.ats){
+        if (weg.has(id)){ unterwegs++; continue; }   // deployed already, counted above
+        if (teams.has(id)) fest++;                   // only a team from a depot we counted
+      }
+    }
+    /* the committed counts stand in only for a drop without any accepted row */
+    if (!zeile) fest = joinOf(b.id).reduce((sum, j) => sum + (+j.n || 0), 0);
+    if (fest || unterwegs) gedeckt++;
+    geplant += fest;
+  }
+  const hand = gesamt - drin;
+  return {gesamt, drin, geplant, hand, frei: Math.max(0, hand - geplant), drops, ungedeckt: drops - gedeckt, unbekannt};
+}
+function paraVorratText(){
+  const v = paraVorrat();
+  const ohne = v.unbekannt ? `${v.unbekannt} member${v.unbekannt === 1 ? "" : "s"} without depot` : "";
+  if (!v.gesamt && v.unbekannt) return `Paras: unknown (${ohne})`;
+  return `Paras: ${v.frei} free of ${v.gesamt} (${v.geplant} planned, ${v.drin} deployed)`
+    + (ohne ? `, ${ohne}` : "");
+}
+/* after a new drop: a second toast when the drops outnumber the paras
+   not deployed; it waits for the first toast to pass */
+function paraVorratWarnung(){
+  let v = null;
+  try { v = paraVorrat(); } catch (e){ return; }
+  if (!v || (!v.gesamt && v.unbekannt) || v.ungedeckt <= v.frei) return;
+  setTimeout(() => toast(`More drops planned than paras on hand: ${v.frei} free, ${v.ungedeckt} drop${v.ungedeckt === 1 ? "" : "s"} without teams`), 2600);
+}
+/* C. who could meet an order asking for one of these types */
+function paraErfuellbar(typen, ausser){
+  const will = new Set(typen || []), belegt = paraBelegteTeams(ausser), gefunden = new Set();
+  let n = 0, unbekannt = 0;
+  for (const who of paraMitglieder()){
+    const liste = paraDepotVon(who);
+    if (!liste){ unbekannt++; continue; }
+    const weg = deployedIds(who);
+    let kann = false;
+    for (const t of liste){
+      if (!t || !will.has(t.k) || weg.has(t.id) || belegt.has(t.id)) continue;
+      kann = true; gefunden.add(t.k);
+    }
+    if (kann) n++;
+  }
+  return {n, unbekannt, typen: [...gefunden]};
+}
+function paraErfuellbarText(typen, ausser){
+  const e = paraErfuellbar(typen, ausser);
+  const namen = (e.typen.length ? e.typen : (typen || [])).map(atName).join(", ");
+  const klammer = [namen, e.unbekannt ? `${e.unbekannt} unknown` : ""].filter(Boolean).join(", ");
+  return `Could be met by ${e.n} member${e.n === 1 ? "" : "s"}${klammer ? ` (${klammer})` : ""}`;
+}
+/* the types an order asks for: a drop takes any airborne team, a unit sign
+   exactly that type */
+function paraBefehlTypen(a){
+  if (!a) return [];
+  if (a.luft) return (a.sym && paraTypIst(a.sym)) ? [a.sym] : luftTypen().map(t => t.k);
+  return a.sym ? [a.sym] : [];
+}
+/* B. the threat: enemy paras per enemy airfield, from sightings and the
+   enemy depot's last-seen town, the two taken as the larger, not the sum.
+   Cached for a few seconds, draw() asks on every frame. */
+let paraBedrohungCache = null, paraBedrohungStand = 0, paraBedrohungZeit = null;
+function paraBedrohungKarte(frisch){
+  if (!frisch && paraBedrohungCache && paraBedrohungZeit === zeitReise && jetzt() - paraBedrohungStand < 5000) return paraBedrohungCache;
+  const karte = new Map();
+  try {
+    const meine = clanFaktion();
+    const feindFlug = i => istFlugplatz(i) && ownerOf(i) >= 0 && ownerOf(i) !== meine;
+    const eintrag = i => { let d = karte.get(i);
+      if (!d){ d = {town: i, spot: 0, dep: 0, je: new Map(), typen: new Set(), t: 0}; karte.set(i, d); } return d; };
+    const frischGenug = t => t >= epoche() && alter(t) < ALT && (!zeitReise || t <= zeitReise);
+    for (const k of Object.keys(S.spot || {})){
+      const e = S.spot[k];
+      if (!e || !Array.isArray(e.v) || !e.v.length || !frischGenug(e.t || 0)) continue;
+      const town = +k.slice(0, k.indexOf(":"));
+      if (!MAP.n[town] || !feindFlug(town)) continue;
+      for (const u of e.v){
+        if (!u || !paraTypIst(u.k) || u.f === meine) continue;
+        const d = eintrag(town); d.typen.add(u.k); d.t = Math.max(d.t, e.t || 0);
+        /* several members may report the same airfield: per type the
+           largest report counts, not the sum of all reports */
+        d.je.set(u.k, Math.max(d.je.get(u.k) || 0, +u.n || 0));
+      }
+    }
+    for (const [key, e] of Object.entries(S.edep || {})){
+      if (!e || !Array.isArray(e.v) || uebergelaufen(key)) continue;
+      const r = (S.roster || {})[key], f = r && r.v ? r.v.f : null;
+      if (f === meine) continue;
+      for (const u of e.v){
+        if (!u || u.o === undefined || u.o === null || !u.t || !MAP.n[u.o] || !paraTypIst(u.k)) continue;
+        const t = u.t * 1000;                                  /* seconds -> ms */
+        if (!frischGenug(t) || !feindFlug(u.o)) continue;
+        const d = eintrag(u.o); d.dep += 1; d.typen.add(u.k); d.t = Math.max(d.t, t);
+      }
+    }
+    for (const [i, d] of [...karte]){
+      d.spot = [...d.je.values()].reduce((a, b) => a + b, 0);
+      d.n = Math.max(d.spot, d.dep);
+      if (!d.n){ karte.delete(i); continue; }
+      let weit = 0;
+      for (const k of d.typen) weit = Math.max(weit, atRadius(k) / 8);
+      d.r = weit || luftReichweite(null);
+      d.caps = [];
+      for (let j = 0; j < MAP.n.length; j++)
+        if (isCap(j) && ownerOf(j) === meine && ortAbstand(i, j) <= d.r) d.caps.push(j);
+    }
+  } catch (e){ karte.clear(); }
+  paraBedrohungCache = karte; paraBedrohungStand = jetzt(); paraBedrohungZeit = zeitReise;
+  return karte;
+}
+const paraBedrohungAn = i => paraBedrohungKarte().get(i) || null;
+function paraBedrohungText(d){
+  return `Para threat: ${d.n} para unit${d.n === 1 ? "" : "s"} at ${MAP.n[d.town][0]} reach ${d.caps.map(j => MAP.n[j][0]).join(", ")}`;
+}
+/* what this browser has reported already: airfield and count with the
+   time, kept a day like the sightings themselves, so a reload does not
+   repeat the alert */
+const PARA_STORE = "hng-warmap-para-gemeldet";
+function paraGemeldetLesen(){
+  let m = {};
+  try { m = JSON.parse(localStorage.getItem(PARA_STORE) || "{}") || {}; } catch (e){ m = {}; }
+  for (const k of Object.keys(m)) if (!(+m[k] > 0) || alter(+m[k]) > ALT) delete m[k];
+  return m;
+}
+function paraGemeldetSchreiben(m){ try { localStorage.setItem(PARA_STORE, JSON.stringify(m)); } catch (e){} }
+/* once per airfield and count: a board post for the clan, unless the same
+   text stands already, and a toast on this machine. A new threat is noted
+   first and posted on a later pass, so two machines syncing in the same
+   moment see each other's post before writing their own. */
+const paraBedrohungVormerk = new Map();
+function paraBedrohungPruefen(){
+  const karte = paraBedrohungKarte(true), gemeldet = paraGemeldetLesen();
+  let neu = false, geaendert = false;
+  for (const d of karte.values()){
+    if (!d.caps.length) continue;
+    const key = d.town + "|" + d.n;
+    if (gemeldet[key]) continue;
+    const text = paraBedrohungText(d);
+    const steht = livePosts().find(([, e]) => e.v && e.v.text === text);
+    if (steht){                                  // someone has posted it already
+      gemeldet[key] = jetzt(); geaendert = true;
+      if (alter(steht[1].t || 0) < 10*60e3) toast(text);
+      neu = true; continue;
+    }
+    const seit = paraBedrohungVormerk.get(key);
+    if (!seit){ paraBedrohungVormerk.set(key, jetzt()); neu = true; continue; }
+    if (jetzt() - seit < 15000) continue;
+    gemeldet[key] = jetzt(); geaendert = true;
+    if (darf("brett")){ addPost(text, d.town, 2, false); boardZahl(); }
+    toast(text);
+    neu = true;
+  }
+  if (geaendert) paraGemeldetSchreiben(gemeldet);
+  return neu;
+}
+/* the reach as a ring, under the towns: with the Airfields view on, or
+   when one of our capitals lies inside */
+function paraBedrohungRinge(){
+  const karte = paraBedrohungKarte();
+  if (!karte.size) return;
+  const WW = cv.width / dpr, HH = cv.height / dpr;
+  ctx.save();
+  for (const d of karte.values()){
+    if (!showFlug && !d.caps.length) continue;
+    const [x, y] = toScr(MAP.n[d.town][1], MAP.n[d.town][2]), rr = d.r * view.z;
+    if (x + rr < -10 || y + rr < -10 || x - rr > WW + 10 || y - rr > HH + 10) continue;
+    ctx.beginPath(); ctx.arc(x, y, rr, 0, 6.284);
+    ctx.globalAlpha = .06; ctx.fillStyle = "#e05545"; ctx.fill();
+    ctx.globalAlpha = d.caps.length ? .8 : .5; ctx.strokeStyle = "#e05545"; ctx.lineWidth = 1.6*uiScale;
+    ctx.setLineDash([7,5]); ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.restore();
+}
+/* the count on a small red plate above the airfield */
+function paraBedrohungEtikett(x, y, n){
+  const gr = Math.max(8, Math.min(11, 6.5*Math.sqrt(view.z)))*uiScale;
+  const text = `${n} para unit${n === 1 ? "" : "s"}`;
+  ctx.save();
+  ctx.font = `700 ${gr}px ${SCHMAL}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const b = ctx.measureText(text).width + gr*0.9, h = gr*1.4;
+  ctx.globalAlpha = .92; ctx.fillStyle = "#e05545";
+  ctx.fillRect(x - b/2, y - h, b, h);
+  ctx.globalAlpha = 1; ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, x, y - h/2 + 0.5);
+  ctx.restore();
+}
 
 function setRang(player, ids){
   const k = Object.assign({}, rangKarte());
@@ -5418,6 +5680,7 @@ function draw(){
     }
   }
   paraRingZeichnen();                     // a start-first drop's reach, under all that moves
+  try { paraBedrohungRinge(); } catch (e){}   // enemy paras' reach from their airfields
   if (zieh && zieh.art === "arrow" && lastMouse){
     const [ax,ay] = toScr(MAP.n[zieh.von][1], MAP.n[zieh.von][2]);
     ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 2.5*uiScale;
@@ -5678,6 +5941,12 @@ function draw(){
        Ist eine Hauptstadt gewaehlt, verengt sich die Anzeige auf die
        Flugplaetze, die SIE erreichen; alle uebrigen bleiben blass. So wird
        aus 117 Ringen eine Antwort. */
+    /* enemy paras sighted on this airfield: the count on a red plate,
+       above the team count when there is one */
+    if (z > 1.2 && istFlugplatz(i)){
+      const dro = paraBedrohungAn(i);
+      if (dro) paraBedrohungEtikett(x, y - r - 3 - (teamsAt(i) ? Math.max(9, 8*Math.sqrt(z))*uiScale + 2 : 0), dro.n);
+    }
     if (showFlug && istFlugplatz(i)){
       const zielCap = (sel != null && isCap(sel)) ? sel : null;
       const trifft = !zielCap || ortAbstand(i, zielCap) <= JAEGER_WEIT;
@@ -6634,6 +6903,7 @@ function paraPfeilAnlegen(von, bis, mehr){
   const brett = a.boardId ? `. ${MAP.n[von][0]} is on the board to be taken first` : "";
   toast(`Drop planned${entwurfModus ? " (draft)" : ""}${brett}. `
     + (mehr ? "Ctrl-click the next target, Escape ends." : "To name it, click the arrow with Inspect."));
+  paraVorratWarnung();                         // a second toast when drops outnumber the paras
   side(); tally();
 }
 /* how much of a fresh drop's arrow is there yet; 1 for every settled arrow */
@@ -6784,6 +7054,7 @@ function paraMenueAuf(knopf){
   const typ = paraTyp();
   const m = document.createElement("div"); m.id = "para-menu";
   m.innerHTML = `<div class="t">Airborne drop</div>
+    <div class="t" id="para-menu-vorrat" style="white-space:normal;max-width:230px;line-height:1.35">${paraTextSicher(paraVorratText)}</div>
     <div class="row">
       <button type="button" class="btn" data-modus="start" aria-pressed="${paraWahl.modus === "start"}">Start first</button>
       <button type="button" class="btn" data-modus="ziel" aria-pressed="${paraWahl.modus !== "start"}">Target first</button>
@@ -7825,7 +8096,8 @@ function paraDialog(i){
   let seite = pb ? pb.f : null;
   openDlg(`
     <div class="dlg-h"><h2>Para-block \u00b7 ${esc(MAP.n[i][0])}</h2>
-      <p>${pb ? zustandText(key, pb, e && (e.n || e.by)) : "No block here yet \u2014 pick the side that blocks."}</p></div>
+      <p>${pb ? zustandText(key, pb, e && (e.n || e.by)) : "No block here yet \u2014 pick the side that blocks."}</p>
+      ${fremd ? "" : `<p>${paraTextSicher(() => paraErfuellbarText(luftTypen().map(t => t.k), {art: "para", id: i}))}</p>`}</div>
     <div class="dlg-b">
       <div class="own4" style="grid-template-columns:repeat(4,1fr)">
         ${FACTIONS.map(q=>`<button type="button" data-pbd="${q.id}" style="--f:${q.color}" aria-pressed="${pb && pb.f===q.id}">${q.tag}</button>`).join("")}
@@ -10211,6 +10483,8 @@ function arrowDialog(a){
   openDlg(`
     <div class="dlg-h"><h2>${esc(MAP.n[a.from][0])} → ${esc(MAP.n[a.to][0])}</h2>
       <p>${zustandText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>
+      ${!fremd && a.luft ? `<p>${paraTextSicher(paraVorratText)}</p>` : ""}
+      ${!fremd && (a.sym || a.luft) ? `<p>${paraTextSicher(() => paraErfuellbarText(paraBefehlTypen(a), {art: "arrow", id: a.id}))}</p>` : ""}
       ${fremd ? "" : `<p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
           <b>${gesamt}</b> assault teams.` : "Nobody has committed to this move yet."}</p>
       <p>${sammelText(a)}</p>`}</div>
@@ -37480,7 +37754,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 39f7f6d871</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c03bc8d331</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -37624,7 +37898,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "39f7f6d871";
+const BAU = "c03bc8d331";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
