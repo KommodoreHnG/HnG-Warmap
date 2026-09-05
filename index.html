@@ -601,7 +601,19 @@ body.txt-modus{cursor:text}
 .btn .marke{display:inline-block;min-width:16px;height:16px;padding:0 4px;margin-left:5px;border-radius:8px;
   background:var(--accent);color:#1a1409;font-size:10.5px;font-weight:700;line-height:16px;text-align:center;
   vertical-align:middle}
-#b-board.neu{box-shadow:inset 0 0 0 1px var(--accent)}
+#b-board.neu,#b-orders.neu{box-shadow:inset 0 0 0 1px var(--accent)}
+/* the orders inbox: section heads and the pick list of free teams */
+.zuord-h{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim2);
+  font-family:var(--schmal);font-weight:600;margin:0}
+.zuord-liste{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;
+  max-height:50vh;overflow-y:auto}
+.zuord-liste label{display:flex;align-items:center;gap:7px;padding:5px 8px;border:1px solid var(--line);
+  border-radius:var(--r);cursor:pointer;font-size:12px;background:var(--panel2)}
+.zuord-liste label:hover{border-color:var(--accent-dk)}
+.zuord-liste label:has(input:checked){border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.zuord-liste .n{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+.zuord-liste .n em{font-style:normal;font-size:10.5px;color:var(--dim)}
+.zuord-liste .n small{color:var(--dim)}
 /* the front replay: a slider above the map */
 #front-zettel{position:absolute;left:50%;bottom:52px;transform:translateX(-50%);z-index:12;
   display:flex;align-items:center;gap:10px;padding:7px 10px;font-size:12px;min-width:min(560px,92%);
@@ -1705,6 +1717,14 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
           <circle cx="8.5" cy="7" r="1.1" fill="currentColor" stroke="none"/>
           <circle cx="15.6" cy="8.5" r="1.1" fill="currentColor" stroke="none"/>
         </svg><span class="txt">Board</span><span class="marke" hidden></span>
+      </button>
+      <button class="btn" id="b-orders" title="Orders inbox: your teams and our side's orders">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+          <!-- an inbox tray with a sheet dropping in -->
+          <path d="M3.5 14.5 L5.6 10 H18.4 L20.5 14.5 V20 H3.5 Z"/>
+          <path d="M3.5 14.5 H8.6 L10.2 17 H13.8 L15.4 14.5 H20.5"/>
+          <path d="M12 3 V9.5 M9.4 7.1 L12 9.7 L14.6 7.1"/>
+        </svg><span class="txt">Orders</span><span class="marke" hidden></span>
       </button>
     </div>
     <div id="tally"></div>
@@ -4312,6 +4332,9 @@ function zustandSetzen(key, v, st, leise){
   /* an arrow going active remembers who held its target (zb), so that a
      move into our own town is not "taken" the moment it is active */
   const okExtra = {n: S.name || ""}, aend = {st: st || undefined};
+  /* the row remembers when it went active, so that a later edit of the
+     order (which moves its t) does not count as newly active again */
+  aend.aktT = st === 1 ? jetzt() : undefined;
   if (b.art === "arrow"){
     if (st === 1){ okExtra.zb = ownerOf(w.to); aend.zb = okExtra.zb; }
     else aend.zb = st === 2 ? w.zb : undefined;
@@ -4319,6 +4342,10 @@ function zustandSetzen(key, v, st, leise){
   if (chef && !stamp("ok", key, st || null, okExtra)) return false;
   if (autor) befehlSchreiben(b, aend);
   save();
+  /* an order marked done by hand hands its assignments on at once; the
+     badge on the Orders button is counted afresh either way */
+  if (st === 2){ try { zuordNachruecken(); } catch (e){} }
+  ordersZahl();
   /* the other road may still say more than what was just written */
   const ziel = st === 2 ? "fertig" : st === 1 ? "aktiv" : "plan";
   const b2 = befehlVonSchluessel(key), jetztZs = b2 ? befehlZustand(key, b2.v) : ziel;
@@ -4424,9 +4451,426 @@ function befehlAutoAbschluss(){
     if (zustandSetzen(a.id, a, 2, true)) getan++;
   }
   if (getan) toast(`${getan} attack${getan === 1 ? "" : "s"} done, target taken`);
+  /* the assignments follow the chain, see zuordNachruecken below */
+  let bewegt = false;
+  try { bewegt = zuordNachruecken(); } catch (e){}
+  if (getan || bewegt) ordersZahl();
+  return getan > 0 || bewegt;
+}
+/* the badge is counted afresh every minute whatever happened */
+setInterval(() => { try { if (befehlAutoAbschluss()) draw(); ordersZahl(); } catch(e){} }, 60000);
+
+/* ---- THE ORDERS INBOX (05.09.2026) ----
+   An assignment ties a player's own teams to one order. The row
+   zuord:<art>-<id>:<player> carries the team ids (ats), groups (grps,
+   empty until the groups arrive) and a state st: 0 waits for the owner's
+   word after an automatic move along the chain, 1 is accepted. A team sits
+   in one assignment at most; a row on a done order is cleared or moved on
+   at the next pass. The inbox behind the Orders button shows my teams with
+   their assignment and every open order of our side; the shield on the map
+   counts accepted teams before commitments.
+   A line or area id carries its author after a colon. Inside the row key
+   that colon would shift the part the server reads as the writer, so it is
+   written as a dot and turned back on reading. */
+const ZUORD_STORE = "hng-warmap-orders-gesehen";
+const ZUORD_ARTEN = ["arrow", "line", "area", "para"];
+const ZUORD_ART_NAME = {arrow: "Attack", line: "Line", area: "Area", para: "Para-block"};
+const zuordSchluessel = (art, id) => `${art}-${String(id).replace(":", ".")}`;
+/* the row key taken apart: kind, order id and the player who wrote it */
+function zuordZerlegen(k){
+  const p = k.lastIndexOf(":");
+  if (p < 0) return null;
+  const teil = k.slice(0, p), d = teil.indexOf("-");
+  if (d < 0) return null;
+  const art = teil.slice(0, d);
+  if (!ZUORD_ARTEN.includes(art)) return null;
+  let id = teil.slice(d + 1);
+  if (art === "line" || art === "area") id = id.replace(".", ":");
+  return {art, id: art === "para" ? +id : id, wer: k.slice(p + 1)};
+}
+const zuordLebt = e => imKrieg(e) && !!e.v && Array.isArray(e.v.ats) && e.v.ats.length > 0;
+function zuordZeile(k){
+  const e = S.zuord[k];
+  if (!zuordLebt(e)) return null;
+  const z = zuordZerlegen(k);
+  if (!z) return null;
+  return {key: k, art: z.art, id: z.id, who: z.wer, ats: e.v.ats.slice(),
+          grps: Array.isArray(e.v.grps) ? e.v.grps.slice() : [], st: +e.v.st === 1 ? 1 : 0,
+          name: e.n || z.wer, mine: z.wer === S.me, t: e.t || 0};
+}
+const zuordAlle = () => Object.keys(S.zuord).map(zuordZeile).filter(Boolean);
+/* every assignment on one order, from every player */
+function zuordVon(b){
+  const vorn = zuordSchluessel(b.art, b.id) + ":";
+  return Object.keys(S.zuord).filter(k => k.startsWith(vorn)).map(zuordZeile).filter(Boolean);
+}
+/* my own rows */
+const meineZuord = () => Object.keys(S.zuord).filter(k => k.endsWith(":" + S.me)).map(zuordZeile).filter(Boolean);
+/* accepted and pending teams on an order, summed over every player */
+function zuordZahlen(b){
+  let fest = 0, offen = 0;
+  for (const z of zuordVon(b)) if (z.st === 1) fest += z.ats.length; else offen += z.ats.length;
+  return {fest, offen};
+}
+/* the shield's "ist": accepted teams when there are any, else what the
+   caller has (the commitments on an arrow) */
+function zuordIst(art, id, sonst){
+  const {fest} = zuordZahlen({art, id});
+  return fest > 0 ? fest : sonst;
+}
+/* the same as a field to merge into a shield call: nothing when nothing
+   is assigned, so a line keeps saying "N planned" */
+function zuordIstFeld(art, id){
+  const {fest} = zuordZahlen({art, id});
+  return fest > 0 ? {ist: fest} : {};
+}
+/* my row on an order; an empty list clears it. Only my own key is ever
+   written - the server keeps everybody to their own rows anyway */
+function zuordSchreiben(b, ats, st){
+  const liste = [...new Set((ats || []).filter(Boolean))];
+  if (!liste.length){ zuordLoeschen(b); return true; }
+  const ok = stamp("zuord", zuordSchluessel(b.art, b.id) + ":" + S.me,
+                   {ats: liste, grps: [], st: st ? 1 : 0}, {n: S.name || ""});
+  if (ok) save();
+  return ok;
+}
+/* true when a row stood there and is cleared now */
+function zuordLoeschen(b){
+  const k = zuordSchluessel(b.art, b.id) + ":" + S.me;
+  const e = S.zuord[k];
+  if (!e || e.v == null) return false;
+  const ok = stamp("zuord", k, null, {n: S.name || ""});
+  if (ok) save();
+  return ok;
+}
+/* the order behind a row */
+function zuordBefehl(z, alle){
+  return (alle || alleBefehle(true)).find(x => x.art === z.art && String(x.id) === String(z.id)) || null;
+}
+/* the next open step of an operation after a given order: steps done
+   already are stepped over, so that two steps finishing in one pass still
+   hand their teams on to the first one that is open */
+function befehlNachfolger(b, alle){
+  if (!b || !b.v || !b.v.op) return null;
+  const eigene = (alle || alleBefehle(true)).filter(x => x.key !== b.key && x.v && x.v.op === b.v.op
+    && !x.fremd && !x.entwurf);
+  /* the first open order with a higher number: gaps from removed links
+     are skipped, finished steps too, and there is no loop to run away */
+  const folge = +b.v.folge || 0;
+  const weiter = eigene.filter(x => +x.v.folge > folge).sort((p, q) => +p.v.folge - +q.v.folge);
+  return weiter.find(x => x.zs !== "fertig") || null;
+}
+/* where an order points, as the town the map jumps to: the arrow's target,
+   the block's town, the line's first town, the town nearest the area */
+function befehlOrt(b){
+  if (!b || !b.v) return null;
+  if (b.art === "arrow") return MAP.n[b.v.to] ? b.v.to : (MAP.n[b.v.from] ? b.v.from : null);
+  if (b.art === "para") return MAP.n[b.id] ? +b.id : null;
+  const pts = Array.isArray(b.v.pts) ? b.v.pts : [];
+  if (!pts.length) return null;
+  if (b.art === "line") return MAP.n[pts[0]] ? +pts[0] : null;
+  let cx = 0, cy = 0, n = 0;
+  for (const p of pts) if (Array.isArray(p)){ cx += +p[0] || 0; cy += +p[1] || 0; n++; }
+  if (!n) return null;
+  cx /= n; cy /= n;
+  let best = null, bd = Infinity;
+  for (let i = 0; i < MAP.n.length; i++){
+    if (!MAP.n[i]) continue;
+    const d = Math.hypot(MAP.n[i][1] - cx, MAP.n[i][2] - cy);
+    if (d < bd){ bd = d; best = i; }
+  }
+  return best;
+}
+const befehlOrtName = b => { const i = befehlOrt(b); return i !== null && MAP.n[i] ? MAP.n[i][0] : ""; };
+const befehlArtName = b => b.art === "arrow" ? (b.v && b.v.luft ? "Drop" : "Attack") : (ZUORD_ART_NAME[b.art] || b.art);
+/* who made the order: the arrow carries it in itself, the others in their row */
+const befehlWer = b => werWar(b.art === "arrow" ? b.v : (S[b.art] && S[b.art][b.id]));
+/* when an order went active: the ok row's time, else the moment its author
+   set it active (aktT, written by zustandSetzen), else the order's own
+   time as a last resort for rows from before aktT */
+function befehlAktivSeit(b){
+  const e = okEintrag(b.ok);
+  if (e) return e.t || 0;
+  if (b.v && +b.v.aktT) return +b.v.aktT;
+  if (b.art === "arrow") return b.v.t || 0;
+  const z = S[b.art] && S[b.art][b.id];
+  return (z && z.t) || 0;
+}
+/* one team out of whatever row of mine holds it; the row is rewritten
+   with the rest or cleared */
+function zuordTeamFrei(teamId){
+  let getan = false;
+  for (const z of meineZuord()){
+    if (!z.ats.includes(teamId)) continue;
+    if (zuordSchreiben({art: z.art, id: z.id}, z.ats.filter(id => id !== teamId), z.st)) getan = true;
+  }
+  return getan;
+}
+/* my teams of the war side that sit in no assignment */
+function zuordFreieTeams(){
+  const belegt = new Set();
+  for (const z of meineZuord()) for (const id of z.ats) belegt.add(id);
+  return aufSeite(myDepotAlle(), clanFaktion()).filter(d => !belegt.has(d.id));
+}
+/* teams onto an order by hand: they leave any other row of mine, join my
+   row on this order, and the row stands accepted - picking is accepting */
+function zuordZuweisen(b, ids){
+  const neu = (ids || []).filter(Boolean);
+  if (!neu.length) return false;
+  for (const z of meineZuord()){
+    if (z.art === b.art && String(z.id) === String(b.id)) continue;
+    const rest = z.ats.filter(id => !neu.includes(id));
+    if (rest.length !== z.ats.length) zuordSchreiben({art: z.art, id: z.id}, rest, z.st);
+  }
+  const da = zuordVon(b).find(z => z.mine);
+  const ats = da ? da.ats.slice() : [];
+  for (const id of neu) if (!ats.includes(id)) ats.push(id);
+  return zuordSchreiben(b, ats, 1);
+}
+/* the owner's word on a row that moved along the chain */
+const zuordBestaetigen = z => zuordSchreiben({art: z.art, id: z.id}, z.ats, 1);
+/* THE CHAIN MOVES THE TEAMS. A done order with a next open step in its
+   operation hands every one of my assignments on to that step, pending my
+   word; without a next step the row is cleared. Teams that left the depot
+   of the war side and orders that are gone fall out here too. Only my own
+   rows are written - the other players' rows move on their own machines.
+   Runs after the automatic completion, after a done set by hand and when
+   the inbox or the pick opens, behind the same bars as befehlAutoAbschluss
+   and never while a pull is still fetching pages. Every row is read afresh
+   on its turn: an earlier turn may have rewritten it already. */
+function zuordNachruecken(){
+  if (zeitReise) return false;
+  if (CFG && !ersterAbrufDurch) return false;
+  if (pulling) return false;
+  if (!S.me) return false;
+  const alle = alleBefehle(true);
+  const depot = new Set(aufSeite(myDepotAlle(), clanFaktion()).map(d => d.id));
+  let getan = 0;
+  for (const k of Object.keys(S.zuord)){
+    if (!k.endsWith(":" + S.me)) continue;
+    const z = zuordZeile(k);
+    if (!z) continue;
+    const b = zuordBefehl(z, alle);
+    if (!b || b.entwurf || b.fremd){ if (zuordLoeschen({art: z.art, id: z.id})) getan++; continue; }
+    const ats = z.ats.filter(id => depot.has(id));
+    if (b.zs !== "fertig"){
+      if (ats.length !== z.ats.length && zuordSchreiben(b, ats, z.st)) getan++;
+      continue;
+    }
+    const weiter = befehlNachfolger(b, alle);
+    if (weiter && ats.length){
+      const da = zuordVon(weiter).find(x => x.mine);
+      /* the union carries depot teams only */
+      const zusammen = (da ? da.ats : []).filter(id => depot.has(id));
+      const neuDazu = ats.some(id => !zusammen.includes(id));
+      for (const id of ats) if (!zusammen.includes(id)) zusammen.push(id);
+      /* teams that arrive by the chain wait for the owner's word; a row
+         that already held them all keeps what it had */
+      if (!zuordSchreiben(weiter, zusammen, neuDazu ? 0 : (da ? da.st : 0))) continue;
+    }
+    if (zuordLoeschen(b)) getan++;
+  }
   return getan > 0;
 }
-setInterval(() => { try { if (befehlAutoAbschluss()) draw(); } catch(e){} }, 60000);
+const ordersGesehen = () => { try { return +localStorage.getItem(ZUORD_STORE) || 0; } catch (e){ return 0; } };
+/* the badge on the Orders button: rows waiting for my word, plus every
+   order of our side that went active since this browser last opened the
+   inbox, however long ago */
+function ordersZahl(){
+  const b = document.getElementById("b-orders");
+  if (!b) return;
+  let n = 0;
+  try {
+    const seit = ordersGesehen(), alle = alleBefehle(true);
+    const offen = alle.filter(x => !x.fremd && !x.entwurf && x.zs !== "fertig");
+    for (const z of meineZuord()) if (z.st === 0 && zuordBefehl(z, offen)) n++;
+    for (const x of offen){
+      if (x.zs !== "aktiv") continue;
+      if (befehlAktivSeit(x) > seit) n++;
+    }
+  } catch (e){}
+  const m = b.querySelector(".marke");
+  if (m){ m.textContent = String(n); m.hidden = !n; }
+  b.classList.toggle("neu", n > 0);
+}
+/* THE PICK: my free teams as a checklist, several at once, onto one
+   order. zurueck reopens whatever window stood before. */
+function zuordWahl(b, zurueck){
+  /* rows on orders done meanwhile move on or clear first, so that their
+     teams are free to pick */
+  try { if (zuordNachruecken()) draw(); } catch (e){}
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const frei = zuordFreieTeams();
+  const ort = befehlOrtName(b);
+  openDlg(`
+    <div class="dlg-h"><h2>Assign to ${esc(b.name || "")}</h2>
+      <p>${esc(befehlArtName(b))}${ort ? ` \u00b7 ${esc(ort)}` : ""} \u00b7 ${ZUSTAND_NAME[b.zs] || b.zs || "planned"}${
+        b.v && +b.v.soll ? ` \u00b7 target ${+b.v.soll}` : ""}</p></div>
+    <div class="dlg-b">
+      ${frei.length ? `<div class="zuord-liste">${frei.map(d => `<label><input type="checkbox" data-zteam="${esc(d.id)}">
+          <span>${symbolSVG(d.k, c, 22, 15)}</span><span class="n"><span>${esc(d.name || atName(d.k))}${
+          d.tag ? ` <small>${esc(d.tag)}</small>` : ""}</span><em>${esc(atName(d.k))}</em></span></label>`).join("")}</div>
+        <div class="row" style="align-items:center">
+          <button class="btn" id="zu-alle" style="font-size:11px;padding:3px 8px">All</button>
+          <button class="btn" id="zu-keine" style="font-size:11px;padding:3px 8px">None</button>
+          <span style="flex:1"></span>
+          <span id="zu-zahl" style="font-size:12px;color:var(--dim)">0 picked</span>
+        </div>` : `<div class="empty">No free team. Release one in the inbox first.</div>`}
+    </div>
+    <div class="dlg-f">
+      <button class="btn" id="zu-zurueck">Back</button>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="zu-ok"${frei.length ? "" : " disabled"}>Assign</button>
+    </div>`, true);
+  const kaesten = [...document.querySelectorAll("#dlg [data-zteam]")];
+  const zaehlen = () => {
+    const el = document.getElementById("zu-zahl");
+    if (el) el.textContent = `${kaesten.filter(k => k.checked).length} picked`;
+  };
+  kaesten.forEach(k => k.addEventListener("change", zaehlen));
+  document.getElementById("zu-alle")?.addEventListener("click", ()=>{ kaesten.forEach(k => { k.checked = true; }); zaehlen(); });
+  document.getElementById("zu-keine")?.addEventListener("click", ()=>{ kaesten.forEach(k => { k.checked = false; }); zaehlen(); });
+  document.getElementById("zu-zurueck").addEventListener("click", ()=>{ if (zurueck) zurueck(); else closeDlg(); });
+  document.getElementById("zu-ok").addEventListener("click", ()=>{
+    const ids = kaesten.filter(k => k.checked).map(k => k.dataset.zteam);
+    if (!ids.length){ toast("Pick a team first."); return; }
+    if (zuordZuweisen(b, ids)){
+      toast(`${ids.length} team${ids.length === 1 ? "" : "s"} assigned`);
+      ordersZahl(); draw();
+    }
+    if (zurueck) zurueck(); else closeDlg();
+  });
+}
+/* THE INBOX. Units: my teams with their assignment, then every open order
+   of our side, active first. Players: the role requests, next package. */
+function ordersDialog(tab){
+  try { localStorage.setItem(ZUORD_STORE, String(jetzt())); } catch (e){}
+  try { if (zuordNachruecken()) draw(); } catch (e){}
+  ordersZahl();
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const alle = alleBefehle(true);
+  const offen = alle.filter(x => !x.fremd && !x.entwurf && x.zs !== "fertig");
+  const rang = {aktiv: 0, plan: 1};
+  offen.sort((a, b) => (rang[a.zs] ?? 2) - (rang[b.zs] ?? 2)
+    || String(a.v.op || "").localeCompare(String(b.v.op || ""))
+    || (+a.v.folge || 0) - (+b.v.folge || 0)
+    || String(a.name || "").localeCompare(String(b.name || "")));
+  const teams = aufSeite(myDepotAlle(), clanFaktion());
+  const meine = meineZuord();
+  const wo = new Map();
+  for (const z of meine) for (const id of z.ats) wo.set(id, z);
+  const frei = teams.filter(d => !wo.has(d.id)).length;
+  const wartend = meine.filter(z => z.st === 0 && zuordBefehl(z, offen)).length;
+  const zsSpan = zs => `<span style="color:${zs === "aktiv" ? "var(--accent)" : zs === "fertig" ? "var(--dim2)" : "var(--dim)"}">${
+    ZUSTAND_NAME[zs] || zs}</span>`;
+  const klein = `style="font-size:11px;padding:3px 8px"`;
+
+  const teamZeilen = teams.map(d => {
+    const z = wo.get(d.id), b = z ? zuordBefehl(z, alle) : null;
+    const town = townOfTeam(d.id);
+    let auftrag = `<span style="color:var(--dim2)">free</span>`, stand = "", knopf = "";
+    if (z){
+      auftrag = b ? `${esc(b.name)} <small style="color:var(--dim)">${esc(befehlArtName(b))}</small>`
+                  : `<span style="color:var(--dim2)">order gone</span>`;
+      stand = b ? zsSpan(b.zs) : "";
+      if (z.st === 0){
+        stand += ` <b style="color:var(--su)">pending (moved by chain), confirm</b>`;
+        /* both words go for the whole row: confirm keeps every team on it,
+           decline clears it. Release takes one team out */
+        knopf = `<button class="btn" data-zbest="${esc(z.key)}" title="Confirm every team on this row" ${klein}>Confirm</button>
+          <button class="btn" data-zab="${esc(z.key)}" title="Clear every team on this row" ${klein}>Decline</button>`;
+      } else knopf = `<button class="btn" data-zfrei="${esc(d.id)}" ${klein}>Release</button>`;
+    }
+    return `<tr${z && z.st === 0 ? ' class="me"' : ""}>
+      <td class="sy">${symbolSVG(d.k, c, 24, 17)}</td>
+      <td>${esc(d.name || atName(d.k))}${d.tag ? ` <small style="color:var(--dim)">${esc(d.tag)}</small>` : ""}</td>
+      <td style="text-align:left">${esc(atName(d.k))}${town !== null && MAP.n[town]
+        ? ` <small style="color:var(--dim)">at ${esc(MAP.n[town][0])}</small>` : ""}</td>
+      <td style="text-align:left">${auftrag}</td>
+      <td style="text-align:left">${stand}</td>
+      <td>${knopf}</td></tr>`;
+  }).join("");
+
+  const befehlZeilen = offen.map(b => {
+    const {fest, offen: pend} = zuordZahlen(b);
+    const ort = befehlOrt(b);
+    return `<tr${ort !== null ? ` data-go="${ort}" style="cursor:pointer"` : ""}>
+      <td>${esc(befehlArtName(b))}</td>
+      <td style="text-align:left">${b.v.folge ? `<small style="color:var(--dim)">#${+b.v.folge}</small> ` : ""}${esc(b.name)}</td>
+      <td style="text-align:left">${esc(befehlOrtName(b))}</td>
+      <td style="text-align:left">${zsSpan(b.zs)}</td>
+      <td>${+b.v.soll || "\u2014"}</td>
+      <td>${fest}${pend ? ` <small style="color:var(--su)">+${pend} pending</small>` : ""}</td>
+      <td style="text-align:left">${esc(befehlWer(b))}</td>
+      <td><button class="btn" data-zwahl="${esc(b.art)}" data-zid="${esc(String(b.id))}" ${klein}${
+        frei ? "" : ' disabled title="No free team"'}>Assign my team \u2026</button></td></tr>`;
+  }).join("");
+
+  openDlg(`
+    <div class="dlg-h"><h2>Orders</h2>
+      <p>${teams.length ? `<b>${teams.length}</b> team${teams.length === 1 ? "" : "s"}, <b>${frei}</b> free${
+        wartend ? `, <b>${wartend}</b> waiting for your word` : ""}.` : "No teams in your depot yet."}
+        <b>${offen.length}</b> open order${offen.length === 1 ? "" : "s"} on our side.</p></div>
+    <div class="tabs">
+      <button data-tab="units"   aria-pressed="true">Units</button>
+      <button data-tab="players" aria-pressed="false">Players</button>
+    </div>
+    <div class="dlg-b">
+      <div class="tabp on" data-tab="units">
+        <h3 class="zuord-h">My teams</h3>
+        ${teams.length ? `<div class="tw"><table><thead><tr><th></th><th>Team</th><th>Type</th><th>Order</th><th>State</th><th></th></tr></thead>
+          <tbody>${teamZeilen}</tbody></table></div>`
+          : `<div class="empty">No teams on this side yet. Add them in the depot on the right.</div>`}
+        <h3 class="zuord-h">Orders of our side</h3>
+        ${offen.length ? `<div class="tw"><table><thead><tr><th>Kind</th><th>Order</th><th>Target</th><th>State</th><th>Planned</th><th>Assigned</th><th>By</th><th></th></tr></thead>
+          <tbody>${befehlZeilen}</tbody></table></div>`
+          : `<div class="empty">No open orders on our side.</div>`}
+        <div class="note">Click an order to jump to it on the map. Assigned teams count on the shield before commitments.</div>
+      </div>
+      <div class="tabp schmal" data-tab="players">
+        <div class="empty">Role requests come with the next package.</div>
+      </div>
+    </div>
+    <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
+  tabsAktiv(document.getElementById("dlg"), tab || "units");
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  /* after a change the window is built afresh on the tab that was open */
+  const wieder = () => {
+    const akt = document.querySelector("#dlg .tabs button[aria-pressed='true']");
+    ordersZahl(); draw();
+    ordersDialog(akt ? akt.dataset.tab : "units");
+  };
+  document.querySelectorAll("#dlg [data-zbest]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    const z = zuordZeile(k.dataset.zbest);
+    if (!z || !z.mine){ toast("That row is gone."); wieder(); return; }
+    if (zuordBestaetigen(z)) toast("Confirmed");
+    wieder();
+  }));
+  document.querySelectorAll("#dlg [data-zab]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    const z = zuordZeile(k.dataset.zab);
+    if (!z || !z.mine){ toast("That row is gone."); wieder(); return; }
+    if (zuordLoeschen({art: z.art, id: z.id})) toast("Declined");
+    wieder();
+  }));
+  document.querySelectorAll("#dlg [data-zfrei]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    if (zuordTeamFrei(k.dataset.zfrei)) toast("Released");
+    wieder();
+  }));
+  document.querySelectorAll("#dlg [data-zwahl]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    const b = alleBefehle(true).find(x => x.art === k.dataset.zwahl && String(x.id) === k.dataset.zid);
+    if (!b){ toast("That order is gone."); wieder(); return; }
+    zuordWahl(b, wieder);
+  }));
+  document.querySelectorAll("#dlg tr[data-go]").forEach(r => r.addEventListener("click", ev => {
+    if (ev.target.closest("button")) return;
+    sel = +r.dataset.go; closeDlg(); flyTo(sel); side(); draw();
+  }));
+}
+document.getElementById("b-orders").addEventListener("click", ()=>ordersDialog("units"));
 
 function setRang(player, ids){
   const k = Object.assign({}, rangKarte());
@@ -5206,8 +5650,10 @@ function draw(){
       /* the block's own order: shield below the canopy, chain badge above */
       const pf = pfeilFarbe(pb.farbe);
       let kP = null;
-      if (z > 1.2 && (pb.label || pb.soll)){
-        kP = befehlSchild(px, py + g*2.9 + 10*uiScale, {name: pb.label, soll: fremdeSeite(pb) ? 0 : +pb.soll || 0, farbe: pf || null, seite: col(FACTIONS[pb.f])});
+      /* the shield also stands on a bare order with accepted teams on it */
+      if (z > 1.2 && (pb.label || pb.soll || (!fremdeSeite(pb) && zuordZahlen({art: "para", id: i}).fest))){
+        kP = befehlSchild(px, py + g*2.9 + 10*uiScale, Object.assign({name: pb.label, soll: fremdeSeite(pb) ? 0 : +pb.soll || 0, farbe: pf || null, seite: col(FACTIONS[pb.f])},
+          fremdeSeite(pb) ? {} : zuordIstFeld("para", i), {ohneBalken: fertigP}));
         if (kP) schildVon.set("para:" + i, kP);
       }
       /* done: one tick at the shield or above the canopy, no chain number */
@@ -5815,12 +6261,14 @@ function drawArea(a, eintrag, entwurf, id){
     /* the chosen colour as a second, thinner rim; a done area fades it too */
     ctx.globalAlpha = fertigA ? .35 : .9; ctx.strokeStyle = af; ctx.lineWidth = 1.1*uiScale; ctx.setLineDash([]); ctx.stroke(); ctx.globalAlpha = 1;
   }
-  if ((a.label || a.soll) && !entwurf){
+  /* the shield also stands on a bare order with accepted teams on it */
+  if ((a.label || a.soll || (id && !fremdA && zuordZahlen({art: "area", id}).fest)) && !entwurf){
     let cx = 0, cy = 0;
     for (const q of p){ cx += q[0]; cy += q[1]; }
     cx /= p.length; cy /= p.length;
     ctx.save(); ctx.globalAlpha = vorA ? .72 : (fertigA ? .55 : 1);
-    const k = befehlSchild(cx, cy, {name: a.label, soll: fremdA ? 0 : +a.soll || 0, farbe: af || null, seite: f});
+    const k = befehlSchild(cx, cy, Object.assign({name: a.label, soll: fremdA ? 0 : +a.soll || 0, farbe: af || null, seite: f},
+      fremdA || !id ? {} : zuordIstFeld("area", id), {ohneBalken: fertigA}));
     if (k && fertigA) befehlAbzeichen(k.x1, k.y0, "\u2713", af || f, true);
     ctx.restore();
     if (k && id) schildVon.set("area:" + id, k);
@@ -5876,11 +6324,13 @@ function drawLine(l, bisMaus, id){
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
-  /* the shield above the middle of the line, and the chain badge at its start */
-  if (view.z > 1.2 && (l.label || l.soll)){
+  /* the shield above the middle of the line, and the chain badge at its
+     start; the shield also stands on a bare order with accepted teams */
+  if (view.z > 1.2 && (l.label || l.soll || (id && !fremdL && zuordZahlen({art: "line", id}).fest))){
     const [mx,my] = pts[Math.floor(pts.length/2)];
     ctx.save(); ctx.globalAlpha = vorL ? .72 : (fertigL ? .55 : 1);
-    const k = befehlSchild(mx, my - br*2.4 - 12*uiScale, {name: l.label, soll: fremdL ? 0 : +l.soll || 0, farbe: lf || null, seite: f});
+    const k = befehlSchild(mx, my - br*2.4 - 12*uiScale, Object.assign({name: l.label, soll: fremdL ? 0 : +l.soll || 0, farbe: lf || null, seite: f},
+      fremdL || !id ? {} : zuordIstFeld("line", id), {ohneBalken: fertigL}));
     if (k && fertigL) befehlAbzeichen(k.x1, k.y0, "\u2713", lf || f, true);
     ctx.restore();
     if (k && id) schildVon.set("line:" + id, k);
@@ -6426,7 +6876,10 @@ function drawArrow(a){
     x2 = ex; y2 = ey;
   }
 
-  const mit = joinOf(a.id), staerke = mit.reduce((s,j)=>s+j.n, 0);
+  const mit = joinOf(a.id), zusagen = mit.reduce((s,j)=>s+j.n, 0);
+  /* accepted assignments outrank the commitments: on the shield, on the
+     badge at the foot and in the width of the arrow */
+  const staerke = fremd ? zusagen : zuordIst("arrow", a.id, zusagen);
   const breite = Math.max(2.8, (2.9 + Math.min(staerke,24)*0.5)*Math.sqrt(view.z))*uiScale;
   const pfad = pfeilForm(x1,y1,cx,cy,x2,y2,breite);
   pfadVon.set(a.id, pfad);
@@ -7275,9 +7728,11 @@ function setPara(town, f, plan, extra){
   /* the block keeps its name, strength, colour and chain across a change of
      side or plan - those belong to the order, not to the side */
   const alt = paraAt(town);
-  /* the state travels with the block only while it stays the same side's;
-     a new block, or one changing side, starts planned */
-  const v = f == null ? null : Object.assign({}, alt ? {label: alt.label, soll: alt.soll, farbe: alt.farbe, op: alt.op, vor: alt.vor, folge: alt.folge, st: +alt.f === +f ? alt.st : undefined} : {},
+  /* the state travels with the block only while it stays the same side's,
+     and so does the moment it went active; a new block, or one changing
+     side, starts planned */
+  const v = f == null ? null : Object.assign({}, alt ? {label: alt.label, soll: alt.soll, farbe: alt.farbe, op: alt.op, vor: alt.vor, folge: alt.folge,
+                                                        st: +alt.f === +f ? alt.st : undefined, aktT: +alt.f === +f ? alt.aktT : undefined} : {},
                                             {f, plan: !!plan, art: (alt && alt.art !== undefined) ? alt.art : artNeu()}, extra || {});
   if (v) for (const k of Object.keys(v)) if (v[k] === undefined || v[k] === "" || v[k] === null) delete v[k];
   if (v && v.f === undefined) v.f = f;
@@ -9764,6 +10219,16 @@ function arrowDialog(a){
       ${mit.length && !fremd ? `<div class="tw"><table><thead><tr><th>Player</th><th>Teams</th></tr></thead>
         <tbody>${mit.map(m=>`<tr${m.mine?' class="me"':''}><td>${esc(m.name||m.who)}${m.mine?" <em>you</em>":""}</td>
           <td>${m.n}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      ${fremd || a.entwurf ? "" : (() => {
+        /* the assignments beside the commitments: accepted teams from
+           every player, the pending ones in brackets */
+        const {fest, offen} = zuordZahlen({art: "arrow", id: a.id});
+        return `<div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Assigned: <b>${fest}</b> team${fest === 1 ? "" : "s"}${
+          offen ? ` (${offen} pending)` : ""}</span>
+        <button class="btn" id="a-zuord" style="font-size:11px">Assign my team \u2026</button>
+      </div>`;
+      })()}
       <div class="row" style="align-items:center">
         ${fremd ? `<span style="flex:1"></span>` : `<span style="font-size:12px;color:var(--dim);flex:1">Your commitment</span>
         <input type="number" id="a-n" min="0" max="99" value="${meins ? meins.n : 0}">`}
@@ -9830,6 +10295,12 @@ function arrowDialog(a){
     </div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
   zustandVerdrahten();
+  document.getElementById("a-zuord")?.addEventListener("click", ()=>{
+    const b = alleBefehle(true).find(x => x.art === "arrow" && x.id === a.id)
+      || {art: "arrow", id: a.id, key: befehlKey("arrow", a.id), v: a, by: a.by,
+          name: a.label || (MAP.n[a.from][0] + " \u2192 " + MAP.n[a.to][0]), zs: befehlZustand(a.id, a)};
+    zuordWahl(b, ()=>arrowDialog(a));
+  });
   document.querySelectorAll("#dlg .pf-farben button").forEach(b => b.addEventListener("click", ()=>{
     const farbeFeld = document.getElementById("a-farbe");
     if (farbeFeld) farbeFeld.value = b.dataset.farbe;
@@ -17523,6 +17994,24 @@ function kbBestaetigen(i){
   KB.status = `Line ${i + 1} confirmed - name, owner and type locked.`;
   kbZeichnen();
 }
+/* REGISTERED SHORTCUTS from the small browser extension (erweiterung/):
+   Ctrl+Shift+1 confirms the shown unit, 2 steps one unit back, 3 one
+   forward. The browser registers the keys and the extension forwards them
+   as a window message; nothing here reads keys, nothing reaches the game. */
+window.addEventListener("message", ev => {
+  const m = ev.data;
+  if (!m || m.hng !== "taste" || ev.source !== window) return;
+  if (!KB){ toast("Open Units first, then the shortcuts work."); return; }
+  const i = kbWahl();
+  if (m.was === "bestaetigen"){
+    if (i === null) toast("No unit picked yet.");
+    else kbBestaetigen(i);
+  } else if (m.was === "zurueck"){
+    kbHandSetzen(Math.max(0, (i === null ? 1 : i) - 1), true); kbZeichnen();
+  } else if (m.was === "vor"){
+    kbHandSetzen(Math.min(KB.N - 1, (i === null ? -1 : i) + 1), true); kbZeichnen();
+  }
+});
 function kbVorruecktSetzen(an){
   kbVorrueckt = !!an;
   try { localStorage.setItem("kb_vorrueckt", kbVorrueckt ? "1" : "0"); } catch(e){}
@@ -36982,7 +37471,7 @@ function after(){
      Speicher, wenn gleich darauf gesichert wird. */
   altlastFegen();
   rebuildUnits(); sel = null; save(); side(); tally(); draw();
-  kopfzeile(); depotZeichnen(); boardZahl(); kraftLeiste();
+  kopfzeile(); depotZeichnen(); boardZahl(); ordersZahl(); kraftLeiste();
 }
 
 /* The help window - opened from the gear menu. */
@@ -36991,7 +37480,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 772752b3bd</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 39f7f6d871</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -37135,7 +37624,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "772752b3bd";
+const BAU = "39f7f6d871";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -37400,7 +37889,9 @@ async function syncPull(){
       toast("A new war has started — the old map is gone.");
       spangenErinnern();
     }
-    if (n){ rebuildUnits(); befehlAutoAbschluss(); save(); side(); tally(); draw(); kopfzeile(); boardZahl();
+    if (n){ rebuildUnits(); befehlAutoAbschluss(); save(); side(); tally(); draw(); kopfzeile(); boardZahl(); ordersZahl();
+      /* the chain move waits until this pull has let go of its flag */
+      setTimeout(() => { try { if (zuordNachruecken()) draw(); ordersZahl(); } catch(e){} }, 0);
             kraftLeiste(); if (showDepot) depotZeichnen(); }
     /* Die vierzig Runden sind nie erreicht worden, solange die Tabelle
        kleiner als vierzigtausend Zeilen ist. Wenn doch, ist das keine
@@ -37795,6 +38286,9 @@ async function syncStart(){
       for (const id of Object.keys(S[b])){
         const t = String(id).split(":");
         if (t[n-1] !== alt) continue;
+        /* an assignment names its order in front; a line or area of my own
+           carries my old id there too, behind the dot (see zuordSchluessel) */
+        if (b === "zuord" && t[0].endsWith("." + alt)) t[0] = t[0].slice(0, t[0].length - alt.length) + neuId;
         t[n-1] = neuId;
         S[b][t.join(":")] = S[b][id];
         delete S[b][id];
@@ -38322,7 +38816,7 @@ async function mitgliederDialog(meldung){
   /* Einmaliger Umzug der Kampfeinheiten-Namen aus der geteilten Zeile in
      diesen Browser. Muss vor der ersten Anzeige laufen. */
   namenAbholen();
-  rebuildUnits(); kopfzeile(); tally(); tips(); depotZeichnen(); boardZahl();
+  rebuildUnits(); kopfzeile(); tally(); tips(); depotZeichnen(); boardZahl(); ordersZahl();
   kraftLeiste(); resize();
   mitgliederKnopf();
   texteAnwenden();
