@@ -5816,6 +5816,8 @@ function namenAn(d){
   if (n.name) raus.name = atNameSauber(n.name);
   if (n.tag)  raus.tag  = atTagSauber(n.tag);
   if (n.st){ raus.st = n.st; raus.stT = n.stT; raus.stO = n.stO; }
+  /* OWN NAMES CUT OFF: the mark rides with the name, see below */
+  if (n.cut && raus.name) raus.cut = 1;
   return raus;
 }
 /* Namen und Kuerzel aus der geteilten Zeile herausholen und hierher legen.
@@ -5864,8 +5866,11 @@ function namenAbstreifen(liste){
     if (d.name) alt.name = atNameSauber(d.name);
     if (d.tag)  alt.tag  = atTagSauber(d.tag);
     if (d.st !== undefined){ alt.st = d.st; alt.stT = d.stT; alt.stO = d.stO; }
+    /* OWN NAMES CUT OFF: the mark stays here with the name, never in the
+       shared row */
+    if (d.cut && d.name) alt.cut = 1; else delete alt.cut;
     eigenNamen[d.id] = alt; geaendert = true;
-    const k = {...d}; delete k.name; delete k.tag; delete k.st; delete k.stT; delete k.stO;
+    const k = {...d}; delete k.name; delete k.tag; delete k.st; delete k.stT; delete k.stO; delete k.cut;
     return k;
   });
   if (geaendert) namenSichern();
@@ -5876,6 +5881,68 @@ function myDepot(){
   return aufSeite(myDepotAlle(), aktiveSeite());
 }
 const teamById = id => myDepot().find(d => d.id === id);
+
+/* ---- OWN NAMES CUT OFF ----
+   The game cuts long unit names in its lists with dots. An enemy's name
+   is completed from its owner, which stands one line below; one's own
+   unit has no such line, the owner is oneself. So a cut name of one's
+   own is filed without the dots and marked cut: 1, the mark living beside
+   the name in the private store. A whole name read later, from the unit
+   box or the mouse-over window, replaces it and clears the mark.
+   The match is the enemy rule turned around: the beginning on file
+   against the same length of the whole name, one slip per six characters,
+   at least one; the tag decides first where both carry one. */
+const OWN_PUNKTE = /\s*(?:\u2026|\.{2,})\s*$/;
+const eigenNameAbgeschnitten = t => OWN_PUNKTE.test(String(t == null ? "" : t));
+const eigenNameKern = t => atNameSauber(String(t == null ? "" : t).replace(OWN_PUNKTE, ""));
+function eigenCutSetzen(d, cut){
+  const k = {...d};
+  if (cut && k.name) k.cut = 1; else delete k.cut;
+  return k;
+}
+/* the index of the cut team a whole name belongs to, -1 for none */
+function eigenCutTreffer(liste, vollName, tag){
+  const tk = atTagKey(tag), VU = String(vollName || "").trim().toUpperCase();
+  if (VU.length < 3) return -1;
+  let best = -1, bestW = Infinity, bestN = 0;
+  (liste || []).forEach((d, i) => {
+    if (!d || !d.cut || !d.name) return;
+    const dk = atTagKey(d.tag);
+    /* tags are readings too: one slip is allowed, a clearly foreign tag is out */
+    const tagGleich = !!(tk && dk && (dk === tk || (tk.length >= 3 && levenshtein(dk, tk) <= 1)));
+    if (tk && dk && !tagGleich) return;
+    const K = String(d.name).trim().toUpperCase();
+    if (K.length < 3 || K.length > VU.length) return;
+    const dist = levenshtein(K, VU.slice(0, K.length));
+    if (dist > Math.max(1, Math.floor(K.length/6))) return;
+    const w = (tk && dk === tk) ? dist - 100 : (tagGleich ? dist - 50 : dist);
+    if (w < bestW){ bestW = w; best = i; bestN = 1; }
+    else if (w === bestW) bestN++;
+  });
+  /* two stumps that fit equally well: nobody is completed at random */
+  return bestN === 1 ? best : -1;
+}
+/* a whole name of one's own unit completes the cut one on file; true when
+   a team was changed */
+function eigenNameVervollstaendigen(vollName, tag){
+  if (!vollName || eigenNameAbgeschnitten(vollName)) return false;
+  const mein = myDepotAlle().slice();
+  /* the whole name is on file already, as a whole: nothing to complete,
+     and no stump is to become its double */
+  const tk = atTagKey(tag), vk = namKey(String(vollName));
+  if (mein.some(d => d && !d.cut && d.name && ((tk && atTagKey(d.tag) === tk) || namKey(String(d.name)) === vk))) return false;
+  const j = eigenCutTreffer(mein, vollName, tag);
+  if (j < 0) return false;
+  const voll = atNameSauber(vollName);
+  if (!voll) return false;
+  const neu = eigenCutSetzen({...mein[j], name: voll}, false);
+  if (!neu.tag && tag) neu.tag = atTagSauber(tag);
+  mein[j] = neu;
+  depotSchreiben({list: mein});
+  if (typeof depotZeichnen === "function") depotZeichnen();
+  toast(`Name completed: ${voll}`);
+  return true;
+}
 
 /* ---- how a depot grew over time ----
    Sync keeps exactly one row per player and only the newest wins, so a
@@ -10206,8 +10273,9 @@ function depotZeichnen(){
         <span>${symbolSVG(d.k, c, 24, 17)}</span>
         <span class="n">
           <span class="zeile2"><input class="tname" data-id="${esc(d.id)}" value="${esc(d.name||"")}"
-              placeholder="${esc(atName(d.k))}" spellcheck="false" maxlength="${TEAM_NAME_MAX}"
-              ${d.name ? 'readonly title="Double-click to rename"' : ""}>
+              placeholder="${esc(d.cut ? "cut off, complete it" : atName(d.k))}" spellcheck="false" maxlength="${TEAM_NAME_MAX}"
+              ${d.name ? `readonly title="${d.cut ? "Name cut off in the game. Double-click to complete it" : "Double-click to rename"}"` : ""}>${
+            d.cut ? `<span style="flex:0 0 auto;color:var(--dim2)" title="Name cut off in the game. Hover the unit in the game or type the rest.">…</span>` : ""}
             <input class="ttag" data-id="${esc(d.id)}" value="${esc(d.tag||"")}"
               placeholder="TAG" spellcheck="false" maxlength="10"
               ${d.tag ? 'readonly title="Double-click to change"' : ""}></span>
@@ -10249,12 +10317,17 @@ function depotZeichnen(){
       const feld = inp.classList.contains("ttag") ? "tag" : "name";
       /* the bolt sits on the way in, not on the keyboard - a value may
          reach here from anywhere */
-      const wert = feld === "tag" ? atTagSauber(inp.value) : atNameSauber(inp.value);
+      const roh = inp.value;
+      const wert = feld === "tag" ? atTagSauber(roh) : eigenNameKern(roh);
       if (inp.value !== wert) inp.value = wert;
-      const alt = (myDepot().find(d => d.id === inp.dataset.id) || {})[feld] || "";
-      if (alt === wert) return;
-      setMyDepot(myDepot().map(d => d.id === inp.dataset.id ? {...d, [feld]: wert} : d));
-      if (alt) toast(`Renamed: ${alt} → ${wert || "(none)"}`);
+      const vorher = myDepot().find(d => d.id === inp.dataset.id) || {};
+      const alt = vorher[feld] || "";
+      /* OWN NAMES CUT OFF: a name saved here without trailing dots is the
+         whole name and the mark falls; saved with dots it stays cut */
+      const cutNeu = feld === "name" ? (!!wert && eigenNameAbgeschnitten(roh)) : !!vorher.cut;
+      if (alt === wert && cutNeu === !!vorher.cut) return;
+      setMyDepot(myDepot().map(d => d.id === inp.dataset.id ? eigenCutSetzen({...d, [feld]: wert}, cutNeu) : d));
+      if (alt && alt !== wert) toast(`Renamed: ${alt} → ${wert || "(none)"}`);
       depotZeichnen();
     });
   });
@@ -17372,6 +17445,10 @@ function kbVerarbeiten(R, vorgabe){
       if (KB.ort === null && e.stadt !== null && e.stadt !== undefined) kbOrtSetzen(e.stadt);
       const hinweisBuch = kbBuchHinweis(z);
       KB.status = `Writing down ${e.tag || ""} ${e.name}${hinweisBuch ? ", " + hinweisBuch : ""} …`;
+      /* OWN NAMES CUT OFF: the whole name of one's own unit completes a cut
+         one on file in the depot; the fresh reading counts, not a hand text,
+         and character soup completes nothing */
+      if (z.eigen && !z.unlesbar && e.name && !kbUnvoll(z)) eigenNameVervollstaendigen(e.name, e.tag);
       kbSchreiben(z);
     }
   }
@@ -18089,17 +18166,27 @@ async function kbTooltipLesen(job){
     const w = kbWahl(), zw = (w !== null && w !== undefined) ? KB.zeilen[w] : null;
     if (zw && zw.status === "erfasst" && zw.tag && tk.length >= 3 && levenshtein(atTagKey(zw.tag), tk) <= 1) z = zw;
   }
-  if (!z){ KB.status = `Mouse-over read: ${tag} - ${name}, no line with that tag.`; kbZeichnen(); return; }
+  if (!z){
+    /* OWN NAMES CUT OFF: no sheet line, but a stump of one's own under
+       exactly this tag: the window's whole name completes it */
+    if (!(teil && teil.kurz) && tk && myDepotAlle().some(d => d && d.cut && atTagKey(d.tag) === tk)) eigenNameVervollstaendigen(name, tag);
+    KB.status = `Mouse-over read: ${tag} - ${name}, no line with that tag.`; kbZeichnen(); return;
+  }
   const alt = String(z.name || "");
   const kern = alt.replace(/\s*(?:\u2026|\.{2,})\s*$/, "").trim();
   /* the line this window belongs to, for the crew rows read after it -
      only once the name agrees, a refused name is no proof of the line */
-  if (kern && kern.toUpperCase() === name.toUpperCase() && !kbUnvoll(z)){ KB.tooltipZeile = {kenn: job.kenn, i: z.i}; return; }
+  /* OWN NAMES CUT OFF: the window's whole name of one's own unit completes
+     a cut one on file in the depot, whether or not the sheet line knew it
+     already; a window name cut off itself completes nothing */
+  const eigenVoll = () => { if (z.eigen && !(teil && teil.kurz)) eigenNameVervollstaendigen(name, tag); };
+  if (kern && kern.toUpperCase() === name.toUpperCase() && !kbUnvoll(z)){ KB.tooltipZeile = {kenn: job.kenn, i: z.i}; eigenVoll(); return; }
   const anfang = kern.toUpperCase().slice(0, Math.max(3, kern.length - 2));
   const passt = !kern || kbUnvoll(z) || name.toUpperCase().startsWith(anfang);
   if (!passt){ KB.status = `Mouse-over says ${tag} - ${name}; line ${z.i + 1} reads ${alt} - not taken over.`; kbZeichnen(); return; }
   KB.tooltipZeile = {kenn: job.kenn, i: z.i};
   z.name = name; z.nameVoll = true; z.nameZuv = Math.max(+z.nameZuv || 0, zuv);
+  eigenVoll();
   KB.status = `Line ${z.i + 1}: full name from the mouse-over window - ${name}.`;
   kbZeichnen();
 }
@@ -19674,17 +19761,34 @@ function kbBehalten(){
       const k = kand[0] || "infantry";
       const tk = atTagKey(z.tag), nk = namKey(String(z.name || ""));
       const st = (z.hp && z.hp.length) ? z.hp.map(h => h ? [h[0], h[1]] : null) : null;
-      const j = mein.findIndex(d => tk ? atTagKey(d.tag) === tk : (nk.length >= 3 && namKey(String(d.name || "")) === nk));
+      let j = mein.findIndex(d => tk ? atTagKey(d.tag) === tk : (nk.length >= 3 && namKey(String(d.name || "")) === nk));
+      /* OWN NAMES CUT OFF: a cut name is filed without its dots and marked;
+         a whole name finds the team filed under its cut beginning and
+         replaces it, never the other way */
+      const unvoll = kbUnvoll(z), kern = eigenNameKern(z.name);
+      if (j < 0 && kern && !unvoll && !z.unlesbar) j = eigenCutTreffer(mein, z.name, z.tag);
+      /* the other way round: a cut reading of a team filed whole already
+         (no tag to tell them apart) joins that team and leaves its whole
+         name alone */
+      if (j < 0 && unvoll && !tk && kern.length >= 3){
+        const sk = namKey(kern);
+        j = mein.findIndex(d => d && !d.cut && d.name && namKey(String(d.name)).startsWith(sk));
+      }
       const stTeil = st ? {st, stT: jetztE, stO: ort} : {};
       if (j >= 0){
-        mein[j] = Object.assign({}, mein[j], (z.typ && mein[j].k !== z.typ) ? {k: z.typ} : {},
-                                (!mein[j].name && z.name && !kbUnvoll(z)) ? {name: atNameSauber(z.name)} : {},
-                                (!mein[j].tag && z.tag) ? {tag: atTagSauber(z.tag)} : {}, stTeil);
+        const nameTeil = (kern && (!mein[j].name || (mein[j].cut && !unvoll))) ? {name: kern} : {};
+        /* a stump filed whole before this rule (the dots were stripped in
+           silence) becomes a marked stump when it is read cut once more */
+        const stumpfGleich = unvoll && !!mein[j].name && namKey(String(mein[j].name)) === namKey(kern);
+        mein[j] = eigenCutSetzen(Object.assign({}, mein[j], (z.typ && mein[j].k !== z.typ) ? {k: z.typ} : {},
+                                nameTeil,
+                                (!mein[j].tag && z.tag) ? {tag: atTagSauber(z.tag)} : {}, stTeil),
+                                 nameTeil.name ? unvoll : (!!mein[j].cut || stumpfGleich));
         eigenAlt++;
       } else {
-        mein.push(Object.assign({id: Math.random().toString(36).slice(2,9), k,
-                                 name: kbUnvoll(z) ? "" : atNameSauber(z.name || ""), tag: atTagSauber(z.tag || ""),
-                                 f: clanFaktion()}, stTeil));
+        mein.push(eigenCutSetzen(Object.assign({id: Math.random().toString(36).slice(2,9), k,
+                                 name: kern, tag: atTagSauber(z.tag || ""),
+                                 f: clanFaktion()}, stTeil), unvoll));
         eigenNeu++;
       }
       z.gespeichert = true;
@@ -29136,7 +29240,11 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
       const k = z.querySelector("select.typ").value;
       const felder = z.querySelectorAll("input[type=text]");
       const id = Math.random().toString(36).slice(2,9);
-      liste.push({id, k, name: atNameSauber(felder[0].value), tag: atTagSauber(felder[1].value)});
+      /* OWN NAMES CUT OFF: the mark stays unless the name was completed here */
+      const nameRoh = felder[0].value, name = eigenNameKern(nameRoh);
+      const cut = !!name && (eigenNameAbgeschnitten(nameRoh) ||
+                             (z.dataset.cut === "1" && name === eigenNameKern(z.dataset.gelesen)));
+      liste.push(eigenCutSetzen({id, k, name, tag: atTagSauber(felder[1].value)}, cut));
       const tw = z.dataset.stadt;
       if (tw !== "") gestellt.push([id, +tw]);
       n++;
@@ -30562,7 +30670,7 @@ async function depotAusRaster(quelle, melde){
                            (r.kastenX[1] - r.kastenX[0]) + r.P*0.06, r.P*0.48);
 
     /* 2. Name und Kuerzelzeile. */
-    let name = "", kzZeile = "", kzAlle = [];
+    let name = "", kzZeile = "", kzAlle = [], cut = false;
     try {
       /* Der Name ueber beide Farbwege - es gewinnt, was die Erkennung selbst
          hoeher bewertet. Sitzt der erste schon sicher, bleibt es dabei. */
@@ -30578,8 +30686,10 @@ async function depotAusRaster(quelle, melde){
            saeubern strips the dots */
         if (a.symbole && a.symbole.length) a.text = ocrSchriftPruefen(nb, a.text, a.symbole);
         const roh = atStrichZuI(String(a.text || "").replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ")).trim();
-        const txt = saeubern(atPunkteErgaenzen(roh, (typeof S !== "undefined" && S.name) || null, unitsBekannteBesitzer) || roh);
-        if (txt && a.zuv > bestZ){ bestZ = a.zuv; name = txt; }
+        const voll = atPunkteErgaenzen(roh, (typeof S !== "undefined" && S.name) || null, unitsBekannteBesitzer);
+        const txt = saeubern(voll || roh);
+        /* OWN NAMES CUT OFF: dots the owner rule could not resolve leave a mark */
+        if (txt && a.zuv > bestZ){ bestZ = a.zuv; name = txt; cut = !voll && eigenNameAbgeschnitten(roh); }
         if (bestZ >= 85) break;
       }
       /* Die Kuerzelzeile ueber beide Farbwege und beide Aufbereitungen. Ein
@@ -30650,7 +30760,7 @@ async function depotAusRaster(quelle, melde){
       }
     }
     if (!name && !tag && !gewaehlt) continue;
-    raus.push({name, tag, ort, stadt, kand, gewaehlt,
+    raus.push({name, tag, ort, stadt, kand, gewaehlt, cut: !!name && cut,
                staerke: gute.map(p => p.join("/")).join("  ")});
   }
   if (!raus.length) return null;
@@ -30756,6 +30866,13 @@ function depotAnzeigen(beste, rohBest, bild, setz){
   }).join("");
   kiste.querySelectorAll(".zeile").forEach((z,i) => {
     z.dataset.stadt = beste[i].stadt === null ? "" : beste[i].stadt;
+    /* OWN NAMES CUT OFF: what was read cut stays marked unless completed here */
+    z.dataset.cut = beste[i].cut ? "1" : "";
+    z.dataset.gelesen = beste[i].name || "";
+    if (beste[i].cut){
+      const nf = z.querySelector("input[type=text]");
+      if (nf) nf.title = "Name cut off in the game. Hover the unit in the game or type the rest.";
+    }
     /* Ein hergeleitetes Kuerzel darf nicht aussehen wie ein gelesenes. */
     if (beste[i].tagAbgeleitet){
       const tf = z.querySelectorAll("input[type=text]")[1];
@@ -30964,9 +31081,11 @@ function depotAusText(text){
       }
       else name = saeubern(rest[0]);
     }
+    /* OWN NAMES CUT OFF: the raw line still carries the game's dots */
+    const cut = !!name && rest.length > 0 && eigenNameAbgeschnitten(rest[0]);
     /* Auch eine Zeile ganz ohne lesbaren Namen wird angeboten: der Typ steht
        fest, den Namen tippt man in einer Sekunde nach. */
-    raus.push({name, tag, ort, stadt, kand, gewaehlt: kand[0]});
+    raus.push({name, tag, ort, stadt, kand, gewaehlt: kand[0], cut});
   }
   return raus;
 }
@@ -38377,7 +38496,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 7d0ebf7334</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 6edcdf836b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -38521,7 +38640,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "7d0ebf7334";
+const BAU = "6edcdf836b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
