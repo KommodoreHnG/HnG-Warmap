@@ -4006,11 +4006,14 @@ function stSymbole(k, st){
      unitIdx  own teams (u.s), stamp S.units[town:who].t in ms
    The capture writes the SAME unit into spot AND edep, so per town and
    side the MAXIMUM of both counts is taken, not the sum. */
+/* The Kommodore's age classes (05.09.): a sighting is fresh for five
+   minutes, still warm for half an hour, an hour old at most - after that it
+   is old. War-map intelligence ages in minutes, not days. */
 const AUFM_STUFEN = [
-  {bis:    3600e3, k:"frisch",  n:"< 1 h",  a:1.00, f:"#7dff9b"},
-  {bis: 12*3600e3, k:"stunden", n:"< 12 h", a:0.85, f:"#d8e86a"},
-  {bis: 48*3600e3, k:"tag",     n:"< 48 h", a:0.62, f:"#e8a34a"},
-  {bis:  Infinity, k:"alt",     n:"older",  a:0.38, f:"#c8453a"},
+  {bis:   5*60e3, k:"frisch",  n:"< 5 min",  a:1.00, f:"#7dff9b"},
+  {bis:  30*60e3, k:"stunden", n:"< 30 min", a:0.85, f:"#d8e86a"},
+  {bis:   3600e3, k:"tag",     n:"< 1 h",    a:0.62, f:"#e8a34a"},
+  {bis:  Infinity, k:"alt",    n:"older",    a:0.38, f:"#c8453a"},
 ];
 const aufmStufe = t => AUFM_STUFEN.find(q => alter(t) < q.bis) || AUFM_STUFEN[3];
 function aufmarschKarte(){
@@ -5843,13 +5846,13 @@ function pfeilForm(x1,y1,cx,cy,x2,y2,breite){
      seventy-four hundredths and measures three and four tenths of a width
      to each side, and the shaft runs harder into it - the shape of the
      thing it is modelled on. */
-  const kopf = 0.74, N = 20, links = [], rechts = [];
+  const kopf = 0.82, N = 20, links = [], rechts = [];
   for (let i=0;i<=N;i++){
     const t = kopf*i/N, [px,py] = B(t), [ux,uy] = Bs(t), w = breite*(1 - 0.34*t);
     links.push([px - uy*w, py + ux*w]);
     rechts.push([px + uy*w, py - ux*w]);
   }
-  const [hx,hy] = B(kopf), [hux,huy] = Bs(kopf), kb = breite*3.8;
+  const [hx,hy] = B(kopf), [hux,huy] = Bs(kopf), kb = breite*3.1;
   const p = new Path2D();
   p.moveTo(links[0][0], links[0][1]);
   for (const q of links) p.lineTo(q[0], q[1]);
@@ -6256,7 +6259,7 @@ function drawArrow(a){
   }
 
   const mit = joinOf(a.id), staerke = mit.reduce((s,j)=>s+j.n, 0);
-  const breite = Math.max(2.2, (2.2 + Math.min(staerke,24)*0.42)*Math.sqrt(view.z))*uiScale;
+  const breite = Math.max(2.8, (2.9 + Math.min(staerke,24)*0.5)*Math.sqrt(view.z))*uiScale;
   const pfad = pfeilForm(x1,y1,cx,cy,x2,y2,breite);
   pfadVon.set(a.id, pfad);
   const mitte = [];                       // fuer die Trefferpruefung, siehe griffTol
@@ -8206,16 +8209,26 @@ function setFaction(f){
   document.querySelectorAll(".fac").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.f === f)));
   tips(); if (sel !== null) side();
 }
-const fBox = document.getElementById("factions");
-FACTIONS.forEach(f => {
-  const b = document.createElement("button");
-  b.className = "fac"; b.dataset.f = f.id; b.style.setProperty("--f", f.color);
-  b.setAttribute("aria-pressed", String(f.id === faction));
-  b.innerHTML = `<span class="dot"></span><span class="lbl">${f.tag}</span>`;
-  b.title = f.name;
-  b.addEventListener("click", () => setFaction(f.id));
-  fBox.appendChild(b);
-});
+/* THE OWN SIDE STANDS FIRST. The buttons are drawn again once the clan's
+   side arrives from the server - until then the order and the tick could
+   sit on the wrong button. */
+function fraktionenZeichnen(){
+  const fBox = document.getElementById("factions");
+  if (!fBox) return;
+  fBox.innerHTML = "";
+  const eigene = clanFaktion();
+  const reihe = [...FACTIONS].sort((a, b) => (a.id === eigene ? 0 : 1) - (b.id === eigene ? 0 : 1));
+  reihe.forEach(f => {
+    const b = document.createElement("button");
+    b.className = "fac"; b.dataset.f = f.id; b.style.setProperty("--f", f.color);
+    b.setAttribute("aria-pressed", String(f.id === faction));
+    b.innerHTML = `<span class="dot"></span><span class="lbl">${f.tag}</span>`;
+    b.title = f.name;
+    b.addEventListener("click", () => setFaction(f.id));
+    fBox.appendChild(b);
+  });
+}
+fraktionenZeichnen();
 function tips(){
   const p = FACTIONS[faction].name;
   document.getElementById("tip").innerHTML = {
@@ -36755,7 +36768,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b7fe247eb8</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 749c9178c1</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -36899,7 +36912,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b7fe247eb8";
+const BAU = "749c9178c1";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -37148,6 +37161,7 @@ async function syncPull(){
        seine Wahl. */
     if (!faktionSelbstGewaehlt && faction !== clanFaktion()){
       faction = clanFaktion();
+      fraktionenZeichnen(); tips();
       side(); draw();
     }
     /* Die Rechte kommen mit demselben Abruf herein. Ohne das hier bliebe
@@ -38105,6 +38119,7 @@ async function mitgliederDialog(meldung){
   themaLaden();
   soldatenUmziehen();
   faction = clanFaktion();     // zeichnen in der Farbe, in der man spielt
+  fraktionenZeichnen();        // the tick and the order follow that side
   werkzeugeAuffrischen();      // was nicht erlaubt ist, gar nicht erst anbieten
   leisteBauen(); menueBauen(); fingerSteuerung(); handySchalter();
   layAnwenden();
