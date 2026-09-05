@@ -552,7 +552,7 @@ body.zieht #mapwrap canvas{pointer-events:none}
   padding-bottom:1px;border-bottom:1px solid rgba(128,140,160,.14)}
 .grp-h span{font-variant-numeric:tabular-nums}
 .grp-h .stale{opacity:.55;font-style:italic}
-.tw tbody tr[data-go]:hover{background:rgba(217,164,65,.1)}
+.tw tbody tr[data-go]:hover,.tw tbody tr[data-pk]:hover{background:rgba(217,164,65,.1)}
 .row{display:flex;gap:5px}
 .row select,.row input{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
   padding:5px 6px;outline:0;min-width:0}
@@ -5523,6 +5523,178 @@ function overtimePruefen(){
   if (orte.length) toast("Overtime at " + orte.join(", ") + " is over: defenders win unless the attackers hold all three objectives.");
   if (weg) save();
   return neu || weg;
+}
+
+/* ---- THE POINTS ACCOUNT (05.09.2026) ----
+   Every hand that helps the clan earns a point. Three accounts per player:
+   recon (first finds, battles marked, the map kept), logistic (the depot
+   kept) and orders (given and carried out). The weighting is a field on
+   every booking and will be tuned later; for now everything counts one.
+
+   THE PAGE ADDS NOTHING UP. The server books every point from the rows it
+   already receives - first:, fight:, owner:, depot:, ok: and the order rows
+   themselves - so nobody can write himself a score. The Scouts table that
+   stood here before was the prototype: it counted the first: rows locally
+   and could be fooled by anyone with the scouting right. This asks the
+   server for the totals (warmap_punkte_stand) and, for the leader or for
+   oneself, for the ledger behind them (warmap_punkte_buch): who renames
+   his units back and forth shows up there line by line. */
+const PUNKTE_KONTEN = [
+  {k:"recon",    n:"Recon",    kurz:"R"},
+  {k:"logistic", n:"Logistic", kurz:"L"},
+  {k:"order",    n:"Orders",   kurz:"O"},
+];
+/* the first-find kinds keep their names from the register (AUFK_NAME) */
+const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
+  fight: "Battles marked", map: "Map kept", unit: "Units kept", done: "Orders done"});
+const punkteAktionName = a => PUNKTE_AKTION[a] || String(a || "");
+const punkteKontoName  = k => (PUNKTE_KONTEN.find(x => x.k === k) || {n: String(k || "")}).n;
+
+/* one minute of memory, so that switching tabs does not ask the server anew */
+let punkteCache = {zeit: 0, zeilen: null};
+async function punkteLaden(){
+  if (!CFG) return null;
+  if (punkteCache.zeilen && jetzt() - punkteCache.zeit < 60000) return punkteCache.zeilen;
+  const zeilen = await rpc("warmap_punkte_stand", {p_room: CFG.room});
+  punkteCache = {zeit: jetzt(), zeilen: Array.isArray(zeilen) ? zeilen : []};
+  return punkteCache.zeilen;
+}
+
+/* rows {spieler, name, konto, aktion, punkte, letzte} -> one entry per player */
+function punkteStand(zeilen){
+  const leute = new Map();
+  for (const z of zeilen || []){
+    if (!z || !z.spieler) continue;
+    let p = leute.get(z.spieler);
+    if (!p){
+      p = {spieler: z.spieler,
+           name: z.name || (depotIdx.get(z.spieler) || {}).name || z.spieler,
+           summe: {recon: 0, logistic: 0, order: 0},
+           aktionen: {recon: [], logistic: [], order: []},
+           letzte: 0};
+      leute.set(z.spieler, p);
+    }
+    if (p.summe[z.konto] === undefined) continue;
+    const n = +z.punkte || 0;
+    p.summe[z.konto] += n;
+    p.aktionen[z.konto].push({aktion: z.aktion, punkte: n});
+    const t = z.letzte ? Date.parse(z.letzte) : 0;
+    if (t > p.letzte) p.letzte = t;
+  }
+  return leute;
+}
+
+async function punkteFuellen(){
+  const feld = document.getElementById("in-punkte");
+  if (!feld) return;
+  if (!CFG){
+    feld.innerHTML = `<div class="note">Points are counted on the server; sign in to see them.</div>`;
+    return;
+  }
+  feld.innerHTML = `<div class="empty">Loading points ...</div>`;
+  let zeilen;
+  try { zeilen = await punkteLaden(); }
+  catch(e){
+    const f2 = document.getElementById("in-punkte");
+    if (f2) f2.innerHTML = `<div class="note">Could not read the points: ${
+      esc(String(e.message || e).slice(0,140))}</div>`;
+    return;
+  }
+  if (!document.getElementById("in-punkte")) return;      // window already closed
+  punkteZeichnen(zeilen || []);
+}
+
+function punkteZeichnen(zeilen){
+  const feld = document.getElementById("in-punkte");
+  if (!feld) return;
+  const leute = punkteStand(zeilen);
+  const ich = leute.get(S.me);
+  const mein = k => ich ? ich.summe[k] : 0;
+  const nz = n => (n || 0).toLocaleString("en");
+  const darfBuch = p => istLeader() || istAdmin() || p === S.me;
+  const spalte = konto => {
+    const liste = [...leute.values()].filter(p => p.summe[konto.k] > 0)
+      .sort((a, b) => b.summe[konto.k] - a.summe[konto.k] || b.letzte - a.letzte
+                      || String(a.name).localeCompare(String(b.name)));
+    return `<div class="tw"><table>
+      <thead><tr><th>${esc(konto.n)}</th><th>Points</th></tr></thead>
+      <tbody>${liste.length ? liste.map((p, i) => `
+        <tr data-pk="${esc(p.spieler)}"${p.spieler === S.me ? ' class="me"' : ''} style="cursor:pointer">
+          <td>${i + 1}. ${esc(p.name)}${p.spieler === S.me ? " <em>you</em>" : ""}</td>
+          <td><b>${nz(p.summe[konto.k])}</b></td></tr>
+        <tr data-pd="${esc(p.spieler)}" style="display:none">
+          <td colspan="2" style="text-align:left;white-space:normal;background:var(--panel2)">
+          ${p.aktionen[konto.k].slice().sort((a, b) => b.punkte - a.punkte).map(a => `
+            <div style="display:flex;gap:8px;font-size:11px;color:var(--dim)">
+              <span style="flex:1">${esc(punkteAktionName(a.aktion))}</span>
+              <span style="font-variant-numeric:tabular-nums">${nz(a.punkte)}</span></div>`).join("")}
+          ${darfBuch(p.spieler) ? `<button class="btn" data-buch="${esc(p.spieler)}"
+             style="font-size:10.5px;margin-top:5px">Ledger</button>` : ""}
+          </td></tr>`).join("")
+        : `<tr><td colspan="2" style="text-align:left"><span class="empty">Nothing booked yet.</span></td></tr>`}
+      </tbody></table></div>`;
+  };
+  feld.innerHTML = `
+    <div class="row" style="align-items:center;gap:8px">
+      <b style="font-family:var(--schmal);text-transform:uppercase;letter-spacing:.08em;color:var(--accent)"
+        >You: R ${nz(mein("recon"))} / L ${nz(mein("logistic"))} / O ${nz(mein("order"))}</b>
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--dim2)">${leute.size} ${
+        leute.size === 1 ? "player has" : "players have"} points on record</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
+      ${PUNKTE_KONTEN.map(spalte).join("")}
+    </div>
+    <div class="note">One point for every hand that helps the clan: <b>Recon</b> for first finds,
+      battles marked and the map kept, <b>Logistic</b> for the depot kept, <b>Orders</b> for orders
+      given and carried out. The server books them from what you write on the map; this page adds
+      nothing up. Click a row to see what the points were for.</div>`;
+  feld.querySelectorAll("tr[data-pk]").forEach(tr => tr.addEventListener("click", () => {
+    const d = tr.nextElementSibling;
+    if (!d || d.dataset.pd === undefined) return;
+    d.style.display = d.style.display === "none" ? "" : "none";
+  }));
+  feld.querySelectorAll("[data-buch]").forEach(b => b.addEventListener("click", ev => {
+    ev.stopPropagation();
+    const p = leute.get(b.dataset.buch);
+    punkteBuch(b.dataset.buch, p ? p.name : b.dataset.buch);
+  }));
+}
+
+/* the ledger of one player: every booking of the last 30 days. The server
+   decides who may read it (the leader and the admin anyone, everybody else
+   only himself) and answers with a sentence otherwise. */
+async function punkteBuch(spieler, name){
+  if (!CFG){ toast("Points are counted on the server; sign in to see them."); return; }
+  openDlg(`<div class="dlg-h"><h2>Ledger: ${esc(name || spieler)}</h2>
+      <p>The last 30 days. Every point and what it was for.</p></div>
+    <div class="dlg-b"><div class="empty">Loading points ...</div></div>
+    <div class="dlg-f"><button class="btn primary" id="pb-zu">Back</button></div>`, "wide");
+  document.getElementById("pb-zu").addEventListener("click", () => { closeDlg(); intelDialog("punkte"); });
+  let zeilen = [];
+  try {
+    zeilen = await rpc("warmap_punkte_buch", {p_room: CFG.room, p_spieler: spieler, p_tage: 30});
+  } catch(e){
+    const b = document.querySelector("#dlg .dlg-b");
+    if (b && document.getElementById("pb-zu")) b.innerHTML = `<div class="note">Could not read the ledger: ${
+      esc(String(e.message || e).slice(0,140))}</div>`;
+    return;
+  }
+  const koerper = document.querySelector("#dlg .dlg-b");
+  if (!koerper || !document.getElementById("pb-zu")) return;   // window already closed
+  zeilen = Array.isArray(zeilen) ? zeilen : [];
+  koerper.innerHTML = zeilen.length ? `<div class="tw"><table>
+      <thead><tr><th>When</th><th style="text-align:left">Account</th><th style="text-align:left">Action</th>
+        <th style="text-align:left">Item</th><th>Points</th><th style="text-align:left">Source</th></tr></thead>
+      <tbody>${zeilen.map(z => `<tr>
+        <td>${esc(z.wann ? new Date(z.wann).toLocaleString() : "")}</td>
+        <td style="text-align:left">${esc(punkteKontoName(z.konto))}</td>
+        <td style="text-align:left">${esc(punkteAktionName(z.aktion))}</td>
+        <td style="text-align:left;color:var(--dim)">${esc(z.sache || "")}</td>
+        <td>${esc(z.betrag == null ? 1 : z.betrag)}</td>
+        <td style="text-align:left;color:var(--dim2)">${esc(z.quelle || "")}</td>
+      </tr>`).join("")}</tbody></table></div>`
+    : `<div class="empty">Nothing booked in the last 30 days.</div>`;
 }
 
 function setRang(player, ids){
@@ -28385,7 +28557,7 @@ function intelDialog(tab, seite){
       <button data-tab="supply"  aria-pressed="false">Supply</button>
       <button data-tab="gaps"    aria-pressed="false">Gaps</button>
       <button data-tab="spots"   aria-pressed="false">Sightings</button>
-      <button data-tab="scout"   aria-pressed="false">Scouts</button>
+      <button data-tab="punkte"  aria-pressed="false">Points</button>
     </div>
     <div class="dlg-b">
       <div class="tabp schmal" data-tab="supply">
@@ -28599,11 +28771,15 @@ function intelDialog(tab, seite){
           after a day. Click a row to fly there.</div>
       </div>
 
-      <div class="tabp" data-tab="scout"><div id="in-scout"></div></div>
+      <div class="tabp" data-tab="punkte"><div id="in-punkte">
+        <div class="empty">Loading points ...</div></div></div>
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
   tabsAktiv(document.getElementById("dlg"), tab);
-  tafelZeichnen();
+  /* the points come from the server, see THE POINTS ACCOUNT: asked for only
+     when the tab is open or opened, the cache holds a minute */
+  if (tab === "punkte") punkteFuellen();
+  document.querySelector('#dlg button[data-tab="punkte"]')?.addEventListener("click", () => { punkteFuellen(); });
   document.getElementById("d-close").addEventListener("click", closeDlg);
   document.getElementById("en-add").addEventListener("click", ()=>{
     const nm = document.getElementById("en-name").value.trim();
@@ -38201,7 +38377,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c217e32840</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 7d0ebf7334</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -38345,7 +38521,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "c217e32840";
+const BAU = "7d0ebf7334";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
