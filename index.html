@@ -571,6 +571,9 @@ textarea{background:var(--panel2);border:1px solid var(--line);border-radius:var
 .nb .l span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toggle{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11.5px}
 .toggle input{width:15px;height:15px;accent-color:var(--accent)}
+.ot-zeile{margin:1px 0 6px 23px;font-size:11.5px;line-height:1.5}
+.ot-zeile .note{margin-top:1px;font-size:11px}
+.ot-zeile .mini{margin-left:6px}
 
 /* ---------- dialogs ---------- */
 /* Das Tor liegt ueber allem und ist undurchsichtig - ohne Code soll die Karte
@@ -3065,7 +3068,7 @@ const TOPFTAFEL = {
   anon:   {wer:0, recht:"anon",  krieg:1},         // anonyme Soldatenliste
   para:   {wer:0, recht:"",      krieg:0},         // Parablock, Eigentum in der Zeile
   rolle:  {wer:0, recht:"anfordern", krieg:0},     // Rollenanforderung, Eigentum in der Zeile
-  gefecht:{wer:0, recht:"aufklaerung", krieg:0},   // Gefechtsstand aus dem Spielbild
+  gefecht:{wer:0, recht:"aufklaerung", krieg:0},   // Gefechtsstand: Verlaengerungsuhr {ot, hud}, spaeter der Battlereader
   akt:    {wer:0, recht:"",      krieg:0},         // Anwesenheitsmeldung
   /* krieg:1 since 05.09.2026: a report to the admin is about the clan, not
      about the war; the server drops the settled ones at the war cut and
@@ -4463,8 +4466,11 @@ function befehlAutoAbschluss(){
   /* enemy paras within reach of one of our capitals, see PARA SUPPLY AND THREAT */
   let drohung = false;
   try { drohung = paraBedrohungPruefen(); } catch (e){}
+  /* overtime clocks that ran out or lost their battle mark, see OVERTIME CLOCK */
+  let ot = false;
+  try { ot = overtimePruefen(); } catch (e){}
   if (getan || bewegt) ordersZahl();
-  return getan > 0 || bewegt || drohung;
+  return getan > 0 || bewegt || drohung || ot;
 }
 /* the badge is counted afresh every minute whatever happened */
 setInterval(() => { try { if (befehlAutoAbschluss()) draw(); ordersZahl(); } catch(e){} }, 60000);
@@ -5147,6 +5153,7 @@ function paraBedrohungEtikett(x, y, n){
   ctx.globalAlpha = 1; ctx.fillStyle = "#ffffff";
   ctx.fillText(text, x, y - h/2 + 0.5);
   ctx.restore();
+  return h;                                  // so the overtime plate can sit above
 }
 
 /* ---- REQUEST RECONNAISSANCE (05.09.2026) ----
@@ -5342,6 +5349,180 @@ function aufklRingeZeichnen(){
     }
   }
   ctx.restore();
+}
+
+/* ---- OVERTIME CLOCK (05.09.2026) ----
+   In an assault the HUD timer runs out and, when no side holds every
+   objective, the game goes into an overtime of at most 60 minutes that it
+   does not display: after 60:00 the defenders win, before that the
+   attackers win as soon as they hold all three objectives.
+   The map keeps ONE shared clock per contested town in the bucket
+   gefecht:<town>, value {ot: ms when the timer ran out}, written by anyone
+   with the intel right, like the battle mark itself. For now it is started
+   by hand from the side panel; later the battle reader starts it itself
+   when it reads the HUD timer at 0. Both go through overtimeStart(i).
+   Shown only while the battle mark stands (fightAt) AND a clock is set: a
+   clock whose mark is gone is cleared by the minute pass when we may
+   write, and simply not drawn otherwise. */
+const OT_DAUER = 60*60000;      // 60:00, the longest overtime
+const OT_ROT   = 50*60000;      // from 50:00 the plate turns red
+/* the stored clock of a town, or null: this war, within the replay moment */
+function gefechtStand(i){
+  const e = S.gefecht[i];
+  return (imKrieg(e) && imZeit(e) && e.v && e.v.ot > 0) ? e : null;
+}
+/* the clock that is to be shown: battle mark and clock together */
+const overtimeAn = i => (fightAt(i) && gefechtStand(i)) || null;
+/* elapsed overtime in ms; in the replay measured up to the chosen moment.
+   A clock started by hand counts from the row's server time, so two
+   machines with different clocks read the same overtime; a moment handed
+   in by the battle reader (hud) is taken as it is. */
+const otMs = e => Math.max(0, (zeitReise || jetzt()) - (e.v.hud ? e.v.ot : (e.t || e.v.ot)));
+function otMmSs(ms){
+  const s = Math.max(0, Math.floor(ms/1000));
+  return String(Math.floor(s/60)).padStart(2, "0") + ":" + String(s%60).padStart(2, "0");
+}
+/* the short form for the plate and the hover chip */
+const overtimeKurz = e => { const ms = otMs(e); return ms >= OT_DAUER ? "OT over" : "OT " + otMmSs(ms); };
+/* the one starter for hand and battle reader: wann is the moment the HUD
+   timer ran out, now when omitted. True when the clock was written. */
+/* the row may carry more than the clock one day (the battle reader's
+   state): start and clear keep the other fields */
+const gefechtRest = i => { const e = S.gefecht[i]; return (e && e.v && typeof e.v === "object") ? Object.assign({}, e.v) : {}; };
+function overtimeStart(i, wann){
+  if (!darf("aufklaerung")) return darfNicht("aufklaerung");
+  if (!fightAt(i)) return false;
+  const v = Object.assign(gefechtRest(i), {ot: +wann || jetzt(), hud: wann ? 1 : 0});
+  if (!stamp("gefecht", i, v, {n: S.name || ""})) return false;
+  save();
+  return true;
+}
+function overtimeClear(i){
+  if (!darf("aufklaerung")) return darfNicht("aufklaerung");
+  if (S.gefecht[i] && S.gefecht[i].v && !overtimeFallen(i)) return false;
+  save();
+  return true;
+}
+/* silent: the clock falls with the battle mark when we may write; other
+   fields of the row stay, the row itself goes when nothing else is in it */
+function overtimeFallen(i){
+  const e = S.gefecht[i];
+  if (!e || !e.v || !darf("aufklaerung")) return false;
+  const rest = gefechtRest(i); delete rest.ot; delete rest.hud;
+  return stamp("gefecht", i, Object.keys(rest).length ? rest : null);
+}
+/* the side panel line under the battle switch */
+function overtimeSatz(e){
+  const ms = otMs(e);
+  if (ms >= OT_DAUER) return {text: "Overtime is over (60:00): defenders win unless the attackers took all three.", vorbei: true};
+  return {text: "Overtime " + otMmSs(ms) + " of 60:00, started by " + werWar(e), vorbei: false};
+}
+function overtimeZeile(i){
+  const e = gefechtStand(i);
+  if (!e) return zeitReise ? "" : `<div class="ot-zeile" id="ot-zeile"><span id="ot-text">Overtime: not started</span>
+        <button class="mini" id="ot-start" title="Start the shared overtime clock now">Timer ran out</button></div>`;
+  const s = overtimeSatz(e);
+  return `<div class="ot-zeile" id="ot-zeile">
+        <div><span id="ot-text"${s.vorbei ? ' style="color:var(--warn,#d08b3a)"' : ""}>${esc(s.text)}</span>
+          ${zeitReise ? "" : `<button class="mini" id="ot-clear">Clear</button>`}</div>
+        <div class="note" id="ot-hint"${s.vorbei ? ' style="display:none"' : ""}>Defenders win at 60:00, attackers as soon as they hold all three objectives.</div></div>`;
+}
+/* only the text is pulled along every second; true while the clock runs */
+function overtimeZeileNachziehen(i){
+  const el = document.getElementById("ot-text");
+  const e = el && overtimeAn(i);
+  if (!e) return false;
+  const s = overtimeSatz(e);
+  el.textContent = s.text;
+  el.style.color = s.vorbei ? "var(--warn,#d08b3a)" : "";
+  const h = document.getElementById("ot-hint");
+  if (h) h.style.display = s.vorbei ? "none" : "";
+  return !s.vorbei;
+}
+let otZeileUhr = null;
+/* one interval for the panel, restarted with every rebuild of side(); it
+   ends itself once the town is no longer chosen or no clock runs */
+function overtimeZeileStarten(i){
+  if (otZeileUhr){ clearInterval(otZeileUhr); otZeileUhr = null; }
+  if (zeitReise || !overtimeZeileNachziehen(i)) return;      // the replay stands still
+  otZeileUhr = setInterval(() => {
+    if (sel !== i || zeitReise || !overtimeZeileNachziehen(i)){ clearInterval(otZeileUhr); otZeileUhr = null; }
+  }, 1000);
+}
+/* the clock on a small plate above the town, like the para plate: orange,
+   red from 50:00, dark red with "OT over" from 60:00. y is the bottom
+   edge; returns the plate height. */
+function overtimeEtikett(x, y, e){
+  const ms = otMs(e);
+  const gr = Math.max(8, Math.min(11, 6.5*Math.sqrt(view.z)))*uiScale;
+  const text = overtimeKurz(e);
+  ctx.save();
+  ctx.font = `700 ${gr}px ${SCHMAL}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const b = ctx.measureText(text).width + gr*0.9, h = gr*1.4;
+  ctx.globalAlpha = .92;
+  ctx.fillStyle = ms >= OT_DAUER ? "#8b2b24" : ms >= OT_ROT ? "#e05545" : "#f0a030";
+  ctx.fillRect(x - b/2, y - h, b, h);
+  ctx.globalAlpha = 1; ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, x, y - h/2 + 0.5);
+  ctx.restore();
+  return h;
+}
+/* is the plate of a RUNNING clock on screen? Over 60:00 nothing moves,
+   and in the replay the clock stands still. */
+function overtimeLaeuftImBild(){
+  if (view.z <= 1.2 || zeitReise) return false;
+  const WW = cv.width/dpr, HH = cv.height/dpr;
+  for (const k of Object.keys(S.gefecht)){
+    const i = +k, e = MAP.n[i] && overtimeAn(i);
+    if (!e || otMs(e) >= OT_DAUER) continue;
+    const [x, y] = toScr(MAP.n[i][1], MAP.n[i][2]);
+    if (x >= -30 && y >= -30 && x <= WW+30 && y <= HH+30) return true;
+  }
+  return false;
+}
+let otTakt = null;
+/* the map is redrawn once a second only while a running plate is on
+   screen: draw() starts the tick when it draws one, and the tick ends
+   itself after the draw that leaves none on screen. Idle otherwise. */
+function otTaktStarten(){
+  if (otTakt) return;
+  otTakt = setInterval(() => {
+    try {
+      draw();
+      /* the hover card's chip keeps pace with the plate */
+      const c = document.getElementById("h-ot"), he = hoverIdx != null && overtimeAn(hoverIdx);
+      if (c && he) c.textContent = overtimeKurz(he);
+      if (!overtimeLaeuftImBild()){ clearInterval(otTakt); otTakt = null; }
+    } catch (e){ clearInterval(otTakt); otTakt = null; }
+  }, 1000);
+}
+/* once a minute from befehlAutoAbschluss: a toast once per town and clock
+   when the overtime is over, and a clock without its battle mark is
+   cleared when we may write. No board post. */
+const otGemeldet = new Set();
+function overtimePruefen(){
+  if (zeitReise) return false;
+  let neu = false, weg = false;
+  const orte = [];
+  for (const k of Object.keys(S.gefecht)){
+    const i = +k, e = S.gefecht[k];
+    if (!MAP.n[i] || !imKrieg(e) || !e.v || !(e.v.ot > 0)) continue;
+    if (!fightAt(i)){
+      if (overtimeFallen(i)) weg = true;
+      continue;
+    }
+    const ms = otMs(e);
+    if (ms < OT_DAUER) continue;
+    const key = i + "|" + e.v.ot;
+    if (otGemeldet.has(key)) continue;
+    otGemeldet.add(key);
+    if (ms > OT_DAUER + 10*60e3) continue;      // long over, found on loading: noted, not announced
+    orte.push(MAP.n[i][0]);
+    neu = true;
+  }
+  if (orte.length) toast("Overtime at " + orte.join(", ") + " is over: defenders win unless the attackers hold all three objectives.");
+  if (weg) save();
+  return neu || weg;
 }
 
 function setRang(player, ids){
@@ -6153,9 +6334,14 @@ function draw(){
        aus 117 Ringen eine Antwort. */
     /* enemy paras sighted on this airfield: the count on a red plate,
        above the team count when there is one */
-    if (z > 1.2 && istFlugplatz(i)){
-      const dro = paraBedrohungAn(i);
-      if (dro) paraBedrohungEtikett(x, y - r - 3 - (teamsAt(i) ? Math.max(9, 8*Math.sqrt(z))*uiScale + 2 : 0), dro.n);
+    if (z > 1.2 && (istFlugplatz(i) || fightAt(i))){
+      /* the plates stack upwards: team count, para threat, overtime clock */
+      let oben = y - r - 3 - (teamsAt(i) ? Math.max(9, 8*Math.sqrt(z))*uiScale + 2 : 0);
+      const dro = istFlugplatz(i) ? paraBedrohungAn(i) : null;
+      if (dro) oben -= paraBedrohungEtikett(x, oben, dro.n) + 2;
+      /* the overtime clock, only with the battle mark, see OVERTIME CLOCK */
+      const ot = overtimeAn(i);
+      if (ot){ overtimeEtikett(x, oben, ot); if (!zeitReise && otMs(ot) < OT_DAUER) otTaktStarten(); }
     }
     if (showFlug && istFlugplatz(i)){
       const zielCap = (sel != null && isCap(sel)) ? sel : null;
@@ -8047,7 +8233,11 @@ function save(){
 addEventListener("visibilitychange", ()=>{ if (document.visibilityState === "hidden" && sparOffen) saveSofort(); });
 addEventListener("pagehide", ()=>{ if (sparOffen) saveSofort(); });
 function setOwner(i, f){ stamp("owner", i, f); save(); }
-function setFight(i, an){ stamp("fight", i, an ? 1 : null); save(); }
+function setFight(i, an){
+  stamp("fight", i, an ? 1 : null);
+  overtimeFallen(i);                     // a mark set or cleared is a new battle: the clock goes, see OVERTIME CLOCK
+  save();
+}
 function dropArrow(id){
   const k = ENTWUERFE.findIndex(a => a && a.id === id);
   if (k >= 0){ ENTWUERFE.splice(k, 1); entwuerfeSpeichern(); return; }   // a draft: just forget it
@@ -8874,7 +9064,7 @@ function neuerKrieg(){
   const startBei = new Map();
   const stst = startStaedte();
   for (const f of [0,1,2]) if (stst[f] != null) startBei.set(String(stst[f]), f);
-  for (const b of ["owner", "fight", "star", "notes", "para"])
+  for (const b of ["owner", "fight", "star", "notes", "para", "gefecht"])
     for (const id of Object.keys(S[b])){
       if (b === "owner" && startBei.has(id)) continue;
       if (S[b][id] && S[b][id].v != null) stamp(b, id, null);
@@ -8986,6 +9176,7 @@ function hoverZeigen(i, mx, my){
     ${starAt(i)||fightAt(i)||pb ? `<div class="h-tags">
       ${starAt(i)?'<span class="chip">key</span>':""}
       ${fightAt(i)?'<span class="chip fight">⚔ contested</span>':""}
+      ${(e => e ? `<span class="chip" id="h-ot" style="border-color:#f0a030;color:#f0a030">${overtimeKurz(e)}</span>` : "")(overtimeAn(i))}
       ${pb?`<span class="chip" style="border-color:var(--accent);color:var(--accent)">para ${
         pb.plan?"planned":"blocked"}${fremdeSeite(pb) ? "" : " · " + ZUSTAND_NAME[befehlZustand(`para:${i}`, pb)]}</span>`:""}
     </div>`:""}
@@ -10288,6 +10479,7 @@ function side(){
       </div>
       <label class="toggle"><input type="checkbox" id="fight-cb" ${fightAt(i)?"checked":""}>
         <span>Fighting here right now</span></label>
+      ${fightAt(i) ? overtimeZeile(i) : ""}
       <label class="toggle"><input type="checkbox" id="star-cb" ${starAt(i)?"checked":""}>
         <span>Key objective — highlight for everyone</span></label>
     </div>
@@ -10552,6 +10744,12 @@ function side(){
   el.querySelector("#star-cb")?.addEventListener("change", ev=>{
     stamp("star", i, ev.target.checked ? 1 : null); save(); side(); draw();
   });
+  el.querySelector("#ot-start")?.addEventListener("click", ()=>{
+    if (overtimeStart(i)){ side(); draw(); }
+  });
+  el.querySelector("#ot-clear")?.addEventListener("click", ()=>{
+    if (overtimeClear(i)){ side(); draw(); }
+  });
   el.querySelectorAll("[data-sf]").forEach(b => b.addEventListener("click", ()=>{
     const v = b.dataset.sf;
     if (!v){ sichtTyp = null; sichtWem = null; }
@@ -10637,6 +10835,7 @@ function side(){
   el.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", ()=>{
     sel = +b.dataset.go; flyTo(sel); side(); draw();
   }));
+  overtimeZeileStarten(i);                 // the clock line ticks on its own, see OVERTIME CLOCK
   seitenspalteRechte(el);
 }
 /* DIE ERSTE LINIE in der Seitenspalte - ein Durchgang nach dem Zeichnen
@@ -10691,7 +10890,7 @@ function fensterRechte(){
 function seitenspalteRechte(el){
   if (!el || darf("aufklaerung")) return;
   const satz = rechtSatz("aufklaerung");
-  el.querySelectorAll("[data-o], #fight-cb, #star-cb, #sp-add, #est-add")
+  el.querySelectorAll("[data-o], #fight-cb, #star-cb, #ot-start, #ot-clear, #sp-add, #est-add")
     .forEach(b => { b.disabled = true; b.title = satz; });
   const n = el.querySelector("#note");
   if (n){ n.readOnly = true; n.title = satz; n.placeholder = satz; }
@@ -38002,7 +38201,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 7a4f3c79ac</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c217e32840</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -38146,7 +38345,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "7a4f3c79ac";
+const BAU = "c217e32840";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
