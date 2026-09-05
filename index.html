@@ -5941,6 +5941,7 @@ function eigenCutTreffer(liste, vollName, tag){
 /* a whole name of one's own unit completes the cut one on file; true when
    a team was changed */
 function eigenNameVervollstaendigen(vollName, tag){
+  if (KB && KB.probe) return false;   /* test bench run: the own depot stays as it is */
   if (!vollName || eigenNameAbgeschnitten(vollName)) return false;
   const mein = myDepotAlle().slice();
   /* the whole name is on file already, as a whole: nothing to complete,
@@ -15256,7 +15257,9 @@ function ocrSchriftLernen(feld, symbole){
     } else continue;
     neu++;
   }
-  if (neu) ocrBuchAb();
+  /* a test bench run learns within itself, as the live path does, but
+     leaves nothing behind: the book is put back when the run ends */
+  if (neu && !(KB && KB.probe)) ocrBuchAb();
 }
 /* THE DOORMAN FOR SINGLE CHARACTERS. Only a plainly better fit gets in:
    it must beat the character that was read, and it must beat the next best
@@ -17542,6 +17545,8 @@ function kbVerarbeiten(R, vorgabe){
 /* The clerk writes: the line's letters appear one by one over about a
    second and a half, the tag goes out in Morse meanwhile. */
 function kbSchreiben(z){
+  /* test bench run: the clerk stays idle but says which line it would be */
+  if (KB && KB.probe){ KB.probeSchrieb = z.i; return; }
   const text = [z.tag, z.name, z.besitzer, (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  ")];
   const gesamt = text.join("").length || 1;
   const dauer = Math.max(900, Math.min(2200, 35*gesamt));
@@ -17617,6 +17622,7 @@ function kbRautenBuchAuf(){
   return kbRautenBuch;
 }
 function kbRautenBuchAb(){
+  if (KB && KB.probe) return;   /* test bench run: the diamond book keeps its templates */
   try {
     const roh = {};
     for (const [g, e] of Object.entries(kbRautenBuch || {})){
@@ -19827,6 +19833,7 @@ function kbTypKandidaten(hp){
   return MAP.at.filter(a => a.crew.length === maxima.length && a.crew.every((c, i) => c[1] === maxima[i])).map(a => a.k);
 }
 function kbBehalten(){
+  if (KB && KB.probe) return;   /* test bench run: nothing is kept */
   kbMorseStopp();
   const ortFeld = document.getElementById("kb-ort");
   const f = ortFeld && ortFeld.value ? unitsStadt(ortFeld.value) : null;
@@ -20757,6 +20764,228 @@ function raeumeSchliessen(ausser){
   if (ausser !== "kabine"  && typeof kbOffen    !== "undefined" && kbOffen)    kabineZu();
   if (ausser !== "spieler" && typeof pgOffen    !== "undefined" && pgOffen)    spielerraumZu();
 }
+
+/* ==== TEST BENCH FOR THE READER ==========================================
+   For the probe only, reached through window; nothing on the live path
+   calls into here. kbProbeBild sends ONE picture down the path a shared
+   frame takes in this room, step for step as kbTick, kbEinreihen and
+   kbSchlange run it: the quick strip (unitsRahmenSchnell), bar, cards and
+   pick (unitsLesen "bild", kbVerarbeiten), the town pass on the standing
+   surface (unitsRahmen, unitsLesen "ort", as kbOrtArbeit), the box cut out
+   onto the working frame (kbEinreihen itself, kbArbeitsRahmen), the text
+   reader with its choice of script (unitsLesen "einheit", the very line
+   kbSchlange runs), the doorman and the quality gate on the way to the
+   sheet (kbVerarbeiten). The picture enters where bildLive hands the tick
+   its bitmap; from there on the path knows nothing of a video.
+   Left out are the gates of the tick alone: the watch, the second sighting
+   of the box, the mouse-over window. They decide WHEN a picture is looked
+   at, not how it is read.
+   Nothing is written down: KB.probe holds the clerk, the depot writers, the
+   keeper and the font book still (opts.schreiben true lets them run). The
+   room opens itself in probe mode when it is closed, without a share, and
+   stays open, so the sheet can be looked at. The sheet starts fresh for
+   every picture (opts.frisch false keeps it), the sound is off for the
+   run (opts.ton true keeps it), opts.zeile binds the reading to a line the
+   way the hand does, opts.ort false skips the town pass.
+   Returned: the sheet's lines, what the box reader read (with the doorman's
+   verdict), the bar, the town, the clock per language set, the time.
+   ocrSprachenSetzen swaps the language set of the main recogniser at run
+   time ("eng", "eng+deu+pol+ces+tur") and rebuilds the worker through the
+   reader's chain. The default OCR_SPRACHEN stays "eng"; ocrZeiten counts
+   under whatever set is in place. */
+async function kbProbeBitmap(quelle){
+  if (typeof quelle === "string"){
+    /* a URL: fetched when the page may, else through an image element */
+    try { return await createImageBitmap(await (await fetch(quelle)).blob()); } catch(e){}
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    await new Promise((ok, err) => {
+      img.onload = ok; img.onerror = () => err(new Error("picture could not be loaded: " + quelle));
+      img.src = quelle;
+    });
+    return await createImageBitmap(img);
+  }
+  if (typeof HTMLImageElement !== "undefined" && quelle instanceof HTMLImageElement && !quelle.complete)
+    await quelle.decode();
+  return await createImageBitmap(quelle);
+}
+async function kbProbeBild(quelle, opts){
+  const o = opts || {};
+  const t0 = performance.now();
+  if (!kbOffen || !KB){
+    raeumeSchliessen("kabine");
+    kbOffen = true;
+    KB = kbNeu();
+    document.getElementById("kabine").classList.add("an");
+  } else if (KB.live) throw new Error("the live capture is running; stop it first (kbLiveStop())");
+  else if (KB.laeuft || KB.werkt || KB.ortLaeuft) throw new Error("the room is busy; try again in a moment");
+  if (o.frisch !== false) KB = kbNeu();
+  KB.probe = o.schreiben !== true;
+  KB.laeuft = true;
+  const tonVorher = kbTon;
+  if (o.ton !== true) kbTon = false;
+  const E = {zeilen: [], leiste: null, ort: null, gelesen: null, dauerMs: 0, ocrZeiten: null,
+             sprachen: ocrSprachenAktiv, status: null, fehler: null, rahmen: null};
+  const handVorher = {an: KB.handAn, wahl: KB.handWahl};
+  /* the font book is put back when the run ends: within the run the reader
+     learns as it does live, afterwards nothing of a test picture remains */
+  const buchVorher = ocrBuch;
+  let f = null;
+  try {
+    /* 1 the picture, held still as a bitmap (bildLive) */
+    f = await kbProbeBitmap(quelle);
+    if (!KB) throw new Error("the room was closed during the run");
+    /* 2 the quick frame, as the tick takes it. Every picture measures its
+         own median: the tick keeps one for thirty frames of the same share,
+         which would press the first picture's gain onto all the others */
+    unitsHellMerk = null;
+    const F = await unitsRahmenSchnell(f);
+    if (!KB) throw new Error("the room was closed during the run");
+    const {d, gross, hell, gain} = F;
+    KB.frame = gross; KB.hell = hell; KB.gain = gain;
+    unitsBlassErlaubt = !!(KB.reiheAlt && KB.reiheAlt.karten.length >= 2
+                           && (KB.blick || 0) - KB.reiheAlt.blick <= KB_REIHE_MERK);
+    unitsTypSperren = (KB.karten || []).map((k, j) => kbFestTyp(KB.zeilen[KB.erste + j]) ? k.x0 : null).filter(x => x !== null);
+    KB.blick = (KB.blick || 0) + 1;
+    E.rahmen = {hell, gain};
+    /* the tick drops what it knows when the town changes; a series of
+       pictures from different towns must do the same */
+    const ok = kbOrtKennung(d);
+    if (KB.ortKennung !== null && KB.ortKennung !== undefined && ok !== KB.ortKennung){
+      KB.letzte = null; KB.vorige = null; KB.reiheKennung = null; KB.reiheAlt = null;
+    }
+    KB.ortKennung = ok;
+    /* 3 the quick look: bar, cards, sides, signs, the pick */
+    const G = await unitsLesen(F, null, null, "bild");
+    if (!KB) throw new Error("the room was closed during the run");
+    kbVerarbeiten(G);
+    KB.typenNeu = false;
+    E.leiste = {gefunden: !!G.leiste, karten: (G.karten || []).length, auswahl: G.auswahl, roll: !!G.roll,
+                form: G.form, kastenOben: G.kastenOben, reiheKennung: G.reiheKennung || null,
+                seite: G.reiheFarbe ? (G.reiheFarbe.seite || null) : null, N: KB.N, erste: KB.erste, wahl: null};
+    /* 4 the box first, then the town, as the tick runs it: the pick that
+         binds the box must come from the same pass as its picture points */
+    /* 5 the box, when one stands in the picture: cut out and bound to its
+         line by kbEinreihen itself. The queue is held back (KB.werkt) so the
+         job is run right here and its reading stays in hand */
+    if (typeof o.zeile === "number"){ KB.handAn = true; KB.handWahl = o.zeile; }
+    let job = null, R = null;
+    if (G.form){
+      KB.werkt = true;
+      try { await kbEinreihen(F, G); } finally { if (KB) KB.werkt = false; }
+      if (!KB) throw new Error("the room was closed during the run");
+      for (let j = KB.warte.length - 1; j >= 0 && !job; j--)
+        if (!KB.warte[j].art) job = KB.warte.splice(j, 1)[0];
+      E.leiste.wahl = G.leiste ? kbWahl() : KB_OHNE_LEISTE;
+    }
+    /* 6 the box reader, the lines kbSchlange runs for a job */
+    if (job){
+      KB.werkt = true; KB.scan = true;
+      KB.arbeit = {ziel: job.ziel, ab: jetzt(), dauer: KB.dauerMittel};
+      if (job.ziel !== null && KB.zeilen[job.ziel] && KB.zeilen[job.ziel].status === "wartet")
+        KB.zeilen[job.ziel].status = "liest";
+      kbZeichnen();
+      const tB = jetzt();
+      unitsBekannteBesitzer = KB.zeilen.filter(z => z.status === "erfasst" && z.besitzer).map(z => z.besitzer);
+      try { R = await unitsLesen(kbArbeitsRahmen(job), null, null, "einheit", job.schrift ? {schrift: job.schrift} : null); }
+      catch(e){ R = null; E.fehler = String((e && e.message) || e); }
+      finally {
+        if (job.bmp && job.bmp.close) job.bmp.close();
+        if (KB){
+          KB.dauerMittel = Math.max(250, Math.round(0.7*KB.dauerMittel + 0.3*(jetzt() - tB)));
+          KB.arbeit = null; KB.werkt = false; KB.scan = false;
+        }
+      }
+      if (!KB) throw new Error("the room was closed during the run");
+      /* 7 the doorman, the quality gate, the sheet (kbVerarbeiten). The
+           verdict is read off the line afterwards: written when the line
+           holds this reading, otherwise the status carries the reason */
+      if (R && R.einheit){
+        const e = unitsZeileAus(R), u = R.einheit;
+        const da = kbSchonDa(e);
+        const nVor = KB.zeilen.length;
+        let i = job.ziel === KB_OHNE_LEISTE ? (da ? da.i : null) : kbAuswahlIndex(R, job.ziel);
+        /* the doorman is asked, not guessed at: his own verdict beforehand,
+           and the clerk says afterwards which line it would have been */
+        const tuerEcht = (i !== null && KB.zeilen[i]) ? kbTuersteher(e, i, job.ziel === KB_OHNE_LEISTE) : null;
+        KB.probeSchrieb = null;
+        kbVerarbeiten(R, job.ziel);
+        if (i === null && job.ziel === KB_OHNE_LEISTE) i = nVor;
+        const z = i !== null ? KB.zeilen[i] : null;
+        const geschrieben = KB.probeSchrieb !== null && KB.probeSchrieb !== undefined;
+        E.gelesen = {ziel: z ? i : null, tag: u.tag, name: u.name, besitzer: u.besitzer, besitzerRoh: u.besitzerRoh,
+                     nameZuv: u.nameZuv, besitzerZuv: u.besitzerZuv,
+                     tagZuv: (u.tagInfo && u.tagInfo.zuv) || null, tagInfo: u.tagInfo || null,
+                     unlesbar: !!u.unlesbar, schrift: u.schrift || null, hp: u.hp, form: u.form, eigen: !!e.eigen,
+                     tuer: {ok: geschrieben, zeile: geschrieben ? KB.probeSchrieb : null,
+                            tuersteher: tuerEcht, grund: geschrieben ? null : KB.status}};
+        E.ocrZeiten = u.zeiten || null;
+      } else if (job.ziel !== null && KB.zeilen[job.ziel] && KB.zeilen[job.ziel].status === "liest")
+        KB.zeilen[job.ziel].status = "vermutet";
+    }
+    /* 8 the town pass on the standing surface (kbOrtArbeit), with its own
+         clock and its own guard: a town that will not read must not take
+         the box reading with it */
+    if (o.ort !== false && KB){
+      const tO = performance.now();
+      const uhrOrt = ocrZeiten = {};
+      try {
+        const V = await unitsRahmen(f, kbOrtFlaeche);
+        if (!KB) throw new Error("the room was closed during the run");
+        KB.ortLaeuft = true;
+        let RO = null;
+        try { RO = await unitsLesen(V, t => { if (KB) KB.status = t; }, KB.reiheKennung, "ort"); }
+        finally { if (KB) KB.ortLaeuft = false; }
+        if (!KB) throw new Error("the room was closed during the run");
+        if (RO.reiheKennung) KB.reiheKennung = RO.reiheKennung;
+        kbVerarbeiten(RO);
+        E.ort = {stadt: RO.stadt ? {i: RO.stadt.i, name: MAP.n[RO.stadt.i] ? MAP.n[RO.stadt.i][0] : null, sicher: !!RO.stadt.sicher} : null,
+                 linie: RO.linie || null, gesamtZahlen: RO.gesamtZahlen || null,
+                 zeiten: uhrOrt, dauerMs: Math.round(performance.now() - tO)};
+      } catch(e){
+        E.ort = {fehler: String((e && e.message) || e), dauerMs: Math.round(performance.now() - tO)};
+      } finally { ocrZeiten = null; }
+    }
+    if (!KB) throw new Error("the room was closed during the run");
+    E.zeilen = KB.zeilen.map(z => ({i: z.i, status: z.status, tag: z.tag, name: z.name, besitzer: z.besitzer,
+      typ: z.typ, seite: z.seite, nameZuv: z.nameZuv, unlesbar: !!z.unlesbar, schrift: z.schrift || null,
+      eigen: !!z.eigen, unsicher: !!z.unsicher, unsicherGrund: z.unsicherGrund || null,
+      tagZuv: E.gelesen && E.gelesen.ziel === z.i ? E.gelesen.tagZuv : null,
+      tuer: E.gelesen && E.gelesen.ziel === z.i ? E.gelesen.tuer : null}));
+    E.status = KB.status;
+    E.dauerMs = Math.round(performance.now() - t0);
+    return E;
+  } finally {
+    if (f && f.close) f.close();
+    kbTon = tonVorher;
+    ocrBuch = buchVorher;          /* what the run learnt stays in the run */
+    if (KB){
+      KB.probe = false; KB.laeuft = false; KB.werkt = false; KB.scan = false; KB.arbeit = null; KB.ortLaeuft = false;
+      KB.handAn = handVorher.an; KB.handWahl = handVorher.wahl;
+      KB.probeSchrieb = null;
+      kbZeichnen();
+    }
+  }
+}
+async function ocrSprachenSetzen(sprachen){
+  const neu = String(sprachen || "").trim() || OCR_SPRACHEN;
+  const alt = ocrSprachenAktiv;
+  /* through the chain, so no reading in flight meets a terminated worker.
+     The new worker is built at once, so a run measures the reading and not
+     the build; a set that cannot be had leaves the old one in place */
+  const wechsel = ocrKette.then(async () => {
+    if (ocrWorker){ try { await ocrWorker.terminate(); } catch(e){} }
+    ocrWorker = null; ocrPsm = null;
+    ocrSprachenAktiv = neu;
+    try { await ocrBereit(7, "", null); }
+    catch(e){ ocrSprachenAktiv = alt; ocrWorker = null; ocrPsm = null; throw e; }
+  });
+  ocrKette = wechsel.catch(() => {});
+  await wechsel;
+  return ocrSprachenAktiv;
+}
+window.kbProbeBild = kbProbeBild;
+window.ocrSprachenSetzen = ocrSprachenSetzen;
 
 /* 'Read screenshot' is gone - the radar room does that job, live. */
 
@@ -29427,13 +29656,17 @@ async function ocrLaden(){
    Die Umlaute kommen wieder - aber erst, wenn der Tuersteher dagegen neu
    geeicht ist, und nicht als Nebenwirkung. */
 const OCR_SPRACHEN = "eng";
+/* THE SET THE WORKER IS BUILT WITH: the default above, or what the test
+   bench put in place for a run (ocrSprachenSetzen, at the end of the units
+   room). The live path never changes it. */
+let ocrSprachenAktiv = OCR_SPRACHEN;
 async function ocrBereit(psm, weiss, melde){
   ocrMelder = melde || (()=>{});
   if (!window.Tesseract) ocrMelder("Loading the text recogniser (about 3 MB, first time only) …");
   await ocrLaden();
   if (!ocrWorker){
     ocrMelder("Starting the recogniser …");
-    ocrWorker = await window.Tesseract.createWorker(OCR_SPRACHEN, 1, {
+    ocrWorker = await window.Tesseract.createWorker(ocrSprachenAktiv, 1, {
       logger: m => { if (m.status === "recognizing text")
         ocrMelder(`Reading … ${Math.round(m.progress*100)} %`); }
     });
@@ -29481,7 +29714,7 @@ async function ocrMitZuvEinzeln(quelle, psm, melde, weiss){
   await ocrBereit(psm, weiss, melde);
   const uhr = ocrZeiten, t0 = performance.now();
   const r = await ocrWorker.recognize(quelle);
-  ocrZeitNehmen(uhr, OCR_SPRACHEN, t0);
+  ocrZeitNehmen(uhr, ocrSprachenAktiv, t0);
   const d = (r && r.data) || {};
   /* THE SINGLE CHARACTERS COME WITH IT. Each one carries its own box and
      its own confidence, and that is what a second look needs. */
@@ -38614,7 +38847,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c64d499fd0</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 009049b81c</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -38758,7 +38991,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "c64d499fd0";
+const BAU = "009049b81c";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
