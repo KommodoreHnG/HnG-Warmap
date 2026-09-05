@@ -351,6 +351,13 @@ body.zieht #mapwrap canvas{pointer-events:none}
   border:1px solid var(--line);border-radius:3px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-size:12px}
 #pb-menu .t{color:var(--dim);margin:0 2px 5px;white-space:nowrap}
 #pb-menu .own4{grid-template-columns:repeat(4,1fr)}
+/* the para tool's menu over its button - on the body like #pb-menu, the bar clips and zooms */
+#para-menu{position:fixed;z-index:60;min-width:172px;padding:6px;background:var(--panel);
+  border:1px solid var(--line);border-radius:3px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-size:12px}
+#para-menu .t{color:var(--dim);margin:0 2px 5px;white-space:nowrap}
+#para-menu .row .btn{flex:1;padding:4px 6px;font-size:11px}
+#para-menu .btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
+#para-menu select{width:100%;margin-top:6px;padding:3px 4px;font-size:11.5px}
 #depot{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;
   border-top:1px solid var(--accent-dk)}
 #depot.zu{display:none}
@@ -1328,6 +1335,7 @@ body.kb-zieht{user-select:none}
   overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .dlg.wide{max-width:min(860px, calc(96vw / var(--dlg-zoom)))}
 .dlg.xwide{max-width:min(1120px, calc(96vw / var(--dlg-zoom)))}
+.dlg.klein{max-width:min(380px, calc(96vw / var(--dlg-zoom)))}
 /* text tabs do not need the wide window - the tables do */
 .dlg.xwide:has(.tabp.schmal.on){max-width:min(780px, calc(96vw / var(--dlg-zoom)))}
 .dlg.dropbereit{outline:2px dashed var(--accent);outline-offset:-6px}
@@ -1766,13 +1774,16 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
         <span class="lbl" data-txt="tool.unit">Unit</span><span class="kb">3</span></button>
       <button class="tool" data-t="arrow" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M3.7 18.8C7.2 9.3 14 5.6 20.2 5.3"/><path d="M16.5 3.9l3.9 1.4-2.5 3.2"/></svg>
-        <span class="lbl" data-txt="tool.arrow">Move</span><span class="kb">4</span></button>
+        <span class="lbl" data-txt="tool.arrow">Attack</span><span class="kb">4</span></button>
       <button class="tool" data-t="line" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M3.5 9.2h17"/><path d="M6.4 9.2v6.4M10.6 9.2v6.4M14.8 9.2v6.4M19 9.2v6.4"/></svg>
         <span class="lbl" data-txt="tool.line">Defence</span><span class="kb">5</span></button>
       <button class="tool" data-t="para" aria-pressed="false">
-        <svg viewBox="0 0 24 24"><path d="M4.5 11.6a7.5 7.5 0 0 1 15 0"/><path d="M4.5 11.6h15"/><path d="M7.4 11.6L12 18.6l4.6-7"/></svg>
-        <span class="lbl" data-txt="tool.para">Para</span><span class="kb">6</span></button>
+        <svg viewBox="0 0 24 24"><path d="M5.6 9.9a6.4 6.4 0 0 1 12.8 0"/><path d="M5.6 9.9h12.8"/><path d="M9.1 9.9Q9.1 5.4 12 3.5M14.9 9.9Q14.9 5.4 12 3.5M12 9.9V3.5"/><path d="M5.6 9.9L12 15.7L18.4 9.9M9.1 9.9L12 15.7L14.9 9.9"/><circle cx="12" cy="17.4" r="1"/><path d="M12 18.5v1.7"/></svg>
+        <span class="lbl" data-txt="tool.para">Plan parablock</span><span class="kb">6</span></button>
+      <button class="tool" data-t="parablock" aria-pressed="false">
+        <svg viewBox="0 0 24 24"><path d="M5.6 9.9a6.4 6.4 0 0 1 12.8 0z" fill="currentColor" fill-opacity=".45"/><path d="M5.6 9.9h12.8"/><path d="M9.1 9.9Q9.1 5.4 12 3.5M14.9 9.9Q14.9 5.4 12 3.5M12 9.9V3.5"/><path d="M5.6 9.9L12 15.7L18.4 9.9M9.1 9.9L12 15.7L14.9 9.9"/><circle cx="12" cy="17.4" r="1"/><path d="M12 18.5v1.7"/></svg>
+        <span class="lbl" data-txt="tool.parablock">Active parablock</span></button>
       <button class="tool" data-t="area" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M4 11.2L7.6 4.6l7.5-.6 5.2 4.4-1.9 7.2-6.5 4-6.3-2.7z"/></svg>
         <span class="lbl" data-txt="tool.area">Area</span><span class="kb">7</span></button>
@@ -3091,6 +3102,22 @@ const SICHT_SERVERREGEL_DA = true;   // Serverregel eingespielt 01.09.2026, frei
    under the pointer shows grab handles, and one of them is being dragged
    while `editing` is set. Declared up here because draw() reads both. */
 let hoverObj = null, editing = null;
+/* THE PARA TOOL'S DROP FLOW (functions under "PARA TOOL FLOW", further
+   down). Mode and unit type are remembered; the marks never are. Declared
+   up here because draw(), tips() and setTool() read them. */
+const PARA_WAHL_KEY = "hng-warmap-para";
+let paraWahl = (() => {
+  const w = {modus: "ziel", typ: "paratroopers"};
+  try {
+    const g = JSON.parse(lies(PARA_WAHL_KEY, "") || "{}") || {};
+    if (g.modus === "start") w.modus = "start";
+    if (typeof g.typ === "string" && g.typ) w.typ = g.typ;
+  } catch(e){}
+  return w;
+})();
+let paraFluss = null;       // {start, ziel, felder:Set, ring:{r}|null, drin:[]} while marks stand
+let paraPuls = false;       // the marks' breathing loop is running
+let luftSprung = null;      // {id, t0, dauer} while a fresh drop grows over the map
 /* Die Trefferflaeche eines Pfeils ist ein Path2D. Am Pfeilobjekt gespeichert
    landete er ueber JSON.stringify als leeres {} in localStorage und in der
    Datenbank - und ctx.isPointInPath wirft darauf. Also getrennt halten, je
@@ -4801,11 +4828,7 @@ function draw(){
       ctx.setLineDash([]);
     }
   }
-  if (zieh && zieh.art === "para") for (const p of zieh.pts){
-    const [px,py] = toScr(MAP.n[p][1], MAP.n[p][2]);
-    ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 2*uiScale;
-    ctx.beginPath(); ctx.arc(px, py, 12*uiScale, 0, 6.284); ctx.stroke();
-  }
+  paraRingZeichnen();                     // a start-first drop's reach, under all that moves
   if (zieh && zieh.art === "arrow" && lastMouse){
     const [ax,ay] = toScr(MAP.n[zieh.von][1], MAP.n[zieh.von][2]);
     ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 2.5*uiScale;
@@ -5014,21 +5037,25 @@ function draw(){
     }
     const pb = paraAt(i);
     if (pb){                                // para-block: parachute glyph beside the disc
-      const g = Math.max(6, 5*Math.sqrt(z))*uiScale, px = x - r - g*0.9, py = y - r*0.2;
+      const g = Math.max(6, 5*Math.sqrt(z))*uiScale, px = x - r - g*0.9, py = y - r*0.2 - g*0.3;
       /* Ein Vorschlag ist blasser als ein Befehl - dieselbe Sprache wie bei
          Pfeilen und Linien. Bisher sahen beide gleich aus, obwohl der Wert
          die ganze Zeit mitgespeichert wurde. */
       const befehl = istBefehl(`para:${i}`, pb);
       ctx.globalAlpha = (pb.plan ? .62 : 1) * (befehl ? 1 : .45) * aOrt;
-      ctx.fillStyle = col(FACTIONS[pb.f]);
-      ctx.strokeStyle = "rgba(5,8,12,.9)"; ctx.lineWidth = 1.3;
-      ctx.beginPath(); ctx.arc(px, py, g, Math.PI, 0); ctx.closePath();
-      ctx.fill(); ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(px-g*.62, py); ctx.lineTo(px, py+g*.85);
-      ctx.lineTo(px+g*.62, py); ctx.stroke();
-      if (pb.plan){ ctx.setLineDash([2,2]); ctx.beginPath();
-        ctx.arc(px, py+g*.2, g*1.35, 0, 6.284); ctx.stroke(); ctx.setLineDash([]); }
+      ctx.save();
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      /* rim first, line on top: the landing mark's order, the one that
+         holds on both grounds */
+      ctx.lineWidth = Math.max(2, g*0.28);
+      ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(10,7,4,.9)";
+      fallschirmZeichnen(ctx, px, py, g, col(FACTIONS[pb.f]));   // the one parachute drawing
+      ctx.lineWidth = Math.max(1, Math.min(1.6, g*0.13));
+      ctx.strokeStyle = light() ? "#1a1409" : "#f4ead9";
+      fallschirmZeichnen(ctx, px, py, g, null);
+      ctx.restore();
+      if (pb.plan){ ctx.strokeStyle = light() ? "rgba(5,8,12,.9)" : "rgba(244,234,217,.85)"; ctx.lineWidth = 1.3; ctx.setLineDash([2,2]);
+        ctx.beginPath(); ctx.arc(px, py+g*.3, g*1.5, 0, 6.284); ctx.stroke(); ctx.setLineDash([]); }
       /* the block's own order: shield below the canopy, chain badge above */
       const pf = pfeilFarbe(pb.farbe);
       if (z > 1.2 && (pb.label || pb.soll)){
@@ -5114,6 +5141,7 @@ function draw(){
      Nicht-Ziele herunter (Objectives-Schalter). Ohne diese Zeile zeichnet
      alles Folgende blass weiter. */
   ctx.globalAlpha = 1;
+  paraFlussZeichnen();                    // the para tool's marks, above the towns
 
   /* --- Aufmarsch: what was last seen in each town, by side and freshness ---
      Ring OUTSIDE every existing ring (largest is the selection ring r+6):
@@ -5866,6 +5894,310 @@ function luftPruefen(a, von, bis){
 /* Does the start airfield stand in enemy land? Then the drop may be
    planned, but it does not become an order until the field is taken. */
 const luftGesperrt = a => !!(a && a.luft && ownerOf(a.from) !== a.f);
+/* ---- PARA TOOL FLOW -----------------------------------------------------
+   The para tool no longer stamps para-blocks (those stay on the town's
+   right-click menu and in the side column); it plans a DROP: an arrow with
+   luft:1 and a unit sign, the very thing the arrow window makes with its
+   "airborne" tick. Two ways in, chosen in the small menu over the tool
+   button and remembered:
+     target first - click the target; every airfield in reach gets a
+                    canopy mark; click one of them
+     start first  - click the airfield; its reach stands as a ring; click
+                    a town inside it
+   A field the drawing side does not hold asks once (yes/no) before the
+   arrow is made. Marks and ring are the tool's own and temporary: gone
+   with the arrow, Escape, the right button, a tool change or a click on
+   empty ground. Nothing here is saved or synced but mode and type. */
+const LUFT_SPRUNG_MS = 600;
+/* the remembered type, if the map still knows it; else plain paratroopers */
+function paraTyp(){
+  const t = luftTypen();
+  if (t.some(x => x.k === paraWahl.typ)) return paraWahl.typ;
+  const p = t.find(x => x.k === "paratroopers") || t[0];
+  return p ? p.k : "paratroopers";
+}
+function paraWahlSetzen(modus, typ){
+  if (modus) paraWahl.modus = modus;
+  if (typ) paraWahl.typ = typ;
+  schreib(PARA_WAHL_KEY, JSON.stringify(paraWahl));
+  paraFlussAbbruch(); tips(); draw();
+}
+const paraFlussAktiv = () => !!(paraFluss && (paraFluss.start !== null || paraFluss.ziel !== null));
+/* the marks go; the caller redraws */
+function paraFlussAbbruch(){
+  if (!paraFluss) return;
+  paraFluss = null; tips();
+}
+function paraFlussNeu(){
+  if (!paraFluss) paraFluss = {start: null, ziel: null, felder: new Set(), ring: null, drin: []};
+  return paraFluss;
+}
+/* the marks breathe while they stand: a slow loop that stops itself as
+   soon as nothing is marked any more */
+function paraPulsStart(){
+  if (paraPuls) return;
+  paraPuls = true;
+  let letzt = 0;
+  const takt = t => {
+    if (!paraFlussAktiv()){ paraPuls = false; return; }
+    if (t - letzt >= 90){ letzt = t; draw(); }
+    requestAnimationFrame(takt);
+  };
+  requestAnimationFrame(takt);
+}
+function paraZielSetzen(i, r){
+  const F = paraFlussNeu();
+  const felder = flugplaetzeNach(i, r);
+  if (!felder.length){
+    toast(`No airfield within ${Math.round(r)} map units of ${MAP.n[i][0]}`);
+    return false;
+  }
+  F.ziel = i; F.start = null; F.ring = null; F.drin = [];
+  F.felder = new Set(felder);
+  paraPulsStart(); tips();
+  return true;
+}
+function paraStartSetzen(i, r){
+  const F = paraFlussNeu();
+  F.start = i; F.ziel = null; F.felder = new Set(); F.ring = {r};
+  F.drin = [];
+  for (let k = 0; k < MAP.n.length; k++)
+    if (k !== i && ortAbstand(i, k) <= r) F.drin.push(k);
+  paraPulsStart(); tips();
+}
+/* one click on a town while the para tool is up; mehr (Ctrl held) keeps a
+   start-first airfield and its ring for further targets */
+function paraFlussKlick(i, mehr){
+  const typ = {sym: paraTyp()}, r = luftReichweite(typ);
+  const F = paraFlussNeu();
+  if (paraWahl.modus === "start"){
+    if (F.start === null){
+      if (!istFlugplatz(i)){ toast(luftPruefen(typ, i, i).grund); return; }
+      paraStartSetzen(i, r); return;
+    }
+    if (i === F.start){ toast("Now click the target town"); return; }
+    const p = luftPruefen(typ, F.start, i);
+    if (!p.ok){ toast(p.grund); return; }
+    paraPfeilFragen(F.start, i, !!mehr);
+    return;
+  }
+  if (F.ziel === null){ paraZielSetzen(i, r); return; }
+  if (i === F.ziel){ toast("Now click one of the marked airfields"); return; }
+  if (F.felder.has(i)){ paraPfeilFragen(i, F.ziel, false); return; }
+  /* any other town becomes the new target, an airfield out of reach too */
+  paraZielSetzen(i, r);
+}
+/* the field is not ours: ask once, in a small window in the middle */
+function paraPfeilFragen(von, bis, mehr){
+  const o = ownerOf(von), F = paraFluss;
+  if (o === faction || (F && F.bestaetigt === von)){ paraPfeilAnlegen(von, bis, mehr); return; }
+  const wer = o >= 0 ? `This airfield is held by <b>${esc(FACTIONS[o].name)}</b>.`
+                     : "This airfield is held by nobody.";
+  openDlg(`<div class="dlg-h"><h2>${esc(MAP.n[von][0])}</h2></div>
+    <div class="dlg-b"><div class="note">${wer} Plan the drop from there anyway?</div></div>
+    <div class="dlg-f">
+      <button class="btn" id="para-nein">No</button>
+      <button class="btn primary" id="para-ja">Yes</button>
+    </div>`, "klein");
+  document.getElementById("para-nein").addEventListener("click", closeDlg);
+  document.getElementById("para-ja").addEventListener("click", () => {
+    closeDlg();
+    if (paraFluss) paraFluss.bestaetigt = von;     // once per flow, not once per target
+    paraPfeilAnlegen(von, bis, mehr);
+  });
+}
+/* the drop itself: an ordinary arrow with luft:1 and the unit sign, the
+   board request if the field is not ours, then the jump over the map */
+function paraPfeilAnlegen(von, bis, mehr){
+  if (!darfIchNochMalen("arrow")) return;
+  const a = pfeilAnlegen(von, bis);
+  a.luft = 1; a.sym = paraTyp();
+  luftBoardAnfordern(a);
+  pfeilGeaendert(a); save();
+  if (!mehr) paraFlussAbbruch();               // Ctrl held: airfield and ring stay for the next target
+  luftSprungStart(a);
+  const brett = a.boardId ? `. ${MAP.n[von][0]} is on the board to be taken first` : "";
+  toast(`Drop planned${entwurfModus ? " (draft)" : ""}${brett}. `
+    + (mehr ? "Ctrl-click the next target, Escape ends." : "To name it, click the arrow with Inspect."));
+  side(); tally();
+}
+/* how much of a fresh drop's arrow is there yet; 1 for every settled arrow */
+function luftSprungAnteil(a){
+  if (!luftSprung || !a || a.id !== luftSprung.id) return 1;
+  const p = Math.min(1, (performance.now() - luftSprung.t0) / luftSprung.dauer);
+  return Math.max(0.04, 1 - (1-p)*(1-p));   // fast off the field, soft at the target
+}
+function luftSprungStart(a){
+  /* the loop is bound to its own jump: a second drop within the moment
+     takes over, and the first loop ends instead of drawing alongside */
+  const mein = luftSprung = {id: a.id, t0: performance.now(), dauer: LUFT_SPRUNG_MS};
+  const takt = () => {
+    if (luftSprung !== mein) return;
+    if (performance.now() - mein.t0 >= mein.dauer) luftSprung = null;
+    draw();
+    if (luftSprung === mein) requestAnimationFrame(takt);
+  };
+  requestAnimationFrame(takt);
+}
+/* THE PARACHUTE, one drawing for every place it appears: canopy with three
+   seams, four shroud lines to the harness, the man as a dot and a stroke.
+   (x,y) is the middle of the chord, gr the canopy's radius; the feet end
+   1.6 radii below the chord. Stroke colour and width are the caller's;
+   fuell, if given, fills the canopy. The tool button's SVG carries the
+   same proportions. */
+function fallschirmZeichnen(ctx, x, y, gr, fuell){
+  const s = gr*0.46, hy = y + gr*0.9;
+  ctx.beginPath();                                          // the canopy
+  ctx.moveTo(x - gr, y); ctx.arc(x, y, gr, Math.PI, 0); ctx.closePath();
+  if (fuell){ ctx.fillStyle = fuell; ctx.fill(); }
+  ctx.stroke();
+  ctx.beginPath();                                          // three seams, four panels
+  ctx.moveTo(x - s, y); ctx.quadraticCurveTo(x - s, y - gr*0.7, x, y - gr);
+  ctx.moveTo(x + s, y); ctx.quadraticCurveTo(x + s, y - gr*0.7, x, y - gr);
+  ctx.moveTo(x, y); ctx.lineTo(x, y - gr);
+  ctx.stroke();
+  ctx.beginPath();                                          // shroud lines and the body
+  for (const dx of [-gr, -s, s, gr]){ ctx.moveTo(x + dx, y); ctx.lineTo(x, hy); }
+  ctx.moveTo(x, hy + gr*0.44); ctx.lineTo(x, hy + gr*0.7);
+  ctx.stroke();
+  ctx.beginPath();                                          // the head
+  ctx.arc(x, hy + gr*0.28, gr*0.16, 0, 6.284);
+  ctx.fillStyle = ctx.strokeStyle; ctx.fill(); ctx.stroke();
+}
+/* the reach of a start-first drop: under arrows and towns */
+function paraRingZeichnen(){
+  const F = paraFluss;
+  if (!F || F.start === null || !F.ring || !MAP.n[F.start]) return;
+  const [x,y] = toScr(MAP.n[F.start][1], MAP.n[F.start][2]);
+  const fc = col(FACTIONS[faction]);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, F.ring.r*view.z, 0, 6.284);
+  ctx.globalAlpha = .08; ctx.fillStyle = fc; ctx.fill();
+  ctx.globalAlpha = .75; ctx.strokeStyle = fc; ctx.lineWidth = 1.8*uiScale;
+  ctx.setLineDash([7,5]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+}
+/* where a town's canopy mark hangs: the town on screen, the chord's
+   middle (y), the canopy radius (g) and the ring's radius (r). Drawing and
+   hit test read the same numbers. */
+const paraMarkeGr = () => Math.max(7, Math.min(20, 5.5*Math.sqrt(view.z)))*uiScale;
+function paraMarkeLage(i){
+  const [x,y] = toScr(MAP.n[i][1], MAP.n[i][2]), r0 = ortRadius(), g = paraMarkeGr();
+  return {x, y: y - r0 - g*2.3, g, r: r0 + 8*uiScale, ox: x, oy: y};
+}
+/* the marked town whose canopy or ring is under the pointer, else null;
+   hitTest knows only the disc, and the canopy hangs well above it */
+function paraMarkeTreffer(sx, sy){
+  const F = paraFluss;
+  if (!F) return null;
+  const kand = F.ziel !== null ? [...F.felder] : (F.start !== null ? [F.start] : []);
+  for (const i of kand){
+    if (!MAP.n[i]) continue;
+    const L = paraMarkeLage(i);
+    if (Math.hypot(sx - L.x, sy - (L.y + L.g*0.3)) <= L.g*1.4) return i;
+    if (Math.hypot(sx - L.ox, sy - L.oy) <= L.r + 4) return i;
+  }
+  return null;
+}
+/* the marks, above the towns: a canopy over every airfield that may fly
+   the drop, a ring with ticks on the target, a faint ring on every town a
+   start-first drop can reach */
+function paraFlussZeichnen(){
+  const F = paraFluss;
+  if (!F || (F.ziel === null && F.start === null)) return;
+  const r0 = ortRadius(), fc = col(FACTIONS[faction]);
+  const WW = cv.width/dpr, HH = cv.height/dpr;
+  const puls = 0.5 + 0.5*Math.sin(performance.now()/360);
+  const g = paraMarkeGr();
+  ctx.save();
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  const marke = i => {
+    if (!MAP.n[i]) return;
+    const L = paraMarkeLage(i), x = L.ox, y = L.oy;
+    if (x < -60 || y < -60 || x > WW+60 || y > HH+60) return;
+    ctx.globalAlpha = .55 + .4*puls; ctx.strokeStyle = fc; ctx.lineWidth = 1.6*uiScale;
+    ctx.beginPath(); ctx.arc(x, y, L.r, 0, 6.284); ctx.stroke();
+    ctx.globalAlpha = .75 + .25*puls;
+    /* rim first, line on top: the landing mark's order, the one that
+       holds on both grounds */
+    const my = L.y - puls*g*0.2;
+    ctx.lineWidth = Math.max(2.2, g*0.28);
+    ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(10,7,4,.9)";
+    fallschirmZeichnen(ctx, x, my, g, fc);
+    ctx.lineWidth = Math.max(1.2, g*0.14);
+    ctx.strokeStyle = light() ? "#1a1409" : "#f4ead9";
+    fallschirmZeichnen(ctx, x, my, g, null);
+  };
+  if (F.ziel !== null){
+    for (const i of F.felder) marke(i);
+    if (MAP.n[F.ziel]){
+      const [x,y] = toScr(MAP.n[F.ziel][1], MAP.n[F.ziel][2]);
+      const rr = r0 + 9*uiScale + puls*2*uiScale, t = 4*uiScale;
+      ctx.globalAlpha = .9; ctx.strokeStyle = fc; ctx.lineWidth = 2*uiScale;
+      ctx.beginPath(); ctx.arc(x, y, rr, 0, 6.284); ctx.stroke();
+      ctx.beginPath();
+      for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        ctx.moveTo(x + dx*(rr - t), y + dy*(rr - t));
+        ctx.lineTo(x + dx*(rr + t*1.5), y + dy*(rr + t*1.5));
+      }
+      ctx.stroke();
+    }
+  }
+  if (F.start !== null){
+    ctx.globalAlpha = .35; ctx.strokeStyle = fc; ctx.lineWidth = 1.2*uiScale;
+    for (const i of F.drin){
+      if (!MAP.n[i]) continue;
+      const [x,y] = toScr(MAP.n[i][1], MAP.n[i][2]);
+      if (x < -30 || y < -30 || x > WW+30 || y > HH+30) continue;
+      ctx.beginPath(); ctx.arc(x, y, r0 + 5*uiScale, 0, 6.284); ctx.stroke();
+    }
+    marke(F.start);
+  }
+  ctx.restore();
+}
+/* THE MENU OVER THE TOOL BUTTON. Hung on the body like the para-block
+   menu: the bar clips and zooms, the body does neither, and the button's
+   rectangle already comes in screen points. */
+function paraMenueZu(){ const m = document.getElementById("para-menu"); if (m) m.remove(); }
+/* open or close, from the button and from key 6 alike */
+function paraMenueWechsel(){
+  const k = document.querySelector('.tool[data-t="para"]');
+  if (document.getElementById("para-menu") || !k) paraMenueZu(); else paraMenueAuf(k);
+}
+function paraMenueAuf(knopf){
+  paraMenueZu();
+  const typ = paraTyp();
+  const m = document.createElement("div"); m.id = "para-menu";
+  m.innerHTML = `<div class="t">Airborne drop</div>
+    <div class="row">
+      <button type="button" class="btn" data-modus="start" aria-pressed="${paraWahl.modus === "start"}">Start first</button>
+      <button type="button" class="btn" data-modus="ziel" aria-pressed="${paraWahl.modus !== "start"}">Target first</button>
+    </div>
+    <select id="para-menu-typ" class="mini" title="Unit type">${luftTypen().map(t =>
+      `<option value="${esc(t.k)}"${t.k === typ ? " selected" : ""}>${esc(atName(t.k))}</option>`).join("")}</select>`;
+  document.body.appendChild(m);
+  const r = knopf.getBoundingClientRect(), b = m.getBoundingClientRect();
+  let oben = r.top - b.height - 4;
+  if (oben < 4) oben = r.bottom + 4;                        // no room above: below the button
+  m.style.left = Math.max(4, Math.min(innerWidth - b.width - 4, r.left)) + "px";
+  m.style.top  = Math.max(4, Math.min(innerHeight - b.height - 4, oben)) + "px";
+  m.querySelectorAll("[data-modus]").forEach(k => k.addEventListener("click", () => {
+    paraWahlSetzen(k.dataset.modus, null);
+    paraMenueZu();
+    toast(k.dataset.modus === "start" ? "Start first: click the airfield, then the target"
+                                      : "Target first: click the target, then an airfield");
+  }));
+  m.querySelector("#para-menu-typ").addEventListener("change", ev => paraWahlSetzen(null, ev.target.value));
+}
+/* the tip box's line for the tool: what to click next, with type and reach */
+function paraTipp(){
+  const typ = paraTyp(), was = `${atName(typ)}, ${Math.round(luftReichweite({sym: typ}))} map units.`;
+  const F = paraFluss;
+  if (F && F.ziel !== null) return `Now click one of the marked airfields. ${was}`;
+  if (F && F.start !== null) return `Now click a town inside the ring. Hold Ctrl to add more targets from this airfield. ${was}`;
+  return (paraWahl.modus === "start" ? "Start first: click the airfield, then the target. "
+                                     : "Target first: click the target, then an airfield. ") + was;
+}
 /* How far an arrow bows out, as a share of the straight line between its
    two towns. Sixteen hundredths is what every arrow used to have. */
 const PFEIL_BAUCH = 0.16, PFEIL_BAUCH_MAX = 0.62;
@@ -5910,7 +6242,18 @@ function drawArrow(a){
      running east to west; one running north to south simply leant over.
      Across the line it reads the same whichever way the drop goes. */
   if (a.luft) bauch = LUFT_BOGEN;
-  const cx = (x1+x2)/2 - dy*bauch, cy = (y1+y2)/2 + dx*bauch;
+  let cx = (x1+x2)/2 - dy*bauch, cy = (y1+y2)/2 + dx*bauch;
+  /* THE JUMP. A drop the para tool has just planned grows out of its
+     airfield along the bow for a moment. De Casteljau cuts the curve at
+     the progress, so what is there already has its final shape. */
+  const sprung = luftSprungAnteil(a);
+  if (sprung < 1){
+    const q = 1 - sprung;
+    const ex = q*q*x1 + 2*q*sprung*cx + sprung*sprung*x2;
+    const ey = q*q*y1 + 2*q*sprung*cy + sprung*sprung*y2;
+    cx = x1 + (cx - x1)*sprung; cy = y1 + (cy - y1)*sprung;
+    x2 = ex; y2 = ey;
+  }
 
   const mit = joinOf(a.id), staerke = mit.reduce((s,j)=>s+j.n, 0);
   const breite = Math.max(2.2, (2.2 + Math.min(staerke,24)*0.42)*Math.sqrt(view.z))*uiScale;
@@ -5939,7 +6282,9 @@ function drawArrow(a){
     const flach = pfeilForm(x1, y1, (x1+x2)/2, (y1+y2)/2, x2, y2, breite*0.72);
     ctx.save();
     ctx.globalAlpha = vor ? .14 : .32; ctx.fillStyle = "#000";
-    ctx.translate(0, Math.max(4, len*0.05)); ctx.fill(flach);
+    /* while the men are in the air the shadow falls further away from them */
+    const hub = sprung < 1 ? 1 + 1.6*Math.sin(Math.PI*sprung) : 1;
+    ctx.translate(0, Math.max(4, len*0.05)*hub); ctx.fill(flach);
     ctx.restore();
   }
   /* THE BODY LETS THE MAP THROUGH - an order lies on the ground, it does
@@ -5966,7 +6311,7 @@ function drawArrow(a){
      strength is set, "12/20 (60 %)". */
   /* THE SHIELD sits on the middle of the curve, horizontal - name, sign,
      strength against plan as a bar. Its box is kept for the hit test. */
-  if (view.z > 1.1 && (staerke || a.label || a.soll || a.sym)){
+  if (sprung >= 1 && view.z > 1.1 && (staerke || a.label || a.soll || a.sym)){
     const mx = .25*x1 + .5*cx + .25*x2, my = .25*y1 + .5*cy + .25*y2;
     const bild = a.sym ? pfeilSymbolBild(a.sym, light() ? "#1a1409" : "#f4ead9") : null;
     ctx.save(); ctx.globalAlpha = vor ? .72 : 1;
@@ -5978,27 +6323,19 @@ function drawArrow(a){
      says "these men come out of the sky" is the parachute, and it stands
      where they land. Dome, chord and load, the same shape the para tool
      carries in the tool bar. */
-  if (a.luft){
+  if (a.luft && sprung >= 1){
     const gr = Math.max(9, Math.min(26, 6.6*Math.sqrt(view.z)))*uiScale;
-    const px = x2, py = y2 - gr*1.6;
-    const schirm = () => {
-      ctx.beginPath();
-      ctx.arc(px, py, gr, Math.PI, 0);                       // the canopy
-      ctx.moveTo(px - gr, py); ctx.lineTo(px + gr, py);      // its chord
-      ctx.moveTo(px - gr*0.62, py); ctx.lineTo(px, py + gr*1.15);
-      ctx.lineTo(px + gr*0.62, py);                          // the load beneath
-      ctx.stroke();
-    };
+    const px = x2, py = y2 - gr*2.05;
     ctx.save();
     ctx.lineJoin = "round"; ctx.lineCap = "round";
     /* dark rim first, light line on top - the same order the map's writing
        uses, and the only one that holds on both grounds */
     ctx.lineWidth = Math.max(2.4, gr*0.30);
     ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(10,7,4,.9)";
-    schirm();
+    fallschirmZeichnen(ctx, px, py, gr, null);
     ctx.lineWidth = Math.max(1.3, gr*0.15);
     ctx.strokeStyle = fb || (light() ? "#1a1409" : "#f4ead9");
-    schirm();
+    fallschirmZeichnen(ctx, px, py, gr, null);
     ctx.restore();
   }
   /* THE BADGE at the foot: the committed strength in a circle, the way a
@@ -7455,7 +7792,6 @@ cv.addEventListener("mousedown", e => {
   const i = hitTest(e.offsetX, e.offsetY);
   if (tool === "arrow" && i !== null){ zieh = {art:"arrow", von:i}; return; }
   if (tool === "line"  && i !== null){ zieh = {art:"line", pts:[i]}; return; }
-  if (tool === "para"  && i !== null){ zieh = {art:"para", pts:[i]}; return; }
   if (tool === "brush"){ zieh = {art:"brush", pts:[], seen:new Set()}; pinselSammeln(e.offsetX, e.offsetY); draw(); return; }
   if (tool === "area"){ zieh = {art:"area", pts:[toMap(e.offsetX, e.offsetY)]}; return; }
   dragging = true; dragged = false;
@@ -7633,6 +7969,12 @@ cv.addEventListener("click", e => {
   const i = hitTest(e.offsetX, e.offsetY);
   if (i === null){
     if (tool === "arrow" && arrowFrom !== null){ arrowFrom = null; draw(); }
+    else if (tool === "para" && paraFlussAktiv()){
+      /* the canopy marks hang above the discs, where hitTest sees nothing */
+      const k = paraMarkeTreffer(e.offsetX, e.offsetY);
+      if (k !== null){ paraFlussKlick(k, e.ctrlKey || e.metaKey); side(); draw(); tally(); return; }
+      paraFlussAbbruch(); draw();
+    }
     else { sel = null; side(); draw(); }
     return;
   }
@@ -7659,6 +8001,13 @@ cv.addEventListener("click", e => {
     setMyUnits(i, []);
     for (const a of liveArrows()) if ((a.from === i || a.to === i) && a.by === S.me) dropArrow(a.id);
     sel = i; save();
+  } else if (tool === "para"){
+    paraFlussKlick(i, e.ctrlKey || e.metaKey);
+  } else if (tool === "parablock"){
+    /* the block as it stands: this side's, in place; the same click again clears it */
+    const pb = paraAt(i);
+    if (pb && pb.f === faction && !pb.plan) setPara(i, null); else setPara(i, faction, false);
+    sel = i;
   } else sel = i;
   side(); draw(); tally();
 });
@@ -7680,10 +8029,8 @@ document.addEventListener("keydown", e => {
   const k = e.key.toLowerCase();
   const t = {"1":"inspect","2":"owner","3":"unit","4":"arrow","5":"line","6":"para",
              "7":"area","8":"spot","9":"battle","0":"erase"}[e.key];
-  if (t){ setTool(t); return; }
+  if (t){ setTool(t); if (t === "para" && tool === "para") paraMenueWechsel(); return; }   // 6 brings the menu along
   if (k === "b"){ document.getElementById("b-board").click(); return; }
-  if (k === "p"){ paraGeplant = !paraGeplant; tips();
-    toast(paraGeplant ? "Para-block: marking as PLANNED" : "Para-block: marking as in place"); return; }
   if (k === "enter" && lineDraft){ lineFertig(); return; }
   if (k === "q"){ setFaction(0); return; }
   if (k === "w"){ setFaction(1); return; }
@@ -7699,6 +8046,7 @@ document.addEventListener("keydown", e => {
   if (k === "escape"){
     if (document.getElementById("veil").classList.contains("on")) closeDlg();
     else if (editing){ editing = null; draw(); }
+    else if (paraFlussAktiv()){ paraFlussAbbruch(); draw(); }
     else if (arrowFrom !== null){ arrowFrom = null; draw(); }
     else { sel = null; side(); draw(); }
   }
@@ -7751,9 +8099,12 @@ function setTool(t){
      man zieht eine Linie ueber zwanzig Staedte, laesst los, und sie ist
      weg. Dieselbe Vorgabe wie bei den Rechten, nur auf Mengen angewandt -
      wer am Anschlag ist, soll das Werkzeug gar nicht erst waehlen. */
-  const marke = {arrow:"arrow", line:"line", area:"area"}[t];
+  const marke = {arrow:"arrow", line:"line", area:"area", para:"arrow"}[t];
   if (marke && !darfIchNochMalen(marke)) return false;
+  const vorher = tool;
   tool = t; arrowFrom = null; hoverObj = null; editing = null;
+  if (t !== vorher) paraFlussAbbruch();                  // the drop's marks go with a real tool change
+  if (t !== "para") paraMenueZu();                       // its menu with any other tool
   cv.classList.remove("griff");
   document.querySelectorAll(".tool[data-t]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.t === t)));
   /* Beim Werkzeug "Einheit" faehrt das Depot von selbst aus - von dort zieht
@@ -7791,6 +8142,21 @@ document.querySelector("#depot h4").addEventListener("click", () => {
   if (r.classList.contains("detail")){ r.classList.toggle("depot-auf"); requestAnimationFrame(resize); }
 });
 document.querySelectorAll(".tool[data-t]").forEach(b => b.addEventListener("click", () => setTool(b.dataset.t)));
+/* The para tool's own small menu: the click above picks the tool, this one
+   opens the menu over the button; a second click closes it again. Key 6
+   does the same. */
+document.querySelector('.tool[data-t="para"]')?.addEventListener("click", () => {
+  if (tool !== "para") return;                 // the tool was refused (arrow cap)
+  paraMenueWechsel();
+});
+window.addEventListener("resize", paraMenueZu);   // pinned to the button's old place otherwise
+document.addEventListener("pointerdown", ev => {
+  const m = document.getElementById("para-menu");
+  if (!m || m.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest('.tool[data-t="para"]')) return;   // the button toggles
+  paraMenueZu();
+});
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") paraMenueZu(); });
 
 /* Right-click on a town: the para-block as a small menu at the mouse, so
    nobody has to open the detail view for it. */
@@ -7822,6 +8188,8 @@ function pbMenue(i, x, y){
   });
 }
 cv.addEventListener("contextmenu", ev => {
+  /* a drop being planned: the right button only calls it off */
+  if (paraFlussAktiv()){ ev.preventDefault(); paraFlussAbbruch(); draw(); return; }
   const i = hitTest(ev.offsetX, ev.offsetY);
   if (i === null || i === undefined || i < 0) return;
   ev.preventDefault();
@@ -7857,9 +8225,10 @@ function tips(){
     inspect:"<b>Inspect</b> — click a town, arrow or line. Your own get handles.",
     owner:  `<b>Control</b> — click sets the town to <b>${p}</b>, again releases.`,
     unit:   `<b>Unit</b> — click a town, or drag teams from your depot.`,
-    arrow:  `<b>Move</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
+    arrow:  `<b>Attack</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
     line:   `<b>Defence</b> — drag across the towns. For <b>${p}</b>.`,
-    para:   `<b>Para</b> — drag across the towns. Hold <kbd>P</kbd> for planned only.`,
+    para:   `<b>Plan parablock</b> — ${paraTipp()} For <b>${p}</b>.`,
+    parablock: `<b>Active parablock</b> — click a town that is blocked right now; click again to clear it. For <b>${p}</b>.`,
     brush:  `<b>Paint</b> — drag over the map; every town under the brush goes to <b>${FACTIONS[faction].name}</b>. Up to ${PINSEL_ZUG_MAX} per stroke.${pinselRueck ? ` <button class="btn" id="tip-rueck" style="padding:1px 7px;font-size:10.5px">Undo last stroke</button>` : ""}`,
     area:   `<b>Area</b> — draw a shape, then label it. For <b>${p}</b>.`,
     spot:   "<b>Sighting</b> — click the town, then record what you saw.",
@@ -31416,6 +31785,9 @@ const ORD_GRUPPEN = {
 function ordnungAnwenden(){
   for (const [k, g] of Object.entries(ORD_GRUPPEN)){
     const wunsch = (LAY.ord && LAY.ord[k]) || null;
+    /* a saved tool order from before 05.09. does not know the second para
+       button - it takes its place right behind the first */
+    if (wunsch && wunsch.includes("para") && !wunsch.includes("parablock")) wunsch.splice(wunsch.indexOf("para") + 1, 0, "parablock");
     for (const el of g.wahl()){
       if (!wunsch){ el.style.order = ""; continue; }
       const i = wunsch.indexOf(g.id(el));
@@ -36383,7 +36755,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 252df0a17b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b7fe247eb8</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -36393,8 +36765,7 @@ function hilfeDialog(){
     <div class="dlg-b">
       <div class="tabp" data-tab="keys">
         <div class="keys">
-          <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Move · Defence · Para · Area · Sighting · Battle · Clear</span></div>
-          <div><kbd>P</kbd><span>Para-block: in place or merely planned</span></div>
+          <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Attack · Defence · Plan parablock · Area · Sighting · Battle · Clear</span></div>
           <div><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd><span>US · Germany · Soviet Union</span></div>
           <div><kbd>B</kbd><span>Board — written orders</span></div>
           <div><kbd>I</kbd><span>Intel — clans, players, sightings</span></div>
@@ -36419,8 +36790,11 @@ function hilfeDialog(){
         <div class="note"><b>Two radii, two meanings.</b> The brass dashed circle is <b>strike</b>
           range, the blue discs are <b>vision</b>; where they overlap the blue deepens. Set the
           scale with a right-click on <b>Radius</b> in the left bar.</div>
-        <div class="note"><b>Para-blocking</b> (6) is dragged across the towns it covers.
-          <kbd>P</kbd> switches between blocked and merely planned — planned is drawn dashed.</div>
+        <div class="note"><b>Plan parablock</b> (6) plans a drop: click the target, then one of the
+          marked airfields, or the airfield first and then a town inside its ring (menu over the tool
+          button; hold <kbd>Ctrl</kbd> on the target to add more). <b>Active parablock</b> marks a town
+          as blocked right now, a second click clears it. Para-blocks also sit on the town's right-click
+          menu.</div>
       </div>
 
       <div class="tabp" data-tab="win">
@@ -36525,7 +36899,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "252df0a17b";
+const BAU = "b7fe247eb8";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
