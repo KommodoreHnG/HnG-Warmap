@@ -3682,7 +3682,9 @@ function spielerSuche(q){
 }
 /* Enemy depot: what we believe a given enemy player owns. Shared, everyone
    may add to it — with name and tag so nobody enters the same team twice. */
-const feindDepot = key => (S.edep[key] && Array.isArray(S.edep[key].v) && S.edep[key].v) || [];
+/* ENEMY NAMES CUT OFF: read through feindDepotNormieren, so dots and the
+   old marks of earlier records become stump and cut on the way out */
+const feindDepot = key => feindDepotNormieren(S.edep[key] && Array.isArray(S.edep[key].v) && S.edep[key].v);
 /* ---- Wer hat es gefunden ---------------------------------------------
    Aufklaerung ist die undankbarste Arbeit im Krieg: wer eine feindliche
    Kampfeinheit eintraegt, hat dafuer meist ein Flugzeug verloren. Bisher
@@ -3794,10 +3796,14 @@ function aufklaerungListe(nurKrieg){
 function setFeindDepot(key, list){
   /* Was neu dazukommt, wird gutgeschrieben - und nur das. Wer eine schon
      bekannte Einheit noch einmal eintraegt, bekommt dafuer nichts. */
-  const vorher = new Set(feindDepot(key).map(atMarke));
+  const alt = feindDepot(key);
+  const vorher = new Set(alt.map(atMarke));
+  /* ENEMY NAMES CUT OFF: a stump completed to its whole name is the same
+     record still, not a new find */
+  const kenn = new Set(alt.map(u => u && u.id).filter(Boolean));
   for (const u of list){
     const m = atMarke(u);
-    if (m && !vorher.has(m)) gutschrift("at", `${key}|${m}`);
+    if (m && !vorher.has(m) && !(u.id && kenn.has(u.id))) gutschrift("at", `${key}|${m}`);
   }
   /* Ueber setFeindTeil, nicht als ganze neue Zeile: sonst faellt beim
      Eintragen einer Kampfeinheit das aufgenommene Arsenal, die Rollen und
@@ -5900,6 +5906,18 @@ function eigenCutSetzen(d, cut){
   if (cut && k.name) k.cut = 1; else delete k.cut;
   return k;
 }
+/* the distance of a stump to the same length of a whole name, -1 where
+   the stump cannot be its beginning: one slip per six characters, at
+   least one; a stump under three characters says nothing. Shared with
+   ENEMY NAMES CUT OFF below. */
+function namenStumpfAbstand(stumpf, voll){
+  const K = String(stumpf == null ? "" : stumpf).trim().toUpperCase();
+  const V = String(voll == null ? "" : voll).trim().toUpperCase();
+  if (K.length < 3 || K.length > V.length) return -1;
+  const d = levenshtein(K, V.slice(0, K.length));
+  return d <= Math.max(1, Math.floor(K.length/6)) ? d : -1;
+}
+const namenStumpfPasst = (stumpf, voll) => namenStumpfAbstand(stumpf, voll) >= 0;
 /* the index of the cut team a whole name belongs to, -1 for none */
 function eigenCutTreffer(liste, vollName, tag){
   const tk = atTagKey(tag), VU = String(vollName || "").trim().toUpperCase();
@@ -5911,10 +5929,8 @@ function eigenCutTreffer(liste, vollName, tag){
     /* tags are readings too: one slip is allowed, a clearly foreign tag is out */
     const tagGleich = !!(tk && dk && (dk === tk || (tk.length >= 3 && levenshtein(dk, tk) <= 1)));
     if (tk && dk && !tagGleich) return;
-    const K = String(d.name).trim().toUpperCase();
-    if (K.length < 3 || K.length > VU.length) return;
-    const dist = levenshtein(K, VU.slice(0, K.length));
-    if (dist > Math.max(1, Math.floor(K.length/6))) return;
+    const dist = namenStumpfAbstand(d.name, VU);
+    if (dist < 0) return;
     const w = (tk && dk === tk) ? dist - 100 : (tagGleich ? dist - 50 : dist);
     if (w < bestW){ bestW = w; best = i; bestN = 1; }
     else if (w === bestW) bestN++;
@@ -5942,6 +5958,74 @@ function eigenNameVervollstaendigen(vollName, tag){
   if (typeof depotZeichnen === "function") depotZeichnen();
   toast(`Name completed: ${voll}`);
   return true;
+}
+
+/* ---- ENEMY NAMES CUT OFF ----
+   The same rule for the other side. An enemy's cut name is completed from
+   its owner while it is read (atPunkteErgaenzen) and from the mouse-over
+   window; what is still cut after that is filed without the dots and
+   marked cut: 1 in the shared row, the name being part of that row. A
+   whole name read later, by the reader or by hand in Intel, replaces the
+   stump and clears the mark; a stump never replaces a whole name, a
+   longer stump replaces a shorter one. The match reuses the own rule:
+   namenStumpfAbstand for the beginning, eigenCutTreffer for the one stump
+   a whole name completes; two that fit alike are left alone.
+   Records from before this rule carry the dots in the name or the old
+   marks kurz (hand path) and unvoll (sheet): they become stump and mark
+   as they are read, in memory only, and reach the server with the next
+   write of that row. */
+function feindCut(u){
+  /* a description of unreadable characters is no reading and never cut */
+  return !!(u && !u.unlesbar && (u.cut || u.kurz || u.unvoll || eigenNameAbgeschnitten(u.name)));
+}
+/* one record into stump and mark, changed in place */
+function feindCutNormieren(u){
+  if (!u || typeof u !== "object") return u;
+  if (feindCut(u)){
+    if (eigenNameAbgeschnitten(u.name)) u.name = eigenNameKern(u.name);
+    if (u.name) u.cut = 1; else delete u.cut;
+  }
+  delete u.kurz; delete u.unvoll;
+  return u;
+}
+function feindDepotNormieren(liste){
+  if (!Array.isArray(liste)) return [];
+  for (const u of liste) feindCutNormieren(u);
+  return liste;
+}
+/* the records a reading stands for: exact and tag matches as before; a
+   whole name against several stumps keeps the one it completes */
+function feindTreffer(depot, neu){
+  const treffer = (depot || []).filter(d => gleicheAT(d, neu));
+  if (!neu || !neu.name || treffer.length < 2) return treffer;
+  const tk = atTagKey(neu.tag);
+  /* the same tag is the surest match of all */
+  const sicher = treffer.filter(d => tk && atTagKey(d.tag) === tk);
+  if (sicher.length) return sicher;
+  const ganz = treffer.filter(d => !feindCut(d));
+  if (feindCut(neu)){
+    /* a stump read against several whole names: the closest beginning,
+       none when two fit alike (the stump is then filed on its own) */
+    if (ganz.length >= 2){
+      let best = -1, bestD = Infinity, n = 0;
+      ganz.forEach((d, i) => {
+        const a = namenStumpfAbstand(neu.name, d.name);
+        if (a < 0) return;
+        if (a < bestD){ bestD = a; best = i; n = 1; } else if (a === bestD) n++;
+      });
+      return n === 1 ? treffer.filter(d => feindCut(d) || d === ganz[best]) : [];
+    }
+    return treffer;
+  }
+  /* a whole name that is on file whole already completes no stump: the
+     record is that one, no double of the same unit */
+  if (ganz.length) return ganz;
+  const j = eigenCutTreffer(treffer, neu.name, neu.tag);
+  return treffer.filter(d => j >= 0 && d === treffer[j]);
+}
+/* the mark behind a cut name wherever the register is shown */
+function feindCutMarke(u){
+  return feindCut(u) ? `<span style="color:var(--dim2)" title="Name cut off in the game. A later reading, the owner line or the hover window completes it.">\u2026</span>` : "";
 }
 
 /* ---- how a depot grew over time ----
@@ -18185,9 +18269,14 @@ async function kbTooltipLesen(job){
   const passt = !kern || kbUnvoll(z) || name.toUpperCase().startsWith(anfang);
   if (!passt){ KB.status = `Mouse-over says ${tag} - ${name}; line ${z.i + 1} reads ${alt} - not taken over.`; kbZeichnen(); return; }
   KB.tooltipZeile = {kenn: job.kenn, i: z.i};
-  z.name = name; z.nameVoll = true; z.nameZuv = Math.max(+z.nameZuv || 0, zuv);
+  /* ENEMY NAMES CUT OFF: a window cut off itself gives a stump, not a whole
+     name; it keeps its dots on the line and never shortens what stands there */
+  const fensterKurz = !!(teil && teil.kurz);
+  if (fensterKurz && kern && name.length <= kern.length){ KB.status = `Line ${z.i + 1} keeps ${alt}, the mouse-over window shows no more: ${tag} - ${name}\u2026`; kbZeichnen(); return; }
+  z.name = fensterKurz ? name + "\u2026" : name; z.nameVoll = !fensterKurz; z.nameZuv = Math.max(+z.nameZuv || 0, zuv);
   eigenVoll();
-  KB.status = `Line ${z.i + 1}: full name from the mouse-over window - ${name}.`;
+  KB.status = fensterKurz ? `Line ${z.i + 1}: the mouse-over window is cut off too, ${name}\u2026 stays a stump.`
+                          : `Line ${z.i + 1}: full name from the mouse-over window - ${name}.`;
   kbZeichnen();
 }
 /* THE CREW PARTS BELOW THE NAME, a second witness for the type. The
@@ -18740,7 +18829,7 @@ function kbZeichnen(){
         z.unsicher
           ? `<span class="kb-schwach" title="${kbEsc(z.unsicherGrund || "read too poorly to write down")}">\u25cf</span>` : ""}${
         kbUnvoll(z)
-          ? `<span class="kb-unvoll" title="Name cut short by the game — hover the card in the game to see the full name, then click the name here and type it in full">\u2026</span>` : ""}${
+          ? `<span class="kb-unvoll" title="Name cut off in the game. A later reading, the owner line or the hover window completes it.">\u2026</span>` : ""}${
         z.unlesbar
           ? `<span class="kb-unles" title="${z.beschrieben
               ? "Described by hand — recognised again by the picture of its name line, not by its letters"
@@ -18748,7 +18837,7 @@ function kbZeichnen(){
         z.bekannt && z.bekannt.stand === "gleich"
           ? `<span class="kb-bek" title="Already in the clan's book — ${kbEsc(kbBekanntText(z.bekannt))}">\u25cf</span>` : ""}${
         z.bekannt && z.bekannt.stand === "aehnlich"
-          ? `<button class="kb-aehnlich" data-i="${z.i}" title="The book has &quot;${kbEsc(z.bekannt.e.tag || z.bekannt.e.name)}&quot;${z.bekannt.besitzer ? " under " + kbEsc(z.bekannt.besitzer) : ""} (${kbEsc(z.bekannt.warum)}) — ${kbEsc(kbBekanntText(z.bekannt))}. Click to take that over.">\u2248</button>` : ""}${
+          ? `<button class="kb-aehnlich" data-i="${z.i}" title="The book has &quot;${kbEsc(z.bekannt.e.tag || (z.bekannt.e.name + (feindCut(z.bekannt.e) ? "\u2026" : "")))}&quot;${z.bekannt.besitzer ? " under " + kbEsc(z.bekannt.besitzer) : ""} (${kbEsc(z.bekannt.warum)}) — ${kbEsc(kbBekanntText(z.bekannt))}. Click to take that over.">\u2248</button>` : ""}${
         z.abweichung ? `<button class="kb-nehmen" data-i="${z.i}" title="${z.abweichung.buch
           ? `Owner ${kbEsc(z.besitzer)} comes from the clan's book, the box read &quot;${kbEsc(z.abweichung.besitzer) || "nothing"}&quot;. Click to take the reading back, right-click to keep the book's owner`
           : `Read as &quot;${kbEsc(z.abweichung.tag)} ${kbEsc(z.abweichung.name)} — ${kbEsc(z.abweichung.besitzer)}&quot; — click to take that over, right-click to dismiss it as a misread`}">!</button>` : ""
@@ -19083,7 +19172,8 @@ function kbBearbeiten(ev){
     if (z && z.bekannt && z.bekannt.e){
       const d = z.bekannt.e, bes = z.bekannt.besitzer || null;
       if (d.tag) z.tag = d.tag;
-      if (d.name && !z.name) z.name = d.name;
+      /* ENEMY NAMES CUT OFF: a stump from the book keeps its dots on the line */
+      if (d.name && !z.name) z.name = d.name + (feindCut(d) ? "\u2026" : "");
       if (d.k && !z.typ && !d.ung) z.typ = d.k;
       /* the owner the book proposed - taken by hand, the Kommodore's doing */
       if (bes) z.besitzer = bes;
@@ -19832,14 +19922,18 @@ function kbBehalten(){
       const key = spielerKey(z.besitzer);
       besitzerKeys.add(key);
       const depot = feindDepot(key).slice();
+      /* ENEMY NAMES CUT OFF: the name goes in without the game's dots, the
+         cut as a mark of its own; a description of unreadable characters
+         is taken as written */
       const neu = {tag: String(z.tag || "").replace(/\s+/g, "").toUpperCase(),
-                   name: String(z.name || ""), kurz: 0,
+                   name: z.unlesbar ? String(z.name || "") : eigenNameKern(z.name),
+                   cut: kbUnvoll(z) ? 1 : 0,
                    unlesbar: z.unlesbar || undefined, bild: z.bild || undefined,
                    schrift: z.schrift || undefined};
       /* an unreadable unit that nobody has described yet goes in without a
          name at all - the character soup would only look like one */
       if (z.unlesbar && !z.beschrieben) neu.name = "";
-      const treffer = depot.filter(d => gleicheAT(d, neu));
+      const treffer = feindTreffer(depot, neu);
       /* IS THIS A FURTHER UNIT, OR THE SAME ONE AGAIN? */
       let weitere = false;
       if (treffer.length){
@@ -19857,7 +19951,7 @@ function kbBehalten(){
         }
       }
       if (!treffer.length || weitere){
-        depot.push(Object.assign({id: Math.random().toString(36).slice(2,9), k, name: neu.name, tag: neu.tag, kurz: 0,
+        depot.push(Object.assign({id: Math.random().toString(36).slice(2,9), k, name: neu.name, tag: neu.tag,
                                   o: ort, t: jetztS},
                                  /* on an attack line the unit is not IN the town - it stands on
                                     the line named by the letter, attacking it */
@@ -19869,7 +19963,7 @@ function kbBehalten(){
                                     name nobody can read, it is the only identity there is */
                                  z.schrift ? {schrift: z.schrift} : {},
                                  z.unlesbar ? {unlesbar: 1, bild: z.bild || "", name: neu.name} : {},
-                                 kbUnvoll(z) ? {unvoll: 1} : {},
+                                 neu.cut ? {cut: 1} : {},
                                  unbestaetigt ? {ung: 1} : {}));
         setFeindDepot(key, depot); teams++;
         if (weitere) doppelt++;
@@ -19883,13 +19977,18 @@ function kbBehalten(){
           da.verm ? {verm: 0} : {},
           (!da.name && neu.name) ? {name: neu.name} : {},
           (z.schrift && da.schrift !== z.schrift) ? {schrift: z.schrift} : {},
-          /* the full name replaces a cut one on file, never the other way */
-          (da.unvoll && !kbUnvoll(z) && neu.name) ? {name: neu.name, unvoll: 0} : {});
+          /* ENEMY NAMES CUT OFF: the whole name replaces a cut one on file,
+             a longer stump a shorter one, never the other way round */
+          (da.cut && neu.name && (!neu.cut || neu.name.length > String(da.name || "").length)) ? {name: neu.name} : {},
+          /* a tag read now fills an empty one on file */
+          (!da.tag && neu.tag) ? {tag: neu.tag} : {});
+        /* the mark follows the name that stays */
+        const cutNeu = (besser.name !== undefined && besser.name === neu.name) ? !!neu.cut : !!da.cut;
         const stNeu = (z.hp && z.hp.length) ? z.hp.map(h => h ? [h[0], h[1]] : null) : null;
         const stAnders = !!stNeu && JSON.stringify(stNeu) !== JSON.stringify(da.st || null);
-        if (da.o !== ort || da.t !== jetztS || Object.keys(besser).length || stAnders)
+        if (da.o !== ort || da.t !== jetztS || Object.keys(besser).length || stAnders || cutNeu !== !!da.cut)
           setFeindDepot(key, depot.map(d => d === da
-            ? Object.assign({}, d, {o: ort, t: jetztS, l: KB.linie || null}, stNeu ? {st: stNeu} : {}, besser) : d));
+            ? eigenCutSetzen(Object.assign({}, d, {o: ort, t: jetztS, l: KB.linie || null}, stNeu ? {st: stNeu} : {}, besser), cutNeu) : d));
       }
     }
     if (seite !== null){
@@ -31624,7 +31723,7 @@ function atZeileTeilen(zeile){
      beginning, and "at034 - kommo..." is no beginning of
      "at034 - kommodore", nor does the longer one start with the dotted
      one. So the one match the rule was built for never came about. */
-  const punkte = /\s*(\u2026|\.\.\.)$/;
+  const punkte = OWN_PUNKTE;              /* two dots and more, as everywhere */
   const m = AT_TRENNER.exec(s);
   if (!m){
     const kurz0 = punkte.test(s);
@@ -31679,12 +31778,17 @@ function gleicheAT(a, b){
     return false;                       // unreadable and no print - no claim
   }
   if (ta && tb) return ta === tb;
-  const na = String(a.name || "").trim().toLowerCase();
-  const nb = String(b.name || "").trim().toLowerCase();
+  /* ENEMY NAMES CUT OFF: the names without the game's dots; a stump on
+     either side stands for the whole name it begins, by the own rule */
+  const na = String(a.name || "").replace(OWN_PUNKTE, "").trim().toLowerCase();
+  const nb = String(b.name || "").replace(OWN_PUNKTE, "").trim().toLowerCase();
   if (!na || !nb) return false;
   if (na === nb) return true;
-  const kurz = a.kurz || b.kurz;
-  return kurz && (na.startsWith(nb) || nb.startsWith(na));
+  const ca = feindCut(a), cb = feindCut(b);
+  if (!ca && !cb) return false;
+  /* stump against stump: only the same beginning, no slips allowed */
+  return (ca && cb) ? (na.startsWith(nb) || nb.startsWith(na))
+       : ca ? namenStumpfPasst(na, nb) : namenStumpfPasst(nb, na);
 }
 /* "USSR-003" -> Stamm "USSR-", Nummer 3, drei Stellen. Der Stamm ist alles vor
    der abschliessenden Zahl - ob er mit der Fraktion beginnt oder mit "INF",
@@ -36209,7 +36313,7 @@ function feindDialog(key, name){
               vermutet(d)?"opacity:.62":""}">
           <span class="sym${vermutet(d)?" frage":""}" title="${esc(vermutet(d)?(d.verm?"assumed from the numbering":"placeholder — not scouted yet"):atName(d.k))}">${vermutet(d)?"?":symbolSVG(d.k, c)}</span>
           <span class="n" dir="auto"><b>${esc(d.tag||"")}</b><span style="overflow:hidden;text-overflow:ellipsis">${esc(d.name || (vermutet(d) ? "not scouted yet" : ""))}${
-              d.kurz?'<span style="color:var(--dim2)">…</span>':""}</span><em><span class="vt">${esc(atKurz(d.k))}</span>${
+              feindCutMarke(d)}</span><em><span class="vt">${esc(atKurz(d.k))}</span>${
               stText(d)?` · ${stText(d)}`:""}${wannText(d)?` · ${wannText(d)}`:""}${woText(d)?` · ${woText(d)}`:""}</em></span>
           <button class="x" data-frm="${i}" title="Remove">×</button></div>`).join("")}
         ${zeig.length ? "" : `<div class="empty">Nothing of this kind on record.</div>`}
@@ -36408,24 +36512,38 @@ function feindDialog(key, name){
     const zerlegt = atZeileTeilen(nm);
     let kurz = false;
     if (zerlegt && zerlegt.tag && !tag){ tag = zerlegt.tag; nm = zerlegt.name; kurz = zerlegt.kurz; }
-    else if (zerlegt) kurz = zerlegt.kurz;
+    else if (zerlegt){ kurz = zerlegt.kurz; if (kurz) nm = eigenNameKern(nm); }   // the stump goes in without its dots
     tag = tag.replace(/\s+/g, "").toUpperCase();
     if (!nm && !tag){ toast("Enter a tag or a name."); return; }
-    const doppelt = liste.find(d => gleicheAT(d, {tag, name:nm, kurz}));
+    /* ENEMY NAMES CUT OFF: a name with dots is a stump and carries the
+       mark; a whole name completes the stump on file */
+    const doppelt = feindTreffer(liste, {tag, name: nm, cut: kurz ? 1 : 0})[0];
     if (doppelt){
       /* Ein Platzhalter wird durch die echte Sichtung ersetzt, nicht doppelt
          angelegt - dafuer war er ja da. */
       if (doppelt.ung){
-        const l = liste.map(d => d === doppelt ? {...d, k, name:nm||d.name, kurz, ung:0} : d);
+        const l = liste.map(d => d === doppelt ? eigenCutSetzen({...d, k, name: nm || d.name, ung: 0}, nm ? kurz : !!d.cut) : d);
         feindDialog.typ = k;
         setFeindDepot(key, l); feindDialog(key, name); toast("Placeholder confirmed");
         return;
       }
-      toast(`Already recorded: ${doppelt.tag || doppelt.name || atName(doppelt.k)}`);
+      if (doppelt.cut && nm && !kurz){
+        const l = liste.map(d => d === doppelt ? eigenCutSetzen({...d, name: nm, tag: d.tag || tag}, false) : d);
+        feindDialog.typ = k;
+        setFeindDepot(key, l); feindDialog(key, name); toast(`Name completed: ${nm}`);
+        return;
+      }
+      /* a longer stump extends a shorter one */
+      if (doppelt.cut && nm && kurz && nm.length > String(doppelt.name || "").length){
+        const l = liste.map(d => d === doppelt ? eigenCutSetzen({...d, name: nm, tag: d.tag || tag}, true) : d);
+        feindDialog.typ = k;
+        setFeindDepot(key, l); feindDialog(key, name); toast(`Name extended: ${nm}\u2026`);
+        return;
+      }
+      toast(`Already recorded: ${doppelt.tag || (doppelt.name ? doppelt.name + (doppelt.cut ? "\u2026" : "") : atName(doppelt.k))}`);
       return;
     }
-    let neu = liste.concat([{id: Math.random().toString(36).slice(2,9), k, name:nm, tag,
-                             kurz: kurz ? 1 : 0}]);
+    let neu = liste.concat([eigenCutSetzen({id: Math.random().toString(36).slice(2,9), k, name: nm, tag}, kurz)]);
     /* Luecken anbieten: wer 003 sieht, weiss dass es 001 und 002 gibt - aber
        nicht, was sie sind. Platzhalter tragen das ausdruecklich. */
     const fehlt = atLuecken(neu, tag);
@@ -38496,7 +38614,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 6edcdf836b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c64d499fd0</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -38640,7 +38758,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "6edcdf836b";
+const BAU = "c64d499fd0";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
