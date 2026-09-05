@@ -3003,8 +3003,16 @@ const TOPFTAFEL = {
   sicht:  {wer:1, recht:"aufklaerung", krieg:0},   // eigene Sichtabdeckung, geteilt
   pos:    {wer:1, recht:"", krieg:0},              // wo jemand gerade scannt
   link:   {wer:1, recht:"", krieg:0},              // welches Geraet zusieht
+  /* The next packages (05.09.2026): presence, own groups of assault teams,
+     the assignment of a team or group to an order, role requests for a
+     running battle and their acceptance, and the state of a battle read
+     from the game screen. Same shapes as their neighbours. */
+  stat:   {wer:1, recht:"", krieg:0},              // Anwesenheit: Active / Inactive / Offline / RTS only / Mobile
+  grp:    {wer:1, recht:"", krieg:1},              // eigene AT-Gruppen
   units:  {wer:2, recht:"", krieg:0},              // eigene Einheiten am Ort
   join:   {wer:2, recht:"", krieg:0},              // Zusage an einem Pfeil
+  zuord:  {wer:2, recht:"", krieg:0},              // Einheit oder Gruppe an einem Befehl (zuord:<art>-<id>:<spieler>)
+  rollezu:{wer:2, recht:"", krieg:0},              // Annahme einer Rollenanforderung
   post:   {wer:2, recht:"brett", krieg:0},         // Brettbeitrag
   line:   {wer:2, recht:"", krieg:0},              // Verteidigungslinie
   area:   {wer:2, recht:"", krieg:0},              // Vieleckzone
@@ -3033,8 +3041,13 @@ const TOPFTAFEL = {
      copy for good. */
   anon:   {wer:0, recht:"anon",  krieg:1},         // anonyme Soldatenliste
   para:   {wer:0, recht:"",      krieg:0},         // Parablock, Eigentum in der Zeile
+  rolle:  {wer:0, recht:"anfordern", krieg:0},     // Rollenanforderung, Eigentum in der Zeile
+  gefecht:{wer:0, recht:"aufklaerung", krieg:0},   // Gefechtsstand aus dem Spielbild
   akt:    {wer:0, recht:"",      krieg:0},         // Anwesenheitsmeldung
-  todo:   {wer:0, recht:"",      krieg:0},         // Meldung ans Werkzeug
+  /* krieg:1 since 05.09.2026: a report to the admin is about the clan, not
+     about the war; the server drops the settled ones at the war cut and
+     keeps the open ones. */
+  todo:   {wer:0, recht:"",      krieg:1},         // Meldung ans Werkzeug
 };
 /* Die vier alten Listen entstehen jetzt aus der Tafel. Sie bleiben, weil
    sie an dreizehn Stellen gelesen werden - nur gepflegt wird oben. */
@@ -4138,6 +4151,8 @@ const RECHTE = [
    d:"Take anybody's arrow, line, area or board post off the map."},
   {k:"hilfe",       n:"Call for help",
    d:"Post a request that shows up clan-wide as a call for help."},
+  {k:"anfordern",   n:"Request roles",
+   d:"Ask the clan for roles or equipment in a running battle."},
   {k:"brett",       n:"Write on the board",
    d:"Leave written orders and notes for everyone."},
   {k:"aufklaerung", n:"File intel",
@@ -4165,7 +4180,7 @@ const RECHTE = [
 const RECHT_NAME = Object.fromEntries(RECHTE.map(r => [r.k, r.n]));
 /* Nur ein Anfang, damit die Liste nicht leer dasteht. Der Leiter schreibt sie um. */
 const ROLLEN_VORGABE = [
-  {id:"off", name:"Officer", rechte:{befehl:1,bestaetigen:1,loeschen:1,hilfe:1,brett:1,aufklaerung:1}},
+  {id:"off", name:"Officer", rechte:{befehl:1,bestaetigen:1,loeschen:1,hilfe:1,anfordern:1,brett:1,aufklaerung:1}},
   {id:"sqd", name:"Squad lead", rechte:{hilfe:1,brett:1,aufklaerung:1}},
   {id:"mem", name:"Member", rechte:{brett:1,aufklaerung:1}},
 ];
@@ -36976,7 +36991,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 73e6d9fcbb</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 772752b3bd</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -37120,7 +37135,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "73e6d9fcbb";
+const BAU = "772752b3bd";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
