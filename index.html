@@ -1772,7 +1772,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="tool" data-t="unit" aria-pressed="false">
         <svg viewBox="0 0 24 24"><rect x="3.5" y="6.2" width="17" height="11.6"/><path d="M3.5 6.2l17 11.6M20.5 6.2L3.5 17.8"/></svg>
         <span class="lbl" data-txt="tool.unit">Unit</span><span class="kb">3</span></button>
-      <button class="tool" data-t="arrow" aria-pressed="false">
+      <button class="tool" data-t="arrow" aria-pressed="false" data-tip="Attack or move: drag from origin to target" title="Attack or move: drag from origin to target">
         <svg viewBox="0 0 24 24"><path d="M3.7 18.8C7.2 9.3 14 5.6 20.2 5.3"/><path d="M16.5 3.9l3.9 1.4-2.5 3.2"/></svg>
         <span class="lbl" data-txt="tool.arrow">Attack</span><span class="kb">4</span></button>
       <button class="tool" data-t="line" aria-pressed="false">
@@ -1838,6 +1838,9 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="tool row" id="b-entwurf" aria-pressed="false" title="New orders stay private until you publish them">
         <svg viewBox="0 0 24 24"><path d="M4.5 19.5l3.2-.7 10.4-10.4-2.5-2.5L5.2 16.3z"/><path d="M14.2 7.3l2.5 2.5"/></svg>
         <span class="lbl" data-txt="view.entwurf">Drafts</span></button>
+      <button class="tool row" id="b-fertig" aria-pressed="false" title="Show orders that are done">
+        <svg viewBox="0 0 24 24"><path d="M4.6 12.4l4.7 4.7L19.4 7"/></svg>
+        <span class="lbl" data-txt="view.fertig">Done</span></button>
     </nav>
 
     <div id="mapwrap">
@@ -3061,7 +3064,7 @@ let tool = "inspect", faction = 1, sel = null, arrowFrom = null, lineDraft = nul
    Die STUECKZAHL bleibt mit Absicht draussen: sie faellt auf 1 zurueck, weil
    eine vergessene 7 teurer ist als ein zweiter Tastendruck. */
 let spotTypMerk = null, spotWemMerk = "";
-let objOnly = false, showNames = true, showKey = false, showDepot = true, paraGeplant = false;
+let objOnly = false, showNames = true, showKey = false, showDepot = true, paraGeplant = false, showFertig = false;
 /* one player's reported positions, lifted on the map (a Set of town indices) */
 let hebe = null, hebeName = "";
 /* the sightings filter in the detail view - a type key and an owner key,
@@ -3915,7 +3918,7 @@ function pfeilGeaendert(a){
 function pfeilFreigeben(a){
   const k = ENTWUERFE.indexOf(a);
   if (k >= 0) ENTWUERFE.splice(k, 1);
-  delete a.entwurf; a.t = jetzt();
+  delete a.entwurf; delete a.st; delete a.zb; a.t = jetzt();   // published: planned
   S.arrows.push(a); dirty.add(`arrow:${a.id}`);
   entwuerfeSpeichern();
 }
@@ -4128,9 +4131,9 @@ function setLeader(player){ stamp("meta", "leader", player || null); save(); kop
    braucht keinen Rang, der Grossoffensiven befiehlt. */
 const RECHTE = [
   {k:"befehl",      n:"Give orders",
-   d:"Their arrows, lines, areas and para blocks count as orders. Everyone else's count as proposals."},
-  {k:"bestaetigen", n:"Confirm proposals",
-   d:"Turn somebody else's proposal into a standing order."},
+   d:"May set their own arrows, lines, areas and para blocks active or done."},
+  {k:"bestaetigen", n:"Confirm orders",
+   d:"May set any order of our side active, done or back to planned."},
   {k:"loeschen",    n:"Clear other people's marks",
    d:"Take anybody's arrow, line, area or board post off the map."},
   {k:"hilfe",       n:"Call for help",
@@ -4227,64 +4230,188 @@ function darfNicht(recht){
   return false;
 }
 function setRollen(liste){ stamp("meta", "rollen", liste && liste.length ? liste : null); save(); }
-/* ---- Befehl oder Vorschlag ----
-   art === 0 heisst Vorschlag. Fehlt art ganz, ist es ein Befehl: alles, was
-   vor dieser Regel entstanden ist, wurde frei gesetzt und soll nicht
-   nachtraeglich herabgestuft werden. */
-const bestaetigt = id => !!(id && S.ok[id] && imKrieg(S.ok[id]) && S.ok[id].v);
-const istBefehl  = (id, v) => !v || v.art !== 0 || bestaetigt(id);
-const artNeu     = () => darf("befehl") ? 1 : 0;
-function setBestaetigt(id, an){
-  if (!darf("bestaetigen")) return darfNicht("bestaetigen");
-  /* NOT A QUESTION OF RIGHTS, a condition on the order itself: a drop out
-     of an airfield that is not ours does not go active, whoever is
-     standing in front of it. */
-  if (an){
-    const a = liveArrows().find(q => q.id === id);
-    if (a && luftGesperrt(a)){
-      toast(`${MAP.n[a.from][0]} is not ours yet — take the airfield first.`);
-      return;
+/* ---- THE ORDER MODEL (05.09.2026) ----
+   Every order (arrow, defence line, area, para block) is in one of three
+   states: PLANNED (the default after it is made), ACTIVE (released) or
+   DONE. A draft is a private stage before all that. The state lives in
+   two places, because the server rules stay as they are: the "ok" bucket
+   (whoever may confirm writes it: 1 active, 2 done, null planned; old
+   confirmations are 1 and so stay valid) and the order's own value (its
+   author writes st 1 or 2 into the row that is theirs anyway). The state
+   is done if either says 2, else active if either says 1, else planned.
+   art is still stored but decides nothing any more. */
+const ZUSTAND_NAME = {plan: "planned", aktiv: "active", fertig: "done"};
+const okEintrag = key => (key && S.ok[key] && imKrieg(S.ok[key]) && S.ok[key].v) ? S.ok[key] : null;
+function befehlZustand(key, v){
+  if (v && v.entwurf) return "plan";
+  const e = okEintrag(key), ok = e ? (+e.v || 1) : 0, st = v ? (+v.st || 0) : 0;
+  if (ok === 2 || st === 2) return "fertig";
+  if (ok || st === 1) return "aktiv";
+  return "plan";
+}
+/* the ok key of an order: an arrow its id, a line or area its row id, a
+   para block "para:" and the town - the keys the windows already use */
+const okSchluessel = (art, id) => art === "para" ? `para:${id}` : String(id);
+/* the order behind an ok key, with its kind, value and author */
+function befehlVonSchluessel(key){
+  key = String(key);
+  if (key.startsWith("para:")){
+    const i = +key.slice(5), pb = paraAt(i);
+    return pb ? {art: "para", id: i, key: befehlKey("para", i), v: pb, by: S.para[i] && S.para[i].by} : null;
+  }
+  const a = liveArrows().find(q => q.id === key);
+  if (a) return {art: "arrow", id: a.id, key: a.id, v: a, by: a.by};
+  if (S.line[key] && S.line[key].v) return {art: "line", id: key, key: befehlKey("line", key), v: S.line[key].v, by: S.line[key].by};
+  if (S.area[key] && S.area[key].v) return {art: "area", id: key, key: befehlKey("area", key), v: S.area[key].v, by: S.area[key].by};
+  return null;
+}
+/* another side's mark is a sighting: no state, no chain, no commitment */
+const fremdeSeite = v => !!v && v.f !== undefined && v.f !== clanFaktion();
+/* done orders stay off the map unless the Done switch is on, and what is
+   not drawn must not be hit either */
+const befehlVersteckt = (key, v) => !showFertig && !!v && !fremdeSeite(v) && befehlZustand(key, v) === "fertig";
+/* who may set the state: anybody who may confirm, or the author with the
+   right to give orders */
+function darfZustand(key, v, e){
+  if (darf("bestaetigen")) return true;
+  const by = e && e.by !== undefined ? e.by : (befehlVonSchluessel(key) || {}).by;
+  return by === S.me && darf("befehl");
+}
+/* set the state: 0 planned, 1 active, 2 done. Writes every road this
+   machine has - the ok bucket with the right to confirm, the own row as
+   the author - so both say the same wherever possible. */
+function zustandSetzen(key, v, st, leise){
+  const b = befehlVonSchluessel(key);
+  if (!b || !b.v) return false;
+  const w = b.v;
+  if (w.entwurf){ toast("A draft has no state. Publish it first."); return false; }
+  if (fremdeSeite(w)){ toast("Only our own side's orders carry a state."); return false; }
+  /* not a question of rights, a condition on the order itself: a drop out
+     of an airfield that is not ours does not go active */
+  if (st === 1 && b.art === "arrow" && luftGesperrt(w)){
+    toast(`${MAP.n[w.from][0]} is not ours yet. Take the airfield first.`);
+    return false;
+  }
+  const chef = darf("bestaetigen"), autor = b.by === S.me && darf("befehl");
+  if (!chef && !autor) return darfNicht(b.by === S.me ? "befehl" : "bestaetigen");
+  /* an arrow going active remembers who held its target (zb), so that a
+     move into our own town is not "taken" the moment it is active */
+  const okExtra = {n: S.name || ""}, aend = {st: st || undefined};
+  if (b.art === "arrow"){
+    if (st === 1){ okExtra.zb = ownerOf(w.to); aend.zb = okExtra.zb; }
+    else aend.zb = st === 2 ? w.zb : undefined;
+  }
+  if (chef && !stamp("ok", key, st || null, okExtra)) return false;
+  if (autor) befehlSchreiben(b, aend);
+  save();
+  /* the other road may still say more than what was just written */
+  const ziel = st === 2 ? "fertig" : st === 1 ? "aktiv" : "plan";
+  const b2 = befehlVonSchluessel(key), jetztZs = b2 ? befehlZustand(key, b2.v) : ziel;
+  if (jetztZs !== ziel && !leise){
+    const e = okEintrag(key);
+    toast(!chef && e ? `Set by ${e.n || e.by}. Only somebody who may confirm can change that.`
+                     : "Its author set that in the order itself. Only they can change it.");
+  }
+  /* a finished drop leaves an active para block on its target, unless our
+     side already holds an active one there: none, another side's or our
+     own still only planned all give way */
+  if (st === 2 && b.art === "arrow" && w.luft && MAP.n[w.to]){
+    const pb = paraAt(w.to);
+    if (!pb || pb.f !== w.f || pb.plan){
+      /* somebody else's planned block cannot be rewritten from here - the
+         server keeps the author's row; then the block is set by hand */
+      const ez = S.para[w.to];
+      const darfSetzen = !pb || (ez && ez.by === S.me) || darf("loeschen");
+      if (darfSetzen){
+        if (setPara(w.to, w.f, false)) zustandSetzen(`para:${w.to}`, null, 1, true);
+      } else toast(`${MAP.n[w.to][0]}: the block there is somebody else's. Set it active by hand.`);
     }
   }
-  stamp("ok", id, an ? 1 : null, {n: S.name || ""});
-  save(); draw();
-  toast(an ? "Confirmed — it stands as an order now" : "Back to a proposal");
+  /* success only when the state really is what was asked for; otherwise
+     the window stays open and shows what stands */
+  const getroffen = jetztZs === ziel;
+  if (!leise){ draw(); if (getroffen) toast(st === 2 ? "Marked done" : st === 1 ? "Set active" : "Back to planned"); }
+  return getroffen;
 }
+/* the old names stay as thin shells for whatever still calls them */
+const bestaetigt = id => !!okEintrag(id);
+const istBefehl  = (id, v) => befehlZustand(id, v) !== "plan";
+const artNeu     = () => darf("befehl") ? 1 : 0;
+function setBestaetigt(id, an){ return zustandSetzen(id, null, an ? 1 : 0); }
 /* Loeschen darf, wem es gehoert - und wer die Karte aufraeumen soll. */
 const darfWeg = e => !!(e && e.by === S.me) || darf("loeschen");
-/* Wer bestaetigt hat, steht daneben: eine Bestaetigung ohne Namen ist im
-   Streitfall wertlos. */
-const okVon = id => bestaetigt(id) ? (S.ok[id].n || S.ok[id].by) : null;
-/* Der Kopfsatz ueber jeder Marke: gilt sie, und auf wessen Wort. */
-function standText(id, v, wer){
-  const von = wer ? ` by <b>${esc(wer)}</b>` : "";
-  if (istBefehl(id, v)){
-    const ok = okVon(id);
-    return ok ? `<span style="color:var(--accent)">Order</span>${von} — confirmed by <b>${esc(ok)}</b>.`
-              : `<span style="color:var(--accent)">Order</span>${von}.`;
-  }
-  return `<span style="color:var(--dim2)">Proposal</span>${von} — it does not count as an order `
-       + `until somebody who may give orders confirms it.`;
+const okVon = id => { const e = okEintrag(id); return e ? (e.n || e.by) : null; };
+/* the line above every mark: its state, and on whose word */
+function zustandText(key, v, wer){
+  const von = wer ? `<b>${esc(wer)}</b>` : "somebody";
+  if (v && v.entwurf) return `<span style="color:var(--dim2)">Draft</span> by ${von}. Only you see it.`;
+  if (fremdeSeite(v)) return `<span style="color:var(--dim2)">Sighting</span> by ${von}. Another side's mark, it carries no state.`;
+  const zs = befehlZustand(key, v), e = okEintrag(key);
+  const okWer = e ? esc(e.n || e.by) : "", autor = esc(wer || "its author");
+  if (zs === "fertig") return `<span style="color:var(--dim2)">Done</span>, by <b>${e && +e.v === 2 ? okWer : autor}</b>.`;
+  if (zs === "aktiv")  return `<span style="color:var(--accent)">Active</span>, set by <b>${e ? okWer : autor}</b>.`;
+  return `<span style="color:var(--dim)">Planned</span> by ${von}.`;
 }
-/* Die beiden Knoepfe, die an jeder Marke gleich aussehen sollen. */
-const okKnopf = (id, v) => (!istBefehl(id, v) && darf("bestaetigen"))
-  ? `<button class="btn" data-okmark="${esc(id)}" style="border-color:var(--accent)">Confirm as order</button>`
-  : (istBefehl(id, v) && bestaetigt(id) && darf("bestaetigen")
-     ? `<button class="btn" data-okweg="${esc(id)}" style="font-size:11px">Back to a proposal</button>` : "");
-/* Ohne Wurzel das Fenster, mit Wurzel die angegebene Stelle - der
-   Para-Block steht in der Seitenspalte, nicht in einem Fenster, und blieb
-   deshalb stumm. */
-function okVerdrahten(wurzel){
+function standText(id, v, wer){ return zustandText(id, v, wer); }
+/* the state buttons, the same at every mark: what the state allows and
+   what this machine may do */
+function zustandKnoepfe(key, v, e){
+  if (!v || v.entwurf || fremdeSeite(v)) return "";
+  if (!darfZustand(key, v, e)) return "";
+  const zs = befehlZustand(key, v);
+  const k = (st, text, akzent) => `<button class="btn" data-zskey="${esc(key)}" data-zs="${st}" style="${
+    akzent ? "border-color:var(--accent)" : "font-size:11px"}">${text}</button>`;
+  if (zs === "plan")  return k(1, "Set active", true);
+  /* a step down is offered only when every road saying more than the
+     target can be written from here: the ok bucket by whoever may confirm,
+     the order's own row by its author. A step up always takes. */
+  const eo = okEintrag(key), okSagt = eo ? (+eo.v === 2 ? 2 : 1) : 0, stSagt = +v.st || 0;
+  const chef = darf("bestaetigen");
+  const by = e && e.by !== undefined ? e.by : (befehlVonSchluessel(key) || {}).by;
+  const autor = by === S.me && darf("befehl");
+  const runter = bis => (chef || okSagt <= bis) && (autor || stSagt <= bis);
+  if (zs === "aktiv") return k(2, "Mark done", true) + (runter(0) ? k(0, "Back to planned") : "");
+  return runter(1) ? k(1, "Reopen") : "";
+}
+const okKnopf = (id, v) => zustandKnoepfe(id, v, null);
+/* without a root the window, with a root the given element - the para
+   block sits in the side column, not in a window */
+function zustandVerdrahten(wurzel){
   const w = wurzel || document.getElementById("dlg");
   if (!w) return;
   const zu = () => { if (!wurzel) closeDlg(); else side(); };
-  w.querySelectorAll("[data-okmark]").forEach(b => b.addEventListener("click", ()=>{
-    setBestaetigt(b.dataset.okmark, true); zu();
-  }));
-  w.querySelectorAll("[data-okweg]").forEach(b => b.addEventListener("click", ()=>{
-    setBestaetigt(b.dataset.okweg, false); zu();
+  w.querySelectorAll("[data-zskey]").forEach(b => b.addEventListener("click", ()=>{
+    if (zustandSetzen(b.dataset.zskey, null, +b.dataset.zs || 0)) zu();
   }));
 }
+function okVerdrahten(wurzel){ zustandVerdrahten(wurzel); }
+/* AUTOMATIC COMPLETION. An active attack arrow (not a drop) whose target
+   our side now holds is done. This machine marks it so when it may;
+   otherwise the arrow window says it. Runs after every sync receipt, after
+   a Control click and once a minute, never inside draw().
+   Hook for later rules (tank hunt and the like): add a further test
+   beside zielGenommen here. Para blocks, lines, areas and recon stay
+   manual. */
+const zielGenommen = a => {
+  if (!(a && !a.entwurf && !a.luft && a.f === clanFaktion()
+      && MAP.n[a.to] && ownerOf(a.to) === a.f && befehlZustand(a.id, a) === "aktiv")) return false;
+  /* who held the target when the arrow went active: our own town makes it
+     a move, never "taken". Older arrows without that memory still count. */
+  const eo = okEintrag(a.id), zb = eo && eo.zb !== undefined ? eo.zb : a.zb;
+  return zb === undefined || zb !== a.f;
+};
+function befehlAutoAbschluss(){
+  if (zeitReise) return false;
+  if (CFG && !ersterAbrufDurch) return false;
+  let getan = 0;
+  for (const a of liveArrows()){
+    if (!zielGenommen(a) || !darfZustand(a.id, a, a)) continue;
+    if (zustandSetzen(a.id, a, 2, true)) getan++;
+  }
+  if (getan) toast(`${getan} attack${getan === 1 ? "" : "s"} done, target taken`);
+  return getan > 0;
+}
+setInterval(() => { try { if (befehlAutoAbschluss()) draw(); } catch(e){} }, 60000);
 
 function setRang(player, ids){
   const k = Object.assign({}, rangKarte());
@@ -5039,13 +5166,15 @@ function draw(){
       ctx.globalAlpha = aOrt;
     }
     const pb = paraAt(i);
-    if (pb){                                // para-block: parachute glyph beside the disc
+    /* the block's state: planned pale, active full, done paler still and
+       hidden unless the Done switch is on; another side's block is a
+       sighting and drawn full */
+    const zsP = pb ? (fremdeSeite(pb) ? "aktiv" : befehlZustand(`para:${i}`, pb)) : "plan";
+    const fertigP = !!pb && zsP === "fertig";
+    if (pb && (!fertigP || showFertig)){    // para-block: parachute glyph beside the disc
       const g = Math.max(6, 5*Math.sqrt(z))*uiScale, px = x - r - g*0.9, py = y - r*0.2 - g*0.3;
-      /* Ein Vorschlag ist blasser als ein Befehl - dieselbe Sprache wie bei
-         Pfeilen und Linien. Bisher sahen beide gleich aus, obwohl der Wert
-         die ganze Zeit mitgespeichert wurde. */
-      const befehl = istBefehl(`para:${i}`, pb);
-      ctx.globalAlpha = (pb.plan ? .62 : 1) * (befehl ? 1 : .45) * aOrt;
+      const befehl = zsP !== "plan";
+      ctx.globalAlpha = (pb.plan ? .62 : 1) * (befehl ? 1 : .45) * (fertigP ? .35 : 1) * aOrt;
       ctx.save();
       ctx.lineJoin = "round"; ctx.lineCap = "round";
       /* rim first, line on top: the landing mark's order, the one that
@@ -5061,11 +5190,16 @@ function draw(){
         ctx.beginPath(); ctx.arc(px, py+g*.3, g*1.5, 0, 6.284); ctx.stroke(); ctx.setLineDash([]); }
       /* the block's own order: shield below the canopy, chain badge above */
       const pf = pfeilFarbe(pb.farbe);
+      let kP = null;
       if (z > 1.2 && (pb.label || pb.soll)){
-        const k = befehlSchild(px, py + g*2.9 + 10*uiScale, {name: pb.label, soll: +pb.soll || 0, farbe: pf || null, seite: col(FACTIONS[pb.f])});
-        if (k) schildVon.set("para:" + i, k);
+        kP = befehlSchild(px, py + g*2.9 + 10*uiScale, {name: pb.label, soll: fremdeSeite(pb) ? 0 : +pb.soll || 0, farbe: pf || null, seite: col(FACTIONS[pb.f])});
+        if (kP) schildVon.set("para:" + i, kP);
       }
-      if (pb.folge && z > 1.1) befehlAbzeichen(px, py - g*1.9, pb.folge, pf || col(FACTIONS[pb.f]), true);
+      /* done: one tick at the shield or above the canopy, no chain number */
+      if (fertigP){
+        /* the tick reads the same at every kind of order: .55 */
+        if (z > 1.1){ ctx.save(); ctx.globalAlpha = .55 * aOrt; befehlAbzeichen(kP ? kP.x1 : px, kP ? kP.y0 : py - g*1.9, "\u2713", pf || col(FACTIONS[pb.f]), true); ctx.restore(); }
+      } else if (pb.folge && z > 1.1) befehlAbzeichen(px, py - g*1.9, pb.folge, pf || col(FACTIONS[pb.f]), true);
       ctx.globalAlpha = aOrt;
     }
     if (gesehen.has(i)){                    // within someone's vision
@@ -5638,6 +5772,12 @@ function scheibeKampf(ctx, x, y, r, farbe){
 /* Free-hand area — circle a region and say what is in it. */
 function drawArea(a, eintrag, entwurf, id){
   if (!a || !Array.isArray(a.pts) || a.pts.length < 3) return;
+  /* state: planned dashed and pale, active full, done paler and hidden
+     unless the Done switch is on; another side's area is a sighting */
+  const fremdA = fremdeSeite(a), zsA = (id && !fremdA) ? befehlZustand(id, a) : "aktiv";
+  const fertigA = zsA === "fertig";
+  if (fertigA && !showFertig) return;
+  const vorA = zsA === "plan";
   const f = col(FACTIONS[a.f]);
   const p = a.pts.map(q => toScr(q[0], q[1]));
   /* smooth outline: a quadratic curve from edge midpoint to edge midpoint,
@@ -5650,23 +5790,23 @@ function drawArea(a, eintrag, entwurf, id){
     ctx.quadraticCurveTo(p[i][0], p[i][1], (p[i][0] + q[0])/2, (p[i][1] + q[1])/2);
   }
   ctx.closePath();
-  const vorA = a.art === 0 && !bestaetigt(id);
-  ctx.globalAlpha = entwurf ? .18 : (vorA ? .07 : .14); ctx.fillStyle = f; ctx.fill();
-  ctx.globalAlpha = entwurf ? .95 : (vorA ? .42 : .8);
+  ctx.globalAlpha = entwurf ? .18 : (vorA ? .07 : (fertigA ? .05 : .14)); ctx.fillStyle = f; ctx.fill();
+  ctx.globalAlpha = entwurf ? .95 : (vorA ? .42 : (fertigA ? .35 : .8));
   ctx.strokeStyle = f; ctx.lineWidth = (vorA ? 1.4 : 2)*uiScale;
   ctx.setLineDash(entwurf ? [5,4] : (vorA ? [2,4] : [9,5])); ctx.stroke(); ctx.setLineDash([]);
   ctx.globalAlpha = 1;
   const af = pfeilFarbe(a.farbe);
   if (af && !entwurf){
-    /* the chosen colour as a second, thinner rim */
-    ctx.globalAlpha = .9; ctx.strokeStyle = af; ctx.lineWidth = 1.1*uiScale; ctx.setLineDash([]); ctx.stroke(); ctx.globalAlpha = 1;
+    /* the chosen colour as a second, thinner rim; a done area fades it too */
+    ctx.globalAlpha = fertigA ? .35 : .9; ctx.strokeStyle = af; ctx.lineWidth = 1.1*uiScale; ctx.setLineDash([]); ctx.stroke(); ctx.globalAlpha = 1;
   }
   if ((a.label || a.soll) && !entwurf){
     let cx = 0, cy = 0;
     for (const q of p){ cx += q[0]; cy += q[1]; }
     cx /= p.length; cy /= p.length;
-    ctx.save(); ctx.globalAlpha = vorA ? .72 : 1;
-    const k = befehlSchild(cx, cy, {name: a.label, soll: +a.soll || 0, farbe: af || null, seite: f});
+    ctx.save(); ctx.globalAlpha = vorA ? .72 : (fertigA ? .55 : 1);
+    const k = befehlSchild(cx, cy, {name: a.label, soll: fremdA ? 0 : +a.soll || 0, farbe: af || null, seite: f});
+    if (k && fertigA) befehlAbzeichen(k.x1, k.y0, "\u2713", af || f, true);
     ctx.restore();
     if (k && id) schildVon.set("area:" + id, k);
     if (k && eintrag && view.z > 1.6){
@@ -5674,7 +5814,7 @@ function drawArea(a, eintrag, entwurf, id){
       ctx.font = `${gr*0.72}px ${SCHMAL}`; ctx.fillStyle = "rgba(240,232,216,.6)"; ctx.textAlign = "center"; ctx.textBaseline = "top";
       ctx.fillText(`${eintrag.n || eintrag.by} \u00b7 ${alterText(eintrag.t)}`, cx, k.y1 + 3*uiScale);
     }
-    if (a.folge && view.z > 1.1) befehlAbzeichen(p[0][0], p[0][1], a.folge, af || f, true);
+    if (a.folge && view.z > 1.1 && !fertigA) befehlAbzeichen(p[0][0], p[0][1], a.folge, af || f, true);
   }
 }
 
@@ -5687,8 +5827,13 @@ function drawLine(l, bisMaus, id){
   if (pts.length < 2) return;
   const f = col(FACTIONS[l.f]);
   const br = Math.max(2.6, 3*Math.sqrt(view.z))*uiScale;
-  const vorL = l.art === 0 && !bestaetigt(id);
-  ctx.globalAlpha = vorL ? .45 : 1;
+  /* state: planned dashed and pale, active full, done paler and hidden
+     unless the Done switch is on; another side's line is a sighting */
+  const fremdL = fremdeSeite(l), zsL = (id && !fremdL) ? befehlZustand(id, l) : "aktiv";
+  const fertigL = zsL === "fertig";
+  if (fertigL && !showFertig) return;
+  const vorL = zsL === "plan";
+  ctx.globalAlpha = vorL ? .45 : (fertigL ? .35 : 1);
   ctx.strokeStyle = f; ctx.lineWidth = br; ctx.lineCap = "round"; ctx.lineJoin = "round";
   if (vorL) ctx.setLineDash([br*2.2, br*1.6]);
   ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
@@ -5719,12 +5864,13 @@ function drawLine(l, bisMaus, id){
   /* the shield above the middle of the line, and the chain badge at its start */
   if (view.z > 1.2 && (l.label || l.soll)){
     const [mx,my] = pts[Math.floor(pts.length/2)];
-    ctx.save(); ctx.globalAlpha = vorL ? .72 : 1;
-    const k = befehlSchild(mx, my - br*2.4 - 12*uiScale, {name: l.label, soll: +l.soll || 0, farbe: lf || null, seite: f});
+    ctx.save(); ctx.globalAlpha = vorL ? .72 : (fertigL ? .55 : 1);
+    const k = befehlSchild(mx, my - br*2.4 - 12*uiScale, {name: l.label, soll: fremdL ? 0 : +l.soll || 0, farbe: lf || null, seite: f});
+    if (k && fertigL) befehlAbzeichen(k.x1, k.y0, "\u2713", lf || f, true);
     ctx.restore();
     if (k && id) schildVon.set("line:" + id, k);
-  }
-  if (l.folge && view.z > 1.1) befehlAbzeichen(pts[0][0], pts[0][1], l.folge, lf || f, true);
+  } else if (fertigL && view.z > 1.1){ ctx.save(); ctx.globalAlpha = .55; befehlAbzeichen(pts[0][0], pts[0][1], "\u2713", lf || f, true); ctx.restore(); }
+  if (l.folge && view.z > 1.1 && !fertigL) befehlAbzeichen(pts[0][0], pts[0][1], l.folge, lf || f, true);
 }
 
 /* A movement arrow is one filled body that tapers into a broad head — the
@@ -5752,6 +5898,7 @@ function befehlSchild(x, y, o){
   const z = view.z, gr = Math.min(13, 7.8*Math.sqrt(z))*uiScale;
   const name = o.name ? String(o.name).toUpperCase() : "";
   const soll = +o.soll || 0, ist = +o.ist || 0, nurPlan = o.ist === undefined;
+  const balken = !!soll && !nurPlan && !o.ohneBalken;   // a done order shows no bar
   const zahl = soll ? (nurPlan ? `${soll} planned` : `${ist}/${soll}`) : (ist ? String(ist) : "");
   const prozent = soll && !nurPlan ? Math.round(100*ist/soll) : null;
   if (!name && !zahl && !o.bild) return null;
@@ -5765,7 +5912,7 @@ function befehlSchild(x, y, o){
   const tz = zt ? ctx.measureText(zt).width : 0;
   const pad = gr*0.55, luecke = gr*0.45;
   const innen = Math.max(tn, tz) + (bw ? bw + luecke : 0);
-  const w = innen + pad*2 + gr*0.35, h = (name ? gr*1.25 : 0) + (zt ? gr*1.0 : 0) + (soll && !nurPlan ? gr*0.45 : 0) + pad*1.1;
+  const w = innen + pad*2 + gr*0.35, h = (name ? gr*1.25 : 0) + (zt ? gr*1.0 : 0) + (balken ? gr*0.45 : 0) + pad*1.1;
   const x0 = Math.round(x - w/2), y0 = Math.round(y - h/2), r = Math.min(6*uiScale, h/2);
   const hell = light();
   const kante = o.farbe || o.seite || (hell ? "#1a1409" : "#f4ead9");
@@ -5793,7 +5940,7 @@ function befehlSchild(x, y, o){
     ctx.font = `600 ${gr*0.86}px ${SCHMAL}`; ctx.fillStyle = hell ? "#4a4133" : "#cbb98a";
     ctx.fillText(zt, tx, ty + gr*0.5); ty += gr*1.0;
   }
-  if (soll && !nurPlan){
+  if (balken){
     const bl = x0 + w - tx - pad, bh2 = Math.max(2, gr*0.28);
     ctx.fillStyle = hell ? "rgba(0,0,0,.14)" : "rgba(255,255,255,.14)";
     ctx.fillRect(tx, ty + gr*0.05, bl, bh2);
@@ -6225,6 +6372,12 @@ function drawArrow(a){
   const f = col(FACTIONS[a.f]);
   const dx = x2-x1, dy = y2-y1, len = Math.hypot(dx,dy) || 1;
   if (len < 8) return;
+  /* state: a draft or a planned order looks pale and dashed, an active one
+     full, a done one paler still and hidden unless the Done switch is on;
+     another side's arrow is a sighting, drawn full without bar or badge */
+  const fremd = fremdeSeite(a), zs = a.entwurf ? "plan" : (fremd ? "aktiv" : befehlZustand(a.id, a));
+  const fertig = !fremd && zs === "fertig";
+  if (fertig && !showFertig) return;         // draw() cleared the hit maps, so it cannot be hit either
   const ux = dx/len, uy = dy/len;
   const rand = Math.max(4, 3.4*Math.sqrt(view.z))*uiScale;   // nicht im Stadtsymbol ansetzen
   x1 += ux*rand; y1 += uy*rand; x2 -= ux*rand*1.25; y2 -= uy*rand*1.25;
@@ -6272,7 +6425,7 @@ function drawArrow(a){
   /* Ein Vorschlag sieht aus wie einer: blass, gestrichelt umrandet. Wer ueber
      die Karte schaut, soll auf einen Blick sehen, was gilt und was jemand
      gern haette. */
-  const vor = !istBefehl(a.id, a) || !!a.entwurf;   // a draft looks like a proposal
+  const vor = !!a.entwurf || zs === "plan";       // a draft looks like a planned order
   /* FLAT ON THE GROUND OF THE MAP. The arrow used to cast a shadow and so
      hovered above the terrain like a sticker. No shadow now; the dark rim
      alone sets it into the ground, and the body carries a little more
@@ -6284,7 +6437,7 @@ function drawArrow(a){
   if (a.luft){
     const flach = pfeilForm(x1, y1, (x1+x2)/2, (y1+y2)/2, x2, y2, breite*0.72);
     ctx.save();
-    ctx.globalAlpha = vor ? .14 : .32; ctx.fillStyle = "#000";
+    ctx.globalAlpha = vor ? .14 : (fertig ? .12 : .32); ctx.fillStyle = "#000";
     /* while the men are in the air the shadow falls further away from them */
     const hub = sprung < 1 ? 1 + 1.6*Math.sin(Math.PI*sprung) : 1;
     ctx.translate(0, Math.max(4, len*0.05)*hub); ctx.fill(flach);
@@ -6294,20 +6447,23 @@ function drawArrow(a){
      not cover it - and carries a strong rim and a lighter back along its
      middle, the way the staff maps draw it. */
   ctx.save();
-  ctx.globalAlpha = vor ? .30 : .74; ctx.fillStyle = f; ctx.fill(pfad);
+  ctx.globalAlpha = vor ? .30 : (fertig ? .35 : .74); ctx.fillStyle = f; ctx.fill(pfad);
   ctx.restore();
   const fb = pfeilFarbe(a.farbe);          // chosen outline colour, if any
-  if (!vor && breite > 3.5*uiScale){
+  if (!vor && !fertig && breite > 3.5*uiScale){
     ctx.save(); ctx.clip(pfad);
     ctx.globalAlpha = .28; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1, breite*0.32); ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(cx, cy, .18*x1 + .5*cx + .32*x2, .18*y1 + .5*cy + .32*y2); ctx.stroke();
     ctx.restore();
   }
+  ctx.save();
+  if (fertig) ctx.globalAlpha = .35;
   ctx.strokeStyle = vor ? f : (fb || "rgba(0,0,0,.72)");
   ctx.lineWidth = vor ? 1.6*uiScale : (fb ? 2.2*uiScale : 1.8*uiScale);
   if (vor) ctx.setLineDash([5,4]);
   ctx.stroke(pfad);
   ctx.setLineDash([]);
+  ctx.restore();
 
   /* The operation name runs along the curve above its middle, capitals with
      a dark rim; behind it the committed strength and, when a planned
@@ -6317,8 +6473,10 @@ function drawArrow(a){
   if (sprung >= 1 && view.z > 1.1 && (staerke || a.label || a.soll || a.sym)){
     const mx = .25*x1 + .5*cx + .25*x2, my = .25*y1 + .5*cy + .25*y2;
     const bild = a.sym ? pfeilSymbolBild(a.sym, light() ? "#1a1409" : "#f4ead9") : null;
-    ctx.save(); ctx.globalAlpha = vor ? .72 : 1;
-    const kasten = befehlSchild(mx, my, {name: a.label, soll: +a.soll || 0, ist: staerke, bild, farbe: fb || null, seite: f});
+    ctx.save(); ctx.globalAlpha = vor ? .72 : (fertig ? .55 : 1);
+    const kasten = befehlSchild(mx, my, fremd ? {name: a.label, bild, farbe: fb || null, seite: f}
+      : {name: a.label, soll: +a.soll || 0, ist: staerke, bild, farbe: fb || null, seite: f, ohneBalken: fertig});
+    if (kasten && fertig) befehlAbzeichen(kasten.x1, kasten.y0, "\u2713", fb || f, true);
     ctx.restore();
     if (kasten) schildVon.set(a.id, kasten);
   } else schildVon.delete(a.id);
@@ -6330,6 +6488,7 @@ function drawArrow(a){
     const gr = Math.max(9, Math.min(26, 6.6*Math.sqrt(view.z)))*uiScale;
     const px = x2, py = y2 - gr*2.05;
     ctx.save();
+    if (fertig) ctx.globalAlpha = .35;        // a done drop's canopy fades with its arrow
     ctx.lineJoin = "round"; ctx.lineCap = "round";
     /* dark rim first, light line on top - the same order the map's writing
        uses, and the only one that holds on both grounds */
@@ -6346,6 +6505,13 @@ function drawArrow(a){
      instead. The chain number, where there is one, sits a step further
      along the arrow. */
   const farb = fb || f;
+  /* a done arrow carries one tick and nothing else: no strength, no chain
+     number. A sighting carries no badge at all. */
+  if (fertig){
+    if (view.z > 1.1 && !schildVon.has(a.id)){ ctx.save(); ctx.globalAlpha = .55; befehlAbzeichen(x1, y1, "\u2713", farb, true); ctx.restore(); }
+    return;
+  }
+  if (fremd && !a.entwurf) return;
   if (view.z > 1.1 && (staerke || a.entwurf)){
     befehlAbzeichen(x1, y1, a.entwurf ? "D" : staerke, farb, !!a.entwurf);
   }
@@ -6608,6 +6774,7 @@ function arrowNah(sx, sy, tol){
 function areaHit(sx, sy){
   const [kx,ky] = toMap(sx,sy);
   for (const [id,e] of liveAreas()){
+    if (befehlVersteckt(id, e.v)) continue;      // hidden done area: not drawn, not hit
     const p = e.v.pts;
     let drin = false;
     for (let i=0,j=p.length-1;i<p.length;j=i++){
@@ -6645,8 +6812,8 @@ function griffNah(sx, sy){
       if (d < R && d < bd){ bd = d; best = ziel; }
     }
   };
-  for (const a of liveArrows()) if (a.by === S.me) pruefe({art:"arrow", id:a.id});
-  for (const [id,e] of liveLines()) if (e.by === S.me) pruefe({art:"line", id});
+  for (const a of liveArrows()) if (a.by === S.me && !befehlVersteckt(a.id, a)) pruefe({art:"arrow", id:a.id});
+  for (const [id,e] of liveLines()) if (e.by === S.me && !befehlVersteckt(id, e.v)) pruefe({art:"line", id});
   return best;
 }
 function griffeListe(ziel){
@@ -7093,10 +7260,16 @@ function setPara(town, f, plan, extra){
   /* the block keeps its name, strength, colour and chain across a change of
      side or plan - those belong to the order, not to the side */
   const alt = paraAt(town);
-  const v = f == null ? null : Object.assign({}, alt ? {label: alt.label, soll: alt.soll, farbe: alt.farbe, op: alt.op, vor: alt.vor, folge: alt.folge} : {},
+  /* the state travels with the block only while it stays the same side's;
+     a new block, or one changing side, starts planned */
+  const v = f == null ? null : Object.assign({}, alt ? {label: alt.label, soll: alt.soll, farbe: alt.farbe, op: alt.op, vor: alt.vor, folge: alt.folge, st: +alt.f === +f ? alt.st : undefined} : {},
                                             {f, plan: !!plan, art: (alt && alt.art !== undefined) ? alt.art : artNeu()}, extra || {});
   if (v) for (const k of Object.keys(v)) if (v[k] === undefined || v[k] === "" || v[k] === null) delete v[k];
   if (v && v.f === undefined) v.f = f;
+  /* the ok key of a block is its town and gets reused: a removed block, or
+     a new one where none stood, must not inherit an old state. Only who
+     may confirm can clear it; without that right the old entry stays. */
+  if ((f == null || !alt) && darf("bestaetigen") && okEintrag("para:" + town)) stamp("ok", "para:" + town, null, {n: S.name || ""});
   stamp("para", town, v, {n: S.name || ""});
   save();
   return true;
@@ -7105,7 +7278,7 @@ function setPara(town, f, plan, extra){
    shields. An arrow keeps its bare id as key (older chains point at it),
    the others carry their kind in front. */
 const befehlKey = (art, id) => art === "arrow" ? String(id) : `${art}:${id}`;
-function alleBefehle(){
+function alleBefehle(alles){
   const raus = [];
   for (const a of liveArrows()) raus.push({art: "arrow", id: a.id, key: befehlKey("arrow", a.id), v: a, by: a.by,
     name: a.label || (MAP.n[a.from][0] + " \u2192 " + MAP.n[a.to][0]), entwurf: !!a.entwurf});
@@ -7118,7 +7291,14 @@ function alleBefehle(){
     raus.push({art: "para", id: p.town, key: befehlKey("para", p.town), v: paraAt(p.town) || {}, by: e && e.by,
       name: p.label || ("Para-block " + MAP.n[p.town][0]), entwurf: false, plan: !!p.plan});
   }
-  return raus;
+  for (const b of raus){
+    b.ok = okSchluessel(b.art, b.id);
+    b.fremd = fremdeSeite(b.v);
+    b.zs = b.fremd || b.entwurf ? "plan" : befehlZustand(b.ok, b.v);
+  }
+  /* the chain and its select know only our own side and nothing done;
+     alles asks for everything, for lookups by key */
+  return alles ? raus : raus.filter(b => !b.fremd && b.zs !== "fertig");
 }
 /* write a change onto an order by its kind's own road */
 function befehlSchreiben(b, aend){
@@ -7135,19 +7315,24 @@ function befehlSchreiben(b, aend){
    number in that operation. Empty key: out of the chain. */
 function ketteSetzen(b, vorKey){
   if (!vorKey){ befehlSchreiben(b, {op: undefined, vor: undefined, folge: undefined}); return; }
-  const alle = alleBefehle(), vor = alle.find(x => x.key === vorKey);
+  const alle = alleBefehle(true), vor = alle.find(x => x.key === vorKey);
   if (!vor || vor.key === b.key) return;
   let op = vor.v.op;
   if (!op){ op = "op" + pfeilId(); befehlSchreiben(vor, {op, folge: vor.v.folge || 1}); }
-  const folge = Math.max(0, ...alleBefehle().filter(x => x.v.op === op && x.key !== b.key).map(x => +x.v.folge || 0)) + 1;
+  const folge = Math.max(0, ...alleBefehle(true).filter(x => x.v.op === op && x.key !== b.key).map(x => +x.v.folge || 0)) + 1;
   befehlSchreiben(b, {op, vor: vorKey, folge});
 }
 /* the "Chain after" select and the colour buttons, shared by every order window */
 function ketteWahl(b, id){
-  const eigene = alleBefehle().filter(x => x.by === S.me && x.key !== b.key);
+  /* nothing done and nothing of another side is offered, but the stored
+     predecessor stays in the list whatever its state - otherwise a plain
+     save of the successor would read "" and cut the chain */
+  const vorKey = (b.v && b.v.vor) || "";
+  const eigene = alleBefehle(true).filter(x => x.by === S.me && x.key !== b.key
+    && (x.key === vorKey || (!x.fremd && x.zs !== "fertig")));
   return `<select id="${id}" class="mini" style="width:190px"><option value="">\u2014</option>${
-    eigene.map(x => `<option value="${esc(x.key)}"${(b.v && b.v.vor) === x.key ? " selected" : ""}>${
-      x.v.folge ? "#" + x.v.folge + " " : ""}${esc(x.name)}${x.art !== "arrow" ? " (" + x.art + ")" : ""}${x.entwurf ? " (draft)" : x.plan ? " (planned)" : ""}</option>`).join("")}</select>`;
+    eigene.map(x => `<option value="${esc(x.key)}"${vorKey === x.key ? " selected" : ""}>${
+      x.v.folge ? "#" + x.v.folge + " " : ""}${esc(x.name)}${x.art !== "arrow" ? " (" + x.art + ")" : ""}${x.entwurf ? " (draft)" : x.plan ? " (planned)" : ""}${x.zs === "fertig" ? " (done)" : ""}</option>`).join("")}</select>`;
 }
 function farbKnoepfe(akt){
   return PFEIL_FARBEN.map(p => `<button type="button" data-farbe="${p.k}" title="${p.name}"
@@ -7155,7 +7340,8 @@ function farbKnoepfe(akt){
 }
 function farbVerdrahten(feldId){
   document.querySelectorAll("#dlg .pf-farben button").forEach(b => b.addEventListener("click", ()=>{
-    document.getElementById(feldId).value = b.dataset.farbe;
+    const feld = document.getElementById(feldId);
+    if (feld) feld.value = b.dataset.farbe;
     document.querySelectorAll("#dlg .pf-farben button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
   }));
 }
@@ -7164,10 +7350,12 @@ function farbVerdrahten(feldId){
 function paraDialog(i){
   const pb = paraAt(i) || null, e = S.para[i] || null;
   const key = befehlKey("para", i), b = {art: "para", id: i, key, v: pb || {}};
+  /* another side's block is a sighting: no strength, no chain, no state */
+  const fremd = !!pb && fremdeSeite(pb);
   let seite = pb ? pb.f : null;
   openDlg(`
     <div class="dlg-h"><h2>Para-block \u00b7 ${esc(MAP.n[i][0])}</h2>
-      <p>${pb ? standText(key, pb, e && (e.n || e.by)) : "No block here yet \u2014 pick the side that blocks."}</p></div>
+      <p>${pb ? zustandText(key, pb, e && (e.n || e.by)) : "No block here yet \u2014 pick the side that blocks."}</p></div>
     <div class="dlg-b">
       <div class="own4" style="grid-template-columns:repeat(4,1fr)">
         ${FACTIONS.map(q=>`<button type="button" data-pbd="${q.id}" style="--f:${q.color}" aria-pressed="${pb && pb.f===q.id}">${q.tag}</button>`).join("")}
@@ -7178,14 +7366,14 @@ function paraDialog(i){
         <span style="font-size:12px;color:var(--dim);flex:1">Operation name</span>
         <input type="text" id="pd-lbl" value="${esc((pb && pb.label) || "")}" placeholder="e.g. Seal the airfields" maxlength="40" style="width:150px">
       </div>
-      <div class="row" style="align-items:center">
+      ${fremd ? "" : `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
         <input type="number" id="pd-soll" min="0" max="999" value="${(pb && +pb.soll) || ""}" placeholder="\u2014" style="width:70px">
       </div>
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Chain after</span>
         ${ketteWahl(b, "pd-kette")}
-      </div>
+      </div>`}
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
         <input type="hidden" id="pd-farbe" value="${esc((pb && pb.farbe) || "")}">
@@ -7196,13 +7384,13 @@ function paraDialog(i){
     </div>
     <div class="dlg-f">
       ${pb ? `<button class="btn danger" id="pd-del">Remove block</button>` : ""}
-      ${pb ? okKnopf(key, pb) : ""}
+      ${pb ? zustandKnoepfe(key, pb, e) : ""}
       <span style="flex:1"></span>
       <button class="btn" id="d-close">Close</button>
       <button class="btn primary" id="pd-save">Save</button>
     </div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
-  okVerdrahten();
+  zustandVerdrahten();
   farbVerdrahten("pd-farbe");
   document.querySelectorAll("#dlg [data-pbd]").forEach(k => k.addEventListener("click", ()=>{
     seite = k.dataset.pbd === "" ? null : +k.dataset.pbd;
@@ -7211,7 +7399,8 @@ function paraDialog(i){
   document.getElementById("pd-save").addEventListener("click", ()=>{
     const plan = document.getElementById("pd-plan").checked;
     const label = document.getElementById("pd-lbl").value.trim();
-    const soll = Math.max(0, Math.min(999, +document.getElementById("pd-soll").value || 0));
+    const sollEl = document.getElementById("pd-soll");
+    const soll = sollEl ? Math.max(0, Math.min(999, +sollEl.value || 0)) : (+(pb && pb.soll) || 0);
     const farbe = document.getElementById("pd-farbe").value;
     if (seite === null){ if (pb) setPara(i, null, false); closeDlg(); if (sel === i) side(); draw(); tally(); return; }
     if (!setPara(i, seite, plan, {label, soll: soll || undefined, farbe: farbe || undefined})) return;
@@ -7380,8 +7569,7 @@ function lineSpeichern(pts){
   S.line[k] = {v:{pts, f: faction, label: "", art: artNeu()}, t: jetzt(), by: S.me,
                n: S.name || ""};
   dirty.add(`line:${k}`); save(); draw();
-  toast(artNeu() ? `Defence line over ${pts.length} towns — click it to label it`
-                 : `Proposed a line over ${pts.length} towns — it needs confirming to count`);
+  toast(`Defence line over ${pts.length} towns. Click it to label it and set it active.`);
 }
 function areaSpeichern(pts){
   if (!darfIchNochMalen("area")) return;
@@ -7400,6 +7588,7 @@ function lineFertig(){
 }
 function lineHit(sx, sy){
   for (const [id,e] of liveLines()){
+    if (befehlVersteckt(id, e.v)) continue;      // hidden done line: not drawn, not hit
     const pts = e.v.pts.map(i => MAP.n[i] ? toScr(MAP.n[i][1], MAP.n[i][2]) : null).filter(Boolean);
     for (let i=0;i<pts.length-1;i++)
       if (abstandZuSegment(sx, sy, pts[i], pts[i+1]) < griffTol()) return {id, e};
@@ -7832,7 +8021,7 @@ function hoverZeigen(i, mx, my){
       ${starAt(i)?'<span class="chip">key</span>':""}
       ${fightAt(i)?'<span class="chip fight">⚔ contested</span>':""}
       ${pb?`<span class="chip" style="border-color:var(--accent);color:var(--accent)">para ${
-        pb.plan?"planned":"blocked"}${istBefehl(`para:${i}`, pb)?"":" · proposal"}</span>`:""}
+        pb.plan?"planned":"blocked"}${fremdeSeite(pb) ? "" : " · " + ZUSTAND_NAME[befehlZustand(`para:${i}`, pb)]}</span>`:""}
     </div>`:""}
     ${teams ? `<div class="h-row"><b>${teams}</b> own teams · ${menAt(i).toLocaleString("en")} men
       <em>${gr.map(g=>esc(g.mine?"you":g.name||g.who)).join(", ")}</em></div>` : ""}
@@ -7982,7 +8171,7 @@ cv.addEventListener("click", e => {
     return;
   }
   if (tool === "owner"){
-    setOwner(i, ownerOf(i) === faction ? -1 : faction); sel = i;
+    setOwner(i, ownerOf(i) === faction ? -1 : faction); sel = i; befehlAutoAbschluss();
   } else if (tool === "unit"){
     sel = i; side(); setTimeout(()=>document.getElementById("u-type")?.focus(), 30);
   } else if (tool === "arrow"){
@@ -8002,7 +8191,7 @@ cv.addEventListener("click", e => {
     stamp("owner", i, -1); stamp("notes", i, null); setFight(i, false);
     stamp("star", i, null); setSpot(i, []);
     setMyUnits(i, []);
-    for (const a of liveArrows()) if ((a.from === i || a.to === i) && a.by === S.me) dropArrow(a.id);
+    for (const a of liveArrows()) if ((a.from === i || a.to === i) && a.by === S.me && !befehlVersteckt(a.id, a)) dropArrow(a.id);   // what is hidden is not cleared
     sel = i; save();
   } else if (tool === "para"){
     paraFlussKlick(i, e.ctrlKey || e.metaKey);
@@ -8080,7 +8269,7 @@ function werkzeugeAuffrischen(){
     const r = WERKZEUG_RECHT[b.dataset.t];
     const zu = !!r && !darf(r);
     b.disabled = zu;
-    b.title = zu ? rechtSatz(r) : "";
+    b.title = zu ? rechtSatz(r) : (b.dataset.tip || "");
   });
   /* UND NICHT AM TOTEN WERKZEUG KLEBEN BLEIBEN. Faellt das Recht fuer das
      gerade gewaehlte weg - der Leiter stellt Rollen um, waehrend jemand die
@@ -8238,7 +8427,7 @@ function tips(){
     inspect:"<b>Inspect</b> — click a town, arrow or line. Your own get handles.",
     owner:  `<b>Control</b> — click sets the town to <b>${p}</b>, again releases.`,
     unit:   `<b>Unit</b> — click a town, or drag teams from your depot.`,
-    arrow:  `<b>Attack</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
+    arrow:  `<b>Attack or move</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
     line:   `<b>Defence</b> — drag across the towns. For <b>${p}</b>.`,
     para:   `<b>Plan parablock</b> — ${paraTipp()} For <b>${p}</b>.`,
     parablock: `<b>Active parablock</b> — click a town that is blocked right now; click again to clear it. For <b>${p}</b>.`,
@@ -8349,6 +8538,9 @@ document.getElementById("b-entwurf").addEventListener("click", function(){
 });
 document.getElementById("b-names").addEventListener("click", function(){
   showNames = !showNames; this.setAttribute("aria-pressed", String(showNames)); draw();
+});
+document.getElementById("b-fertig").addEventListener("click", function(){
+  showFertig = !showFertig; this.setAttribute("aria-pressed", String(showFertig)); draw();
 });
 document.getElementById("b-key").addEventListener("click", function(){
   showKey = !showKey; this.setAttribute("aria-pressed", String(showKey));
@@ -9347,8 +9539,8 @@ function side(){
       ${pb ? `<label class="toggle"><input type="checkbox" id="pb-plan" ${pb.plan?"checked":""}>
         <span>Only planned, not in place yet</span></label>
         <div style="font-size:11.5px;color:var(--dim);margin-top:5px">${
-          standText(`para:${i}`, pb, S.para[i] && (S.para[i].n || S.para[i].by))}</div>
-        ${okKnopf(`para:${i}`, pb)}` : ""}
+          zustandText(`para:${i}`, pb, S.para[i] && (S.para[i].n || S.para[i].by))}</div>
+        ${zustandKnoepfe(`para:${i}`, pb, S.para[i])}` : ""}
       <button class="btn" id="pb-fenster" style="margin-top:6px;font-size:11px" title="Name, planned strength, chain and colour of this block">Order window \u2026</button>
     </div>
     <div class="sec">
@@ -9369,7 +9561,7 @@ function side(){
      .own4 box, and a handler on every button there set the owner to NaN -
      "open" on screen - whenever a para-block side was picked. */
   el.querySelectorAll(".own4 button[data-o]").forEach(b => b.addEventListener("click", ()=>{
-    setOwner(i, +b.dataset.o); side(); draw(); tally();
+    setOwner(i, +b.dataset.o); befehlAutoAbschluss(); side(); draw(); tally();
   }));
   el.querySelector("#fight-cb")?.addEventListener("change", ev=>{
     setFight(i, ev.target.checked); side(); draw(); tally();
@@ -9389,7 +9581,7 @@ function side(){
     setPara(i, v === "" ? null : +v, pb ? pb.plan : false);
     side(); draw(); tally();
   }));
-  okVerdrahten(el);
+  zustandVerdrahten(el);
   el.querySelector("#pb-fenster")?.addEventListener("click", ()=> paraDialog(i));
   el.querySelector("#pb-plan")?.addEventListener("change", ev=>{
     if (pb) setPara(i, pb.f, ev.target.checked);
@@ -9543,39 +9735,43 @@ function arrowDialog(a){
   const mit = joinOf(a.id), meins = mit.find(m => m.mine);
   const gesamt = mit.reduce((s,j)=>s+j.n, 0);
   const raus = deployedBy(S.me), habe = Object.values(raus).reduce((s,n)=>s+n,0);
+  /* another side's arrow is a sighting: label, sign and colour, nothing
+     of commitment, strength, chain or state */
+  const fremd = fremdeSeite(a);
   openDlg(`
     <div class="dlg-h"><h2>${esc(MAP.n[a.from][0])} → ${esc(MAP.n[a.to][0])}</h2>
-      <p>${standText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>
-      <p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
+      <p>${zustandText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>
+      ${fremd ? "" : `<p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
           <b>${gesamt}</b> assault teams.` : "Nobody has committed to this move yet."}</p>
-      <p>${sammelText(a)}</p></div>
+      <p>${sammelText(a)}</p>`}</div>
     <div class="dlg-b">
-      ${mit.length ? `<div class="tw"><table><thead><tr><th>Player</th><th>Teams</th></tr></thead>
+      ${zielGenommen(a) ? `<div class="note">Target taken, mark it done.</div>` : ""}
+      ${mit.length && !fremd ? `<div class="tw"><table><thead><tr><th>Player</th><th>Teams</th></tr></thead>
         <tbody>${mit.map(m=>`<tr${m.mine?' class="me"':''}><td>${esc(m.name||m.who)}${m.mine?" <em>you</em>":""}</td>
           <td>${m.n}</td></tr>`).join("")}</tbody></table></div>` : ""}
       <div class="row" style="align-items:center">
-        <span style="font-size:12px;color:var(--dim);flex:1">Your commitment</span>
-        <input type="number" id="a-n" min="0" max="99" value="${meins ? meins.n : 0}">
+        ${fremd ? `<span style="flex:1"></span>` : `<span style="font-size:12px;color:var(--dim);flex:1">Your commitment</span>
+        <input type="number" id="a-n" min="0" max="99" value="${meins ? meins.n : 0}">`}
         <button class="btn primary" id="a-join">Save</button>
       </div>
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Operation name</span>
         <input type="text" id="a-lbl" value="${esc(a.label||"")}" placeholder="e.g. Push to Berlin" maxlength="40" style="width:150px">
       </div>
-      <div class="row" style="align-items:center">
+      ${fremd ? "" : `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
         <input type="number" id="a-soll" min="0" max="999" value="${+a.soll || ""}" placeholder="—" style="width:70px">
-      </div>
-      ${a.by === S.me ? `<div class="row" style="align-items:center">
+      </div>`}
+      ${a.by === S.me && !fremd ? `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Chain after</span>
         ${ketteWahl({art: "arrow", id: a.id, key: befehlKey("arrow", a.id), v: a}, "a-kette")}
-      </div>
-      <div class="row" style="align-items:center">
+      </div>` : ""}
+      ${a.by === S.me ? `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Draft <small>(only you see it)</small></span>
         <label class="toggle"><input type="checkbox" id="a-entwurf" ${a.entwurf ? "checked" : ""}><span></span></label>
       </div>` : ""}
       ${a.folge ? `<div class="note">Step <b>${a.folge}</b> of its operation${a.entwurf ? " — still a draft" : ""}.</div>` : ""}
-      ${(() => {
+      ${fremd ? "" : (() => {
         /* THE ORDER'S OWN KIND. Switching it on asks the two questions the
            map can answer: is the start an airfield, and is the target
            within reach. Who holds the airfield is asked afterwards - a
@@ -9593,7 +9789,7 @@ function arrowDialog(a){
       ${g ? `<div class="note">${esc(MAP.n[a.from][0])} is not ours. The drop can be planned,
         but it does not become an order until the airfield is taken — the request is on the board.</div>` : ""}`;
       })()}
-      <div class="row" style="align-items:center">
+      ${fremd ? "" : `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Unit sign</span>
         <select id="a-sym" class="mini" style="width:170px">
           <option value="">—</option>
@@ -9607,20 +9803,21 @@ function arrowDialog(a){
           aria-pressed="${(a.farbe||"") === p.k}" style="${p.d ? `--pf:${light() ? p.l : p.d}` : ""}">${p.d ? "" : "×"}</button>`).join("")}</div>
       </div>
       <div class="note">You have <b>${habe}</b> teams on the map in total. Committing here is a plan,
-        it does not move anything by itself.</div>
+        it does not move anything by itself.</div>`}
     </div>
     <div class="dlg-f">
       ${darfWeg(a) ? `<button class="btn danger" id="a-del">Delete arrow</button>` : ""}
       ${a.op && ENTWUERFE.some(x => x.op === a.op) ? `<button class="btn" id="a-kette-frei"
         title="Publish every draft of this operation">Publish chain</button>` : ""}
-      ${a.entwurf ? "" : okKnopf(a.id, a)}
+      ${a.entwurf ? "" : zustandKnoepfe(a.id, a, a)}
       <span style="flex:1"></span>
       <button class="btn primary" id="d-close">Close</button>
     </div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
-  okVerdrahten();
+  zustandVerdrahten();
   document.querySelectorAll("#dlg .pf-farben button").forEach(b => b.addEventListener("click", ()=>{
-    document.getElementById("a-farbe").value = b.dataset.farbe;
+    const farbeFeld = document.getElementById("a-farbe");
+    if (farbeFeld) farbeFeld.value = b.dataset.farbe;
     document.querySelectorAll("#dlg .pf-farben button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
   }));
   document.getElementById("a-kette-frei")?.addEventListener("click", ()=>{
@@ -9629,15 +9826,20 @@ function arrowDialog(a){
     save(); closeDlg(); draw(); toast(`${liste.length} order${liste.length === 1 ? "" : "s"} published`);
   });
   document.getElementById("a-join").addEventListener("click", ()=>{
-    if (!a.entwurf) setJoin(a.id, Math.max(0, Math.min(99, +document.getElementById("a-n").value || 0)));
+    const nEl = document.getElementById("a-n");
+    if (!a.entwurf && nEl) setJoin(a.id, Math.max(0, Math.min(99, +nEl.value || 0)));
     const lbl = document.getElementById("a-lbl").value.trim();
-    const soll = Math.max(0, Math.min(999, +document.getElementById("a-soll").value || 0));
-    const farbe = document.getElementById("a-farbe").value;
+    const sollEl = document.getElementById("a-soll");
+    const soll = sollEl ? Math.max(0, Math.min(999, +sollEl.value || 0)) : (+a.soll || 0);
+    const farbeEl = document.getElementById("a-farbe");
+    const farbe = farbeEl ? farbeEl.value : (a.farbe||"");
     let neu = false;
     if (lbl !== (a.label||"")){ a.label = lbl; neu = true; }
     if (soll !== (+a.soll || 0)){ a.soll = soll || undefined; neu = true; }
     if (farbe !== (a.farbe||"")){ a.farbe = farbe || undefined; neu = true; }
-    const luftAn = !!document.getElementById("a-luft")?.checked;
+    /* a sighting's window has no airborne row; then the old value stands */
+    const luftEl = document.getElementById("a-luft");
+    const luftAn = luftEl ? !!luftEl.checked : !!a.luft;
     if (luftAn !== !!a.luft){
       if (luftAn){
         const p = luftPruefen(a, a.from, a.to);
@@ -9645,7 +9847,8 @@ function arrowDialog(a){
         else { a.luft = 1; neu = true; luftBoardAnfordern(a); }
       } else { delete a.luft; neu = true; }
     }
-    const sym = document.getElementById("a-sym").value;
+    const symEl = document.getElementById("a-sym");
+    const sym = symEl ? symEl.value : (a.sym||"");
     if (sym !== (a.sym||"")){ a.sym = sym || undefined; neu = true; }
     /* chain: take the predecessor's operation and the next number */
     const ketteEl = document.getElementById("a-kette");
@@ -9661,6 +9864,7 @@ function arrowDialog(a){
       if (entwEl.checked){
         const k = S.arrows.indexOf(a);
         if (k >= 0){ S.arrows.splice(k, 1); dropArrow(a.id); }
+        delete a.st; delete a.zb;                 // a draft has no state
         a.entwurf = 1; a.id = pfeilId(); ENTWUERFE.push(a); entwuerfeSpeichern();
       } else pfeilFreigeben(a);
     }
@@ -26381,11 +26585,11 @@ function wacheAnzeigen(){
 
 /* ---------------- free-hand area dialog ---------------- */
 function areaDialog(id, e, neuGezogen){
-  const a = e.v, meins = e.by === S.me;
+  const a = e.v, meins = e.by === S.me, fremd = fremdeSeite(a);   // another side's area is a sighting
   openDlg(`
     <div class="dlg-h"><h2>${neuGezogen ? "What is in there?" : "Marked area"}</h2>
       <p>${neuGezogen ? "Give it a short label — that is what everyone reads on the map."
-                      : standText(id, a, e.n || e.by) + " · " + alterText(e.t)}</p></div>
+                      : zustandText(id, a, e.n || e.by) + " · " + alterText(e.t)}</p></div>
     <div class="dlg-b">
       <div class="row">
         <input type="text" id="ar-lbl" value="${esc(a.label||"")}" style="flex:1"
@@ -26394,40 +26598,42 @@ function areaDialog(id, e, neuGezogen){
         ${["recon wanted","many planes","armour massing","infantry heavy","AA cover","weak spot","avoid"]
           .map(v=>`<button class="btn" data-vor="${esc(v)}" style="font-size:11px;padding:3px 8px">${esc(v)}</button>`).join("")}
       </div>
-      <div class="row" style="align-items:center">
+      ${fremd ? "" : `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
         <input type="number" id="ar-soll" min="0" max="999" value="${+a.soll || ""}" placeholder="\u2014" style="width:70px" ${meins?"":"disabled"}>
-      </div>
-      ${meins ? `<div class="row" style="align-items:center">
+      </div>`}
+      ${meins && !fremd ? `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Chain after</span>
         ${ketteWahl({art: "area", id, key: befehlKey("area", id), v: a}, "ar-kette")}
       </div>` : ""}
-      <div class="row" style="align-items:center">
+      ${fremd ? "" : `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
         <input type="hidden" id="ar-farbe" value="${esc(a.farbe||"")}">
         <div class="pf-farben">${farbKnoepfe(a.farbe)}</div>
-      </div>
+      </div>`}
       ${a.folge ? `<div class="note">Step <b>${a.folge}</b> of its operation.</div>` : ""}
       <div class="note">The colour of the area follows the faction selected on the left — pick the enemy
         before drawing and the area reads as theirs; the outline colour is your own accent.</div>
     </div>
     <div class="dlg-f">
       ${darfWeg(e) ? `<button class="btn danger" id="ar-del">Delete</button>` : ""}
-      ${neuGezogen ? "" : okKnopf(id, a)}
+      ${neuGezogen ? "" : zustandKnoepfe(id, a, e)}
       <span style="flex:1"></span>
       <button class="btn" id="d-close">Close</button>
       ${meins ? `<button class="btn primary" id="ar-save">Save</button>` : ""}
     </div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
-  okVerdrahten();
+  zustandVerdrahten();
   document.querySelectorAll("[data-vor]").forEach(b => b.addEventListener("click", ()=>{
     document.getElementById("ar-lbl").value = b.dataset.vor;
   }));
   farbVerdrahten("ar-farbe");
   document.getElementById("ar-save")?.addEventListener("click", ()=>{
     const label = document.getElementById("ar-lbl").value.trim();
-    const soll = Math.max(0, Math.min(999, +document.getElementById("ar-soll").value || 0));
-    const farbe = document.getElementById("ar-farbe").value;
+    const sollEl = document.getElementById("ar-soll");
+    const soll = sollEl ? Math.max(0, Math.min(999, +sollEl.value || 0)) : (+a.soll || 0);
+    const farbeEl = document.getElementById("ar-farbe");
+    const farbe = farbeEl ? farbeEl.value : (a.farbe||"");
     const v = {...a, label};
     if (soll) v.soll = soll; else delete v.soll;
     if (farbe) v.farbe = farbe; else delete v.farbe;
@@ -26457,10 +26663,10 @@ function areaDialog(id, e, neuGezogen){
 
 /* ---------------- defence line dialog ---------------- */
 function lineDialog(id, e){
-  const l = e.v;
+  const l = e.v, fremd = fremdeSeite(l);   // another side's line is a sighting
   openDlg(`
     <div class="dlg-h"><h2>Defence line</h2>
-      <p>${standText(id, l, e.n || e.by)}</p>
+      <p>${zustandText(id, l, e.n || e.by)}</p>
       <p>${l.pts.length} towns · ${alterText(e.t)}</p></div>
     <div class="dlg-b">
       <div style="font-size:12px;color:var(--dim)">${l.pts.map(i=>esc(MAP.n[i]?MAP.n[i][0]:"?")).join(" → ")}</div>
@@ -26468,34 +26674,36 @@ function lineDialog(id, e){
         <span style="font-size:12px;color:var(--dim);flex:1">Operation name</span>
         <input type="text" id="l-lbl" value="${esc(l.label||"")}" placeholder="e.g. hold at all costs" maxlength="40" style="width:190px">
       </div>
-      <div class="row" style="align-items:center">
+      ${fremd ? "" : `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
         <input type="number" id="l-soll" min="0" max="999" value="${+l.soll || ""}" placeholder="\u2014" style="width:70px">
-      </div>
-      ${e.by === S.me ? `<div class="row" style="align-items:center">
+      </div>`}
+      ${e.by === S.me && !fremd ? `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Chain after</span>
         ${ketteWahl({art: "line", id, key: befehlKey("line", id), v: l}, "l-kette")}
       </div>` : ""}
-      <div class="row" style="align-items:center">
+      ${fremd ? "" : `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
         <input type="hidden" id="l-farbe" value="${esc(l.farbe||"")}">
         <div class="pf-farben">${farbKnoepfe(l.farbe)}</div>
-      </div>
+      </div>`}
       ${l.folge ? `<div class="note">Step <b>${l.folge}</b> of its operation.</div>` : ""}
     </div>
     <div class="dlg-f">
       ${darfWeg(e) ? `<button class="btn danger" id="l-del">Delete line</button>` : ""}
-      ${okKnopf(id, l)}
+      ${zustandKnoepfe(id, l, e)}
       <span style="flex:1"></span>
       <button class="btn" id="d-close">Close</button>
       ${e.by === S.me ? `<button class="btn primary" id="l-save">Save</button>` : ""}
     </div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
-  okVerdrahten();
+  zustandVerdrahten();
   farbVerdrahten("l-farbe");
   document.getElementById("l-save")?.addEventListener("click", ()=>{
-    const soll = Math.max(0, Math.min(999, +document.getElementById("l-soll").value || 0));
-    const farbe = document.getElementById("l-farbe").value;
+    const sollEl = document.getElementById("l-soll");
+    const soll = sollEl ? Math.max(0, Math.min(999, +sollEl.value || 0)) : (+l.soll || 0);
+    const farbeEl = document.getElementById("l-farbe");
+    const farbe = farbeEl ? farbeEl.value : (l.farbe||"");
     const v = {...l, label: document.getElementById("l-lbl").value.trim()};
     if (soll) v.soll = soll; else delete v.soll;
     if (farbe) v.farbe = farbe; else delete v.farbe;
@@ -36768,7 +36976,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 749c9178c1</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 73e6d9fcbb</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -36778,7 +36986,7 @@ function hilfeDialog(){
     <div class="dlg-b">
       <div class="tabp" data-tab="keys">
         <div class="keys">
-          <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Attack · Defence · Plan parablock · Area · Sighting · Battle · Clear</span></div>
+          <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Attack or move · Defence · Plan parablock · Area · Sighting · Battle · Clear</span></div>
           <div><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd><span>US · Germany · Soviet Union</span></div>
           <div><kbd>B</kbd><span>Board — written orders</span></div>
           <div><kbd>I</kbd><span>Intel — clans, players, sightings</span></div>
@@ -36912,7 +37120,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "749c9178c1";
+const BAU = "73e6d9fcbb";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -37177,7 +37385,7 @@ async function syncPull(){
       toast("A new war has started — the old map is gone.");
       spangenErinnern();
     }
-    if (n){ rebuildUnits(); save(); side(); tally(); draw(); kopfzeile(); boardZahl();
+    if (n){ rebuildUnits(); befehlAutoAbschluss(); save(); side(); tally(); draw(); kopfzeile(); boardZahl();
             kraftLeiste(); if (showDepot) depotZeichnen(); }
     /* Die vierzig Runden sind nie erreicht worden, solange die Tabelle
        kleiner als vierzigtausend Zeilen ist. Wenn doch, ist das keine
