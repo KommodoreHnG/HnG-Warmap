@@ -1807,6 +1807,9 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="tool" data-t="area" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M4 11.2L7.6 4.6l7.5-.6 5.2 4.4-1.9 7.2-6.5 4-6.3-2.7z"/></svg>
         <span class="lbl" data-txt="tool.area">Area</span><span class="kb">7</span></button>
+      <button class="tool" data-t="aufkl" aria-pressed="false">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5"/><circle cx="12" cy="12" r="1.2"/></svg>
+        <span class="lbl" data-txt="tool.aufkl">Recon</span></button>
       <button class="tool" data-t="spot" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M12 4L20.6 19.6H3.4z"/><path d="M12 10.2v3.9M12 16.9v.1"/></svg>
         <span class="lbl" data-txt="tool.spot">Sighting</span><span class="kb">8</span></button>
@@ -3152,6 +3155,9 @@ let paraWahl = (() => {
   return w;
 })();
 let paraFluss = null;       // {start, ziel, felder:Set, ring:{r}|null, drin:[]} while marks stand
+let aufklFluss = null;      // {id} while the recon tool may add towns to that request with Ctrl-clicks
+const aufklFarbe = () => light() ? "#0a7c8c" : "#4fc3f7";   // a recon request's rim when no outline colour is chosen, per theme
+const AUFKL_RAND = 6;            // hull margin around an asked town, map units
 let paraPuls = false;       // the marks' breathing loop is running
 let luftSprung = null;      // {id, t0, dauer} while a fresh drop grows over the map
 /* Die Trefferflaeche eines Pfeils ist ein Path2D. Am Pfeilobjekt gespeichert
@@ -4585,7 +4591,8 @@ function befehlOrt(b){
   return best;
 }
 const befehlOrtName = b => { const i = befehlOrt(b); return i !== null && MAP.n[i] ? MAP.n[i][0] : ""; };
-const befehlArtName = b => b.art === "arrow" ? (b.v && b.v.luft ? "Drop" : "Attack") : (ZUORD_ART_NAME[b.art] || b.art);
+const befehlArtName = b => b.art === "arrow" ? (b.v && b.v.luft ? "Drop" : "Attack")
+  : (b.art === "area" && b.v && b.v.aufkl ? "Recon" : (ZUORD_ART_NAME[b.art] || b.art));
 /* who made the order: the arrow carries it in itself, the others in their row */
 const befehlWer = b => werWar(b.art === "arrow" ? b.v : (S[b.art] && S[b.art][b.id]));
 /* when an order went active: the ok row's time, else the moment its author
@@ -4667,6 +4674,12 @@ function zuordNachruecken(){
       const zusammen = (da ? da.ats : []).filter(id => depot.has(id));
       const neuDazu = ats.some(id => !zusammen.includes(id));
       for (const id of ats) if (!zusammen.includes(id)) zusammen.push(id);
+      /* a recon request takes scouts within reach only; the rest stay off it */
+      if (weiter.art === "area" && weiter.v && weiter.v.aufkl){
+        const meine = myDepotAlle(), lage = aufklLage(aufklPunkte(weiter.v));
+        const ok = zusammen.filter(id => { const d = meine.find(x => x.id === id); return !d || !aufklSperre(weiter, d, lage); });
+        if (ok.length !== zusammen.length){ zusammen.length = 0; zusammen.push(...ok); toast("Only scouts within reach move on to the recon request."); }
+      }
       /* teams that arrive by the chain wait for the owner's word; a row
          that already held them all keeps what it had */
       if (!zuordSchreiben(weiter, zusammen, neuDazu ? 0 : (da ? da.st : 0))) continue;
@@ -4705,14 +4718,16 @@ function zuordWahl(b, zurueck){
   const c = light() ? "#1a2029" : "#e9e2d5";
   const frei = zuordFreieTeams();
   const ort = befehlOrtName(b);
+  const lage = b.art === "area" && b.v && b.v.aufkl ? aufklLage(aufklPunkte(b.v)) : null;   // a recon request: scouts that reach it only
   openDlg(`
     <div class="dlg-h"><h2>Assign to ${esc(b.name || "")}</h2>
       <p>${esc(befehlArtName(b))}${ort ? ` \u00b7 ${esc(ort)}` : ""} \u00b7 ${ZUSTAND_NAME[b.zs] || b.zs || "planned"}${
         b.v && +b.v.soll ? ` \u00b7 target ${+b.v.soll}` : ""}</p></div>
     <div class="dlg-b">
-      ${frei.length ? `<div class="zuord-liste">${frei.map(d => `<label><input type="checkbox" data-zteam="${esc(d.id)}">
+      ${frei.length ? `<div class="zuord-liste">${frei.map(d => { const grund = aufklSperre(b, d, lage); return `<label${
+          grund ? ` title="${esc(grund)}" style="opacity:.45;cursor:default"` : ""}><input type="checkbox" data-zteam="${esc(d.id)}"${grund ? " disabled" : ""}>
           <span>${symbolSVG(d.k, c, 22, 15)}</span><span class="n"><span>${esc(d.name || atName(d.k))}${
-          d.tag ? ` <small>${esc(d.tag)}</small>` : ""}</span><em>${esc(atName(d.k))}</em></span></label>`).join("")}</div>
+          d.tag ? ` <small>${esc(d.tag)}</small>` : ""}</span><em>${esc(atName(d.k))}</em></span></label>`; }).join("")}</div>
         <div class="row" style="align-items:center">
           <button class="btn" id="zu-alle" style="font-size:11px;padding:3px 8px">All</button>
           <button class="btn" id="zu-keine" style="font-size:11px;padding:3px 8px">None</button>
@@ -4731,7 +4746,7 @@ function zuordWahl(b, zurueck){
     if (el) el.textContent = `${kaesten.filter(k => k.checked).length} picked`;
   };
   kaesten.forEach(k => k.addEventListener("change", zaehlen));
-  document.getElementById("zu-alle")?.addEventListener("click", ()=>{ kaesten.forEach(k => { k.checked = true; }); zaehlen(); });
+  document.getElementById("zu-alle")?.addEventListener("click", ()=>{ kaesten.forEach(k => { if (!k.disabled) k.checked = true; }); zaehlen(); });
   document.getElementById("zu-keine")?.addEventListener("click", ()=>{ kaesten.forEach(k => { k.checked = false; }); zaehlen(); });
   document.getElementById("zu-zurueck").addEventListener("click", ()=>{ if (zurueck) zurueck(); else closeDlg(); });
   document.getElementById("zu-ok").addEventListener("click", ()=>{
@@ -5131,6 +5146,201 @@ function paraBedrohungEtikett(x, y, n){
   ctx.fillRect(x - b/2, y - h, b, h);
   ctx.globalAlpha = 1; ctx.fillStyle = "#ffffff";
   ctx.fillText(text, x, y - h/2 + 0.5);
+  ctx.restore();
+}
+
+/* ---- REQUEST RECONNAISSANCE (05.09.2026) ----
+   A recon request is an area with aufkl:1. Set on towns it also carries
+   orte:[town indices], and its polygon is a hull around them, so drawing,
+   hit test, shield, chain, state, assignment and the inbox run unchanged.
+   Asked only within sight: every target must lie within the widest scout's
+   vision of one of our towns. Nothing new goes to the server. */
+function aufklTypen(){ return MAP.at.filter(t => kannAufklaeren(t.k)).map(t => t.k); }
+/* a scout's vision in map units, as siehtStaedte reads it */
+function aufklWeite(k){ return atVision(k)/8; }
+/* the scouts sitting in any clan depot on the war side */
+function aufklImDepot(){
+  const drin = new Set();
+  for (const who of paraMitglieder()){
+    const liste = paraDepotVon(who);
+    if (!liste) continue;
+    for (const t of liste) if (t && kannAufklaeren(t.k)) drin.add(t.k);
+  }
+  return [...drin];
+}
+/* the widest scout to ask with: from the depots, else any of the four */
+function aufklWeitester(){
+  const depot = aufklImDepot(), typen = depot.length ? depot : aufklTypen();
+  let best = null;
+  for (const k of typen) if (best === null || aufklWeite(k) > aufklWeite(best)) best = k;
+  return {k: best, r: best === null ? 0 : aufklWeite(best), ausDepot: depot.length > 0};
+}
+/* our towns: held by the clan's side */
+function aufklEigene(){
+  const f = clanFaktion(), raus = [];
+  for (let i = 0; i < MAP.n.length; i++) if (MAP.n[i] && ownerOf(i) === f) raus.push(i);
+  return raus;
+}
+/* the target points of a request: its towns, else the polygon's corners */
+function aufklPunkte(a){
+  if (a && a.orte && a.orte.length) return a.orte.filter(i => MAP.n[i]).map(i => [MAP.n[i][1], MAP.n[i][2]]);
+  return (a && a.pts) || [];
+}
+/* the worst target: the own town nearest to it, and that distance */
+function aufklLage(punkte){
+  const eigene = aufklEigene();
+  let worst = null;
+  for (const p of punkte){
+    let ort = -1, d = Infinity;
+    for (const i of eigene){
+      const w = Math.hypot(MAP.n[i][1] - p[0], MAP.n[i][2] - p[1]);
+      if (w < d){ d = w; ort = i; }
+    }
+    if (!worst || d > worst.d) worst = {ort, d};
+  }
+  return worst || {ort: -1, d: Infinity};
+}
+/* true when every point lies within the widest scout's sight of one of our
+   towns; else a toast says why, and no request is made */
+function aufklInSicht(punkte){
+  if (!aufklEigene().length){ toast("No town of ours to scout from."); return false; }
+  const w = aufklWeitester(), lage = aufklLage(punkte);
+  if (lage.ort < 0){ toast("No town of ours to scout from."); return false; }
+  if (lage.d <= w.r) return true;
+  toast(`Out of reach: ${atName(w.k)} sees ${Math.round(w.r)} map units from ${MAP.n[lage.ort][0]}, the target is ${Math.round(lage.d)} away.`);
+  return false;
+}
+/* the hull of a request on towns: an octagon of AUFKL_RAND around one town
+   (wider around a capital, whose star reaches further), the convex hull of
+   all such octagons around several. Rounded like a drawn area. */
+function aufklHuelle(orte){
+  const ecken = [];
+  for (const i of orte){
+    if (!MAP.n[i]) continue;
+    const x = MAP.n[i][1], y = MAP.n[i][2], r = AUFKL_RAND*(isCap(i) ? 1.5 : 1);
+    for (let j = 0; j < 8; j++){
+      const w = (j + 0.5)*Math.PI/4;
+      ecken.push([x + r*Math.cos(w), y + r*Math.sin(w)]);
+    }
+  }
+  let huelle = ecken;
+  if (ecken.length > 8){
+    ecken.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+    const kreuz = (o, a, b) => (a[0] - o[0])*(b[1] - o[1]) - (a[1] - o[1])*(b[0] - o[0]);
+    const unten = [], oben = [];
+    for (const p of ecken){
+      while (unten.length >= 2 && kreuz(unten[unten.length - 2], unten[unten.length - 1], p) <= 0) unten.pop();
+      unten.push(p);
+    }
+    for (let i = ecken.length - 1; i >= 0; i--){
+      const p = ecken[i];
+      while (oben.length >= 2 && kreuz(oben[oben.length - 2], oben[oben.length - 1], p) <= 0) oben.pop();
+      oben.push(p);
+    }
+    unten.pop(); oben.pop();
+    huelle = unten.concat(oben);
+  }
+  return huelle.map(p => [Math.round(p[0]*10)/10, Math.round(p[1]*10)/10]);
+}
+/* our side's live requests that name this town, hidden done ones left out */
+function aufklAnfragenAn(i){
+  const raus = [];
+  for (const [id, e] of liveAreas()){
+    const a = e.v;
+    if (!a || !a.aufkl || !Array.isArray(a.orte) || !a.orte.includes(i) || fremdeSeite(a) || befehlVersteckt(id, a)) continue;
+    raus.push([id, e]);
+  }
+  return raus;
+}
+/* the asked towns by name, "area" for a drawn request */
+function aufklZiele(a){
+  return (a && a.orte && a.orte.length) ? a.orte.map(i => MAP.n[i] ? MAP.n[i][0] : "?").join(", ") : "area";
+}
+/* the recon tool's flow: a plain click on a town makes a request for it,
+   Ctrl-clicks add towns to that request; Escape or a tool change ends it */
+function aufklFlussAbbruch(){
+  if (!aufklFluss) return;
+  aufklFluss = null; tips();
+}
+function aufklKlick(i, mehr){
+  if (!MAP.n[i]) return;
+  const punkt = [[MAP.n[i][1], MAP.n[i][2]]];
+  const F = aufklFluss, e = F && S.area[F.id];
+  if (mehr && e && e.v && e.v.aufkl && lebt(F.id, e)){
+    const orte = (e.v.orte || []).slice();
+    if (orte.includes(i)){ toast(`${MAP.n[i][0]} is already in this request.`); return; }
+    if (!aufklInSicht(punkt)) return;
+    orte.push(i);
+    befehlSchreiben({art: "area", id: F.id, v: e.v}, {orte, pts: aufklHuelle(orte)});
+    tips();
+    toast(`${MAP.n[i][0]} added. Ctrl-click the next town, Escape ends.`);
+    return;
+  }
+  /* the town is in one of our open requests already: take that one up */
+  const alt = aufklAnfragenAn(i).find(([id, e]) => e.by === S.me && befehlZustand(id, e.v) !== "fertig");
+  if (alt){
+    aufklFluss = {id: alt[0]}; tips();
+    toast(`${MAP.n[i][0]} is asked for already. Ctrl-click adds towns, Escape ends.`);
+    return;
+  }
+  if (!aufklInSicht(punkt)) return;
+  const k = areaSpeichern(aufklHuelle([i]), {aufkl: 1, orte: [i]});
+  if (!k) return;
+  aufklFluss = {id: k}; tips();
+  toast(`Eyes asked on ${MAP.n[i][0]}. Ctrl-click adds towns, Escape ends.`);
+}
+function aufklTipp(){
+  const e = aufklFluss && S.area[aufklFluss.id];
+  return e && e.v ? `Ctrl-click the next town to add it to <b>${esc(aufklZiele(e.v))}</b>; Escape ends.`
+                  : "click a town to ask for eyes on it, Ctrl-click adds more; click open ground to draw an area.";
+}
+/* the request window's lines under the state line */
+function aufklFensterZeilen(a, id){
+  const lage = aufklLage(aufklPunkte(a)), w = aufklWeitester();
+  if (lage.ort < 0) return `<p>No town of ours to scout from.</p>`;
+  const typen = aufklTypen();
+  const kann = typen.filter(k => aufklWeite(k) >= lage.d), fehlt = typen.filter(k => aufklWeite(k) < lage.d);
+  return `<p>Nearest own town: <b>${esc(MAP.n[lage.ort][0])}</b> (${Math.round(lage.d)} map units)</p>
+      <p>Scouts that reach it: ${kann.length ? esc(kann.map(atName).join(", ")) : "none"}</p>${
+      w.ausDepot ? "" : `<p>No scout in any depot yet.</p>`}${
+      fehlt.length ? `<p>out of reach: ${esc(fehlt.map(atName).join(", "))}</p>` : ""}
+      <p>${paraTextSicher(() => paraErfuellbarText(kann, {art: "area", id}))}</p>`;
+}
+/* why a team may not take a recon request; "" when it may */
+function aufklSperre(b, d, lage){
+  if (!(b && b.art === "area" && b.v && b.v.aufkl)) return "";
+  if (!kannAufklaeren(d.k)) return "not a scout";
+  const L = lage || aufklLage(aufklPunkte(b.v));
+  return aufklWeite(d.k) < L.d ? "out of reach" : "";
+}
+/* the placeholder mark: a ring with a cross, in the request's colour */
+function aufklZeichen(x, y, r, farbe){
+  ctx.save();
+  ctx.strokeStyle = farbe; ctx.lineWidth = Math.max(1, r*0.22); ctx.lineCap = "round"; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(x, y, r*0.62, 0, 6.284); ctx.stroke();
+  ctx.beginPath();
+  for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ ctx.moveTo(x + dx*r*0.3, y + dy*r*0.3); ctx.lineTo(x + dx*r, y + dy*r); }
+  ctx.stroke();
+  ctx.restore();
+}
+/* a thin ring around every asked town, above the discs; the state fades it */
+function aufklRingeZeichnen(){
+  const r0 = ortRadius();
+  ctx.save(); ctx.setLineDash([]);
+  for (const [id, e] of liveAreas()){
+    const a = e.v;
+    if (!a.aufkl || !a.orte || !a.orte.length) continue;
+    const zs = fremdeSeite(a) ? "aktiv" : befehlZustand(id, a);
+    if (zs === "fertig" && !showFertig) continue;
+    ctx.strokeStyle = pfeilFarbe(a.farbe) || aufklFarbe();
+    ctx.globalAlpha = zs === "plan" ? .45 : (zs === "fertig" ? .3 : .85);
+    ctx.lineWidth = 1.2*uiScale;
+    for (const i of a.orte){
+      if (!MAP.n[i]) continue;
+      const [x, y] = toScr(MAP.n[i][1], MAP.n[i][2]);
+      ctx.beginPath(); ctx.arc(x, y, (isCap(i) ? r0*STERN_RAGT : r0) + 4*uiScale, 0, 6.284); ctx.stroke();
+    }
+  }
   ctx.restore();
 }
 
@@ -5661,7 +5871,7 @@ function draw(){
   /* --- free-hand areas: enemy concentrations, zones, anything you circle --- */
   for (const [id,e] of liveAreas()) drawArea(e.v, e, false, id);
   if (zieh && zieh.art === "area" && zieh.pts.length > 2)
-    drawArea({pts: zieh.pts, f: faction, label: ""}, null, true);
+    drawArea({pts: zieh.pts, f: zieh.aufkl ? clanFaktion() : faction, label: "", aufkl: zieh.aufkl || 0}, null, true);
 
   for (const [id,e] of liveLines()) drawLine(e.v, null, id);
   if (lineDraft && lineDraft.pts.length) drawLine({pts: lineDraft.pts, f: lineDraft.f}, lastMouse);
@@ -6009,6 +6219,7 @@ function draw(){
      alles Folgende blass weiter. */
   ctx.globalAlpha = 1;
   paraFlussZeichnen();                    // the para tool's marks, above the towns
+  aufklRingeZeichnen();                   // the asked towns' rings, above the discs too
 
   /* --- Aufmarsch: what was last seen in each town, by side and freshness ---
      Ring OUTSIDE every existing ring (largest is the selection ring r+6):
@@ -6522,23 +6733,29 @@ function drawArea(a, eintrag, entwurf, id){
   ctx.closePath();
   ctx.globalAlpha = entwurf ? .18 : (vorA ? .07 : (fertigA ? .05 : .14)); ctx.fillStyle = f; ctx.fill();
   ctx.globalAlpha = entwurf ? .95 : (vorA ? .42 : (fertigA ? .35 : .8));
-  ctx.strokeStyle = f; ctx.lineWidth = (vorA ? 1.4 : 2)*uiScale;
-  ctx.setLineDash(entwurf ? [5,4] : (vorA ? [2,4] : [9,5])); ctx.stroke(); ctx.setLineDash([]);
+  /* a recon request: dotted rim in its own colour, the side only in the fill;
+     planned it is dashed like any area */
+  const af = pfeilFarbe(a.farbe) || (a.aufkl ? aufklFarbe() : "");
+  ctx.strokeStyle = a.aufkl ? af : f; ctx.lineWidth = (vorA ? 1.4 : 2)*uiScale;
+  ctx.save(); if (a.aufkl) ctx.lineCap = "round";
+  ctx.setLineDash(a.aufkl && !vorA ? [0.5, 4.5*uiScale] : (entwurf ? [5,4] : (vorA ? [2,4] : [9,5]))); ctx.stroke();
+  ctx.restore(); ctx.setLineDash([]);
   ctx.globalAlpha = 1;
-  const af = pfeilFarbe(a.farbe);
-  if (af && !entwurf){
+  if (af && !entwurf && !a.aufkl){
     /* the chosen colour as a second, thinner rim; a done area fades it too */
     ctx.globalAlpha = fertigA ? .35 : .9; ctx.strokeStyle = af; ctx.lineWidth = 1.1*uiScale; ctx.setLineDash([]); ctx.stroke(); ctx.globalAlpha = 1;
   }
   /* the shield also stands on a bare order with accepted teams on it */
-  if ((a.label || a.soll || (id && !fremdA && zuordZahlen({art: "area", id}).fest)) && !entwurf){
+  if ((a.label || a.soll || a.aufkl || (id && !fremdA && zuordZahlen({art: "area", id}).fest)) && !entwurf){
     let cx = 0, cy = 0;
     for (const q of p){ cx += q[0]; cy += q[1]; }
     cx /= p.length; cy /= p.length;
     ctx.save(); ctx.globalAlpha = vorA ? .72 : (fertigA ? .55 : 1);
-    const k = befehlSchild(cx, cy, Object.assign({name: a.label, soll: fremdA ? 0 : +a.soll || 0, farbe: af || null, seite: f},
+    const k = befehlSchild(cx, cy, Object.assign({name: a.label || (a.aufkl ? "RECON" : ""), soll: fremdA ? 0 : +a.soll || 0, farbe: af || null, seite: f},
       fremdA || !id ? {} : zuordIstFeld("area", id), {ohneBalken: fertigA}));
     if (k && fertigA) befehlAbzeichen(k.x1, k.y0, "\u2713", af || f, true);
+    /* the request's mark above its shield: a placeholder for the real symbol */
+    if (k && a.aufkl){ const mr = Math.min(9, 5*Math.sqrt(view.z))*uiScale; aufklZeichen(cx, k.y0 - mr - 3*uiScale, mr, af); }
     ctx.restore();
     if (k && id) schildVon.set("area:" + id, k);
     if (k && eintrag && view.z > 1.6){
@@ -8026,7 +8243,7 @@ function alleBefehle(alles){
   for (const [id, e] of liveLines()) raus.push({art: "line", id, key: befehlKey("line", id), v: e.v, by: e.by,
     name: e.v.label || ("Defence " + (MAP.n[e.v.pts[0]] ? MAP.n[e.v.pts[0]][0] : "")), entwurf: false});
   for (const [id, e] of liveAreas()) raus.push({art: "area", id, key: befehlKey("area", id), v: e.v, by: e.by,
-    name: e.v.label || "Area", entwurf: false});
+    name: e.v.label || (e.v.aufkl ? "Recon " + aufklZiele(e.v) : "Area"), entwurf: false});
   for (const p of allPara()){
     const e = S.para[p.town];
     raus.push({art: "para", id: p.town, key: befehlKey("para", p.town), v: paraAt(p.town) || {}, by: e && e.by,
@@ -8313,14 +8530,19 @@ function lineSpeichern(pts){
   dirty.add(`line:${k}`); save(); draw();
   toast(`Defence line over ${pts.length} towns. Click it to label it and set it active.`);
 }
-function areaSpeichern(pts){
-  if (!darfIchNochMalen("area")) return;
+/* extra: fields merged into the area, {aufkl:1, orte?} for a recon request.
+   A request is our side's ask whatever the left bar shows; one on towns
+   opens no window, its flow goes on with Ctrl-clicks. */
+function areaSpeichern(pts, extra){
+  if (!darfIchNochMalen("area")) return null;
   const id = Math.random().toString(36).slice(2,10), k = `${id}:${S.me}`;
   const rund = pts.map(p => [Math.round(p[0]*10)/10, Math.round(p[1]*10)/10]);
-  S.area[k] = {v:{pts: rund, f: faction, label: "", art: artNeu()}, t: jetzt(), by: S.me,
-               n: S.name || ""};
+  const aufkl = !!(extra && extra.aufkl);
+  S.area[k] = {v: Object.assign({pts: rund, f: aufkl ? clanFaktion() : faction, label: "", art: artNeu()}, extra || {}),
+               t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`area:${k}`); save(); draw();
-  areaDialog(k, S.area[k], true);
+  if (!(extra && extra.orte)) areaDialog(k, S.area[k], true);
+  return k;
 }
 function lineFertig(){
   if (!lineDraft) return;
@@ -8728,6 +8950,8 @@ cv.addEventListener("mousedown", e => {
   if (tool === "line"  && i !== null){ zieh = {art:"line", pts:[i]}; return; }
   if (tool === "brush"){ zieh = {art:"brush", pts:[], seen:new Set()}; pinselSammeln(e.offsetX, e.offsetY); draw(); return; }
   if (tool === "area"){ zieh = {art:"area", pts:[toMap(e.offsetX, e.offsetY)]}; return; }
+  /* the recon tool draws on open ground only; a town goes to the click handler */
+  if (tool === "aufkl" && i === null){ zieh = {art:"area", aufkl:1, pts:[toMap(e.offsetX, e.offsetY)]}; return; }
   dragging = true; dragged = false;
   dragStart = {mx:e.offsetX, my:e.offsetY, vx:view.x, vy:view.y};
 });
@@ -8882,8 +9106,15 @@ window.addEventListener("mouseup", e => {
     if (zieh.pts.length >= 2) lineSpeichern(zieh.pts);
     else toast("Drag across at least two towns");
   } else if (zieh.art === "area"){
-    if (zieh.pts.length >= 6) areaSpeichern(zieh.pts);
-    setTool("inspect");          // one report, then back to the normal pointer
+    /* a drawn recon request: every corner must be within sight, else no
+       entry and the tool stays for another try; a bare click with the
+       recon tool keeps the tool and its flow too */
+    let fertig = true;
+    if (zieh.pts.length >= 6){
+      if (!zieh.aufkl || aufklInSicht(zieh.pts)) areaSpeichern(zieh.pts, zieh.aufkl ? {aufkl: 1} : null);
+      else fertig = false;
+    } else if (zieh.aufkl) fertig = false;
+    if (fertig) setTool("inspect");          // one report, then back to the normal pointer
   }
   zieh = null; draw(); tally();
 });
@@ -8937,6 +9168,8 @@ cv.addEventListener("click", e => {
     sel = i; save();
   } else if (tool === "para"){
     paraFlussKlick(i, e.ctrlKey || e.metaKey);
+  } else if (tool === "aufkl"){
+    aufklKlick(i, e.ctrlKey || e.metaKey);
   } else if (tool === "parablock"){
     /* the block as it stands: this side's, in place; the same click again clears it */
     const pb = paraAt(i);
@@ -8981,6 +9214,7 @@ document.addEventListener("keydown", e => {
     if (document.getElementById("veil").classList.contains("on")) closeDlg();
     else if (editing){ editing = null; draw(); }
     else if (paraFlussAktiv()){ paraFlussAbbruch(); draw(); }
+    else if (aufklFluss){ aufklFlussAbbruch(); draw(); }
     else if (arrowFrom !== null){ arrowFrom = null; draw(); }
     else { sel = null; side(); draw(); }
   }
@@ -9033,11 +9267,12 @@ function setTool(t){
      man zieht eine Linie ueber zwanzig Staedte, laesst los, und sie ist
      weg. Dieselbe Vorgabe wie bei den Rechten, nur auf Mengen angewandt -
      wer am Anschlag ist, soll das Werkzeug gar nicht erst waehlen. */
-  const marke = {arrow:"arrow", line:"line", area:"area", para:"arrow"}[t];
+  const marke = {arrow:"arrow", line:"line", area:"area", aufkl:"area", para:"arrow"}[t];
   if (marke && !darfIchNochMalen(marke)) return false;
   const vorher = tool;
   tool = t; arrowFrom = null; hoverObj = null; editing = null;
   if (t !== vorher) paraFlussAbbruch();                  // the drop's marks go with a real tool change
+  if (t !== vorher) aufklFlussAbbruch();                 // the recon flow too
   if (t !== "para") paraMenueZu();                       // its menu with any other tool
   cv.classList.remove("griff");
   document.querySelectorAll(".tool[data-t]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.t === t)));
@@ -9175,6 +9410,7 @@ function tips(){
     parablock: `<b>Active parablock</b> — click a town that is blocked right now; click again to clear it. For <b>${p}</b>.`,
     brush:  `<b>Paint</b> — drag over the map; every town under the brush goes to <b>${FACTIONS[faction].name}</b>. Up to ${PINSEL_ZUG_MAX} per stroke.${pinselRueck ? ` <button class="btn" id="tip-rueck" style="padding:1px 7px;font-size:10.5px">Undo last stroke</button>` : ""}`,
     area:   `<b>Area</b> — draw a shape, then label it. For <b>${p}</b>.`,
+    aufkl:  `<b>Recon</b> — ${aufklTipp()}`,
     spot:   "<b>Sighting</b> — click the town, then record what you saw.",
     battle: "<b>Battle</b> — click marks a town contested, again clears it.",
     erase:  darf("aufklaerung")
@@ -10285,6 +10521,11 @@ function side(){
         ${zustandKnoepfe(`para:${i}`, pb, S.para[i])}` : ""}
       <button class="btn" id="pb-fenster" style="margin-top:6px;font-size:11px" title="Name, planned strength, chain and colour of this block">Order window \u2026</button>
     </div>
+    ${(() => { const anf = aufklAnfragenAn(i); return anf.length ? `<div class="sec">
+      <h3>Reconnaissance</h3>
+      ${anf.map(([id, e]) => `<div style="font-size:11.5px;color:var(--dim);margin-top:4px">${e.v.label ? esc(e.v.label) + " \u00b7 " : ""}${zustandText(id, e.v, e.n || e.by)}</div>
+      <button class="btn" data-aufkl-fenster="${esc(id)}" style="margin-top:4px;font-size:11px" title="Scouts that reach it, name, chain and state of this request">Request window \u2026</button>`).join("")}
+    </div>` : ""; })()}
     <div class="sec">
       <h3>Note</h3>
       <textarea id="note" placeholder="e.g. push at 20:00, supplies low …">${esc(noteOf(i))}</textarea>
@@ -10325,6 +10566,9 @@ function side(){
   }));
   zustandVerdrahten(el);
   el.querySelector("#pb-fenster")?.addEventListener("click", ()=> paraDialog(i));
+  el.querySelectorAll("[data-aufkl-fenster]").forEach(k => k.addEventListener("click", () => {
+    const id = k.dataset.aufklFenster; if (S.area[id]) areaDialog(id, S.area[id]);
+  }));
   el.querySelector("#pb-plan")?.addEventListener("change", ev=>{
     if (pb) setPara(i, pb.f, ev.target.checked);
     side(); draw();
@@ -27365,15 +27609,17 @@ function wacheAnzeigen(){
 function areaDialog(id, e, neuGezogen){
   const a = e.v, meins = e.by === S.me, fremd = fremdeSeite(a);   // another side's area is a sighting
   openDlg(`
-    <div class="dlg-h"><h2>${neuGezogen ? "What is in there?" : "Marked area"}</h2>
-      <p>${neuGezogen ? "Give it a short label — that is what everyone reads on the map."
-                      : zustandText(id, a, e.n || e.by) + " · " + alterText(e.t)}</p></div>
+    <div class="dlg-h"><h2>${a.aufkl ? "Reconnaissance \u00b7 " + esc(aufklZiele(a)) : (neuGezogen ? "What is in there?" : "Marked area")}</h2>
+      <p>${neuGezogen && !a.aufkl ? "Give it a short label — that is what everyone reads on the map."
+                      : zustandText(id, a, e.n || e.by) + " · " + alterText(e.t)}</p>${
+      a.aufkl && !fremd ? aufklFensterZeilen(a, id) : ""}</div>
     <div class="dlg-b">
       <div class="row">
         <input type="text" id="ar-lbl" value="${esc(a.label||"")}" style="flex:1"
-          placeholder="e.g. many planes · armour massing · avoid" ${meins?"":"disabled"}></div>
+          placeholder="${a.aufkl ? "e.g. count the armour · watch the airfield" : "e.g. many planes · armour massing · avoid"}" ${meins?"":"disabled"}></div>
       <div class="row" style="flex-wrap:wrap;gap:5px">
-        ${["recon wanted","many planes","armour massing","infantry heavy","AA cover","weak spot","avoid"]
+        ${(a.aufkl ? ["count the armour","watch the airfield","who holds it","planes on the field"]
+                   : ["recon wanted","many planes","armour massing","infantry heavy","AA cover","weak spot","avoid"])
           .map(v=>`<button class="btn" data-vor="${esc(v)}" style="font-size:11px;padding:3px 8px">${esc(v)}</button>`).join("")}
       </div>
       ${fremd ? "" : `<div class="row" style="align-items:center">
@@ -27390,8 +27636,9 @@ function areaDialog(id, e, neuGezogen){
         <div class="pf-farben">${farbKnoepfe(a.farbe)}</div>
       </div>`}
       ${a.folge ? `<div class="note">Step <b>${a.folge}</b> of its operation.</div>` : ""}
-      <div class="note">The colour of the area follows the faction selected on the left — pick the enemy
-        before drawing and the area reads as theirs; the outline colour is your own accent.</div>
+      ${a.aufkl ? `<div class="note">Eyes are asked from our nearest town; a scout that sees that far can take it. Mark it done by hand.</div>`
+                : `<div class="note">The colour of the area follows the faction selected on the left — pick the enemy
+        before drawing and the area reads as theirs; the outline colour is your own accent.</div>`}
     </div>
     <div class="dlg-f">
       ${darfWeg(e) ? `<button class="btn danger" id="ar-del">Delete</button>` : ""}
@@ -27422,7 +27669,7 @@ function areaDialog(id, e, neuGezogen){
     closeDlg(); draw(); toast("Saved");
     /* "recon wanted" is a request, not a note: it also goes to the board as
        a call for help, pinned to the town nearest the area's centre. */
-    if (/^recon\b/i.test(label) && a.pts && a.pts.length){
+    if (!a.aufkl && /^recon\b/i.test(label) && a.pts && a.pts.length){   // a recon request is the ask itself
       const sx = a.pts.reduce((t, p) => t + p[0], 0)/a.pts.length;
       const sy = a.pts.reduce((t, p) => t + p[1], 0)/a.pts.length;
       let best = -1, bd = Infinity;
@@ -27435,7 +27682,7 @@ function areaDialog(id, e, neuGezogen){
   });
   document.getElementById("ar-del")?.addEventListener("click", ()=>{
     if (!dropEntry("area", id)) return;   // die Absage steht schon da
-    closeDlg(); draw(); toast("Area removed");
+    closeDlg(); draw(); toast(a.aufkl ? "Recon request removed" : "Area removed");
   });
 }
 
@@ -32787,6 +33034,7 @@ function ordnungAnwenden(){
     /* a saved tool order from before 05.09. does not know the second para
        button - it takes its place right behind the first */
     if (wunsch && wunsch.includes("para") && !wunsch.includes("parablock")) wunsch.splice(wunsch.indexOf("para") + 1, 0, "parablock");
+    if (wunsch && wunsch.includes("area") && !wunsch.includes("aufkl")) wunsch.splice(wunsch.indexOf("area") + 1, 0, "aufkl");
     for (const el of g.wahl()){
       if (!wunsch){ el.style.order = ""; continue; }
       const i = wunsch.indexOf(g.id(el));
@@ -37754,7 +38002,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c03bc8d331</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 7a4f3c79ac</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -37898,7 +38146,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "c03bc8d331";
+const BAU = "7a4f3c79ac";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
