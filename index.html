@@ -4475,8 +4475,10 @@ function befehlAutoAbschluss(){
   /* overtime clocks that ran out or lost their battle mark, see OVERTIME CLOCK */
   let ot = false;
   try { ot = overtimePruefen(); } catch (e){}
+  let rr = false;
+  try { rr = rollePruefen(); } catch (e){}          // requests without a battle, see ROLE REQUESTS
   if (getan || bewegt) ordersZahl();
-  return getan > 0 || bewegt || drohung || ot;
+  return getan > 0 || bewegt || drohung || ot || rr;
 }
 /* the badge is counted afresh every minute whatever happened */
 setInterval(() => { try { if (befehlAutoAbschluss()) draw(); ordersZahl(); } catch(e){} }, 60000);
@@ -4716,6 +4718,7 @@ function ordersZahl(){
       if (x.zs !== "aktiv") continue;
       if (befehlAktivSeit(x) > seit) n++;
     }
+    n += rolleOffenFuerMich();          // open role requests I have not taken, see ROLE REQUESTS
   } catch (e){}
   const m = b.querySelector(".marke");
   if (m){ m.textContent = String(n); m.hidden = !n; }
@@ -4772,7 +4775,8 @@ function zuordWahl(b, zurueck){
   });
 }
 /* THE INBOX. Units: my teams with their assignment, then every open order
-   of our side, active first. Players: the role requests, next package. */
+   of our side, active first. Players: the open role requests of our side,
+   who took them, and the one role I hold, see ROLE REQUESTS. */
 function ordersDialog(tab){
   try { localStorage.setItem(ZUORD_STORE, String(jetzt())); } catch (e){}
   try { if (zuordNachruecken()) draw(); } catch (e){}
@@ -4857,8 +4861,8 @@ function ordersDialog(tab){
           : `<div class="empty">No open orders on our side.</div>`}
         <div class="note">Click an order to jump to it on the map. Assigned teams count on the shield before commitments.</div>
       </div>
-      <div class="tabp schmal" data-tab="players">
-        <div class="empty">Role requests come with the next package.</div>
+      <div class="tabp" data-tab="players">
+        ${rollePostfachInhalt()}
       </div>
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
@@ -4894,6 +4898,20 @@ function ordersDialog(tab){
     const b = alleBefehle(true).find(x => x.art === k.dataset.zwahl && String(x.id) === k.dataset.zid);
     if (!b){ toast("That order is gone."); wieder(); return; }
     zuordWahl(b, wieder);
+  }));
+  document.querySelectorAll("#dlg [data-rolle-nimm]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    rolleNehmen(k.dataset.rolleNimm); side(); wieder();
+  }));
+  document.querySelectorAll("#dlg [data-rolle-frei]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    if (rolleFrei(k.dataset.rolleFrei)) toast("Released");
+    side(); wieder();
+  }));
+  document.querySelectorAll("#dlg [data-rolle-weg]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    if (rolleWeg(k.dataset.rolleWeg)) toast("Request removed");
+    side(); wieder();
   }));
   document.querySelectorAll("#dlg tr[data-go]").forEach(r => r.addEventListener("click", ev => {
     if (ev.target.closest("button")) return;
@@ -5701,6 +5719,344 @@ async function punkteBuch(spieler, name){
         <td style="text-align:left;color:var(--dim2)">${esc(z.quelle || "")}</td>
       </tr>`).join("")}</tbody></table></div>`
     : `<div class="empty">Nothing booked in the last 30 days.</div>`;
+}
+
+/* ---- ROLE REQUESTS (06.09.2026) ----
+   In a running battle the clan is short of one thing at a time: a pilot
+   against the enemy planes, a tank with the right gun, flak, a medic.
+   A request names the role, how many players are wanted and one line of
+   detail. It hangs on one town and dies with that battle.
+
+     rolle:<id>              v = {stadt, rolle, n, text, f, by, t}
+                             right "anfordern", owner in the row (e.by).
+     rollezu:<id>:<player>   v = {t, st:1, ok} - the acceptance. ok is what
+                             the taker's own soldiers say, so the asker can
+                             see who answered without the right equipment.
+
+   Only one role at a time: taking a second one lets the first go. Whether
+   a member CAN fill a role is read from his own soldiers every time, never
+   stored. The map plate is counted once per half second for the whole map,
+   never once per town. */
+const ROLLE_TEXT_MAX = 80, ROLLE_MAX = 8;
+/* The battle roles. Not ROLLEN (weapon roles) and not ROLLEN_VORGABE
+   (who may do what in the clan) - those names are taken.
+   kann(f, s): f is faehigkeiten(s), s the soldier. */
+const KAMPFROLLEN = [
+  {k:"pilot",    name:"Pilot",     kann:f => f.has("plane"),
+   warum:"none of your soldiers owns a plane"},
+  {k:"tanker",   name:"Tank crew", kann:f => f.has("tank") || f.has("heavy"),
+   warum:"none of your soldiers has a tank or tank destroyer"},
+  {k:"flak",     name:"Anti-air",  kann:f => f.has("aa"),
+   warum:"none of your soldiers has a flak vehicle or an anti-tank rifle"},
+  {k:"medic",    name:"Medic",     kann:f => f.has("medic"),
+   warum:"none of your soldiers carries a first aid kit"},
+  {k:"sniper",   name:"Sniper",    kann:f => f.has("sniper"),
+   warum:"none of your soldiers has a scoped rifle"},
+  {k:"at",       name:"Anti-tank", kann:f => f.has("at"),
+   warum:"none of your soldiers can kill armour"},
+  {k:"scout",    name:"Scout",     kann:(f, s) => s.cls === "recon" || f.has("optics"),
+   warum:"none of your soldiers is recon or carries binoculars"},
+  {k:"infantry", name:"Infantry",  immer:1, kann:() => true, warum:""},
+  {k:"runner",   name:"Runner",    immer:1, kann:() => true, warum:""},
+];
+const kampfRolle     = k => KAMPFROLLEN.find(r => r.k === k) || null;
+const kampfRolleName = k => (kampfRolle(k) || {name: k}).name;
+
+/* one request, or null when it is gone: another war, another side, or the
+   battle it belongs to is over */
+function rolleZeile(id){
+  const e = S.rolle[id];
+  if (!e || !e.v || !imKrieg(e) || !imZeit(e)) return null;
+  const v = e.v, i = +v.stadt;
+  if (!MAP.n[i] || fremdeSeite(v) || !fightAt(i)) return null;
+  return {id, stadt: i, rolle: v.rolle,
+          n: Math.max(1, Math.min(8, +v.n || 1)),
+          text: v.text || "", by: e.by, name: e.n || e.by || "?",
+          t: e.t || 0, mine: e.by === S.me, weg: darfWeg(e)};
+}
+const rolleOffen = () => Object.keys(S.rolle).map(rolleZeile).filter(Boolean)
+                           .sort((a, b) => (b.t || 0) - (a.t || 0));
+/* one acceptance; the key is <requestId>:<player>, so the id carries no colon */
+function rolleZuZeile(k){
+  const e = S.rollezu[k];
+  if (!e || !e.v || !imKrieg(e) || !imZeit(e)) return null;
+  const p = k.lastIndexOf(":");
+  if (p <= 0) return null;
+  const wer = k.slice(p + 1);
+  return {key: k, rolle: k.slice(0, p), wer, name: e.n || wer,
+          ok: e.v.ok === 0 ? 0 : 1, t: e.t || 0, mine: wer === S.me};
+}
+const rolleZuAlle = () => Object.keys(S.rollezu).map(rolleZuZeile).filter(Boolean);
+/* can any of my own soldiers fill that role? Two roles need no soldier at
+   all, and somebody who never filled in his arsenal is UNKNOWN, not unable:
+   a cross against a man we know nothing about would be a lie. */
+function rolleKannIch(k, men){
+  const r = kampfRolle(k);
+  if (!r || r.immer) return true;
+  const liste = men || meineSoldaten();
+  if (!liste.length) return true;
+  for (const s of liste) if (r.kann(faehigkeiten(s), s)) return true;
+  return false;
+}
+
+/* the map plate is counted for the whole map at most twice a second */
+let rolleOrteKarte = null, rolleOrteStand = 0, rolleOrteZeit = null;
+function rolleOrteZahl(){
+  const t = jetzt();
+  if (rolleOrteKarte && rolleOrteZeit === zeitReise && t - rolleOrteStand < 500) return rolleOrteKarte;
+  /* how many have taken each request, so a full one no longer calls */
+  const an = new Map();
+  for (const k of Object.keys(S.rollezu)){
+    const z = rolleZuZeile(k);
+    if (z) an.set(z.rolle, (an.get(z.rolle) || 0) + 1);
+  }
+  const m = new Map();
+  for (const id of Object.keys(S.rolle)){
+    const e = S.rolle[id];
+    if (!e || !e.v || !imKrieg(e) || !imZeit(e) || fremdeSeite(e.v)) continue;
+    const i = +e.v.stadt;
+    if (!MAP.n[i] || !fightAt(i)) continue;
+    if ((an.get(id) || 0) >= Math.max(1, Math.min(8, +e.v.n || 1))) continue;
+    m.set(i, (m.get(i) || 0) + 1);
+  }
+  rolleOrteKarte = m; rolleOrteStand = t; rolleOrteZeit = zeitReise;
+  return m;
+}
+const rolleFrisch = () => { rolleOrteStand = 0; };
+
+/* ask for a role at a town that is fighting */
+function rolleAnlegen(stadt, rolle, n, text){
+  if (zeitReise) return false;              /* the replay only reads */
+  if (!darf("anfordern")) return darfNicht("anfordern");
+  if (!MAP.n[stadt] || !fightAt(stadt)){ toast("No battle at that town."); return false; }
+  if (!kampfRolle(rolle)){ toast("Unknown role."); return false; }
+  /* a hand can ask for a few things, not for fifty: the same guard the
+     map marks have, and the same role twice at one town says nothing new */
+  const meine = rolleOffen().filter(r => r.mine);
+  if (meine.length >= ROLLE_MAX){
+    toast(`You already have ${ROLLE_MAX} open requests. Remove one first.`); return false;
+  }
+  if (meine.some(r => r.stadt === +stadt && r.rolle === rolle)){
+    toast("You asked for that role there already."); return false;
+  }
+  const v = {stadt: +stadt, rolle, n: Math.max(1, Math.min(8, +n || 1)),
+             text: String(text || "").trim().slice(0, ROLLE_TEXT_MAX),
+             f: clanFaktion(), by: S.me, t: jetzt()};
+  if (!stamp("rolle", Math.random().toString(36).slice(2, 10), v, {n: S.name || ""})) return false;
+  save(); rolleFrisch();
+  return true;
+}
+/* the asker closes it; his own acceptance goes with it, other people's
+   rows fall out of sight with the request the server still holds */
+function rolleWeg(id){
+  if (zeitReise) return false;              /* the replay only reads */
+  const e = S.rolle[id];
+  if (!e || e.v == null) return false;
+  if (!darfWeg(e)){ darfNicht("loeschen"); return false; }
+  if (!stamp("rolle", id, null, {n: S.name || ""})) return false;
+  const k = id + ":" + S.me;
+  if (S.rollezu[k] && S.rollezu[k].v != null) stamp("rollezu", k, null, {n: S.name || ""});
+  save(); rolleFrisch();
+  return true;
+}
+/* take a role. Only one at a time: the one held before is let go, and the
+   toast says so. Taking a role your soldiers cannot fill is allowed - the
+   asker decides, not the tool - but it is recorded on the row. */
+function rolleNehmen(id){
+  /* the replay only reads: an acceptance held now falls outside the chosen
+     moment, and the one-role rule would not see it */
+  if (zeitReise) return false;
+  const r = rolleZeile(id);
+  if (!r){ toast("That request is gone."); return false; }
+  let vorher = "";
+  for (const z of rolleZuAlle()){
+    if (!z.mine || z.rolle === id) continue;
+    const alt = rolleZeile(z.rolle);
+    if (alt) vorher = kampfRolleName(alt.rolle) + " at " + MAP.n[alt.stadt][0];
+    stamp("rollezu", z.key, null, {n: S.name || ""});
+  }
+  const kann = rolleKannIch(r.rolle);
+  if (!stamp("rollezu", id + ":" + S.me, {t: jetzt(), st: 1, ok: kann ? 1 : 0},
+             {n: S.name || ""})) return false;
+  save();
+  const wo = `${kampfRolleName(r.rolle)} at ${MAP.n[r.stadt][0]}`;
+  toast(vorher ? `Took ${wo}. You left ${vorher}.`
+               : kann ? `Took ${wo}.` : `Took ${wo}. Your soldiers cannot fill it, the asker sees that.`);
+  return true;
+}
+function rolleFrei(id){
+  if (zeitReise) return false;              /* the replay only reads */
+  const k = id + ":" + S.me, e = S.rollezu[k];
+  if (!e || e.v == null) return false;
+  if (!stamp("rollezu", k, null, {n: S.name || ""})) return false;
+  save();
+  return true;
+}
+/* the badge on the Orders button: open requests of our side that are not
+   filled yet and that I have not taken */
+function rolleOffenFuerMich(){
+  const off = rolleOffen();
+  if (!off.length) return 0;
+  const zahl = new Map(), meins = new Set();
+  for (const z of rolleZuAlle()){
+    zahl.set(z.rolle, (zahl.get(z.rolle) || 0) + 1);
+    if (z.mine) meins.add(z.rolle);
+  }
+  let n = 0;
+  /* my own asks are not news to me, and a role I cannot fill is not either */
+  for (const r of off)
+    if (!r.mine && !meins.has(r.id) && (zahl.get(r.id) || 0) < r.n && rolleKannIch(r.rolle)) n++;
+  return n;
+}
+/* once a minute, like overtimePruefen: a request whose battle mark is gone
+   is closed. Only rows we may write are cleared, the rest are out of sight
+   anyway; my own acceptance of a dead request goes too. */
+function rollePruefen(){
+  if (zeitReise) return false;
+  let weg = false;
+  for (const id of Object.keys(S.rolle)){
+    const e = S.rolle[id];
+    if (!e || !e.v || !imKrieg(e)) continue;
+    if (fightAt(+e.v.stadt)) continue;
+    if (!darfWeg(e) || !darf("anfordern")) continue;
+    if (stamp("rolle", id, null, {n: S.name || ""})) weg = true;
+  }
+  for (const k of Object.keys(S.rollezu)){
+    const e = S.rollezu[k];
+    if (!e || e.v == null || !k.endsWith(":" + S.me)) continue;
+    const r = S.rolle[k.slice(0, k.lastIndexOf(":"))];
+    if (r && r.v && imKrieg(r) && fightAt(+r.v.stadt)) continue;
+    if (stamp("rollezu", k, null, {n: S.name || ""})) weg = true;
+  }
+  if (weg){ save(); rolleFrisch(); }
+  return weg;
+}
+
+/* a small blue plate over a town with open requests, above the clock */
+function rolleEtikett(x, y, n){
+  const gr = Math.max(8, Math.min(11, 6.5*Math.sqrt(view.z)))*uiScale;
+  const text = `${n} role${n === 1 ? "" : "s"} asked`;
+  ctx.save();
+  ctx.font = `700 ${gr}px ${SCHMAL}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const b = ctx.measureText(text).width + gr*0.9, h = gr*1.4;
+  ctx.globalAlpha = .92; ctx.fillStyle = "#3d7fb8";
+  ctx.fillRect(x - b/2, y - h, b, h);
+  ctx.globalAlpha = 1; ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, x, y - h/2 + 0.5);
+  ctx.restore();
+  return h;                                  // so the next plate can sit above
+}
+
+/* the names of the takers, with a cross on whoever said he cannot fill it */
+function rolleNehmerText(an){
+  if (!an.length) return "\u2014";
+  return an.map(z => z.ok ? esc(z.name)
+    : `<span style="color:var(--su)" title="Took it although his own soldiers cannot fill it">\u2715 ${esc(z.name)}</span>`).join(", ");
+}
+/* the Roles box in a town's side panel. Only where a battle is on. */
+function rolleAbschnitt(i){
+  if (zeitReise) return "";                 /* the replay only reads */
+  if (!fightAt(i)) return "";
+  const liste = rolleOffen().filter(r => r.stadt === i);
+  const darfAnf = darf("anfordern");
+  if (!liste.length && !darfAnf) return "";
+  const zu = rolleZuAlle();
+  const klein = `style="font-size:11px;padding:3px 8px"`;
+  const zeilen = liste.map(r => {
+    const an = zu.filter(z => z.rolle === r.id);
+    const ich = an.some(z => z.mine);
+    const kann = rolleKannIch(r.rolle);
+    const rr = kampfRolle(r.rolle);
+    return `<div>
+      <div style="font-size:11.5px">${kann ? "" :
+        `<span style="color:var(--su)" title="${esc((rr && rr.warum) || "your soldiers cannot fill it")}">\u2715 </span>`
+        }<b>${esc(kampfRolleName(r.rolle))}</b>
+        <span style="color:${an.length >= r.n ? "var(--dim2)" : "var(--accent)"}">${an.length}/${r.n}</span>${
+        r.text ? ` \u00b7 ${esc(r.text)}` : ""}</div>
+      <div class="hint">by ${esc(r.name)} \u00b7 ${esc(alterText(r.t))} \u00b7 ${rolleNehmerText(an)}</div>
+      <div class="row" style="margin-top:4px">
+        <button class="btn" data-rolle-${ich ? "frei" : "nimm"}="${esc(r.id)}" ${klein}>${
+          ich ? "Release" : "Take it"}</button>
+        ${r.weg && darfAnf ? `<button class="btn" data-rolle-weg="${esc(r.id)}" ${klein}>Remove</button>` : ""}
+      </div></div>`;
+  }).join("");
+  return `<div class="sec">
+      <h3>Roles</h3>
+      ${zeilen || `<div class="empty">No role asked for here.</div>`}
+      ${darfAnf ? `<button class="btn" id="rr-neu" style="font-size:11px"
+        title="Ask the clan for a role in this battle">Ask for roles \u2026</button>` : ""}
+    </div>`;
+}
+/* the small window behind "Ask for roles ..." */
+function rolleDialog(i){
+  if (!darf("anfordern")) return darfNicht("anfordern");
+  if (!MAP.n[i] || !fightAt(i)){ toast("No battle at that town."); return false; }
+  const kann = new Set(KAMPFROLLEN.filter(r => rolleKannIch(r.k)).map(r => r.k));
+  openDlg(`
+    <div class="dlg-h"><h2>Ask for roles</h2>
+      <p>${esc(MAP.n[i][0])} \u00b7 it stands until you remove it or the battle ends.</p></div>
+    <div class="dlg-b">
+      <div class="row" style="flex-wrap:wrap;align-items:center">
+        <select id="rr-rolle" style="width:150px">${KAMPFROLLEN.map(r =>
+          `<option value="${esc(r.k)}">${esc(r.name)}${kann.has(r.k) ? "" : " \u2715"}</option>`).join("")}</select>
+        <select id="rr-n" style="width:110px">${[1,2,3,4,5,6,7,8].map(n =>
+          `<option value="${n}">${n} player${n === 1 ? "" : "s"}</option>`).join("")}</select>
+        <input type="text" id="rr-text" maxlength="${ROLLE_TEXT_MAX}"
+          placeholder="e.g. Panther, HE ammo" style="flex:1;min-width:150px">
+        <button class="btn primary" id="rr-ok">Ask</button>
+      </div>
+      <div class="note">Everyone on our side sees it in the orders inbox and on the town.
+        A cross marks a role your own soldiers cannot fill.</div>
+    </div>
+    <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`);
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  document.getElementById("rr-ok").addEventListener("click", ()=>{
+    if (!rolleAnlegen(i, document.getElementById("rr-rolle").value,
+                      +document.getElementById("rr-n").value || 1,
+                      document.getElementById("rr-text").value)) return;
+    closeDlg(); toast("Role requested"); side(); draw(); ordersZahl();
+  });
+  return true;
+}
+/* the Players tab of the orders inbox */
+function rollePostfachInhalt(){
+  const off = rolleOffen(), zu = rolleZuAlle();
+  const klein = `style="font-size:11px;padding:3px 8px"`;
+  const darfAnf = darf("anfordern");
+  const zeilen = off.map(r => {
+    const an = zu.filter(z => z.rolle === r.id);
+    const ich = an.some(z => z.mine);
+    const kann = rolleKannIch(r.rolle);
+    const rr = kampfRolle(r.rolle);
+    return `<tr data-go="${r.stadt}" style="cursor:pointer"${ich ? ` class="me"` : ""}>
+      <td class="sy">${kann ? "" :
+        `<span style="color:var(--su)" title="${esc((rr && rr.warum) || "your soldiers cannot fill it")}">\u2715</span>`}</td>
+      <td style="text-align:left">${esc(MAP.n[r.stadt][0])}</td>
+      <td style="text-align:left"><b>${esc(kampfRolleName(r.rolle))}</b></td>
+      <td style="text-align:left;color:var(--dim)">${esc(r.text)}</td>
+      <td style="color:${an.length >= r.n ? "var(--dim2)" : "var(--accent)"}">${an.length}/${r.n}</td>
+      <td style="text-align:left;color:var(--dim2)">${rolleNehmerText(an)}</td>
+      <td style="text-align:left;color:var(--dim2)">${esc(r.name)} \u00b7 ${esc(alterText(r.t))}</td>
+      <td style="white-space:nowrap">
+        <button class="btn" data-rolle-${ich ? "frei" : "nimm"}="${esc(r.id)}" ${klein}>${
+          ich ? "Release" : "Take it"}</button>${
+        r.weg && darfAnf ? ` <button class="btn" data-rolle-weg="${esc(r.id)}" ${klein}>Remove</button>` : ""}</td>
+    </tr>`;
+  }).join("");
+  const mein = zu.filter(z => z.mine).map(z => rolleZeile(z.rolle)).filter(Boolean)[0] || null;
+  return `<h3 class="zuord-h">Open requests on our side</h3>
+    ${off.length ? `<div class="tw"><table><thead><tr><th></th><th>Town</th><th>Role</th><th>Detail</th>
+      <th>Taken</th><th>Taken by</th><th>Asked by</th><th></th></tr></thead>
+      <tbody>${zeilen}</tbody></table></div>`
+      : `<div class="empty">No role asked for on our side.</div>`}
+    ${mein ? `<h3 class="zuord-h">Your role</h3>
+      <div class="note">You took: <b>${esc(kampfRolleName(mein.rolle))}</b> at
+        <b>${esc(MAP.n[mein.stadt][0])}</b>${mein.text ? " \u00b7 " + esc(mein.text) : ""}.
+        You can hold one role at a time.</div>` : ""}
+    <div class="note">Click a row to jump to the town. A cross marks a role your own soldiers cannot
+      fill; you may still take it. ${darfAnf
+        ? "Open a town that is fighting and use <b>Ask for roles</b> to add one."
+        : esc(rechtSatz("anfordern"))}</div>`;
 }
 
 function setRang(player, ids){
@@ -6665,7 +7021,9 @@ function draw(){
       if (dro) oben -= paraBedrohungEtikett(x, oben, dro.n) + 2;
       /* the overtime clock, only with the battle mark, see OVERTIME CLOCK */
       const ot = overtimeAn(i);
-      if (ot){ overtimeEtikett(x, oben, ot); if (!zeitReise && otMs(ot) < OT_DAUER) otTaktStarten(); }
+      if (ot){ oben -= overtimeEtikett(x, oben, ot) + 2; if (!zeitReise && otMs(ot) < OT_DAUER) otTaktStarten(); }
+      /* open role requests, topmost plate, see ROLE REQUESTS */
+      if (fightAt(i)){ const rz = rolleOrteZahl().get(i); if (rz) rolleEtikett(x, oben, rz); }
     }
     if (showFlug && istFlugplatz(i)){
       const zielCap = (sel != null && isCap(sel)) ? sel : null;
@@ -9388,7 +9746,7 @@ function neuerKrieg(){
   const startBei = new Map();
   const stst = startStaedte();
   for (const f of [0,1,2]) if (stst[f] != null) startBei.set(String(stst[f]), f);
-  for (const b of ["owner", "fight", "star", "notes", "para", "gefecht"])
+  for (const b of ["owner", "fight", "star", "notes", "para", "gefecht", "rolle"])
     for (const id of Object.keys(S[b])){
       if (b === "owner" && startBei.has(id)) continue;
       if (S[b][id] && S[b][id].v != null) stamp(b, id, null);
@@ -9396,7 +9754,7 @@ function neuerKrieg(){
   for (const [id, f] of startBei) stamp("owner", id, f);
   /* Fremde Reihen weist der Server ab - das ist gewollt. Ihre Eintraege sind
      ueber den Zeitstempel oben ohnehin schon aus dem Bild. */
-  for (const b of ["units", "join", "spot", "est"])
+  for (const b of ["units", "join", "spot", "est", "rollezu"])
     for (const k of Object.keys(S[b])) if (k.endsWith(":"+S.me) && S[b][k] && S[b][k].v != null){
       S[b][k] = {v:null, t:jetzt(), by:S.me, n:S.name||""}; dirty.add(`${b}:${k}`);
     }
@@ -11048,6 +11406,7 @@ function side(){
       ${anf.map(([id, e]) => `<div style="font-size:11.5px;color:var(--dim);margin-top:4px">${e.v.label ? esc(e.v.label) + " \u00b7 " : ""}${zustandText(id, e.v, e.n || e.by)}</div>
       <button class="btn" data-aufkl-fenster="${esc(id)}" style="margin-top:4px;font-size:11px" title="Scouts that reach it, name, chain and state of this request">Request window \u2026</button>`).join("")}
     </div>` : ""; })()}
+    ${rolleAbschnitt(i)}
     <div class="sec">
       <h3>Note</h3>
       <textarea id="note" placeholder="e.g. push at 20:00, supplies low …">${esc(noteOf(i))}</textarea>
@@ -11096,6 +11455,17 @@ function side(){
   el.querySelector("#pb-fenster")?.addEventListener("click", ()=> paraDialog(i));
   el.querySelectorAll("[data-aufkl-fenster]").forEach(k => k.addEventListener("click", () => {
     const id = k.dataset.aufklFenster; if (S.area[id]) areaDialog(id, S.area[id]);
+  }));
+  /* ROLE REQUESTS: ask, take, release, remove - all rebuild panel and map */
+  el.querySelector("#rr-neu")?.addEventListener("click", ()=> rolleDialog(i));
+  el.querySelectorAll("[data-rolle-nimm]").forEach(k => k.addEventListener("click", ()=>{
+    rolleNehmen(k.dataset.rolleNimm); side(); draw(); ordersZahl();
+  }));
+  el.querySelectorAll("[data-rolle-frei]").forEach(k => k.addEventListener("click", ()=>{
+    if (rolleFrei(k.dataset.rolleFrei)){ toast("Released"); side(); draw(); ordersZahl(); }
+  }));
+  el.querySelectorAll("[data-rolle-weg]").forEach(k => k.addEventListener("click", ()=>{
+    if (rolleWeg(k.dataset.rolleWeg)){ toast("Request removed"); side(); draw(); ordersZahl(); }
   }));
   el.querySelector("#pb-plan")?.addEventListener("change", ev=>{
     if (pb) setPara(i, pb.f, ev.target.checked);
@@ -38992,7 +39362,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 130538b8cf</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 5a61649a10</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -39136,7 +39506,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "130538b8cf";
+const BAU = "5a61649a10";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
