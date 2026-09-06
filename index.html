@@ -4919,6 +4919,11 @@ function ordersDialog(tab){
     if (rolleDrinSetzen(k.dataset.rolleDrin)) toast("Marked as in the battle");
     side(); wieder();
   }));
+  document.querySelectorAll("#dlg [data-rolle-raus]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    if (rolleRausSetzen(k.dataset.rolleRaus)) toast("Left the battle");
+    side(); wieder();
+  }));
   document.querySelectorAll("#dlg [data-rolle-nochnicht]").forEach(k => k.addEventListener("click", ev => {
     ev.stopPropagation();
     toast("Not yet. You are asked again.");
@@ -5999,7 +6004,7 @@ function rolleAbschnitt(i){
   const klein = `style="font-size:11px;padding:3px 8px"`;
   const zeilen = liste.map(r => {
     const an = zu.filter(z => z.rolle === r.id);
-    const ich = an.some(z => z.mine);
+    const meinZ = an.find(z => z.mine) || null, ich = !!meinZ;
     const kann = rolleKannIch(r.rolle);
     const rr = kampfRolle(r.rolle);
     return `<div>
@@ -6013,7 +6018,7 @@ function rolleAbschnitt(i){
         <button class="btn" data-rolle-${ich ? "frei" : "nimm"}="${esc(r.id)}" ${klein}>${
           ich ? "Release" : "Take it"}</button>
         ${r.weg && darfAnf ? `<button class="btn" data-rolle-weg="${esc(r.id)}" ${klein}>Remove</button>` : ""}
-      </div>${rolleFrageZeile(r.id, an.find(z => z.mine))}</div>`;
+      </div>${rolleFrageZeile(r.id, meinZ)}${rolleRausZeile(r.id, meinZ)}</div>`;
   }).join("");
   /* who of us is in this battle, see rolleDrinNamen */
   const drin = rolleDrinNamen(i);
@@ -6105,7 +6110,7 @@ function rollePostfachInhalt(){
         rolleDrinMs(meinZu) ? ` You have been in the battle for <b style="color:var(--us)">${
           esc(rolleDrinKurz(meinZu))}</b>.` : ""}
         You can hold one role at a time.</div>
-      ${rolleFrageZeile(mein.id, meinZu)}` : ""}
+      ${rolleFrageZeile(mein.id, meinZu)}${rolleRausZeile(mein.id, meinZu)}` : ""}
     <div class="note">Click a row to jump to the town. A cross marks a role your own soldiers cannot
       fill; you may still take it. ${darfAnf
         ? "Open a town that is fighting and use <b>Ask for roles</b> to add one."
@@ -6148,6 +6153,21 @@ function rolleDrinSetzen(id){
   const k = id + ":" + S.me, e = S.rollezu[k];
   if (!e || e.v == null){ toast("You do not hold that role."); return false; }
   const v = Object.assign({}, e.v, {drin: jetzt()});
+  if (!stamp("rollezu", k, v, {n: S.name || ""})) return false;
+  save(); rolleFrisch();
+  return true;
+}
+
+/* THE WAY OUT. Leaving is written the way joining is: the row stays, every
+   other field with it, only the moment falls away. Nobody else's row is
+   touched, and the question comes back on the next build, as after "Not
+   yet" - so a man who left and went back in says so himself. */
+function rolleRausSetzen(id){
+  if (zeitReise) return false;              /* the replay only reads */
+  const k = id + ":" + S.me, e = S.rollezu[k];
+  if (!e || e.v == null){ toast("You do not hold that role."); return false; }
+  if (!(+e.v.drin)) return false;           /* nothing to leave */
+  const v = Object.assign({}, e.v); delete v.drin;
   if (!stamp("rollezu", k, v, {n: S.name || ""})) return false;
   save(); rolleFrisch();
   return true;
@@ -6199,6 +6219,19 @@ function rolleFrageZeile(id, z){
       <span style="font-size:11.5px">Are you in this battle?</span>
       <button class="btn primary" data-rolle-drin="${esc(id)}" ${klein}>In the battle</button>
       <button class="btn" data-rolle-nochnicht="${esc(id)}" ${klein}>Not yet</button>
+    </div>`;
+}
+/* the counterpart of the question: while I stand in that battle, my own row
+   says so and offers the way out. The duration stays in the title, because
+   the panel is not rebuilt every second and a visible clock would age. */
+function rolleRausZeile(id, z){
+  if (zeitReise) return "";            /* the replay only reads */
+  if (!z || !z.mine || !rolleDrinMs(z)) return "";
+  const klein = `style="font-size:11px;padding:3px 8px"`;
+  return `<div class="row" style="margin-top:5px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:11.5px;color:var(--us)"
+        title="in the battle for ${esc(rolleDrinKurz(z))}">You are in this battle.</span>
+      <button class="btn" data-rolle-raus="${esc(id)}" ${klein}>Left the battle</button>
     </div>`;
 }
 /* the green plate over a town: how many of us stand in that battle */
@@ -11654,6 +11687,11 @@ function side(){
   el.querySelectorAll("[data-rolle-drin]").forEach(k => k.addEventListener("click", ()=>{
     if (rolleDrinSetzen(k.dataset.rolleDrin)){
       toast("Marked as in the battle"); side(); draw(); ordersZahl();
+    }
+  }));
+  el.querySelectorAll("[data-rolle-raus]").forEach(k => k.addEventListener("click", ()=>{
+    if (rolleRausSetzen(k.dataset.rolleRaus)){
+      toast("Left the battle"); side(); draw(); ordersZahl();
     }
   }));
   el.querySelectorAll("[data-rolle-nochnicht]").forEach(k => k.addEventListener("click", ()=>{
@@ -39554,7 +39592,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 73edf7e079</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 8f0438e5b2</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -39698,7 +39736,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "73edf7e079";
+const BAU = "8f0438e5b2";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
