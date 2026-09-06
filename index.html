@@ -8481,12 +8481,31 @@ function sammelzeit(a){
   let weg = wegSuche(starts, ziel, ruhig);
   if (!weg){ umweg = true; weg = wegSuche(starts, ziel, () => true); }
   if (!weg) return null;
-  /* every team type the committed players have on the map; the one that
-     takes longest sets the gathering time */
+  /* WHICH TEAMS SET THE TIME. The teams actually assigned to this order and
+     accepted by their owner are the exact answer: the slowest of them is
+     what everybody waits for. Only when nobody has taken the order do the
+     committed players' teams on the map stand in - that counts everything
+     they have anywhere, so a heavy tank in the depot slows an order that
+     will be carried out by infantry. With nothing at all the game's slowest
+     type is assumed, as before. */
   const arten = new Set();
-  for (const m of joinOf(a.id)) for (const k of Object.keys(deployedBy(m.who))) if (AT[k]) arten.add(k);
+  let quelle = "zugeordnet";
+  for (const z of zuordVon({art: "arrow", id: a.id})){
+    if (z.st !== 1) continue;
+    const d = depotIdx.get(z.who);
+    if (!d || !Array.isArray(d.list)) continue;
+    for (const id of z.ats){
+      const t = d.list.find(x => x && x.id === id);
+      if (t && AT[t.k]) arten.add(t.k);
+    }
+  }
+  if (!arten.size){
+    quelle = "zugesagt";
+    for (const m of joinOf(a.id)) for (const k of Object.keys(deployedBy(m.who))) if (AT[k]) arten.add(k);
+  }
   let geraten = false;
   if (!arten.size){
+    quelle = "geraten";
     geraten = true;
     let langsam = null;
     for (const t of MAP.at) if (t.speed && !fliegt(t.k) && (!langsam || t.speed < langsam.speed)) langsam = t;
@@ -8500,7 +8519,7 @@ function sammelzeit(a){
   }
   if (sekunden !== null && umweg) sekunden += SAMMEL_UMWEG_MIN * 60;
   const tempo = AT[typ] ? AT[typ].speed : null;
-  return {...weg, umweg, tempo, typ, geraten, sekunden, minuten: sekunden === null ? null : sekunden / 60,
+  return {...weg, umweg, tempo, typ, geraten, quelle, sekunden, minuten: sekunden === null ? null : sekunden / 60,
           fremdeHauptstadt: !eigene.length, luft: fliegt(typ)};
 }
 function sammelText(a){
@@ -8512,7 +8531,9 @@ function sammelText(a){
   return `<span style="color:var(--dim)">Gathering: </span>${dauer}<span style="color:var(--dim)">from ${esc(MAP.n[z.von][0])}${
     z.fremdeHauptstadt ? " (no capital of this side yet)" : ""} — ${z.luft ? "straight flight" : `${z.hops} hop${z.hops === 1 ? "" : "s"}`}, ${
     z.umweg ? `<b>no uncontested path</b>, +${SAMMEL_UMWEG_MIN} min` : "uncontested"}; slowest ${esc(atName(z.typ))}${
-    z.geraten ? " (nobody committed with teams on the map — slowest type assumed)" : ""}.</span>`;
+    z.quelle === "zugeordnet" ? " of the assigned teams"
+      : z.quelle === "zugesagt" ? " of what the committed players have on the map"
+      : " (nobody has taken this order yet, so the game's slowest type is assumed)"}.</span>`;
 }
 
 /* WIE GROSS IST EIN ORT AUF DER KARTE? der Auftrag: "Bitte alle Kreise
@@ -39362,7 +39383,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5a61649a10</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 54c9bc6bb4</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -39506,7 +39527,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "5a61649a10";
+const BAU = "54c9bc6bb4";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
