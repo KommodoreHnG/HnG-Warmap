@@ -4913,6 +4913,17 @@ function ordersDialog(tab){
     if (rolleWeg(k.dataset.rolleWeg)) toast("Request removed");
     side(); wieder();
   }));
+  /* BATTLE LOCK: stopPropagation, or the row jumps to the town */
+  document.querySelectorAll("#dlg [data-rolle-drin]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    if (rolleDrinSetzen(k.dataset.rolleDrin)) toast("Marked as in the battle");
+    side(); wieder();
+  }));
+  document.querySelectorAll("#dlg [data-rolle-nochnicht]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    toast("Not yet. You are asked again.");
+    side(); wieder();
+  }));
   document.querySelectorAll("#dlg tr[data-go]").forEach(r => r.addEventListener("click", ev => {
     if (ev.target.closest("button")) return;
     sel = +r.dataset.go; closeDlg(); flyTo(sel); side(); draw();
@@ -5738,6 +5749,14 @@ async function punkteBuch(spieler, name){
    stored. The map plate is counted once per half second for the whole map,
    never once per town. */
 const ROLLE_TEXT_MAX = 80, ROLLE_MAX = 8;
+/* The runner is the role that carries the player log. It rides beside a
+   job the battle does not depend on, and one log per battle says all there
+   is to say, so only one runner is taken at a time. The number may grow. */
+const RUNNER_MAX = 1;
+/* how many players a role may be asked for at all. The runner is capped
+   because only one of us records a battle; every other role is open. One
+   place decides it, so the count, the button and the badge never disagree. */
+const rolleGrenze = k => k === "runner" ? RUNNER_MAX : 8;
 /* The battle roles. Not ROLLEN (weapon roles) and not ROLLEN_VORGABE
    (who may do what in the clan) - those names are taken.
    kann(f, s): f is faehigkeiten(s), s the soldier. */
@@ -5770,7 +5789,7 @@ function rolleZeile(id){
   const v = e.v, i = +v.stadt;
   if (!MAP.n[i] || fremdeSeite(v) || !fightAt(i)) return null;
   return {id, stadt: i, rolle: v.rolle,
-          n: Math.max(1, Math.min(8, +v.n || 1)),
+          n: Math.max(1, Math.min(rolleGrenze(v.rolle), +v.n || 1)),
           text: v.text || "", by: e.by, name: e.n || e.by || "?",
           t: e.t || 0, mine: e.by === S.me, weg: darfWeg(e)};
 }
@@ -5784,7 +5803,10 @@ function rolleZuZeile(k){
   if (p <= 0) return null;
   const wer = k.slice(p + 1);
   return {key: k, rolle: k.slice(0, p), wer, name: e.n || wer,
-          ok: e.v.ok === 0 ? 0 : 1, t: e.t || 0, mine: wer === S.me};
+          /* the moment of the acceptance, from the row's own value: writing
+             the join into the same row restamps the outer t */
+          ok: e.v.ok === 0 ? 0 : 1, t: +e.v.t || e.t || 0, mine: wer === S.me,
+          drin: +e.v.drin || 0};
 }
 const rolleZuAlle = () => Object.keys(S.rollezu).map(rolleZuZeile).filter(Boolean);
 /* can any of my own soldiers fill that role? Two roles need no soldier at
@@ -5816,13 +5838,13 @@ function rolleOrteZahl(){
     if (!e || !e.v || !imKrieg(e) || !imZeit(e) || fremdeSeite(e.v)) continue;
     const i = +e.v.stadt;
     if (!MAP.n[i] || !fightAt(i)) continue;
-    if ((an.get(id) || 0) >= Math.max(1, Math.min(8, +e.v.n || 1))) continue;
+    if ((an.get(id) || 0) >= Math.max(1, Math.min(rolleGrenze(e.v.rolle), +e.v.n || 1))) continue;
     m.set(i, (m.get(i) || 0) + 1);
   }
   rolleOrteKarte = m; rolleOrteStand = t; rolleOrteZeit = zeitReise;
   return m;
 }
-const rolleFrisch = () => { rolleOrteStand = 0; };
+const rolleFrisch = () => { rolleOrteStand = 0; rolleDrinStand = 0; };
 
 /* ask for a role at a town that is fighting */
 function rolleAnlegen(stadt, rolle, n, text){
@@ -5839,7 +5861,7 @@ function rolleAnlegen(stadt, rolle, n, text){
   if (meine.some(r => r.stadt === +stadt && r.rolle === rolle)){
     toast("You asked for that role there already."); return false;
   }
-  const v = {stadt: +stadt, rolle, n: Math.max(1, Math.min(8, +n || 1)),
+  const v = {stadt: +stadt, rolle, n: Math.max(1, Math.min(rolleGrenze(rolle), +n || 1)),
              text: String(text || "").trim().slice(0, ROLLE_TEXT_MAX),
              f: clanFaktion(), by: S.me, t: jetzt()};
   if (!stamp("rolle", Math.random().toString(36).slice(2, 10), v, {n: S.name || ""})) return false;
@@ -5868,11 +5890,21 @@ function rolleNehmen(id){
   if (zeitReise) return false;
   const r = rolleZeile(id);
   if (!r){ toast("That request is gone."); return false; }
-  let vorher = "";
+  /* the runner cap, before a single row is written: the player log runs
+     beside a role the battle does not hang on, and nobody logs twice */
+  if (r.rolle === "runner"){
+    const schon = rolleZuAlle().filter(z => z.rolle === id && !z.mine);
+    if (schon.length >= RUNNER_MAX){
+      toast(`${schon.map(z => z.name).join(", ")} already run${schon.length === 1 ? "s" : ""} at ${MAP.n[r.stadt][0]}.`);
+      return false;
+    }
+  }
+  let vorher = "", warDrin = 0;
   for (const z of rolleZuAlle()){
     if (!z.mine || z.rolle === id) continue;
     const alt = rolleZeile(z.rolle);
     if (alt) vorher = kampfRolleName(alt.rolle) + " at " + MAP.n[alt.stadt][0];
+    if (alt && z.drin) warDrin = z.drin;   /* only a battle we can still name */
     stamp("rollezu", z.key, null, {n: S.name || ""});
   }
   const kann = rolleKannIch(r.rolle);
@@ -5880,7 +5912,9 @@ function rolleNehmen(id){
              {n: S.name || ""})) return false;
   save();
   const wo = `${kampfRolleName(r.rolle)} at ${MAP.n[r.stadt][0]}`;
-  toast(vorher ? `Took ${wo}. You left ${vorher}.`
+  /* walking out of a battle you said you were in is worth a clear word */
+  toast(warDrin ? `Took ${wo}. You walk out of a running battle: ${vorher}, in for ${otMmSs(jetzt() - warDrin)}.`
+      : vorher ? `Took ${wo}. You left ${vorher}.`
                : kann ? `Took ${wo}.` : `Took ${wo}. Your soldiers cannot fill it, the asker sees that.`);
   return true;
 }
@@ -5950,8 +5984,9 @@ function rolleEtikett(x, y, n){
 /* the names of the takers, with a cross on whoever said he cannot fill it */
 function rolleNehmerText(an){
   if (!an.length) return "\u2014";
-  return an.map(z => z.ok ? esc(z.name)
-    : `<span style="color:var(--su)" title="Took it although his own soldiers cannot fill it">\u2715 ${esc(z.name)}</span>`).join(", ");
+  return an.map(z => (z.ok ? esc(z.name)
+    : `<span style="color:var(--su)" title="Took it although his own soldiers cannot fill it">\u2715 ${esc(z.name)}</span>`)
+    + rolleDrinPunkt(z)).join(", ");
 }
 /* the Roles box in a town's side panel. Only where a battle is on. */
 function rolleAbschnitt(i){
@@ -5978,10 +6013,14 @@ function rolleAbschnitt(i){
         <button class="btn" data-rolle-${ich ? "frei" : "nimm"}="${esc(r.id)}" ${klein}>${
           ich ? "Release" : "Take it"}</button>
         ${r.weg && darfAnf ? `<button class="btn" data-rolle-weg="${esc(r.id)}" ${klein}>Remove</button>` : ""}
-      </div></div>`;
+      </div>${rolleFrageZeile(r.id, an.find(z => z.mine))}</div>`;
   }).join("");
+  /* who of us is in this battle, see rolleDrinNamen */
+  const drin = rolleDrinNamen(i);
   return `<div class="sec">
       <h3>Roles</h3>
+      ${drin.length ? `<div class="hint" style="margin-bottom:5px">In this battle:
+        <b style="color:var(--us)">${drin.map(esc).join(", ")}</b></div>` : ""}
       ${zeilen || `<div class="empty">No role asked for here.</div>`}
       ${darfAnf ? `<button class="btn" id="rr-neu" style="font-size:11px"
         title="Ask the clan for a role in this battle">Ask for roles \u2026</button>` : ""}
@@ -5999,8 +6038,7 @@ function rolleDialog(i){
       <div class="row" style="flex-wrap:wrap;align-items:center">
         <select id="rr-rolle" style="width:150px">${KAMPFROLLEN.map(r =>
           `<option value="${esc(r.k)}">${esc(r.name)}${kann.has(r.k) ? "" : " \u2715"}</option>`).join("")}</select>
-        <select id="rr-n" style="width:110px">${[1,2,3,4,5,6,7,8].map(n =>
-          `<option value="${n}">${n} player${n === 1 ? "" : "s"}</option>`).join("")}</select>
+        <select id="rr-n" style="width:110px"></select>
         <input type="text" id="rr-text" maxlength="${ROLLE_TEXT_MAX}"
           placeholder="e.g. Panther, HE ammo" style="flex:1;min-width:150px">
         <button class="btn primary" id="rr-ok">Ask</button>
@@ -6010,6 +6048,17 @@ function rolleDialog(i){
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  /* the number field follows the role: a capped role offers nothing bigger
+     than its cap, so nobody picks a three and is then told it is a one */
+  const rSel = document.getElementById("rr-rolle"), nSel = document.getElementById("rr-n");
+  const nFuellen = () => {
+    const max = rolleGrenze(rSel.value), alt = +nSel.value || 1;
+    nSel.innerHTML = Array.from({length: max}, (_, x) => x + 1).map(n =>
+      `<option value="${n}">${n} player${n === 1 ? "" : "s"}</option>`).join("");
+    nSel.value = String(Math.min(alt, max));
+  };
+  nFuellen();
+  rSel.addEventListener("change", nFuellen);
   document.getElementById("rr-ok").addEventListener("click", ()=>{
     if (!rolleAnlegen(i, document.getElementById("rr-rolle").value,
                       +document.getElementById("rr-n").value || 1,
@@ -6043,7 +6092,8 @@ function rollePostfachInhalt(){
         r.weg && darfAnf ? ` <button class="btn" data-rolle-weg="${esc(r.id)}" ${klein}>Remove</button>` : ""}</td>
     </tr>`;
   }).join("");
-  const mein = zu.filter(z => z.mine).map(z => rolleZeile(z.rolle)).filter(Boolean)[0] || null;
+  const meinZu = zu.filter(z => z.mine && rolleZeile(z.rolle))[0] || null;
+  const mein = meinZu ? rolleZeile(meinZu.rolle) : null;
   return `<h3 class="zuord-h">Open requests on our side</h3>
     ${off.length ? `<div class="tw"><table><thead><tr><th></th><th>Town</th><th>Role</th><th>Detail</th>
       <th>Taken</th><th>Taken by</th><th>Asked by</th><th></th></tr></thead>
@@ -6051,12 +6101,119 @@ function rollePostfachInhalt(){
       : `<div class="empty">No role asked for on our side.</div>`}
     ${mein ? `<h3 class="zuord-h">Your role</h3>
       <div class="note">You took: <b>${esc(kampfRolleName(mein.rolle))}</b> at
-        <b>${esc(MAP.n[mein.stadt][0])}</b>${mein.text ? " \u00b7 " + esc(mein.text) : ""}.
-        You can hold one role at a time.</div>` : ""}
+        <b>${esc(MAP.n[mein.stadt][0])}</b>${mein.text ? " \u00b7 " + esc(mein.text) : ""}.${
+        rolleDrinMs(meinZu) ? ` You have been in the battle for <b style="color:var(--us)">${
+          esc(rolleDrinKurz(meinZu))}</b>.` : ""}
+        You can hold one role at a time.</div>
+      ${rolleFrageZeile(mein.id, meinZu)}` : ""}
     <div class="note">Click a row to jump to the town. A cross marks a role your own soldiers cannot
       fill; you may still take it. ${darfAnf
         ? "Open a town that is fighting and use <b>Ask for roles</b> to add one."
         : esc(rechtSatz("anfordern"))}</div>`;
+}
+
+/* ---- BATTLE LOCK AND RUNNER (06.09.2026) ----
+   Taking a role is a promise, standing in the battle is a fact. Two minutes
+   after the acceptance the tool asks once: are you in? The answer goes into
+   the acceptance row that is already there, field drin = the ms of the join.
+   No new bucket, no new key, nothing the server has not seen before.
+
+     rollezu:<id>:<player>   v = {t, st, ok, drin}
+
+   The two minutes are a stand-in. When the battlereader can read the join
+   timer out of the game picture it raises the question instead and
+   ROLLE_FRAGE_AB goes away.
+
+   Nothing here touches the game. It holds a player inside the tool: the clan
+   sees who is where, and he gets a clear word when he walks out. The battle
+   mark falling takes the whole row with it, see rollePruefen, so a battle
+   that ended needs no lock of its own. */
+const ROLLE_FRAGE_AB = 120000;             /* ask 2 min after the acceptance */
+
+/* the ms of the join, or 0 */
+const rolleDrinMs = z => (z && +z.drin) || 0;
+/* is the question due on my own row: taken, unanswered, old enough */
+const rolleFrageFaellig = z =>
+  !!z && z.mine && !rolleDrinMs(z) && (zeitReise || jetzt()) - (z.t || 0) >= ROLLE_FRAGE_AB;
+/* how long he has been in, mm:ss, frozen in the replay like the OT clock */
+const rolleDrinKurz = z => otMmSs((zeitReise || jetzt()) - rolleDrinMs(z));
+/* the small green dot behind a name that is in the battle */
+const rolleDrinPunkt = z => rolleDrinMs(z)
+  ? ` <span style="color:var(--us)" title="in the battle for ${esc(rolleDrinKurz(z))}">\u25cf</span>` : "";
+
+/* "In the battle": the join is written into the row that is already there,
+   every other field kept, the way overtimeStart keeps the battle row. */
+function rolleDrinSetzen(id){
+  if (zeitReise) return false;              /* the replay only reads */
+  const k = id + ":" + S.me, e = S.rollezu[k];
+  if (!e || e.v == null){ toast("You do not hold that role."); return false; }
+  const v = Object.assign({}, e.v, {drin: jetzt()});
+  if (!stamp("rollezu", k, v, {n: S.name || ""})) return false;
+  save(); rolleFrisch();
+  return true;
+}
+
+/* Everybody on our side who said he is in that battle, names only. One town,
+   one list: this is what "who plays where" builds on later. The rows are
+   already filtered by war, side, moment and battle mark. */
+function rolleDrinNamen(i){
+  /* one line per player, even if two rows of his survived a race */
+  const wer = new Map();
+  for (const z of rolleZuAlle()){
+    if (!rolleDrinMs(z)) continue;
+    const r = rolleZeile(z.rolle);
+    if (r && r.stadt === +i && !wer.has(z.wer)) wer.set(z.wer, z.name);
+  }
+  return [...wer.values()];
+}
+/* the count for the map, taken for the whole map at most twice a second like
+   rolleOrteZahl: never once per town */
+let rolleDrinKarte = null, rolleDrinStand = 0, rolleDrinZeit = null;
+function rolleDrinZahl(){
+  const t = jetzt();
+  if (rolleDrinKarte && rolleDrinZeit === zeitReise && t - rolleDrinStand < 500) return rolleDrinKarte;
+  /* players, not rows: two rows of one player must not read as two men,
+     or the mark on the map disagrees with the list of names below it */
+  const wer = new Map();
+  for (const z of rolleZuAlle()){
+    if (!rolleDrinMs(z)) continue;
+    const r = rolleZeile(z.rolle);
+    if (!r) continue;
+    if (!wer.has(r.stadt)) wer.set(r.stadt, new Set());
+    wer.get(r.stadt).add(z.wer);
+  }
+  const m = new Map();
+  for (const [stadt, leute] of wer) m.set(stadt, leute.size);
+  rolleDrinKarte = m; rolleDrinStand = t; rolleDrinZeit = zeitReise;
+  return m;
+}
+
+/* the question, one line with two buttons. z is my own acceptance of that
+   request, or nothing. Empty unless the question is due. "Not yet" writes
+   nothing, so it is asked again on the next build. */
+function rolleFrageZeile(id, z){
+  if (zeitReise) return "";            /* the replay only reads */
+  if (!rolleFrageFaellig(z)) return "";
+  const klein = `style="font-size:11px;padding:3px 8px"`;
+  return `<div class="row" style="margin-top:5px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:11.5px">Are you in this battle?</span>
+      <button class="btn primary" data-rolle-drin="${esc(id)}" ${klein}>In the battle</button>
+      <button class="btn" data-rolle-nochnicht="${esc(id)}" ${klein}>Not yet</button>
+    </div>`;
+}
+/* the green plate over a town: how many of us stand in that battle */
+function rolleDrinEtikett(x, y, n){
+  const gr = Math.max(8, Math.min(11, 6.5*Math.sqrt(view.z)))*uiScale;
+  const text = `${n} of us in`;
+  ctx.save();
+  ctx.font = `700 ${gr}px ${SCHMAL}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const b = ctx.measureText(text).width + gr*0.9, h = gr*1.4;
+  ctx.globalAlpha = .92; ctx.fillStyle = "#2f7d4a";
+  ctx.fillRect(x - b/2, y - h, b, h);
+  ctx.globalAlpha = 1; ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, x, y - h/2 + 0.5);
+  ctx.restore();
+  return h;                                  // so the next plate can sit above
 }
 
 function setRang(player, ids){
@@ -7022,8 +7179,13 @@ function draw(){
       /* the overtime clock, only with the battle mark, see OVERTIME CLOCK */
       const ot = overtimeAn(i);
       if (ot){ oben -= overtimeEtikett(x, oben, ot) + 2; if (!zeitReise && otMs(ot) < OT_DAUER) otTaktStarten(); }
-      /* open role requests, topmost plate, see ROLE REQUESTS */
-      if (fightAt(i)){ const rz = rolleOrteZahl().get(i); if (rz) rolleEtikett(x, oben, rz); }
+      /* open role requests, then how many of us are in, see ROLE REQUESTS */
+      if (fightAt(i)){
+        const rz = rolleOrteZahl().get(i);
+        if (rz) oben -= rolleEtikett(x, oben, rz) + 2;
+        const dz = rolleDrinZahl().get(i);
+        if (dz) rolleDrinEtikett(x, oben, dz);
+      }
     }
     if (showFlug && istFlugplatz(i)){
       const zielCap = (sel != null && isCap(sel)) ? sel : null;
@@ -11487,6 +11649,15 @@ function side(){
   }));
   el.querySelectorAll("[data-rolle-weg]").forEach(k => k.addEventListener("click", ()=>{
     if (rolleWeg(k.dataset.rolleWeg)){ toast("Request removed"); side(); draw(); ordersZahl(); }
+  }));
+  /* BATTLE LOCK: the answer to "are you in", see rolleDrinSetzen */
+  el.querySelectorAll("[data-rolle-drin]").forEach(k => k.addEventListener("click", ()=>{
+    if (rolleDrinSetzen(k.dataset.rolleDrin)){
+      toast("Marked as in the battle"); side(); draw(); ordersZahl();
+    }
+  }));
+  el.querySelectorAll("[data-rolle-nochnicht]").forEach(k => k.addEventListener("click", ()=>{
+    toast("Not yet. You are asked again.");   /* nothing changed, nothing to rebuild */
   }));
   el.querySelector("#pb-plan")?.addEventListener("change", ev=>{
     if (pb) setPara(i, pb.f, ev.target.checked);
@@ -39383,7 +39554,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 54c9bc6bb4</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 73edf7e079</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -39527,7 +39698,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "54c9bc6bb4";
+const BAU = "73edf7e079";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
