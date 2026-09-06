@@ -1046,6 +1046,13 @@ body.kb-zieht{user-select:none}
   font:700 10px/1 system-ui;padding:2px 5px}
 .kb-nehmen:hover{background:#b8452f}
 .kb-z.fest{background:rgba(74,107,58,.10);box-shadow:inset 3px 0 0 #4a6b3a}
+/* A UNIT THAT LEFT THE TOWN. Its line is kept - nothing on the sheet is
+   saved before "Keep the sheet" - but it is no part of the bar any more:
+   pale, at the end, and it says so on hover. */
+.kb-z.fort{opacity:.45;font-style:italic}
+.kb-k.fort{opacity:.4;border-style:dotted;pointer-events:none}
+.kb-hinweis .kb-abreise-weg{font:inherit;margin-left:8px;background:#d9cba6;border:1px solid #b9ab8a;
+  border-radius:2px;padding:2px 8px;cursor:pointer}
 /* THE GOLDEN FRAME, on the sheet this time. The tool kept KB.auswahl and
    showed it nowhere - the Kommodore could not see which unit the code
    thought he was on. Outline, not box-shadow: a locked or doubtful line
@@ -17111,7 +17118,7 @@ function kbOrtSetzen(i, linie){
     const offen = KB.zeilen.filter(z => z.status === "erfasst" && !z.gespeichert).length;
     if (offen) kbBehalten();
     const live = KB.live, ton = kbTon;
-    KB.zeilen = []; KB.N = 0; KB.erste = 0; KB.sichtbar = 0; KB.karten = []; KB.reiheKennung = null; KB.reiheAlt = null;
+    KB.zeilen = []; KB.N = 0; KB.erste = 0; KB.sichtbar = 0; KB.karten = []; KB.reiheKennung = null; KB.reiheAlt = null; KB.abreiseUnklar = null;
     KB.auswahl = null; KB.wandel = null; KB.nRing = null; KB.nSchaetzung = null; KB.hatteBahn = false; KB.hakenAnker = null; KB.gerollt = null; KB.reiheSeite = null;
     KB.handAn = false; KB.handWahl = null; KB.handZieht = false;
     kbSchlangeLeeren(); KB.kastenLetzte = null; KB.kastenRuhe = null; KB.gesamt = null;
@@ -17246,7 +17253,7 @@ function kbNeu(){
           handAn: false, handWahl: null, handZieht: false, ortKennung: null, blick: 0, ortLaeuft: false, ortHand: false,
           fehlschlaege: 0, letzterFehler: null,
           warte: [], werkt: false, arbeit: null, kastenLetzte: null, kastenRuhe: null, dauerMittel: 850,
-          reiheAlt: null,
+          reiheAlt: null, abreiseUnklar: null,
           gesamt: null,
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …", schreibt: null, gerollt: null};
 }
@@ -17264,12 +17271,17 @@ function kbWahl(){
 function kbAuswahlIndex(R, vorgabe){
   /* a line bound when the picture was set aside outranks everything: that
      is the unit that stood in the box at that moment */
-  if (vorgabe !== null && vorgabe !== undefined && vorgabe >= 0 && vorgabe < KB.N) return vorgabe;
+  /* the whole sheet, not only the active block: a picture bound before its
+     unit left the town points into the parked lines, and that binding is
+     exactly the one that must still hold */
+  if (vorgabe !== null && vorgabe !== undefined && vorgabe >= 0 && vorgabe < KB.zeilen.length) return vorgabe;
   /* the hand outranks the picture */
   if (KB.handAn && KB.handWahl !== null && KB.handWahl !== undefined
       && KB.handWahl >= 0 && KB.handWahl < KB.N) return KB.handWahl;
-  /* the dark plate names the picked card outright */
-  if (R.auswahl !== null && R.auswahl !== undefined){
+  /* the dark plate names the picked card outright - but not while it is
+     unclear which unit left the bar: the places are one line out then, and
+     a name written by place is worse than no name at all */
+  if (!KB.abreiseUnklar && R.auswahl !== null && R.auswahl !== undefined){
     const i = KB.erste + R.auswahl;
     if (i >= 0 && i < KB.N) return i;
   }
@@ -17281,7 +17293,23 @@ function kbAuswahlIndex(R, vorgabe){
   return null;
 }
 /* The unit type as read from the card's symbol, when it was clear. */
-function kbTypVon(R, idx){ const k = R.karten[idx - KB.erste]; return k && k.typ ? k.typ : null; }
+function kbTypVon(R, idx){ const k = kbKarteZu(R, idx); return k && k.typ ? k.typ : null; }
+/* WHICH CARDS OF THE BAR CARRY A LOCKED TYPE. The parked lines are no part
+   of the bar, so their locks may not decide whether a card's sign is read. */
+function kbTypSperrenVon(){
+  return (KB.karten || []).map((k, j) => {
+    const z = KB.zeilen[KB.erste + j];
+    return (z && !z.fort && kbFestTyp(z)) ? k.x0 : null;
+  }).filter(x => x !== null);
+}
+/* THE CARD THAT BELONGS TO A LINE - by place, and only while the places
+   hold. With a departure nobody could pin down, the cards may all sit one
+   line off, and then no card belongs to any line. */
+function kbKarteZu(R, i){
+  if (KB && KB.abreiseUnklar) return null;
+  if (!KB || !KB.zeilen[i] || KB.zeilen[i].fort) return null;
+  return (R && R.karten) ? R.karten[i - KB.erste] : null;
+}
 
 /* Total and window from the track: the thumb's share of the channel is the
    share of units on screen, its offset the share scrolled past. */
@@ -17343,7 +17371,7 @@ function kbFenster(R){
   }
   return {N: n, erste: 0, sichtbar: n};
 }
-function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, festTyp: null, festName: null, haken: false, riegel: null, schriftHand: null, abweichung: null, unsicher: false, kandidat: null, unsicherGrund: null, neuLesen: null, typNeu: null}; }
+function kbZeileLeer(i){ return {i, status: "vermutet", seite: null, typ: null, tag: "", name: "", besitzer: "", hp: null, eigen: false, nameZuv: 0, festTyp: null, festName: null, haken: false, riegel: null, schriftHand: null, abweichung: null, unsicher: false, kandidat: null, unsicherGrund: null, neuLesen: null, typNeu: null, fort: null}; }
 /* A LOCKED LINE IS NOT TOUCHED. Not by a reading, not by a move, not by
    clearing, not by the tidying up of a bar that has grown shorter. What
    the tool reads differently it only reports: the line gets a note, the
@@ -17794,6 +17822,190 @@ function kbTuersteher(e, ziel, ohneLeiste){
   return {ok: true};
 }
 
+/* ---- A UNIT THAT LEAVES THE TOWN ---------------------------------------
+   WHY THE PLACES ALONE CANNOT SEE IT. When a unit leaves, its card falls
+   out of the MIDDLE of the row and every card to its right moves one pitch
+   to the left. The row is then regular again: every card that is left
+   stands on a place that was remembered a moment ago, and the only place
+   now empty is the one at the RIGHT END - which is exactly the picture a
+   card blinking out at the right edge makes.
+   Measured in the running page with these very functions (eight cards, the
+   fourth gone): the repair below took it for a blink, hung a phantom card
+   at the right end, and four of eight lines were handed the type and the
+   side of their neighbour. The clicked card landed on line 4 instead of
+   line 5, and the count vote noticed nothing at all, because the row
+   looked complete. Silent, and it corrupts what the Kommodore has read.
+   SO THE ROW IS ALSO COMPARED BY WHAT ITS CARDS SHOW. Does the row that
+   stands now come out of the remembered one by striking exactly one place,
+   and is that place the ONLY one that fits, then a unit left there. Is it
+   not the only one - a run of cards of the same type and the same side
+   looks the same wherever the gap is cut - nothing is guessed: no line is
+   moved, no phantom card is hung up, no type and no side is written this
+   look, and the sheet says so in plain words.
+   AND THE THUMB DECIDES FIRST. What the cards show can say WHERE the row
+   lost one; only the scroll track can say THAT it lost one. A card that
+   blinks out leaves the thumb exactly as it was, a unit that left makes it
+   count one less. So the track is asked before anything is moved - and
+   when it cannot be read this look (it blinks too), nothing is decided at
+   all and the memory of the row is kept, so the next look tries again.
+   WHAT TELLS TWO CARDS APART, measured on the eight calibration stills
+   (95 cards): the TYPE, and nothing else. It is read on 93 of the 95 (the
+   two misses are cards clipped by the window's edge). The coarse print of
+   the sign carries nothing beyond it - two cards of the SAME type have
+   bit-identical prints (107 pairs, difference nought every single time),
+   two of DIFFERENT types differ in a median of ONE of the 24 samples (158
+   pairs, 95th percentile eleven). A veto built on that would hardly ever
+   fire, so none is built. The side is no witness either: unitsReiheFaerben
+   paints every card of a bar in the majority's colour before the rows are
+   ever compared. */
+/* two cards that CANNOT be the same unit. Only a plain contradiction
+   counts - an unread sign is no witness against anything, and that is what
+   keeps the old blink repair working. */
+function kbKarteAnders(a, b){
+  return !!(a.typ && b.typ && a.typ !== b.typ);
+}
+/* WHERE THE ROW LOST A CARD.
+     "flackern" - the remembered row with its LAST place empty and nothing
+                  else changed: that is what a blinking card looks like,
+                  and the old repair handles it;
+     "abreise"  - striking exactly one place p from the remembered row
+                  gives what stands now, and only that one place does;
+     "unklar"   - several places fit, or the print speaks against the one
+                  that did;
+     "wirr"     - no single place explains the row at all. */
+/* WHICH PLACE THE ROW LOST. Asked only once the track has said that a unit
+   really left, so the LAST place counts as a candidate like any other -
+   there is no need to hold it back for the blink any more.
+     "abreise" - striking exactly one place p gives what stands now, and
+                 only that one place does;
+     "unklar"  - several places fit, or none does. A run of cards of one
+                 type looks the same wherever the gap is cut, and then
+                 nothing is guessed. */
+function kbAbreiseStelle(alt, jetzt){
+  const n = alt.length;
+  if (n < 1 || jetzt.length !== n - 1) return {art: "unklar", stellen: []};
+  const pre = new Array(n + 1).fill(false), suf = new Array(n + 2).fill(false);
+  pre[0] = true;
+  for (let j = 0; j < n - 1; j++) pre[j + 1] = pre[j] && !kbKarteAnders(alt[j], jetzt[j]);
+  suf[n] = true;
+  for (let j = n - 1; j >= 1; j--) suf[j] = suf[j + 1] && !kbKarteAnders(alt[j], jetzt[j - 1]);
+  const kand = [];
+  for (let p = 0; p < n; p++) if (pre[p] && suf[p + 1]) kand.push(p);
+  if (kand.length === 1) return {art: "abreise", stelle: kand[0]};
+  return {art: "unklar", stellen: kand};
+}
+/* WHEN THE ORDER OF THE SHEET CHANGES, everything that points at a line
+   has to move with it. The pictures in the queue above all: each one
+   carries the line it will be written to, and a queue left pointing at the
+   old numbers writes a reading onto its neighbour's line. */
+function kbZeigerUmsetzen(abb){
+  const um = v => (v === null || v === undefined || v < 0) ? v : abb(v);
+  /* A PICTURE WHOSE LINE IS GONE IS DROPPED, not passed on. null does not
+     mean "no line" further down the road - it means "take whatever is
+     picked now", and that would write the reading onto a stranger. */
+  for (const j of KB.warte || []){
+    const n = um(j.ziel);
+    if (n === null && j.ziel !== null && j.ziel !== undefined) j.tot = true; else j.ziel = n;
+  }
+  if (KB.arbeit) KB.arbeit.ziel = um(KB.arbeit.ziel);
+  if (KB.schreibt){
+    const n = um(KB.schreibt.i);
+    if (n === null || n === undefined) KB.schreibt = null; else KB.schreibt.i = n;
+  }
+  /* the coloured section bars hold a line number too */
+  KB.zeilen.forEach(z => { if (z.riegel !== null && z.riegel !== undefined) z.riegel = um(z.riegel); });
+  /* the hover window keeps its target line across two jobs of the queue */
+  if (KB.tooltipZeile){
+    const n = um(KB.tooltipZeile.i);
+    if (n === null || n === undefined) KB.tooltipZeile = null; else KB.tooltipZeile.i = n;
+  }
+  KB.auswahl = um(KB.auswahl);
+  KB.handWahl = um(KB.handWahl);
+  KB.hakenAnker = um(KB.hakenAnker);
+  KB.gerollt = um(KB.gerollt);
+  KB.zeilen.forEach((z, k) => z.i = k);
+}
+/* HOW MANY LINES THE BAR STILL HOLDS. The lines of units that have left
+   are parked at the END of the sheet; the places the window counts from
+   are the ones before that block, so the count stops where it begins. */
+function kbAktivN(){
+  let n = KB.zeilen.length;
+  while (n > 0 && KB.zeilen[n - 1].fort) n--;
+  return n;
+}
+/* THE LINE OF A UNIT THAT LEFT IS NOT LOST. Nothing on the sheet is saved
+   before "Keep the sheet" - a captured line that simply disappeared would
+   take the Kommodore's work with it. So the line steps out of the order
+   and goes to the END, marked and pale; the units that stayed line up with
+   the bar again, and "Keep the sheet" keeps the parked line like any
+   other. A line that holds nothing at all is dropped - there is nothing to
+   save there. */
+function kbZeileFort(p){
+  const z = KB.zeilen[p];
+  if (!z) return null;
+  /* an empty strength field is an ARRAY and would count as content, a
+     hand-set script is the Kommodore's work and does count as content */
+  const leer = z.status === "vermutet" && !kbFestHand(z) && !z.vonHand && !z.haken
+               && !z.tag && !z.name && !z.besitzer && !(z.hp && z.hp.length)
+               && !z.schriftHand && !z.abweichung && !z.gespeichert;
+  KB.zeilen.splice(p, 1);
+  let wo = null;
+  if (!leer){
+    /* the tick stays: it is the Kommodore's intention to keep that line,
+       not a property of the bar. Without it "Keep the sheet" would skip
+       exactly the line whose unit is gone. */
+    z.fort = jetzt(); z.neuLesen = null; z.typNeu = null;
+    z.unsicher = false; z.kandidat = null; z.unsicherGrund = null;
+    KB.zeilen.push(z);
+    wo = KB.zeilen.length - 1;
+  }
+  kbZeigerUmsetzen(i => i === p ? wo : (i > p ? i - 1 : i));
+  KB.N = kbAktivN();
+  /* the hand cannot lead a line that is no longer in the bar - say so
+     instead of silently following the game again */
+  if (KB.handWahl !== null && KB.handWahl !== undefined && KB.handWahl >= KB.N){
+    KB.handAn = false; KB.handWahl = null;
+  }
+  return {geparkt: !leer, wo, zeile: z};
+}
+/* What follows from a departure - done where the window's own origin for
+   THIS look is known, so that a row which scrolled in the same look can
+   never be mistaken for one that lost a unit. */
+function kbAbreiseFolgen(a){
+  /* NOT A SECOND TIME while the first one stands unresolved: the sheet is
+     one line out against the bar then, so the place a second departure
+     names would be counted on numbers that no longer hold. */
+  if (a.art === "abreise" && a.erste === KB.erste && !KB.abreiseUnklar){
+    const zeile = KB.erste + a.stelle;
+    /* no line stands there at all - the sheet was still shorter than the
+       bar, so there is nothing to shift and nothing to warn about either.
+       And never into the parked block: a line that is already parked would
+       be cut out and re-parked, the active lines would not move a step, and
+       the moment of the first departure would be lost. */
+    if (!KB.zeilen[zeile] || zeile >= kbAktivN()) return;
+    const aus = kbZeileFort(zeile);
+    /* the ring's twenty-five measurements are all from before the departure.
+       Emptied HERE and nowhere else: emptying it on every suspicion would
+       stop the count vote from ever finishing. */
+    KB.nRing = [];
+    KB.status = aus && aus.geparkt
+      ? `A unit left the bar - the sheet has been shifted, its line is parked at the end (line ${aus.wo + 1}).`
+      : "A unit left the bar - the sheet has been shifted.";
+    return;
+  }
+  /* THE WINDOW MOVED IN THIS VERY LOOK. That is scrolling, not a departure:
+     the guard in kbReiheErgaenzen compares two OLD origins and cannot see
+     it, so it is caught here, where the new origin is known. Nothing is
+     shifted and NOTHING IS SAID - a warning for every scroll would lock the
+     room in normal use. */
+  if (a.erste !== KB.erste) return;
+  /* NOTHING IS GUESSED HERE EITHER. Several places fit the gap, or none
+     does - shifting the sheet on that would move captured lines onto the
+     wrong units. */
+  KB.abreiseUnklar = {art: a.art};
+  KB.status = "A unit left the bar - which one is unclear, please rescan.";
+}
+
 /* One reading -> the sheet. */
 /* A CARD AT THE ROW'S EDGE IS CARRIED OVER THE CREST OF ITS GLOW. With
    several battles glowing out of step, the finder saw 10 to 12 of 12
@@ -17812,11 +18024,43 @@ function kbReiheErgaenzen(R){
   const jetztK = R.karten || [], alt = KB.reiheAlt;
   const nah = (a, b) => Math.abs(a.x0 - b.x0) <= 4;
   const frisch = alt && (KB.blick || 0) - alt.blick <= KB_REIHE_MERK;
+  const merken = () => { KB.reiheAlt = {karten: jetztK.map(k => Object.assign({}, k)), blick: KB.blick || 0, erste: KB.erste}; };
   if (frisch && alt.karten.length > jetztK.length && jetztK.length
       && jetztK.every(k => alt.karten.some(a => nah(a, k)))){
     const fehlend = alt.karten.filter(a => !jetztK.some(k => nah(a, k)));
     const links = jetztK[0].x0, rechts = jetztK[jetztK.length - 1].x0;
     if (fehlend.every(a => a.x0 < links - 50 || a.x0 > rechts + 50)){
+      /* ONE CARD SHORT, THE GAP AT THE RIGHT END, AND THE WINDOW HAS NOT
+         MOVED: that is the picture a departure makes - and the picture a
+         card blinking out at the right end makes. Only what the cards SHOW
+         tells the two apart. Everything else stays the old repair: a card
+         blinking out on the LEFT leaves its neighbours standing where they
+         are, and the places say so by themselves. */
+      const anStelle = alt.karten.length === jetztK.length + 1
+                       && alt.erste === KB.erste
+                       && jetztK.every((k, j) => nah(alt.karten[j], k));
+      /* THE TRACK IS ASKED FIRST, and only its own fresh measurement counts:
+         a look without the thumb says nothing, and saying nothing must
+         leave everything as it was - including the memory of the row, so
+         the next look can try again. Exactly one less, not "somehow less". */
+      /* MEASURED ON THE REMEMBERED ROW, not on the short one. kbFenster's
+         count has a floor of "cards seen plus one", so measuring on the row
+         that is one card short would let the missing card lower the very
+         number that is meant to confirm its loss. With the remembered cards
+         only the thumb's own geometry can fall - and it has to fall by
+         exactly one. A count the geometry itself calls rough (45 units and
+         up) is no witness at all. */
+      const fJetzt = (anStelle && R.roll && R.roll.anteil && R.roll.bahnLinks)
+        ? kbFenster(Object.assign({}, R, {karten: alt.karten})) : null;
+      const wirklichFort = !!fJetzt && !fJetzt.ungenau && KB.N > 0 && fJetzt.N === KB.N - 1;
+      if (wirklichFort){
+        const urteil = kbAbreiseStelle(alt.karten, jetztK);
+        /* the memory takes the row as it stands now, so the same departure
+           is not found a second time at the next look */
+        R.abreise = {art: urteil.art, stelle: urteil.stelle, erste: KB.erste};
+        merken();
+        return;
+      }
       const xWahl = R.auswahl !== null && R.auswahl !== undefined && jetztK[R.auswahl] ? jetztK[R.auswahl].x0 : null;
       const xKnapp = R.wahlKnapp && jetztK[R.wahlKnapp.i] ? jetztK[R.wahlKnapp.i].x0 : null;
       R.karten = alt.karten.map(a => jetztK.find(k => nah(k, a)) || Object.assign({}, a, {gemerkt: true, q: 9}));
@@ -17828,8 +18072,7 @@ function kbReiheErgaenzen(R){
   }
   /* what stands now becomes the memory - unless a fresher, fuller memory
      is still being carried */
-  if (jetztK.length >= 2 && !(frisch && alt.karten.length > jetztK.length))
-    KB.reiheAlt = {karten: jetztK.map(k => Object.assign({}, k)), blick: KB.blick || 0};
+  if (jetztK.length >= 2 && !(frisch && alt.karten.length > jetztK.length)) merken();
 }
 function kbVerarbeiten(R, vorgabe){
   KB.frame = R.gross; KB.hell = R.hell; KB.gain = R.gain;
@@ -17895,22 +18138,37 @@ function kbVerarbeiten(R, vorgabe){
     /* what the bar says right now, kept for the head - the tool may discuss
        out loud, it just may not write it down yet */
     KB.nSchaetzung = {n: vorschlag, stimmen: beste, von: KB.nRing.length};
-    if (vorschlag !== KB.zeilen.length){
-      const sofort = KB.zeilen.length === 0;
+    /* THE PARKED LINES ARE NOT COUNTED and never touched. A unit that has
+       left the town keeps its line at the END of the sheet; the bar knows
+       nothing of it, so neither the vote nor the window's places may. New
+       lines are therefore put IN FRONT of that block, not behind it. */
+    const aktiv = kbAktivN();
+    if (vorschlag !== aktiv){
+      const sofort = KB.zeilen.length === 0;   /* a fresh sheet, not a sheet of parked lines */
       const sichtbarMin = KB.erste + (R.karten ? R.karten.length : 0);
       let letzteVoll = 0;
-      KB.zeilen.forEach((z, i) => { if (z.status === "erfasst" || kbFestHand(z) || z.vonHand) letzteVoll = i + 1; });
+      KB.zeilen.forEach((z, i) => { if (!z.fort && (z.status === "erfasst" || kbFestHand(z) || z.vonHand)) letzteVoll = i + 1; });
       const getragen = KB.nRing.length >= KB_RING && beste >= KB_RING_MEHRHEIT;
       if (sofort || (getragen && vorschlag >= sichtbarMin && vorschlag >= letzteVoll)){
-        if (vorschlag > KB.zeilen.length)
-          for (let i = KB.zeilen.length; i < vorschlag; i++) KB.zeilen.push(kbZeileLeer(i));
-        else
-          while (KB.zeilen.length > vorschlag && KB.zeilen[KB.zeilen.length - 1].status === "vermutet"
-                 && !kbFestHand(KB.zeilen[KB.zeilen.length - 1]) && !KB.zeilen[KB.zeilen.length - 1].vonHand) KB.zeilen.pop();
+        if (vorschlag > aktiv){
+          for (let i = aktiv; i < vorschlag; i++){
+            KB.zeilen.splice(i, 0, kbZeileLeer(i));
+            kbZeigerUmsetzen(k => k >= i ? k + 1 : k);
+          }
+        } else {
+          let n = aktiv;
+          while (n > vorschlag && !KB.zeilen[n - 1].fort && KB.zeilen[n - 1].status === "vermutet"
+                 && !kbFestHand(KB.zeilen[n - 1]) && !KB.zeilen[n - 1].vonHand){
+            const weg = n - 1;
+            KB.zeilen.splice(weg, 1);
+            kbZeigerUmsetzen(k => k === weg ? null : (k > weg ? k - 1 : k));
+            n--;
+          }
+        }
         KB.nRing = [];
       }
     }
-    KB.N = KB.zeilen.length;
+    KB.N = kbAktivN();
     /* the town's strength line. The pictures come with every quick look,
        the numbers only with a slow one - so the numbers already read are
        kept when a quick look brings the same diamonds again. */
@@ -17930,6 +18188,14 @@ function kbVerarbeiten(R, vorgabe){
       kbRautenOrdnen();
     }
     KB.erste = f.erste; KB.sichtbar = f.sichtbar; KB.karten = R.karten;
+    /* the memory of the row learns which window it was taken in - only a
+       row that has not scrolled since may be compared place for place */
+    if (KB.reiheAlt && KB.reiheAlt.blick === (KB.blick || 0)) KB.reiheAlt.erste = KB.erste;
+    /* A UNIT THAT LEFT THE BAR is acted on HERE, where this look's own
+       window origin is known at last. */
+    /* a change of town empties the sheet in this very look - a departure
+       found on the OLD row must not be applied to the new one */
+    if (R.abreise && KB.zeilen.length) kbAbreiseFolgen(R.abreise);
     /* TYPES: FILL WHAT IS EMPTY, CORRECT ONLY WHAT IS CLICKED. A standing
        type is not touched by a passing look - a glowing card at its crest
        is not a second opinion. The picked card is the exception: its sign
@@ -17947,9 +18213,14 @@ function kbVerarbeiten(R, vorgabe){
        "?" next to its neighbours. */
     const reihenSeite = R.reiheFarbe && R.reiheFarbe.seite ? ["US","GE","SU"].indexOf(R.reiheFarbe.seite) : -1;
     if (reihenSeite >= 0) KB.reiheSeite = reihenSeite;
-    R.karten.forEach((k, j) => {
+    /* WHILE IT IS UNCLEAR WHICH UNIT LEFT, nothing at all is written by
+       place. The cards may all sit one line off, and a type or a side
+       written then is a lie that looks like a reading. */
+    if (!KB.abreiseUnklar) R.karten.forEach((k, j) => {
       const z = KB.zeilen[KB.erste + j];
-      if (!z) return;
+      /* never into the parked block: it is no part of the bar, and the
+         window can reach past the active lines while the vote catches up */
+      if (!z || z.fort) return;
       z.eigen = k.seite === "gelb";
       if (!z.eigen){
         const s = k.seite === "US" ? 0 : k.seite === "GE" ? 1 : k.seite === "SU" ? 2 : (reihenSeite >= 0 ? reihenSeite : null);
@@ -18000,7 +18271,11 @@ function kbVerarbeiten(R, vorgabe){
   KB.ziel = (KB.ort !== null && KB.linie) ? linieZiel(KB.ort, KB.linie) : null;
   if (R.einheit){
     const e = unitsZeileAus(R);
-    if (!R.leiste && KB.N === 0 && vorgabe !== KB_OHNE_LEISTE){ KB.zeilen = [kbZeileLeer(0)]; KB.N = 1; }
+    /* THE SHEET IS EMPTY only when it holds no line at all. KB.N counts the
+       lines that stand in the bar; the lines of units that have left are
+       kept behind them, and they are no reason to start a fresh sheet -
+       asking KB.N here would have thrown them away. */
+    if (!R.leiste && KB.zeilen.length === 0 && vorgabe !== KB_OHNE_LEISTE){ KB.zeilen = [kbZeileLeer(0)]; KB.N = 1; }
     const da = kbSchonDa(e);
     /* Without a bar the tag names the line: is the unit already on the
        sheet it is corrected, otherwise a line is added for it. */
@@ -18008,9 +18283,11 @@ function kbVerarbeiten(R, vorgabe){
     if (vorgabe === KB_OHNE_LEISTE){
       if (da) kand = da.i;
       else {
-        kand = KB.zeilen.length;
-        KB.zeilen.push(kbZeileLeer(kand));
-        KB.N = KB.zeilen.length;
+        /* in front of the parked lines - they are no part of the bar */
+        kand = kbAktivN();
+        KB.zeilen.splice(kand, 0, kbZeileLeer(kand));
+        kbZeigerUmsetzen(k => k >= kand ? k + 1 : k);
+        KB.N = kbAktivN();
       }
     } else kand = kbAuswahlIndex(R, vorgabe);
     if (kand === null || !KB.zeilen[kand]){
@@ -18042,7 +18319,7 @@ function kbVerarbeiten(R, vorgabe){
         /* NAME AND OWNER LOCKED. Only a note for them - the type gap may
            still be filled while its own lock is open. */
         const anders = kbAbweichungMerken(z, e);
-        if (!z.typ && !kbFestTyp(z)){ const k2 = R.karten[i - KB.erste]; const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
+        if (!z.typ && !kbFestTyp(z)){ const k2 = kbKarteZu(R, i); const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
         KB.status = anders
           ? `Line ${i + 1} is locked — read as ${e.tag || e.name}, not taken over.`
           : `Line ${i + 1} is locked and reads the same.`;
@@ -18063,7 +18340,7 @@ function kbVerarbeiten(R, vorgabe){
         /* a note left by a refused reading is answered by this confirmation */
         if (!kbFestName(z)) z.abweichung = null;
         kbNeuLesenErledigt(z);
-        if (!z.typ && !kbFestTyp(z)){ const k2 = R.karten[i - KB.erste]; const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
+        if (!z.typ && !kbFestTyp(z)){ const k2 = kbKarteZu(R, i); const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
         if (!z.typ && !kbFestTyp(z)){ const kand = kbTypKandidaten(e.hp); if (kand.length === 1) z.typ = kand[0]; }
         if ((z.seite === null || z.seite === undefined) && e.seite !== null && e.seite !== undefined) z.seite = e.seite;
         if (KB.ort === null && e.stadt !== null && e.stadt !== undefined) kbOrtSetzen(e.stadt);
@@ -18090,7 +18367,7 @@ function kbVerarbeiten(R, vorgabe){
          nowhere. And the move wants two known owners; an unknown one is
          no witness for taking a line away. */
       if (umzug){ kbZeileLeeren(da); KB.status = `${e.tag || e.name} moved from line ${da.i + 1}.`; }
-      if (!z.typ && !kbFestTyp(z)){ const k2 = R.karten[i - KB.erste]; const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
+      if (!z.typ && !kbFestTyp(z)){ const k2 = kbKarteZu(R, i); const t = k2 ? kbTypAusListe(k2) : null; if (t) z.typ = t; }
       /* The composition is a second witness: the strength diamonds carry
          the crew maxima, and those fit exactly one type often enough. It
          only fills a gap - a read symbol is never overruled. */
@@ -18465,7 +18742,7 @@ function kbRauteTaufen(i, gruppe){
 function kbGelesenVerlangt(){
   const noetig = new Set();
   for (const z of (KB.zeilen || [])){
-    if (z.status !== "erfasst") continue;
+    if (z.status !== "erfasst" || z.fort) continue;   /* gone from the town */
     const kand = z.typ ? [z.typ] : kbTypKandidaten(z.hp);
     for (const k of kand) noetig.add(k);
   }
@@ -18694,6 +18971,11 @@ function kbOrtKennung(d){
 function kbSchlangeLeeren(){
   if (!KB) return;
   for (const j of (KB.warte || [])) if (j.bmp && j.bmp.close) j.bmp.close();
+  /* THE READING THAT IS RUNNING CANNOT BE REACHED - it is out of the queue
+     and its line number lives in a local variable. So the sheet counts how
+     often it has been thrown away; a reading that comes back to a different
+     count belongs to a sheet that no longer exists. */
+  KB.leerzahl = (KB.leerzahl || 0) + 1;
   KB.warte = []; KB.arbeit = null; KB.werkt = false;
 }
 /* The set-aside picture back in its place on one working surface, so that
@@ -18745,6 +19027,14 @@ function kbSchriftWunsch(ziel){
 }
 async function kbEinreihen(F, G){
   if (!KB || KB.warte.length >= 24) return;
+  /* WHILE IT IS UNCLEAR WHICH UNIT LEFT, no picture is set aside at all.
+     Its line would be named by place on a sheet that is one line out, and
+     a NAME on the wrong line is worse than the shifted types this package
+     set out to stop. */
+  if (KB.abreiseUnklar){
+    KB.status = "A unit left the bar - which one is unclear. Clear the note on the sheet first.";
+    return;
+  }
   /* THE LINE IS BOUND FIRST - this is the unit that stood in the box when
      the picture was taken, whatever is clicked next. Without a certainly
      picked card there is no line to bind, and then the picture is not
@@ -19001,6 +19291,12 @@ async function kbSchlange(){
   try {
     while (KB && KB.warte.length){
       const job = KB.warte.shift();
+      /* its line went away while it waited, see kbZeigerUmsetzen */
+      if (job.tot){
+        if (job.bmp && job.bmp.close) job.bmp.close();
+        KB.status = "The line that picture belonged to is gone - the reading was dropped.";
+        kbZeichnen(); continue;
+      }
       if (job.art === "tooltip"){ await kbTooltipLesen(job); continue; }
       if (job.art === "tooltipTeile"){ await kbTooltipTeileLesen(job); continue; }
       /* locked since the picture was taken - the reading is not owed */
@@ -19014,6 +19310,7 @@ async function kbSchlange(){
         KB.zeilen[job.ziel].status = "liest";
       kbZeichnen();
       const t0 = jetzt();
+      const leerVor = KB.leerzahl || 0;      /* see kbSchlangeLeeren */
       let R = null;
       /* the owners already on the sheet, for completing a cut name */
       unitsBekannteBesitzer = KB.zeilen.filter(z => z.status === "erfasst" && z.besitzer).map(z => z.besitzer);
@@ -19021,12 +19318,30 @@ async function kbSchlange(){
       catch(e){ R = null; }
       if (job.bmp && job.bmp.close) job.bmp.close();
       if (!KB) return;
+      /* the sheet was thrown away while this was being read - a change of
+         town, most likely. The line number belongs to the old sheet. */
+      if ((KB.leerzahl || 0) !== leerVor){
+        KB.arbeit = null;
+        KB.status = "The sheet changed while that was being read - the reading was dropped.";
+        kbZeichnen(); continue;
+      }
       const gebraucht = jetzt() - t0;
       KB.dauerMittel = Math.max(250, Math.round(0.7*KB.dauerMittel + 0.3*gebraucht));
+      /* THE LINE MAY HAVE MOVED WHILE THIS WAS BEING READ. The text
+         recognition takes the better part of a second, and in that second a
+         unit can leave the bar and the sheet shift under it. The job is out
+         of the queue by then, so kbZeigerUmsetzen cannot reach it - but it
+         does reach KB.arbeit, and that is the line to write to. */
+      const zielJetzt = KB.arbeit ? KB.arbeit.ziel : job.ziel;
       KB.arbeit = null;
-      if (R && R.einheit) kbVerarbeiten(R, job.ziel);
-      else if (job.ziel !== null && KB.zeilen[job.ziel] && KB.zeilen[job.ziel].status === "liest")
-        KB.zeilen[job.ziel].status = "vermutet";
+      if (zielJetzt === null && job.ziel !== null && job.ziel !== KB_OHNE_LEISTE){
+        /* its line is gone - the reading belongs nowhere and is dropped */
+        KB.status = "The line that reading belonged to is gone - it was dropped.";
+        kbZeichnen(); continue;
+      }
+      if (R && R.einheit) kbVerarbeiten(R, zielJetzt);
+      else if (zielJetzt !== null && KB.zeilen[zielJetzt] && KB.zeilen[zielJetzt].status === "liest")
+        KB.zeilen[zielJetzt].status = "vermutet";
       kbZeichnen();
     }
   } finally { if (KB){ KB.werkt = false; KB.scan = false; kbZeichnen(); } }
@@ -19060,7 +19375,9 @@ function kbFuellen(){
    movement of the hand. */
 function kbKarteBei(streifen, x, y){
   let best = null;
-  streifen.querySelectorAll(".kb-k").forEach(el => {
+  /* the parked cards are no targets - the hand cannot lead a line that is
+     not in the bar, and a frame that sticks there says nothing */
+  streifen.querySelectorAll(".kb-k:not(.fort)").forEach(el => {
     const mx = el.offsetLeft + el.offsetWidth/2, my = el.offsetTop + el.offsetHeight/2;
     const dx = x - mx, dy = (y - my) * 3;
     const w = dx*dx + dy*dy;
@@ -19172,7 +19489,7 @@ function kbZeichnen(){
   if (af && af.closest && af.closest("#kabine") && /^(SELECT|INPUT|TEXTAREA)$/.test(af.tagName)) return;
   const kopf = document.getElementById("kb-kopf"), links = document.getElementById("kb-links"),
         streifen = document.getElementById("kb-streifen"), blatt = document.getElementById("kb-blatt");
-  const erfasst = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen).length;
+  const erfasst = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen && !z.fort).length;
   const ortName = KB.ort !== null && KB.ort !== undefined ? MAP.n[KB.ort][0] : null;
   kopf.innerHTML = `
     <div class="rd-kf weit ${ortName ? "ort" : ""}"><div class="t">Town</div>
@@ -19289,16 +19606,21 @@ function kbZeichnen(){
     if (ortFeldLinks.value !== soll) ortFeldLinks.value = soll;
   }
   /* the strip */
-  streifen.className = "kb-streifen" + (KB.N > 20 ? " gross" : "");
+  /* the strip draws every line, the parked ones too - so its width follows
+     the whole sheet, not only the lines that stand in the bar */
+  streifen.className = "kb-streifen" + (KB.zeilen.length > 20 ? " gross" : "");
   streifen.innerHTML = KB.zeilen.map((z, i) => {
-    const imFenster = i >= KB.erste && i < KB.erste + KB.sichtbar;
+    /* a parked line stands in no window at all - the bar knows nothing of it */
+    const imFenster = !z.fort && i >= KB.erste && i < KB.erste + KB.sichtbar;
     const kl = ["kb-k", z.eigen ? "eigen" : kbSeiteKlasse(z.seite), imFenster ? "fenster" : "",
+                z.fort ? "fort" : "",
                 z.status === "wartet" ? "wartet" : "", z.status === "liest" ? "liest" : "",
                 KB.schreibt && KB.schreibt.i === i ? "jetzt" : ""].join(" ");
-    const sagt = z.status === "erfasst" ? `${z.tag} ${z.name} - ${z.besitzer}`
+    const sagt = (z.fort ? "left the bar \u2014 " : "")
+               + (z.status === "erfasst" ? `${z.tag} ${z.name} - ${z.besitzer}`
                : z.status === "wartet" ? "picture taken - waiting to be read"
                : z.status === "liest" ? "being read now"
-               : "not read yet";
+               : "not read yet");
     return `<div class="${kl}" data-i="${i}" title="${kbEsc(sagt)}">${
       z.typ && kbSymbolDa(z.typ) ? "" : "?"}${
       z.status === "wartet" ? `<span class="uhr" title="waiting to be read">⋯</span>` : ""}${
@@ -19392,7 +19714,7 @@ function kbZeichnen(){
   /* a type ordered afresh has arrived - the lock goes back as it was */
   for (const z of KB.zeilen) if (z.typNeu && z.typ) kbTypNeuErledigt(z);
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Town ?"}${KB.linie ? ` · attack line ${kbEsc(KB.linie)}` : ""} · ${new Date().toLocaleDateString()}</div>
-    <div class="kb-schreibrecht"><button class="kb-alle" title="${KB.zeilen.length && KB.zeilen.every(u => u.haken) ? "Untick every line" : "Tick every line on the sheet"}">${KB.zeilen.length && KB.zeilen.every(u => u.haken) ? "\u2610 none" : "\u2611 all"}</button><button class="kb-sichtbar" title="Tick every line that stands in the part of the bar you see right now — then one lock click locks them all">\u2610 visible part</button><button class="kb-typen-neu" title="Read the types of the visible lines afresh — all whose type is not locked">\u21bb types</button><button class="kb-zeile-plus" title="Add an empty line at the end — for a unit the count missed. The count vote will not take it away again; × removes it.">+ line</button>${(() => {
+    <div class="kb-schreibrecht"><button class="kb-alle" title="${KB.zeilen.length && KB.zeilen.every(u => u.haken) ? "Untick every line" : "Tick every line on the sheet"}">${KB.zeilen.length && KB.zeilen.every(u => u.haken) ? "\u2610 none" : "\u2611 all"}</button><button class="kb-sichtbar" title="Tick every line that stands in the part of the bar you see right now — then one lock click locks them all">\u2610 visible part</button><button class="kb-typen-neu" title="Read the types of the visible lines afresh — all whose type is not locked">\u21bb types</button><button class="kb-zeile-plus" title="Add an empty line — for a unit the count missed. The count vote will not take it away again; × removes it.">+ line</button>${(() => {
       /* THE LOCKS FOR THE SELECTION. Without ticked lines the two buttons
          are grey and dead; with ticks a click locks the type, or name and
          owner, of every ticked line - or opens them, when all are shut. */
@@ -19408,7 +19730,7 @@ function kbZeichnen(){
     })()}<span class="kb-recht-hinweis">Tick lines with the box, Shift+click for a range, Ctrl+click for single ones — a lock click on a ticked line locks all ticked lines, and "Keep the sheet" keeps only the ticked ones while any are ticked.${
       riegelListe.length > 1 ? " The coloured bars at the line numbers mark screen sections — the lines taken in one view of the bar; click a bar to tick its whole section." : ""}</span></div>
     <div class="kb-z kopfz"><div></div><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Script</div><div></div></div>
-    <div class="kb-zeilen">${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${kbFestHand(z) ? "fest" : ""} ${z.haken ? "haken" : ""} ${z.unsicher ? "unsicher" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}">
+    <div class="kb-zeilen">${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${kbFestHand(z) ? "fest" : ""} ${z.haken ? "haken" : ""} ${z.unsicher ? "unsicher" : ""} ${z.fort ? "fort" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}" ${z.fort ? `title="left the bar - this unit is no longer in the town. The line is kept so that what was read of it can still go into the book with &quot;Keep the sheet&quot;."` : ""}>
       <div><button class="kb-haken ${z.haken ? "an" : ""}" data-i="${z.i}" title="Select this line — Shift+click a range, Ctrl+click adds or removes one">${z.haken ? "\u2611" : "\u2610"}</button></div>
       <div class="kb-nr">${riegelListe.length > 1 && z.riegel !== null && z.riegel !== undefined ? (() => { const nr = riegelListe.indexOf(z.riegel); return `<span class="kb-riegel r${nr % 4}" data-r="${z.riegel}" title="Screen section ${nr + 1} (from card ${z.riegel + 1}) — click to tick all of it"></span>`; })() : ""}${z.i + 1}</div>
       <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${(z.eigen ? "own unit" : kbSeiteName(z.seite)) + " · " + (z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set")}">${z.typ ? "" : "?"}</span></div>
@@ -19461,7 +19783,7 @@ function kbZeichnen(){
       }${z.festName === null ? " (follows the default above)" : ""}">${kbFestName(z) ? "🔒" : "🔓"}<small>N</small></button>${
         z.gespeichert ? `<span title="recorded" style="color:#4f7a3a">✓</span>` : `<button class="weg" data-i="${z.i}" title="remove this line">×</button>`}</div>
     </div>`).join("")}</div>
-    ${KB.N ? "" : `<div class="kb-hinweis">Nothing on the sheet yet.</div>`}
+    ${KB.zeilen.length ? "" : `<div class="kb-hinweis">Nothing on the sheet yet.</div>`}
     ${(() => {
       /* WHAT TO DO ABOUT THE RED LINES, said once and plainly. Panning or
          zooming the game puts something else behind the see-through bar,
@@ -19473,6 +19795,20 @@ function kbZeichnen(){
         ${rot.length === 1 ? "reads" : "read"} too poorly to write down — the bar is see-through and the map moves behind it.
         Pan or zoom the game a little and click ${rot.length === 1 ? "it" : "them"} again: the reader then has a second
         picture to work from, and two that agree carry the name.</div>`;
+    })()}
+    ${(() => {
+      /* A UNIT LEFT AND THE TOOL CANNOT SAY WHICH. It says so, and it says
+         it until the Kommodore has looked - a note that goes away by
+         itself would be no note at all. Nothing is written by place while
+         it stands. */
+      if (!KB.abreiseUnklar) return "";
+      return `<div class="kb-hinweis schwach">A unit has <b>left the bar</b> — and which one cannot be
+        told: several places in the row fit the gap equally well, or none of them does. So nothing is
+        moved and nothing is guessed. The lines below may sit one place off against the bar, and until
+        this note is cleared nothing at all is written by place — no type, no side, no name — and no
+        new box is read. Compare the strip with the sheet, take the line of the unit that is gone
+        away with its <b>×</b>, then carry on.
+        <button class="kb-abreise-weg" type="button">understood</button></div>`;
     })()}`;
   blatt.querySelectorAll(".kb-z[data-i] .sym").forEach(el => {
     const z = KB.zeilen[+el.closest(".kb-z").dataset.i];
@@ -19528,7 +19864,7 @@ function kbPult(){
        of the card. The first click on Keep stops and says so; the second
        keeps them, marked as incomplete in the record. */
     const angehakt = KB.zeilen.some(z => z.haken);
-    const gekuerzt = KB.zeilen.filter(z => kbUnvoll(z) && !z.eigen && !z.gespeichert && (!angehakt || z.haken)).map(z => z.i + 1);
+    const gekuerzt = KB.zeilen.filter(z => kbUnvoll(z) && !z.eigen && !z.gespeichert && (!angehakt || z.haken || z.fort)).map(z => z.i + 1);
     if (gekuerzt.length && !KB.unvollGewarnt){
       KB.unvollGewarnt = true;
       KB.status = `Line${gekuerzt.length === 1 ? "" : "s"} ${gekuerzt.join(", ")}: name cut short by the game (…). Hover the card in the game to see the full name, click the name here and type it in — or keep again to file ${gekuerzt.length === 1 ? "it" : "them"} marked as incomplete.`;
@@ -19587,14 +19923,21 @@ async function kbSchwebeAuf(){
       <button class="rd-schalter" id="kb-schwebe-sichtbar" title="Tick every line that stands in the part of the bar you see right now">\u2610 visible part</button>
       <button class="rd-schalter" id="kb-schwebe-bestaetigen" title="Lock name, owner and type of the line under the frame">\u2713 confirm</button>
       <button class="rd-schalter" id="kb-schwebe-vorrueckt" title="When on, stepping to the next card locks the line just left">advancing confirms</button>
+      <button class="rd-schalter" id="kb-schwebe-abweg" hidden title="A unit left the bar and the tool cannot say which one. Nothing is read until this is cleared.">! unit left — understood</button>
     </div>`;
   doc.getElementById("kb-schwebe-sichtbar").addEventListener("click", ()=>{
     if (!KB) return;
     const von = KB.erste || 0, bis = von + Math.max(1, KB.sichtbar || 0) - 1;
-    kbHakenAlle(KB.zeilen.filter(u => u.i >= von && u.i <= bis));
+    kbHakenAlle(KB.zeilen.filter(u => u.i >= von && u.i <= bis && !u.fort));
   });
   doc.getElementById("kb-schwebe-bestaetigen").addEventListener("click", ()=>{ const i = kbWahl(); if (i !== null && i !== undefined) kbBestaetigen(i); });
   doc.getElementById("kb-schwebe-vorrueckt").addEventListener("click", ()=>{ kbVorruecktSetzen(!kbVorrueckt); });
+  doc.getElementById("kb-schwebe-abweg").addEventListener("click", ()=>{
+    if (!KB) return;
+    KB.abreiseUnklar = null;
+    KB.status = "Carrying on - check the sheet against the strip.";
+    kbZeichnen();
+  });
   w.addEventListener("resize", ()=>{ kbSchwebeZeichnen(); });
   /* closed from its own corner or by the browser: forget it, relabel the pult */
   w.addEventListener("pagehide", ()=>{ if (kbSchwebe === w){ kbSchwebe = null; if (KB) kbZeichnen(); } });
@@ -19617,11 +19960,12 @@ function kbSchwebeZeichnen(){
   const wahl = kbWahl();
   /* the same cards as the room's strip, rebuilt only when they changed */
   const html = KB.zeilen.map((z, i) => {
-    const imFenster = i >= KB.erste && i < KB.erste + KB.sichtbar;
+    const imFenster = !z.fort && i >= KB.erste && i < KB.erste + KB.sichtbar;
     const kl = ["kb-k", z.eigen ? "eigen" : kbSeiteKlasse(z.seite), imFenster ? "fenster" : "",
+                z.fort ? "fort" : "",
                 z.status === "wartet" ? "wartet" : "", z.status === "liest" ? "liest" : "",
                 KB.schreibt && KB.schreibt.i === i ? "jetzt" : ""].join(" ");
-    return `<div class="${kl}" data-i="${i}" data-typ="${kbEsc(z.typ || "")}" title="${kbEsc(z.status === "erfasst" ? `${z.tag} ${z.name} - ${z.besitzer}` : "not read yet")}">${
+    return `<div class="${kl}" data-i="${i}" data-typ="${kbEsc(z.typ || "")}" title="${kbEsc((z.fort ? "left the bar - " : "") + (z.status === "erfasst" ? `${z.tag} ${z.name} - ${z.besitzer}` : "not read yet"))}">${
       z.typ && kbSymbolDa(z.typ) ? "" : "?"}${
       z.status === "wartet" ? `<span class="uhr">\u22ef</span>` : ""}${
       z.status === "erfasst" ? `<span class="fg">\u25ce</span>` : ""}<span class="nr">${i+1}</span></div>`;
@@ -19648,9 +19992,16 @@ function kbSchwebeZeichnen(){
     r.style.width = ziel.offsetWidth + "px"; r.style.height = ziel.offsetHeight + "px";
     if (String(wahl) !== st.dataset.gerollt && ziel.scrollIntoView){ st.dataset.gerollt = String(wahl); ziel.scrollIntoView({inline: "nearest", block: "nearest"}); }
   } else if (r) r.remove();
+  /* A UNIT LEFT AND THE TOOL CANNOT SAY WHICH. Nothing is read while that
+     stands, so it has to be said HERE as well: the sheet sits behind the
+     game, this window is what he looks at. */
+  const abw = doc.getElementById("kb-schwebe-abweg");
+  if (abw) abw.hidden = !KB.abreiseUnklar;
   /* the reading of the unit under the frame */
   const z = wahl !== null && wahl !== undefined ? KB.zeilen[wahl] : null;
-  const soll = z
+  const soll = KB.abreiseUnklar
+    ? `<b>A unit left the bar</b><br>Which one cannot be told, so nothing is read.<br><small>Press “! unit left — understood” below, then carry on.</small>`
+    : z
     ? `<b>${kbEsc(z.tag)}</b> ${kbEsc(z.name)}<br>${kbEsc(z.besitzer)}<br><small>${z.typ ? kbEsc(atName(z.typ)) : "type ?"} \u00b7 ${z.eigen ? "own" : kbSeiteName(z.seite)} \u00b7 line ${wahl + 1}${kbFestName(z) && kbFestTyp(z) ? " \u00b7 \u{1F512}" : ""}</small><div class="hp">${kbStaerkeHTML(z)}</div>`
     : kbEsc(KB.status);
   if (jf.innerHTML !== soll) jf.innerHTML = soll;
@@ -19695,7 +20046,9 @@ function kbVorrueckSchliessen(vorher, neu){
   if (!kbVorrueckt || !KB) return;
   if (vorher === null || vorher === undefined || vorher === neu) return;
   const z = KB.zeilen[vorher];
-  if (!z || z.status !== "erfasst" || z.eigen || z.neuLesen || z.typNeu) return;
+  /* a line whose unit has left the bar is not "stepped away from" - it was
+     carried off, and locking it would only make it harder to correct */
+  if (!z || z.fort || z.status !== "erfasst" || z.eigen || z.neuLesen || z.typNeu) return;
   if (!z.tag && !z.name) return;
   z.festTyp = true; z.festName = true;
 }
@@ -19704,11 +20057,23 @@ function kbVorrueckSchliessen(vorher, neu){
 function kbBearbeiten(ev){
   const f = ev.target.closest("[data-f]"); const zel = ev.target.closest(".kb-z[data-i]");
   /* the visible part of the bar, and a whole screen section */
+  /* the note about a unit that left, taken note of */
+  const abWeg = ev.target.closest(".kb-abreise-weg");
+  if (abWeg){
+    KB.abreiseUnklar = null;
+    KB.status = "Carrying on - check the sheet against the strip.";
+    kbZeichnen();
+    return;
+  }
   /* A LINE BY HAND, for a unit the count missed */
   const plus = ev.target.closest(".kb-zeile-plus");
   if (plus){
-    const z = kbZeileLeer(KB.zeilen.length); z.vonHand = true;
-    KB.zeilen.push(z); KB.N = KB.zeilen.length; KB.nRing = [];
+    /* in front of the lines of units that have left */
+    const wo = kbAktivN();
+    const z = kbZeileLeer(wo); z.vonHand = true;
+    KB.zeilen.splice(wo, 0, z);
+    kbZeigerUmsetzen(k => k >= wo ? k + 1 : k);
+    KB.N = kbAktivN(); KB.nRing = [];
     KB.status = `Line ${z.i + 1} added by hand.`;
     kbZeichnen();
     return;
@@ -19724,7 +20089,7 @@ function kbBearbeiten(ev){
   const sichtbar = ev.target.closest(".kb-sichtbar");
   if (sichtbar){
     const von = KB.erste || 0, bis = von + Math.max(1, KB.sichtbar || 0) - 1;
-    kbHakenAlle(KB.zeilen.filter(u => u.i >= von && u.i <= bis));
+    kbHakenAlle(KB.zeilen.filter(u => u.i >= von && u.i <= bis && !u.fort));
     return;
   }
   /* TYPES AFRESH: the visible lines whose type is not locked lose it, the
@@ -19733,7 +20098,9 @@ function kbBearbeiten(ev){
   if (typenNeu){
     const von = KB.erste || 0, bis = von + Math.max(1, KB.sichtbar || 0) - 1;
     let n = 0;
-    for (const u of KB.zeilen) if (u.i >= von && u.i <= bis && !kbFestTyp(u)){ u.typ = null; n++; }
+    /* never into the parked block: the bar's window can reach past the
+       active lines while the count vote is still catching up */
+    for (const u of KB.zeilen) if (u.i >= von && u.i <= bis && !u.fort && !kbFestTyp(u)){ u.typ = null; n++; }
     unitsTypAlt = {};
     KB.typenNeu = true;
     KB.status = n ? `Reading the types of ${n} visible line${n === 1 ? "" : "s"} afresh …` : "No visible line with an open type.";
@@ -19794,7 +20161,9 @@ function kbBearbeiten(ev){
   if (ev.target.closest(".weg")){
     const i = +ev.target.closest(".weg").dataset.i;
     if (kbFestHand(KB.zeilen[i])){ KB.status = `Line ${i + 1} is locked — open the lock first.`; kbZeichnen(); return; }
-    KB.zeilen.splice(i, 1); KB.zeilen.forEach((z, k) => z.i = k); KB.N = KB.zeilen.length;
+    KB.zeilen.splice(i, 1);
+    kbZeigerUmsetzen(k => k === i ? null : (k > i ? k - 1 : k));
+    KB.N = kbAktivN();
     KB.status = "Line removed."; kbZeichnen(); return;
   }
   if (!f || !zel || f.querySelector("input,select")) return;
@@ -20030,7 +20399,7 @@ async function kbTick(){
                            && (KB.blick || 0) - KB.reiheAlt.blick <= KB_REIHE_MERK);
     /* which cards need no sign this look: those whose line has the type
        locked, by hand or by the default */
-    unitsTypSperren = (KB.karten || []).map((k, j) => kbFestTyp(KB.zeilen[KB.erste + j]) ? k.x0 : null).filter(x => x !== null);
+    unitsTypSperren = kbTypSperrenVon();
     const kasten = unitsForm(d);
     /* THE BOX IS LOOKED FOR ONCE A LOOK. unitsLesen looked for it again on
        this very buffer a moment later, and the search costs two to four
@@ -20073,7 +20442,7 @@ async function kbTick(){
        With a sheet of one captured line it fell silent and stayed at one,
        while eleven cards stood in the game. A sheet is never "finished"
        while the bar can still grow. */
-    if (neu || KB.blick % 4 === 0 || !KB.zeilen.length || zahlOffen){
+    if (neu || KB.blick % 4 === 0 || !kbAktivN() || zahlOffen){
       const G = await unitsLesen(F, null, null, "bild");
       if (!KB || !KB.live) return;
       kbVerarbeiten(G);
@@ -20426,7 +20795,7 @@ function kbStaerkeHTML(z){
 function kbGesamtStaerke(){
   let ist = 0, max = 0, n = 0;
   for (const z of KB.zeilen){
-    if (z.status !== "erfasst" || z.eigen || !z.hp) continue;
+    if (z.status !== "erfasst" || z.eigen || z.fort || !z.hp) continue;
     let hat = false;
     for (const h of z.hp) if (h){ ist += +h[0] || 0; max += +h[1] || 0; hat = true; }
     if (hat) n++;
@@ -20446,10 +20815,14 @@ function kbBehalten(){
   const f = ortFeld && ortFeld.value ? unitsStadt(ortFeld.value) : null;
   const ort = f ? f.i : KB.ort;
   if (ort === null || ort === undefined){ toast("Which town? Type its name on the left."); ortFeld && ortFeld.focus(); return; }
-  /* ticked lines, if any are ticked; otherwise every line, as before */
+  /* ticked lines, if any are ticked; otherwise every line, as before. A LINE
+     WHOSE UNIT HAS LEFT THE BAR IS ALWAYS KEPT: it stands in no window any
+     more, so "visible part" can never tick it, and the tick filter would
+     drop exactly the line this whole package exists to save. */
   const angehakt = KB.zeilen.some(z => z.haken);
-  const zeilen = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen && !z.gespeichert && (!angehakt || z.haken));
-  const eigene = KB.zeilen.filter(z => z.status === "erfasst" && z.eigen && !z.gespeichert && (!angehakt || z.haken));
+  const gemeint = z => !angehakt || z.haken || z.fort;
+  const zeilen = KB.zeilen.filter(z => z.status === "erfasst" && !z.eigen && !z.gespeichert && gemeint(z));
+  const eigene = KB.zeilen.filter(z => z.status === "erfasst" && z.eigen && !z.gespeichert && gemeint(z));
   if (!zeilen.length && !eigene.length){ toast(angehakt ? "Nothing new to keep among the ticked lines." : "Nothing new to keep."); return; }
   /* OWN UNITS GO INTO THE OWN DEPOT, not into the enemy book - the
      Kommodore's depot maintenance through the capture: matched by tag,
@@ -21557,7 +21930,7 @@ async function kbProbeBild(quelle, opts){
     KB.frame = gross; KB.hell = hell; KB.gain = gain;
     unitsBlassErlaubt = !!(KB.reiheAlt && KB.reiheAlt.karten.length >= 2
                            && (KB.blick || 0) - KB.reiheAlt.blick <= KB_REIHE_MERK);
-    unitsTypSperren = (KB.karten || []).map((k, j) => kbFestTyp(KB.zeilen[KB.erste + j]) ? k.x0 : null).filter(x => x !== null);
+    unitsTypSperren = kbTypSperrenVon();
     KB.blick = (KB.blick || 0) + 1;
     E.rahmen = {hell, gain};
     /* the tick drops what it knows when the town changes; a series of
@@ -21618,7 +21991,7 @@ async function kbProbeBild(quelle, opts){
       if (R && R.einheit){
         const e = unitsZeileAus(R), u = R.einheit;
         const da = kbSchonDa(e);
-        const nVor = KB.zeilen.length;
+        const nVor = kbAktivN();     /* a line without a bar goes before the parked block */
         let i = job.ziel === KB_OHNE_LEISTE ? (da ? da.i : null) : kbAuswahlIndex(R, job.ziel);
         /* the doorman is asked, not guessed at: his own verdict beforehand,
            and the clerk says afterwards which line it would have been */
@@ -39592,7 +39965,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 8f0438e5b2</span></p></div>
+         installation. <span style="color:var(--dim2)">· build ebe7b860b9</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -39736,7 +40109,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "8f0438e5b2";
+const BAU = "ebe7b860b9";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
