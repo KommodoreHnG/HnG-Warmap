@@ -14594,10 +14594,16 @@ function unitsScheibenZeichen(d, yReihe){
 /* The coloured disc with the town's symbol, left of the name. */
 function unitsNode(d, yReihe){
   const px = []; let n = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+  /* THE CENTROID COMES OUT OF THIS PASS. It used to be taken in a second
+     run over the same 13000 points with the same test, and an empty third
+     run stood in front of it. The count is the same count, so the sums are
+     gathered where the points are already being looked at. */
+  let sx = 0, sy = 0;
   for (let y=yReihe-40; y<yReihe+90; y++) for (let x=1050; x<1150; x++){
     const p = (y*UNITS_W + x)*4;
     if (unitsMax(d,p) - unitsMin(d,p) > 70){
       px.push([d[p], d[p+1], d[p+2]]); n++;
+      sx += x; sy += y;
       if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
     }
   }
@@ -14613,14 +14619,7 @@ function unitsNode(d, yReihe){
      winning class; in a ring from 36 to 46 out there must be few, because
      the disc has a dark border and the panel around it is grey. A busy map
      under the translucent bar fills the ring as well as the circle. */
-  let cx = 0, cy = 0;
-  if (n > 200){ for (const _ of px){} }
-  { let sx = 0, sy = 0, m = 0;
-    for (let y=yReihe-40; y<yReihe+90; y++) for (let x=1050; x<1150; x++){
-      const p = (y*UNITS_W + x)*4;
-      if (unitsMax(d,p) - unitsMin(d,p) > 70){ sx += x; sy += y; m++; }
-    }
-    cx = m ? Math.round(sx/m) : 1100; cy = m ? Math.round(sy/m) : yReihe + 45; }
+  const cx = n ? Math.round(sx/n) : 1100, cy = n ? Math.round(sy/n) : yReihe + 45;
   let drin = 0, drinKlasse = 0, gesamt = 0, ring = 0, ringGesamt = 0;
   const test = [SHOT_COL[0], SHOT_COL[1], SHOT_COL[2]][["US","GE","SU"].indexOf(u.klasse)];
   for (let y = cy-46; y <= cy+46; y++) for (let x = cx-46; x <= cx+46; x++){
@@ -16020,7 +16019,9 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
       }
     }
   }
-  const kasten = unitsForm(d);
+  /* the caller may have found the box already on this same buffer, and
+     kbTick does, to decide whether it is a new one */
+  const kasten = (quelle && quelle.kastenDa) ? quelle.kasten : unitsForm(d);
   R.form = kasten ? kasten.form : null; R.kastenOben = kasten ? kasten.oben : null;
   /* NO HEAD BOX, NO PICKED UNIT. The golden frame marks the card the game
      has picked, and the game only picks one while it shows that unit's box
@@ -19431,6 +19432,12 @@ async function kbTick(){
        locked, by hand or by the default */
     unitsTypSperren = (KB.karten || []).map((k, j) => kbFestTyp(KB.zeilen[KB.erste + j]) ? k.x0 : null).filter(x => x !== null);
     const kasten = unitsForm(d);
+    /* THE BOX IS LOOKED FOR ONCE A LOOK. unitsLesen looked for it again on
+       this very buffer a moment later, and the search costs two to four
+       bands of 520 columns by 68 rows: 70720 points in the usual case,
+       141440 where there is no box at all. The answer travels on the frame
+       the reader is handed anyway. */
+    F.kasten = kasten; F.kastenDa = true;
     const kk = kasten ? kbKastenKennung(d, kasten.oben, kasten.form) : null;
     let neu = kk !== null && !kbKastenGleich(kk, KB.kastenLetzte);
     /* A BOX THAT WAS REFUSED IS NOT OFFERED AGAIN AT ONCE. It used to be:
@@ -20227,6 +20234,24 @@ function gfZeileTinte(d, spalte, ay){
     for (let x = spalte; x <= bis; x++) if (gfHell(d, x, y) > 120) n++;
   return n;
 }
+/* ASKED ONCE PER READING. Two loops in the same beat ask the same lines:
+   the count of taken lines, and the search for an unread one. And on a
+   quiet beat the doorman hands the LAST reading back, whose points cannot
+   have changed. One line is 33 rows by 501 columns, 16533 points, and a
+   full window holds 22 of them: 363726 points a beat, four beats a second.
+   The answers are kept on the reading itself, so a new picture brings a
+   new sheet of answers and nothing stale can survive it.
+   THIS RESTS ON ONE THING: unitsRahmen hands out a FRESH ImageData on
+   every call, even when the surface itself stands. A standing buffer, the
+   way unitsRahmenSchnell hands out unitsPuffer, would make this sheet
+   stale on every quiet beat, and the fault would show as a line that is
+   never read again, not as a crash. */
+function gfTinte(R, spalte, ay){
+  const buch = R.tinte || (R.tinte = {});
+  const s = spalte + ":" + ay;
+  const v = buch[s];
+  return v !== undefined ? v : (buch[s] = gfZeileTinte(R.d, spalte, ay));
+}
 /* The town of the battle, from the head band over the table. */
 async function gfStadt(c){
   const t = await unitsText(c, 60, 330, 1340, 126, null, "schlicht");
@@ -20368,7 +20393,7 @@ function pgVerarbeiten(R){
   for (const s of R.seiten){
     for (let k = 0; k < R.sichtbar; k++){
       const i = R.erste + k, key = pgKey(s.platz, i);
-      if (gfZeileTinte(R.d, s.spalte, R.anker + k*GF_ZEILE) >= GF_TINTE_MIN){
+      if (gfTinte(R, s.spalte, R.anker + k*GF_ZEILE) >= GF_TINTE_MIN){
         PG.ende[s.platz] = Math.max(PG.ende[s.platz] || 0, i + 1);
         /* a line with ink is not empty - but one already set aside after
            three failed tries stays set aside, or the dead end comes back */
@@ -20425,7 +20450,7 @@ async function pgTick(){
       for (let k = 0; k < R.sichtbar; k++){
         const i = R.erste + k, key = pgKey(s.platz, i);
         if (PG.namen.has(key) || PG.leer.has(key)) continue;
-        if (gfZeileTinte(R.d, s.spalte, R.anker + k*GF_ZEILE) < GF_TINTE_MIN){ PG.leer.add(key); continue; }
+        if (gfTinte(R, s.spalte, R.anker + k*GF_ZEILE) < GF_TINTE_MIN){ PG.leer.add(key); continue; }
         ziel = {s, i, k}; break;
       }
       if (ziel) break;
@@ -20506,7 +20531,7 @@ async function pgBild(datei){
       for (let k = 0; k < R.sichtbar; k++){
         const i = R.erste + k, key = pgKey(s.platz, i);
         if (PG.namen.has(key) || PG.leer.has(key)) continue;
-        if (gfZeileTinte(R.d, s.spalte, R.anker + k*GF_ZEILE) < GF_TINTE_MIN){ PG.leer.add(key); break; }
+        if (gfTinte(R, s.spalte, R.anker + k*GF_ZEILE) < GF_TINTE_MIN){ PG.leer.add(key); break; }
         const g = await gfName(R.c, s.spalte, R.anker + k*GF_ZEILE);
         if (!PG) return;
         if (g) PG.namen.set(key, {name: g.name, zuv: g.zuv, f: s.f});
@@ -20793,6 +20818,91 @@ function raeumeSchliessen(ausser){
    time ("eng", "eng+deu+pol+ces+tur") and rebuilds the worker through the
    reader's chain. The default OCR_SPRACHEN stays "eng"; ocrZeiten counts
    under whatever set is in place. */
+/* ---- WHAT ONE LOOK COSTS IN PICTURES ------------------------------------
+   The wall clock says how long a run took; it does not say how much of
+   that was the main thread copying pixels, and that is the part the
+   Kommodore feels as a stutter. So the probe counts the copies
+   themselves: every drawImage, every getImageData, every putImageData and
+   every createImageBitmap, with the points each one moved and the time
+   its own call took. The SUM OF THE CALLS is the number that counts here,
+   not the clock: a look waiting on the text reader is idle, a look that
+   moves thirty-three megabytes is not.
+   The counters are hung on the canvas prototypes for the length of a
+   probe run and taken off again in kbProbeBild's finally, so the live
+   reader runs on the untouched functions and pays nothing at all.
+   Read afterwards as window.__BILDZAEHLER, or from the run's own return
+   value as E.kosten. "flaechen" lists the calls by kind and size, so a
+   picture fetched twice from the same source shows as a count of two. */
+const kbKosten = {draw: 0, drawPx: 0, getData: 0, getPx: 0, putData: 0, putPx: 0,
+                bitmap: 0, bitmapPx: 0, msMain: 0, flaechen: null};
+let kbKostenAlt = null;
+function kbKostenNotiz(art, w, h){
+  const k = art + " " + Math.abs(Math.round(w || 0)) + "x" + Math.abs(Math.round(h || 0));
+  kbKosten.flaechen[k] = (kbKosten.flaechen[k] || 0) + 1;
+}
+function kbKostenAn(){
+  if (kbKostenAlt || typeof CanvasRenderingContext2D === "undefined") return;
+  kbKosten.draw = 0; kbKosten.drawPx = 0; kbKosten.getData = 0; kbKosten.getPx = 0;
+  kbKosten.putData = 0; kbKosten.putPx = 0; kbKosten.bitmap = 0; kbKosten.bitmapPx = 0;
+  kbKosten.msMain = 0; kbKosten.flaechen = {};
+  const P = CanvasRenderingContext2D.prototype;
+  const A = kbKostenAlt = {draw: P.drawImage, get: P.getImageData, put: P.putImageData,
+                           bmp: typeof createImageBitmap === "function" ? createImageBitmap : null};
+  P.drawImage = function(bild, ...a){
+    const t = performance.now();
+    const r = A.draw.call(this, bild, ...a);
+    kbKosten.msMain += performance.now() - t;
+    /* the points written: the destination rectangle where one is given,
+       otherwise the picture's own size */
+    const w = a.length >= 8 ? a[6] : a.length >= 4 ? a[2] : (bild && (bild.width || bild.videoWidth)) || 0;
+    const h = a.length >= 8 ? a[7] : a.length >= 4 ? a[3] : (bild && (bild.height || bild.videoHeight)) || 0;
+    kbKosten.draw++; kbKosten.drawPx += Math.abs(w*h); kbKostenNotiz("draw", w, h);
+    return r;
+  };
+  P.getImageData = function(x, y, w, h, ...a){
+    const t = performance.now();
+    const r = A.get.call(this, x, y, w, h, ...a);
+    kbKosten.msMain += performance.now() - t;
+    kbKosten.getData++; kbKosten.getPx += Math.abs(w*h); kbKostenNotiz("get", w, h);
+    return r;
+  };
+  P.putImageData = function(id, ...a){
+    const t = performance.now();
+    const r = A.put.call(this, id, ...a);
+    kbKosten.msMain += performance.now() - t;
+    const w = (id && id.width) || 0, h = (id && id.height) || 0;
+    kbKosten.putData++; kbKosten.putPx += w*h; kbKostenNotiz("put", w, h);
+    return r;
+  };
+  /* only the synchronous part of the call lands in msMain - the decoding
+     runs off the main thread, the copy of the source does not */
+  if (A.bmp) window.createImageBitmap = function(...a){
+    const t = performance.now();
+    const p = A.bmp.apply(window, a);
+    kbKosten.msMain += performance.now() - t;
+    const q = a[0] || {};
+    const w = a.length >= 5 ? a[3] : (q.width || q.videoWidth || 0);
+    const h = a.length >= 5 ? a[4] : (q.height || q.videoHeight || 0);
+    kbKosten.bitmap++; kbKosten.bitmapPx += Math.abs(w*h); kbKostenNotiz("bitmap", w, h);
+    return p;
+  };
+}
+function kbKostenStand(){
+  return {draw: kbKosten.draw, drawPx: kbKosten.drawPx,
+          getData: kbKosten.getData, getPx: kbKosten.getPx,
+          putData: kbKosten.putData, putPx: kbKosten.putPx,
+          bitmap: kbKosten.bitmap, bitmapPx: kbKosten.bitmapPx,
+          msMain: Math.round(kbKosten.msMain*10)/10,
+          flaechen: Object.assign({}, kbKosten.flaechen || {})};
+}
+function kbKostenAus(){
+  if (!kbKostenAlt) return;
+  const A = kbKostenAlt; kbKostenAlt = null;
+  const P = CanvasRenderingContext2D.prototype;
+  P.drawImage = A.draw; P.getImageData = A.get; P.putImageData = A.put;
+  if (A.bmp) window.createImageBitmap = A.bmp;
+  window.__BILDZAEHLER = kbKostenStand();
+}
 async function kbProbeBitmap(quelle){
   if (typeof quelle === "string"){
     /* a URL: fetched when the page may, else through an image element */
@@ -20825,12 +20935,14 @@ async function kbProbeBild(quelle, opts){
   const tonVorher = kbTon;
   if (o.ton !== true) kbTon = false;
   const E = {zeilen: [], leiste: null, ort: null, gelesen: null, dauerMs: 0, ocrZeiten: null,
-             sprachen: ocrSprachenAktiv, status: null, fehler: null, rahmen: null};
+             sprachen: ocrSprachenAktiv, status: null, fehler: null, rahmen: null, kosten: null};
   const handVorher = {an: KB.handAn, wahl: KB.handWahl};
   /* the font book is put back when the run ends: within the run the reader
      learns as it does live, afterwards nothing of a test picture remains */
   const buchVorher = ocrBuch;
   let f = null;
+  /* the picture counter, for a run that writes nothing - see kbKostenAn */
+  if (KB.probe) kbKostenAn();
   try {
     /* 1 the picture, held still as a bitmap (bildLive) */
     f = await kbProbeBitmap(quelle);
@@ -20855,7 +20967,10 @@ async function kbProbeBild(quelle, opts){
       KB.letzte = null; KB.vorige = null; KB.reiheKennung = null; KB.reiheAlt = null;
     }
     KB.ortKennung = ok;
-    /* 3 the quick look: bar, cards, sides, signs, the pick */
+    /* 3 the quick look: bar, cards, sides, signs, the pick. The box is
+         looked for here and handed on, exactly as the tick does it, so the
+         bench walks the same branch it is meant to watch */
+    F.kasten = unitsForm(d); F.kastenDa = true;
     const G = await unitsLesen(F, null, null, "bild");
     if (!KB) throw new Error("the room was closed during the run");
     kbVerarbeiten(G);
@@ -20954,8 +21069,10 @@ async function kbProbeBild(quelle, opts){
       tuer: E.gelesen && E.gelesen.ziel === z.i ? E.gelesen.tuer : null}));
     E.status = KB.status;
     E.dauerMs = Math.round(performance.now() - t0);
+    E.kosten = kbKostenStand();
     return E;
   } finally {
+    kbKostenAus();          /* the live reader gets its own functions back */
     if (f && f.close) f.close();
     kbTon = tonVorher;
     ocrBuch = buchVorher;          /* what the run learnt stays in the run */
@@ -21131,11 +21248,20 @@ function suchIndexOffen(a){
      Unterkantensuche kostete gemessen 2638 statt 1168 ms; nicht die
      Rechnung war teuer, sondern die zwanzig Einzelabrufe. */
   const bw = x1 - x0, bh = y1 - y0;
-  let d;
-  try {
-    d = a.tmp.getContext("2d", {willReadFrequently:true})
-             .getImageData(x0, y0, bw, H - y0).data;
-  } catch(e){ return null; }
+  /* THE SAME POINTS, NOT A SECOND FETCH. maskeAus read this surface whole
+     and nothing has drawn on it since, so the window is taken out of those
+     points by index instead of asked of the canvas again. The stride is
+     then the whole width and the window's corner is the offset. Without
+     the kept points the old fetch still stands, with the old stride. */
+  let d, breite = bw, vx = 0, vy = 0;
+  if (a.px && a.px.width === W && a.px.height === H){
+    d = a.px.data; breite = W; vx = x0; vy = y0;
+  } else {
+    try {
+      d = a.tmp.getContext("2d", {willReadFrequently:true})
+               .getImageData(x0, y0, bw, H - y0).data;
+    } catch(e){ return null; }
+  }
   /* Traegt diese Zeile des Ausschnitts ueberall fast denselben Wert?
      Helligkeit als hellster Kanal - dasselbe Mass, mit dem maskeBauen
      ohnehin arbeitet. Der Abbruch bei der ersten Ueberschreitung macht
@@ -21143,7 +21269,7 @@ function suchIndexOffen(a){
      Punkten. */
   const vollton = (y) => {
     let lo = 255, hi = 0;
-    const z = y*bw;
+    const z = (vy + y)*breite + vx;
     for (let x = 0; x < bw; x++){
       const p = (z + x) << 2;
       const r = d[p], g = d[p+1], b = d[p+2];
@@ -21233,7 +21359,15 @@ function maskeAus(quelle, feld, maxb){
   tmp.width = W; tmp.height = H;
   const tc = tmp.getContext("2d", {willReadFrequently:true});
   tc.drawImage(quelle, bw*F.x, bh*F.y, bw*F.w, bh*F.h, 0, 0, W, H);
-  const mk = maskeBauen(tc.getImageData(0, 0, W, H));
+  /* ONE READ PER SURFACE PER BEAT. The points are kept instead of thrown
+     away. ortMaske used to fetch the very same rectangle a second time
+     from this same canvas with nothing drawn in between: 1100 by 743 is
+     817300 points, 3,3 megabytes, once every ortAnlauf. suchIndexOffen
+     fetched a window inside it a third time, 87300 points, five times a
+     second. maskeBauen only reads what it is given, so the kept points
+     are exactly the points that were read. */
+  const px = tc.getImageData(0, 0, W, H);
+  const mk = maskeBauen(px);
   /* Welchen Anteil der Bildschirmbreite dieses Arbeitsbild zeigt. Ohne
      das kann netzMass seine Scheibengroesse nicht auf die
      Kartenfeld-Konvention normieren - eine Schwelle in Bildpunkten
@@ -21256,7 +21390,7 @@ function maskeAus(quelle, feld, maxb){
     sx += q % W; sy += (q/W)|0; sn++;
   }
   const schwer = sn ? {x: sx/sn, y: sy/sn, n: sn} : null;
-  return {mk, W, H, tmp, feld:F, k, tx:-bw*F.x*k, ty:-bh*F.y*k, bw, bh, schwer,
+  return {mk, W, H, tmp, px, feld:F, k, tx:-bw*F.x*k, ty:-bh*F.y*k, bw, bh, schwer,
           bildwerte: mk.bildwerte};
 }
 /* Eine Lage vom Arbeitsbild ins Quellbild und zurueck. Ohne das kann eine
@@ -21339,6 +21473,8 @@ function kartenAusBild(quelle, melde, opt){
       const aS = a.W > 1250 ? maskeAus(quelle, F, STERN_BREITE) : a;
       const st = aS ? sternLage(aS.mk, punkte,
                        {spanne: spanneF, sFest: o.sFest > 0 ? o.sFest * aS.k : 0}) : null;
+      /* the star map works on its mask, nobody asks it for points again */
+      if (aS && aS !== a) aS.px = null;
       if (st){
         const q = trZuQuelle({s: st.s, ox: st.ox, oy: st.oy}, aS);
         tr = trAusQuelle(q, a);
@@ -21385,6 +21521,7 @@ function kartenAusBild(quelle, melde, opt){
       }
     }
     if (!bestes || g.quote > bestes.g.quote) bestes = {a, tr, g};
+    if (bestes.a !== a) a.px = null;   /* only the best picture keeps its points */
     /* Sitzt der Ausschnitt schon gut, muss das Vollbild nicht mehr sein. */
     if (g.quote >= PASS_GUT) break;
   }
@@ -24322,7 +24459,12 @@ function ortKastenmittel(g, W, H, r){
    handabgelesenen Namen gefunden. */
 function ortMaske(a){
   const W = a.W, H = a.H;
-  const d = a.tmp.getContext("2d", {willReadFrequently:true})
+  /* The picture is already in hand. maskeAus kept what it read and nothing
+     has drawn on the surface since, so this is the same rectangle, point
+     for point. Without the kept points the old fetch still stands. */
+  const d = (a.px && a.px.width === W && a.px.height === H)
+    ? a.px.data
+    : a.tmp.getContext("2d", {willReadFrequently:true})
              .getImageData(0, 0, W, H).data;
   const n = W*H;
   const mn = new Uint8Array(n), m = new Uint8Array(n);
@@ -24664,6 +24806,9 @@ function ortAnlauf(video){
   if (!a || !a.tmp) return ortNein("kein_bild");
 
   const fund = ortSuchen(a);
+  /* the points were kept for ortMaske alone; from here only numbers are
+     read from a, and the reading below waits on the text recogniser */
+  a.px = null;
   if (!fund) return null;              /* ortSuchen hat den Grund gezaehlt */
 
   /* Der Scheibendurchmesser in Quellpunkten, geschaetzt aus der
@@ -38847,7 +38992,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 009049b81c</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 130538b8cf</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -38991,7 +39136,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "009049b81c";
+const BAU = "130538b8cf";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
