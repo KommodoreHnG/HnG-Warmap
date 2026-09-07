@@ -96,6 +96,35 @@ button,input,select,textarea{font:inherit;color:inherit}
 #brand{display:flex;flex-direction:column;gap:1px;min-width:0}
 #brand b{font-size:19px;font-weight:600;white-space:nowrap;color:var(--accent)}
 #brand span{font-size:10px;color:var(--dim2);text-transform:uppercase;letter-spacing:1px}
+/* DER EIGENE STATUS, gleich neben der Marke. Er gehoert nicht in ein
+   Fenster: wer ihn nicht sieht, vergisst ihn, und ein vergessener Status
+   ist schlechter als keiner.
+   Eine gewoehnliche Auswahlliste, kein eigenes Menue - auf dem Telefon
+   oeffnet das Geraet dafuer seine eigene Liste, und die ist mit dem Daumen
+   zu treffen. Der Punkt davor traegt die Farbe, wie am Sync-Knopf. */
+#me-status{display:flex;align-items:center;gap:6px;flex:0 0 auto;
+  background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
+  padding:3px 9px}
+#me-status .dot{width:8px;height:8px;border-radius:50%;background:var(--dim2);flex:0 0 auto}
+#me-status select{background:transparent;border:0;padding:0;cursor:pointer;
+  font-family:var(--schmal);text-transform:uppercase;letter-spacing:.07em;font-size:12.5px}
+#me-status select option{background:var(--panel);color:var(--text);
+  text-transform:none;letter-spacing:0}
+/* Auf dem Telefon steht in der ersten Zeile nur noch Marke, Status und die
+   drei rechten Knoepfe - die Raumleiste ist seit heute die zweite Zeile.
+   Enger, damit auf 375 Bildpunkten nichts hinausfaellt. */
+@media (max-width: 760px){
+  /* NUR DER PUNKT. Gemessen bei 375x812: mit dem Wort daneben sind Marke,
+     Status und die drei rechten Knoepfe zusammen 438 Punkte breit, und die
+     Kopfzeile wuchs von zwei auf drei Zeilen, von 111 auf 141 Punkte. Die
+     Farbe sagt dasselbe wie das Wort. Die Auswahl bleibt darunter liegen und
+     deckt den ganzen Kasten ab, damit ein Tipper sie trifft; das Geraet
+     zeigt dann seine eigene Liste mit allen vier Woertern. */
+  #me-status{padding:3px 7px;gap:0;position:relative;min-width:26px;justify-content:center}
+  #me-status .dot{width:11px;height:11px}
+  #me-status select{position:absolute;left:0;top:0;right:0;bottom:0;
+    width:100%;height:100%;opacity:0;font-size:16px}
+}
 #tally{display:flex;gap:6px}
 .tile{display:flex;flex-direction:column;gap:0;padding:3px 11px 3px 9px;border-left:3px solid var(--f);
   background:rgba(0,0,0,.28);min-width:78px}
@@ -1705,6 +1734,10 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 <div id="app">
   <header id="top">
     <div id="brand"><b id="clan-name">War Map</b><span id="war-label">Heroes &amp; Generals</span></div>
+    <!-- Der eigene Status. Die Eintraege stehen NICHT hier, sondern in der
+         Liste STATUS im Skript - sonst muesste man sie an zwei Stellen
+         pflegen, und die eine wuerde vergessen. -->
+    <div id="me-status"><span class="dot"></span><select id="st-wahl" aria-label="Status"></select></div>
     <!-- THE CAPTURE ROOMS AND THE BOARD STAND AT THE LEFT EDGE. They used
          to sit inside #top-right, whose margin-left:auto pushes that whole
          box to the right-hand side - an order:-1 then only sorted them to
@@ -4714,11 +4747,42 @@ function zuordIstFeld(art, id){
   const {fest} = zuordZahlen({art, id});
   return fest > 0 ? {ist: fest} : {};
 }
+/* ONE TEAM, ONE ACTIVE ORDER. Returns a map from team id onto the order of
+   mine that team already follows. Bound are the rows zuordNachruecken lets stand:
+   the order is still there, no draft, not another side's mark and not done.
+   A done order, one that is gone and a draft hold nobody. The row on b
+   itself is left out - rewriting it is what the caller is doing. Only my
+   own rows are read: a team id is unique inside one depot, not across them.
+   The orders are only looked up when a team really sits somewhere else. */
+function zuordBelegung(b, ats){
+  const suche = new Set(ats || []), treffer = new Map();
+  const zeilen = meineZuord().filter(z => (!b || z.art !== b.art || String(z.id) !== String(b.id))
+    && z.ats.some(id => suche.has(id)));
+  if (!zeilen.length) return treffer;
+  const alle = alleBefehle(true);
+  for (const z of zeilen){
+    const x = zuordBefehl(z, alle);
+    if (!x || x.entwurf || x.fremd || x.zs === "fertig") continue;
+    for (const id of z.ats) if (suche.has(id) && !treffer.has(id)) treffer.set(id, x);
+  }
+  return treffer;
+}
 /* my row on an order; an empty list clears it. Only my own key is ever
-   written - the server keeps everybody to their own rows anyway */
+   written - the server keeps everybody to their own rows anyway.
+   A team that follows another order is turned away here, whichever road
+   brought it: the pick takes it off its old row first, a second machine or
+   a later entry point does not. */
 function zuordSchreiben(b, ats, st){
   const liste = [...new Set((ats || []).filter(Boolean))];
   if (!liste.length){ zuordLoeschen(b); return true; }
+  const belegt = zuordBelegung(b, liste);
+  for (const id of liste){
+    const x = belegt.get(id);
+    if (!x) continue;
+    const d = myDepotAlle().find(q => q.id === id);
+    toast(`${d ? (d.name || atName(d.k)) : id} already follows ${x.name}.`);
+    return false;
+  }
   const ok = stamp("zuord", zuordSchluessel(b.art, b.id) + ":" + S.me,
                    {ats: liste, grps: [], st: st ? 1 : 0}, {n: S.name || ""});
   if (ok) save();
@@ -4776,6 +4840,29 @@ const befehlArtName = b => b.art === "arrow" ? (b.v && b.v.luft ? "Drop" : "Atta
   : (b.art === "area" && b.v && b.v.aufkl ? "Recon" : (ZUORD_ART_NAME[b.art] || b.art));
 /* who made the order: the arrow carries it in itself, the others in their row */
 const befehlWer = b => werWar(b.art === "arrow" ? b.v : (S[b.art] && S[b.art][b.id]));
+/* ---- YOUR OWN ORDER IS NOT YOURS TO ACCEPT (07.09.2026) ----
+   Whoever wrote an order does not answer it: he picks no teams onto it, he
+   confirms no row the chain moved onto it, he commits nothing to his own
+   arrow, and he does not take a role he asked for himself.
+   The bar sits in the writing functions - zuordZuweisen, zuordBestaetigen,
+   setJoin, rolleNehmen - so a second window or a page built a minute ago
+   cannot walk around it. The buttons stay where they are and say why.
+   The author is read from the row that carries him; b.by is taken when the
+   caller already has it. */
+const EIGEN_BEFEHL_WORT = "You wrote that order yourself.";
+const EIGEN_ROLLE_WORT  = "You asked for that role yourself.";
+function befehlUrheber(b){
+  if (!b) return null;
+  if (b.by !== undefined && b.by !== null) return b.by;
+  /* arrows live in a list, the other three in a bucket under their id */
+  if (b.art === "arrow"){
+    const a = liveArrows().find(x => String(x.id) === String(b.id));
+    return a ? a.by : null;
+  }
+  const e = S[b.art] && S[b.art][b.id];
+  return e ? e.by : null;
+}
+const eigenerBefehl = b => { const w = befehlUrheber(b); return !!(S.me && w && w === S.me); };
 /* when an order went active: the ok row's time, else the moment its author
    set it active (aktT, written by zustandSetzen), else the order's own
    time as a last resort for rows from before aktT */
@@ -4808,6 +4895,8 @@ function zuordFreieTeams(){
 function zuordZuweisen(b, ids){
   const neu = (ids || []).filter(Boolean);
   if (!neu.length) return false;
+  /* picking is accepting, and the author does not accept his own order */
+  if (eigenerBefehl(b)){ toast(EIGEN_BEFEHL_WORT); return false; }
   for (const z of meineZuord()){
     if (z.art === b.art && String(z.id) === String(b.id)) continue;
     const rest = z.ats.filter(id => !neu.includes(id));
@@ -4818,8 +4907,12 @@ function zuordZuweisen(b, ids){
   for (const id of neu) if (!ats.includes(id)) ats.push(id);
   return zuordSchreiben(b, ats, 1);
 }
-/* the owner's word on a row that moved along the chain */
-const zuordBestaetigen = z => zuordSchreiben({art: z.art, id: z.id}, z.ats, 1);
+/* the owner's word on a row that moved along the chain. Not on an order of
+   his own - such a row can only be declined */
+const zuordBestaetigen = z => {
+  if (eigenerBefehl({art: z.art, id: z.id})){ toast(EIGEN_BEFEHL_WORT); return false; }
+  return zuordSchreiben({art: z.art, id: z.id}, z.ats, 1);
+};
 /* THE CHAIN MOVES THE TEAMS. A done order with a next open step in its
    operation hands every one of my assignments on to that step, pending my
    word; without a next step the row is cleared. Teams that left the depot
@@ -4848,7 +4941,10 @@ function zuordNachruecken(){
       if (ats.length !== z.ats.length && zuordSchreiben(b, ats, z.st)) getan++;
       continue;
     }
-    const weiter = befehlNachfolger(b, alle);
+    let weiter = befehlNachfolger(b, alle);
+    /* the chain hands nothing onto an order of my own: nobody could ever
+       confirm that row. Those teams come free instead */
+    if (weiter && eigenerBefehl(weiter)) weiter = null;
     if (weiter && ats.length){
       const da = zuordVon(weiter).find(x => x.mine);
       /* the union carries depot teams only */
@@ -4977,8 +5073,10 @@ function ordersDialog(tab){
       if (z.st === 0){
         stand += ` <b style="color:var(--su)">pending (moved by chain), confirm</b>`;
         /* both words go for the whole row: confirm keeps every team on it,
-           decline clears it. Release takes one team out */
-        knopf = `<button class="btn" data-zbest="${esc(z.key)}" title="Confirm every team on this row" ${klein}>Confirm</button>
+           decline clears it. Release takes one team out. On an order of my
+           own only decline is left */
+        const eigB = !!b && eigenerBefehl(b);
+        knopf = `<button class="btn" data-zbest="${esc(z.key)}" title="${eigB ? esc(EIGEN_BEFEHL_WORT) : "Confirm every team on this row"}" ${klein}${eigB ? " disabled" : ""}>Confirm</button>
           <button class="btn" data-zab="${esc(z.key)}" title="Clear every team on this row" ${klein}>Decline</button>`;
       } else knopf = `<button class="btn" data-zfrei="${esc(d.id)}" ${klein}>Release</button>`;
     }
@@ -5004,7 +5102,8 @@ function ordersDialog(tab){
       <td>${fest}${pend ? ` <small style="color:var(--su)">+${pend} pending</small>` : ""}</td>
       <td style="text-align:left">${esc(befehlWer(b))}</td>
       <td><button class="btn" data-zwahl="${esc(b.art)}" data-zid="${esc(String(b.id))}" ${klein}${
-        frei ? "" : ' disabled title="No free team"'}>Assign my team \u2026</button></td></tr>`;
+        eigenerBefehl(b) ? ` disabled title="${esc(EIGEN_BEFEHL_WORT)}"`
+        : frei ? "" : ' disabled title="No free team"'}>Assign my team \u2026</button></td></tr>`;
   }).join("");
 
   openDlg(`
@@ -5989,8 +6088,36 @@ function rolleKannIch(k, men){
   if (!r || r.immer) return true;
   const liste = men || meineSoldaten();
   if (!liste.length) return true;
+  /* Ein eingetragener Mann ohne eine einzige Waffe und ohne Fahrzeug ist
+     genauso unbekannt wie ein fehlender. Traegt KEINER von ihnen etwas, gilt
+     das Arsenal als nicht gefuehrt und es wird nichts behauptet: seit dem
+     05.09.2026 sperrt das Kreuz den Annahmeknopf, und eine falsche Sperre
+     hielte jemanden aus einem Gefecht, das er fahren kann. */
+  if (!liste.some(s => (s.w && s.w.length) || (s.v && s.v.length))) return true;
   for (const s of liste) if (r.kann(faehigkeiten(s), s)) return true;
   return false;
+}
+/* der Satz hinter dem Kreuz: warum diese Rolle nicht zu bedienen ist */
+const rolleWarum = k => (kampfRolle(k) || {}).warum || "your soldiers cannot fill it";
+/* Der Annahmeknopf einer Anforderung. Wer die Rolle nach eigenem Arsenal
+   nicht bedienen kann, sieht die Anforderung weiter, kann sie aber nicht
+   nehmen: der Knopf ist aus, das rote Kreuz liegt darueber, der Grund steht
+   im title. Der Umschlag traegt den title ein zweites Mal, weil ein
+   abgeschalteter Knopf keine Mauszeiger-Ereignisse bekommt und seinen
+   eigenen title deshalb nicht zeigt. */
+function rolleNehmKnopf(r, ich, kann, klein){
+  if (ich)  return `<button class="btn" data-rolle-frei="${esc(r.id)}" ${klein}>Release</button>`;
+  /* EINE STELLE ENTSCHEIDET, OB "TAKE IT" GEHT. Zwei Gruende sperren:
+     die eigene Anforderung (der Auftraggeber: "Eigene Befehle koennen
+     natuerlich nicht angenommen werden") und die Rolle, die die eigene
+     Ausruestung nicht hergibt. Beide standen erst an je eigener Stelle und
+     haben sich gegenseitig ueberschrieben. */
+  if (r.mine) return `<button class="btn" ${klein} disabled title="${esc(EIGEN_ROLLE_WORT)}">Take it</button>`;
+  if (kann) return `<button class="btn" data-rolle-nimm="${esc(r.id)}" ${klein}>Take it</button>`;
+  const g = esc(rolleWarum(r.rolle));
+  return `<span title="${g}" style="position:relative;display:inline-block"
+    ><button class="btn" ${klein} disabled title="${g}">Take it</button
+    ><span style="position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;color:var(--su);font-size:15px;font-weight:700;pointer-events:none">\u2715</span></span>`;
 }
 
 /* the map plate is counted for the whole map at most twice a second */
@@ -6054,14 +6181,23 @@ function rolleWeg(id){
   return true;
 }
 /* take a role. Only one at a time: the one held before is let go, and the
-   toast says so. Taking a role your soldiers cannot fill is allowed - the
-   asker decides, not the tool - but it is recorded on the row. */
+   toast says so. A role the own arsenal does not cover is barred here as
+   well, not only on the button: the panel is not rebuilt on every click, and
+   the same request hangs at the town and in the orders inbox. */
 function rolleNehmen(id){
   /* the replay only reads: an acceptance held now falls outside the chosen
      moment, and the one-role rule would not see it */
   if (zeitReise) return false;
   const r = rolleZeile(id);
   if (!r){ toast("That request is gone."); return false; }
+  /* nobody promises what his men cannot do. rolleKannIch says nothing while
+     no arsenal is entered, and then nothing is barred either. */
+  if (!rolleKannIch(r.rolle)){
+    toast(`${kampfRolleName(r.rolle)}: ${rolleWarum(r.rolle)}.`);
+    return false;
+  }
+  /* the asker is not one of the answers */
+  if (r.mine){ toast(EIGEN_ROLLE_WORT); return false; }
   /* the runner cap, before a single row is written: the player log runs
      beside a role the battle does not hang on, and nobody logs twice */
   if (r.rolle === "runner"){
@@ -6079,15 +6215,15 @@ function rolleNehmen(id){
     if (alt && z.drin) warDrin = z.drin;   /* only a battle we can still name */
     stamp("rollezu", z.key, null, {n: S.name || ""});
   }
-  const kann = rolleKannIch(r.rolle);
-  if (!stamp("rollezu", id + ":" + S.me, {t: jetzt(), st: 1, ok: kann ? 1 : 0},
+  /* ok bleibt im Wert stehen: aeltere Staende und andere Rechner lesen es */
+  if (!stamp("rollezu", id + ":" + S.me, {t: jetzt(), st: 1, ok: 1},
              {n: S.name || ""})) return false;
   save();
   const wo = `${kampfRolleName(r.rolle)} at ${MAP.n[r.stadt][0]}`;
   /* walking out of a battle you said you were in is worth a clear word */
   toast(warDrin ? `Took ${wo}. You walk out of a running battle: ${vorher}, in for ${otMmSs(jetzt() - warDrin)}.`
       : vorher ? `Took ${wo}. You left ${vorher}.`
-               : kann ? `Took ${wo}.` : `Took ${wo}. Your soldiers cannot fill it, the asker sees that.`);
+               : `Took ${wo}.`);
   return true;
 }
 function rolleFrei(id){
@@ -6182,8 +6318,7 @@ function rolleAbschnitt(i){
         r.text ? ` \u00b7 ${esc(r.text)}` : ""}</div>
       <div class="hint">by ${esc(r.name)} \u00b7 ${esc(alterText(r.t))} \u00b7 ${rolleNehmerText(an)}</div>
       <div class="row" style="margin-top:4px">
-        <button class="btn" data-rolle-${ich ? "frei" : "nimm"}="${esc(r.id)}" ${klein}>${
-          ich ? "Release" : "Take it"}</button>
+        ${rolleNehmKnopf(r, ich, kann, klein)}
         ${r.weg && darfAnf ? `<button class="btn" data-rolle-weg="${esc(r.id)}" ${klein}>Remove</button>` : ""}
       </div>${rolleFrageZeile(r.id, meinZ)}${rolleRausZeile(r.id, meinZ)}</div>`;
   }).join("");
@@ -6259,8 +6394,7 @@ function rollePostfachInhalt(){
       <td style="text-align:left;color:var(--dim2)">${rolleNehmerText(an)}</td>
       <td style="text-align:left;color:var(--dim2)">${esc(r.name)} \u00b7 ${esc(alterText(r.t))}</td>
       <td style="white-space:nowrap">
-        <button class="btn" data-rolle-${ich ? "frei" : "nimm"}="${esc(r.id)}" ${klein}>${
-          ich ? "Release" : "Take it"}</button>${
+        ${rolleNehmKnopf(r, ich, kann, klein)}${
         r.weg && darfAnf ? ` <button class="btn" data-rolle-weg="${esc(r.id)}" ${klein}>Remove</button>` : ""}</td>
     </tr>`;
   }).join("");
@@ -6279,7 +6413,7 @@ function rollePostfachInhalt(){
         You can hold one role at a time.</div>
       ${rolleFrageZeile(mein.id, meinZu)}${rolleRausZeile(mein.id, meinZu)}` : ""}
     <div class="note">Click a row to jump to the town. A cross marks a role your own soldiers cannot
-      fill; you may still take it. ${darfAnf
+      fill. ${darfAnf
         ? "Open a town that is fighting and use <b>Ask for roles</b> to add one."
         : esc(rechtSatz("anfordern"))}</div>`;
 }
@@ -9412,9 +9546,13 @@ function setMyArms(arms){
   if (anonAn()) anonSchreiben(arms); else depotSchreiben({arms});
 }
 function setJoin(arrowId, n){
+  /* a commitment answers somebody's order; the author does not answer his
+     own arrow. Taking an old one back to nothing stays open */
+  if (n && eigenerBefehl({art: "arrow", id: arrowId})){ toast(EIGEN_BEFEHL_WORT); return false; }
   const k = `${arrowId}:${S.me}`;
   S.join[k] = {v: n || null, t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`join:${k}`); save();
+  return true;
 }
 function setSpot(town, list){
   if (!darf("aufklaerung")) return darfNicht("aufklaerung");
@@ -12058,7 +12196,7 @@ function arrowDialog(a){
       ${!fremd && a.luft ? `<p>${paraTextSicher(paraVorratText)}</p>` : ""}
       ${!fremd && (a.sym || a.luft) ? `<p>${paraTextSicher(() => paraErfuellbarText(paraBefehlTypen(a), {art: "arrow", id: a.id}))}</p>` : ""}
       ${fremd ? "" : `<p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
-          <b>${gesamt}</b> assault teams.` : "Nobody has committed to this move yet."}</p>
+          <b>${gesamt}</b> assault teams.` : "Nobody has committed to this arrow yet."}</p>
       <p>${sammelText(a)}</p>`}</div>
     <div class="dlg-b">
       ${zielGenommen(a) ? `<div class="note">Target taken, mark it done.</div>` : ""}
@@ -12072,7 +12210,8 @@ function arrowDialog(a){
         return `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Assigned: <b>${fest}</b> team${fest === 1 ? "" : "s"}${
           offen ? ` (${offen} pending)` : ""}</span>
-        <button class="btn" id="a-zuord" style="font-size:11px">Assign my team \u2026</button>
+        <button class="btn" id="a-zuord" style="font-size:11px"${
+          eigenerBefehl({art: "arrow", id: a.id, by: a.by}) ? ` disabled title="${esc(EIGEN_BEFEHL_WORT)}"` : ""}>Assign my team \u2026</button>
       </div>`;
       })()}
       <div class="row" style="align-items:center">
@@ -33610,6 +33749,122 @@ function handySchalter(){
 }
 const amHandy = () => matchMedia("(max-width: 760px)").matches;
 
+/* ---- Der eigene Status ------------------------------------------------
+   Vier Zustaende, so wie sie im Blatt stehen. Sie sagen dem Clan, ob man
+   ansprechbar ist - mehr nicht, deshalb auch keine fuenfte Stufe und kein
+   erklaerender Satz an der Auswahl.
+
+   Geschrieben wird in den Topf stat (Topftafel Zeile 3178): ein Eintrag je
+   Spieler, Schluessel stat:<spieler>, Eigentum im Schluessel. Kein neues
+   Recht, kein neuer Serverschluessel.
+
+   Zwei Merker liegen daneben, beide nur in diesem Browser:
+     STAT_HAND  die letzte Wahl VON HAND. Sie entscheidet beim naechsten
+                Start, wohin es zurueckgeht. Ohne sie wuerde ein Telefon
+                jedes Mal "Mobile" ueber eine bewusst gesetzte Wahl legen.
+     STAT_TIPP  ob der Hinweis auf das Abmelden schon gefallen ist. */
+const STATUS = [
+  {k:"on",  n:"Active",   f:"var(--us)"},
+  {k:"rts", n:"RTS only", f:"var(--accent)"},
+  {k:"mob", n:"Mobile",   f:"var(--ge)"},
+  {k:"off", n:"Inactive", f:"var(--dim2)"}
+];
+const STAT_HAND = "hng-warmap-status";
+const STAT_TIPP = "hng-warmap-status-tipp";
+const statusArt = k => STATUS.find(x => x.k === k) || null;
+const statusVon = who => {
+  const e = S.stat && S.stat[who];
+  return e && statusArt(e.v) ? e.v : "";
+};
+/* Der Punkt vor einem Namen. Wer nichts gesetzt hat, bekommt KEINEN: ein
+   grauer Punkt saehe aus wie Inactive, und das waere eine Behauptung ueber
+   jemanden, der nie etwas gesagt hat. */
+function statusPunkt(who){
+  const st = statusArt(statusVon(who));
+  if (!st) return "";
+  return `<i title="${esc(st.n)}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${st.f};margin-right:6px;vertical-align:middle"></i>`;
+}
+function statusLeiste(){
+  const kasten = document.getElementById("me-status");
+  if (!kasten) return;
+  const k = statusVon(S.me) || "off";
+  const wahl = kasten.querySelector("select");
+  if (wahl && wahl.value !== k) wahl.value = k;
+  const punkt = kasten.querySelector(".dot");
+  const st = statusArt(k);
+  if (punkt) punkt.style.background = st ? st.f : "var(--dim2)";
+}
+function statusSetzen(k, vonHand){
+  if (!statusArt(k)) return;
+  if (statusVon(S.me) !== k && stamp("stat", S.me, k)) save();
+  if (vonHand) schreib(STAT_HAND, k);
+  statusLeiste();
+  /* Steht die Mitgliederliste gerade offen, traegt sie den Punkt sofort
+     nach - so wie es der Rang schon macht. */
+  if (document.getElementById("cl-people")) leuteZeichnen();
+}
+/* ANMELDEN. Wer die Seite oeffnet, ist da. Aufgehoben wird aber nur ein
+   Inactive - eine bewusst gesetzte Wahl bleibt stehen, sonst waere "RTS
+   only" nach jedem Neuladen weg.
+   Wohin es zurueckgeht, sagt die letzte Handwahl dieses Geraets. Gibt es
+   keine, entscheidet das Geraet: auf dem Telefon Mobile, sonst Active. */
+function statusAn(){
+  const ist = statusVon(S.me);
+  if (ist && ist !== "off"){ statusLeiste(); return; }
+  const hand = lies(STAT_HAND, "") || "";
+  statusSetzen(statusArt(hand) && hand !== "off" ? hand
+             : amHandy() ? "mob" : "on", false);
+}
+/* ABMELDEN BEIM SCHLIESSEN. pagehide, nicht visibilitychange: wer auf das
+   Spiel umschaltet, versteckt die Seite nur - und genau dann spielt er.
+   unload ist ausgeschlossen, das Ereignis kommt auf dem Telefon gar nicht.
+
+   Der gewoehnliche Weg (dirty, dann syncPush im Takt) kommt hier nicht
+   mehr dran: das Fenster ist weg, bevor der naechste Takt faellt. Also
+   einmal von Hand hinaus, mit keepalive - dann fuehrt der Browser die
+   Anfrage zu Ende, auch wenn die Seite schon fort ist. sendBeacon kann es
+   nicht: PostgREST verlangt die Kopfzeilen aus heads(), und die kann ein
+   Beacon nicht setzen. Derselbe Aufruf wie beim Notizbuch (Zeile 36698). */
+let statusZu = false;
+function statusSchliessen(){
+  if (statusZu || !S.me) return;
+  statusZu = true;
+  if (statusVon(S.me) === "off") return;
+  if (!stamp("stat", S.me, "off")) return;
+  saveSofort();                       // sonst faellt die Zeile mit dem Fenster
+  if (!CFG) return;
+  try {
+    fetch(api("warmap"), {
+      method: "POST", keepalive: true,
+      headers: heads({"Prefer": "resolution=merge-duplicates,return=minimal"}),
+      body: JSON.stringify([{room: CFG.room, key: `stat:${S.me}`, value: S.stat[S.me]}])
+    }).catch(()=>{});
+  } catch(e){}
+}
+function statusAufbau(){
+  const kasten = document.getElementById("me-status");
+  if (!kasten) return;
+  const wahl = kasten.querySelector("select");
+  if (!wahl) return;
+  wahl.innerHTML = STATUS.map(x => `<option value="${x.k}">${esc(x.n)}</option>`).join("");
+  wahl.addEventListener("change", ()=> statusSetzen(wahl.value, true));
+  statusAn();
+  /* NUR DAS ECHTE SCHLIESSEN. pagehide feuert auch, wenn der Browser die
+     Seite nur einfriert und in den Rueck-Vor-Speicher legt - auf dem
+     Telefon bei jedem Wechsel in eine andere App. Dann steht ev.persisted
+     auf wahr, und wer gerade spielt, waere sonst mitten im Gefecht auf
+     Inactive gesetzt. Genau der Fall, den dieser Punkt vermeiden soll. */
+  addEventListener("pagehide", ev => { if (!ev.persisted) statusSchliessen(); });
+  /* Zurueck aus dem Vor-Zurueck-Speicher des Browsers: die Seite lebt
+     weiter, das Abmelden von eben ist damit hinfaellig. */
+  addEventListener("pageshow", ev => { if (ev.persisted){ statusZu = false; statusAn(); } });
+  /* Einmal sagen, was beim Schliessen passiert. Danach nie wieder. */
+  if (!lies(STAT_TIPP, "")){
+    schreib(STAT_TIPP, "1");
+    setTimeout(()=>toast("Closing this window sets you to Inactive."), 2500);
+  }
+}
+
 /* Was der Scoreboard-Leser gefunden hat, vorlegen - und die Kopfzahlen mit
    einem Klick in die Aktivitaetsliste uebernehmen. */
 let SB_LETZTE = null;
@@ -38581,7 +38836,7 @@ function leuteZeichnen(liste){
           const ist = (rangKarte()[m.player] || [])[0] || "";
           const fuehrt = m.player === leaderId();
           return `<tr${m.player===S.me?' class="me"':''}>
-            <td>${esc(m.name||m.player)}${m.player===S.me?" <em>you</em>":""}
+            <td>${statusPunkt(m.player)}${esc(m.name||m.player)}${m.player===S.me?" <em>you</em>":""}
               ${m.approved===false?` <span style="color:var(--su);font-size:10px">locked</span>`:""}</td>
             <td style="text-align:left">${fuehrt
               ? `<b style="color:var(--accent)">Leader</b>`
@@ -40175,7 +40430,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 7e5f9769cf</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 5c8a386bd6</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -40185,7 +40440,7 @@ function hilfeDialog(){
     <div class="dlg-b">
       <div class="tabp" data-tab="keys">
         <div class="keys">
-          <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Attack or move · Defence · Plan parablock · Area · Sighting · Battle · Clear</span></div>
+          <div><kbd>1</kbd>…<kbd>0</kbd><span>Inspect · Control · Unit · Attack · Defence · Plan parablock · Area · Sighting · Battle · Clear</span></div>
           <div><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd><span>US · Germany · Soviet Union</span></div>
           <div><kbd>B</kbd><span>Board — written orders</span></div>
           <div><kbd>I</kbd><span>Intel — clans, players, sightings</span></div>
@@ -40347,7 +40602,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "7e5f9769cf";
+const BAU = "5c8a386bd6";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -40615,7 +40870,7 @@ async function syncPull(){
     if (n){ rebuildUnits(); befehlAutoAbschluss(); save(); side(); tally(); draw(); kopfzeile(); boardZahl(); ordersZahl();
       /* the chain move waits until this pull has let go of its flag */
       setTimeout(() => { try { if (zuordNachruecken()) draw(); ordersZahl(); } catch(e){} }, 0);
-            kraftLeiste(); if (showDepot) depotZeichnen(); }
+            kraftLeiste(); if (showDepot) depotZeichnen(); statusLeiste(); }
     /* Die vierzig Runden sind nie erreicht worden, solange die Tabelle
        kleiner als vierzigtausend Zeilen ist. Wenn doch, ist das keine
        Kleinigkeit - dann bleibt beim naechsten Takt etwas liegen, und das
@@ -41561,7 +41816,7 @@ async function mitgliederDialog(meldung){
   faction = clanFaktion();     // zeichnen in der Farbe, in der man spielt
   fraktionenZeichnen();        // the tick and the order follow that side
   werkzeugeAuffrischen();      // was nicht erlaubt ist, gar nicht erst anbieten
-  leisteBauen(); menueBauen(); fingerSteuerung(); handySchalter();
+  leisteBauen(); menueBauen(); fingerSteuerung(); handySchalter(); statusAufbau();
   layAnwenden();
   if (torNoetig()){
     /* Liegt ein verschlossener Code vor, wird nach dem Passwort gefragt -
