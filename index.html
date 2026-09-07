@@ -1607,7 +1607,18 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   /* Werkzeugstreifen unten, waagerecht rollend */
   #bar{width:auto;flex-direction:column;border-right:0;border-top:1px solid var(--line);
     padding:0;order:2;overflow:visible}
-  #toolwrap{flex-direction:row;overflow-x:auto;overflow-y:hidden;gap:0;min-width:0;
+  /* THE STRIP WAS NEVER SIDEWAYS. The base rule sets display:grid, and
+     flex-direction does nothing to a grid - so on a phone the tools stayed
+     a four-column grid, whatever this rule said. Measured at 375x812
+     before the fix: the tool box 405 points tall, the whole bar 461 of
+     812, and the map left with 285. That is the half screen the Kommodore
+     reported on 07.09.
+     So the display mode is now said out loud and the grid's column
+     template is taken back. The two-column rule carries more weight than a
+     plain id, so it has to be named here too, or it wins again. */
+  #bar #toolwrap, #bar.zwei #toolwrap{
+    display:flex;grid-template-columns:none;margin-right:0;
+    flex-direction:row;overflow-x:auto;overflow-y:hidden;gap:0;min-width:0;
     padding:4px 4px 6px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
   #bar .tool{min-width:60px;flex:0 0 auto;scroll-snap-align:center;padding:7px 4px 5px}
   #bar > .bar-h{display:none}
@@ -1805,7 +1816,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="tool" data-t="arrow" aria-pressed="false" data-tip="Attack or move: drag from origin to target" title="Attack or move: drag from origin to target">
         <svg viewBox="0 0 24 24"><path d="M3.7 18.8C7.2 9.3 14 5.6 20.2 5.3"/><path d="M16.5 3.9l3.9 1.4-2.5 3.2"/></svg>
         <span class="lbl" data-txt="tool.arrow">Attack</span><span class="kb">4</span></button>
-      <button class="tool" data-t="line" aria-pressed="false">
+      <button class="tool" data-t="line" aria-pressed="false" data-tip="Defence line: drag across the towns to hold" title="Defence line: drag across the towns to hold">
         <svg viewBox="0 0 24 24"><path d="M3.5 9.2h17"/><path d="M6.4 9.2v6.4M10.6 9.2v6.4M14.8 9.2v6.4M19 9.2v6.4"/></svg>
         <span class="lbl" data-txt="tool.line">Defence</span><span class="kb">5</span></button>
       <button class="tool" data-t="para" aria-pressed="false">
@@ -10199,8 +10210,15 @@ window.addEventListener("mouseup", e => {
       : `${markiert} town${markiert===1?"":"s"} marked para-blocked`);
     side();
   } else if (zieh.art === "line"){
-    if (zieh.pts.length >= 2) lineSpeichern(zieh.pts);
-    else toast("Drag across at least two towns");
+    /* A DRAWN LINE MUST SWALLOW THE CLICK THAT FOLLOWS IT. The line branch
+       of mousedown returns before "dragging = true", so the latch that
+       eats the trailing click was never set - and every drag was followed
+       by a click that opened a phantom draft of one town, overwrote the
+       confirmation with "1 towns ...", and hung a rubber band on the
+       mouse. Only when at least two towns were drawn, or the click chain
+       (the only way to pick towns the pointer does not cross) would die
+       with it. */
+    if (zieh.pts.length >= 2){ lineSpeichern(zieh.pts); dragged = true; }
   } else if (zieh.art === "area"){
     /* a drawn recon request: every corner must be within sight, else no
        entry and the tool stays for another try; a bare click with the
@@ -10251,7 +10269,7 @@ cv.addEventListener("click", e => {
   } else if (tool === "line"){
     if (!lineDraft) lineDraft = {pts:[], f:faction};
     if (lineDraft.pts[lineDraft.pts.length-1] === i) lineFertig();
-    else { lineDraft.pts.push(i); toast(`${lineDraft.pts.length} towns — Enter or click the last one again to finish`); }
+    else { lineDraft.pts.push(i); toast(`${lineDraft.pts.length} towns — Enter or click the last one again to finish, Escape to cancel`); }
   } else if (tool === "spot"){
     sel = i; side(); setTimeout(()=>document.getElementById("sp-type")?.focus(), 30);
   } else if (tool === "battle"){
@@ -10312,6 +10330,9 @@ document.addEventListener("keydown", e => {
     else if (paraFlussAktiv()){ paraFlussAbbruch(); draw(); }
     else if (aufklFluss){ aufklFlussAbbruch(); draw(); }
     else if (arrowFrom !== null){ arrowFrom = null; draw(); }
+    /* the half-drawn defence line, before the catch-all below clears the
+       selection instead and leaves the rubber band hanging */
+    else if (lineDraft){ lineDraft = null; toast("Defence line cancelled"); draw(); }
     else { sel = null; side(); draw(); }
   }
   if (k === "/"){ e.preventDefault(); document.getElementById("search").focus(); }
@@ -10366,7 +10387,7 @@ function setTool(t){
   const marke = {arrow:"arrow", line:"line", area:"area", aufkl:"area", para:"arrow"}[t];
   if (marke && !darfIchNochMalen(marke)) return false;
   const vorher = tool;
-  tool = t; arrowFrom = null; hoverObj = null; editing = null;
+  tool = t; arrowFrom = null; hoverObj = null; editing = null; lineDraft = null;
   if (t !== vorher) paraFlussAbbruch();                  // the drop's marks go with a real tool change
   if (t !== vorher) aufklFlussAbbruch();                 // the recon flow too
   if (t !== "para") paraMenueZu();                       // its menu with any other tool
@@ -39965,7 +39986,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build e978c8dcad</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 460ab37145</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -40109,7 +40130,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "e978c8dcad";
+const BAU = "460ab37145";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
