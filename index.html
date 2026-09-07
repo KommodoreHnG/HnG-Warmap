@@ -389,6 +389,12 @@ body.zieht #mapwrap canvas{pointer-events:none}
 #para-menu .row .btn{flex:1;padding:4px 6px;font-size:11px}
 #para-menu .btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
 #para-menu select{width:100%;margin-top:6px;padding:3px 4px;font-size:11.5px}
+/* the defence tool's menu over its button - built like #para-menu */
+#line-menu{position:fixed;z-index:60;min-width:186px;padding:6px;background:var(--panel);
+  border:1px solid var(--line);border-radius:3px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-size:12px}
+#line-menu .t{color:var(--dim);margin:0 2px 5px;white-space:nowrap}
+#line-menu .row .btn{flex:1;padding:4px 6px;font-size:11px}
+#line-menu .btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
 #depot{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;
   border-top:1px solid var(--accent-dk)}
 #depot.zu{display:none}
@@ -3272,6 +3278,17 @@ let S = neu();
    clanFaktion() steht hier noch nicht bereit, deshalb wird der Wert beim
    Start nachgezogen (siehe start()). */
 let tool = "inspect", faction = 1, sel = null, arrowFrom = null, lineDraft = null;
+/* DEFENCE HAT ZWEI BETRIEBSARTEN. "linie" ist die bisherige ueber mehrere
+   Staedte, "einzel" haelt genau eine. Die Wahl steht hier und nur hier; das
+   Untermenue am Knopf, der Hinweiskasten, der Klick auf die Karte und das
+   Rechtsklickmenue lesen alle dieselbe Stelle. */
+const lineWahl = {modus: "linie"};
+const lineEinzel = () => lineWahl.modus === "einzel";
+/* NUR wer dieses Merkmal traegt, darf auf EINER Stadt stehen. Fuer alles
+   andere gilt weiter die Mindestzahl zwei: eine Linie aus einem Punkt wird
+   nirgends gezeichnet und nirgends getroffen, und waere damit ein Eintrag,
+   den niemand mehr wegklicken kann. */
+const istEinzelLinie = l => !!(l && l.einzel && Array.isArray(l.pts) && l.pts.length === 1);
 /* Der zuletzt gemeldete Einheitentyp und Besitzer. Beide ueberleben den
    Neuaufbau der Seitenspalte nach einer Meldung - man meldet selten eine
    einzelne Einheit, sondern eine Reihe.
@@ -4211,7 +4228,8 @@ function darfIchNochMalen(art){
   return false;
 }
 const liveLines = () => Object.entries(S.line)
-  .filter(([id,e]) => lebt(id,e) && Array.isArray(e.v.pts) && e.v.pts.length >= 2);
+  .filter(([id,e]) => lebt(id,e) && Array.isArray(e.v.pts)
+    && (e.v.pts.length >= 2 || istEinzelLinie(e.v)));
 const liveAreas = () => Object.entries(S.area)
   .filter(([id,e]) => lebt(id,e) && Array.isArray(e.v.pts) && e.v.pts.length >= 3);
 const livePosts = () => Object.entries(S.post).filter(([id,e]) => lebt(id,e) && e.v.text != null)
@@ -4837,6 +4855,7 @@ function befehlOrt(b){
 }
 const befehlOrtName = b => { const i = befehlOrt(b); return i !== null && MAP.n[i] ? MAP.n[i][0] : ""; };
 const befehlArtName = b => b.art === "arrow" ? (b.v && b.v.luft ? "Drop" : "Attack")
+  : b.art === "line" && istEinzelLinie(b.v) ? "Defence"
   : (b.art === "area" && b.v && b.v.aufkl ? "Recon" : (ZUORD_ART_NAME[b.art] || b.art));
 /* who made the order: the arrow carries it in itself, the others in their row */
 const befehlWer = b => werWar(b.art === "arrow" ? b.v : (S[b.art] && S[b.art][b.id]));
@@ -8131,10 +8150,80 @@ function drawArea(a, eintrag, entwurf, id){
   }
 }
 
+/* Where the shield of a single-city defence hangs: right above the town's
+   disc, the capital's star taken into account. Drawing and hit test read
+   the same number, so what the eye aims at is what the hand hits. */
+function einzelSchildOrt(i){
+  if (!MAP.n[i]) return null;
+  const [x,y] = toScr(MAP.n[i][1], MAP.n[i][2]);
+  const r = isCap(i) ? ortRadius()*STERN_RAGT : ortRadius();
+  const g = Math.max(6, 5.2*Math.sqrt(view.z))*uiScale;
+  return [x, y - r - g*0.95, g];
+}
+/* The shield itself: a heraldic escutcheon in the side's colour. Rim first,
+   line on top - the parachute's order, the one that holds on both grounds. */
+function einzelSchildZeichnen(x, y, g, farbe){
+  const w = g*0.8, h = g*1.1;
+  const form = () => {
+    ctx.beginPath();
+    ctx.moveTo(x - w, y - h*0.68);
+    ctx.lineTo(x + w, y - h*0.68);
+    ctx.lineTo(x + w, y + h*0.02);
+    ctx.quadraticCurveTo(x + w*0.9, y + h*0.72, x, y + h);
+    ctx.quadraticCurveTo(x - w*0.9, y + h*0.72, x - w, y + h*0.02);
+    ctx.closePath();
+  };
+  ctx.save();
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
+  form(); ctx.fillStyle = farbe; ctx.fill();
+  ctx.lineWidth = Math.max(2, g*0.26);
+  ctx.strokeStyle = light() ? "rgba(255,255,255,.92)" : "rgba(10,7,4,.9)";
+  ctx.stroke();
+  ctx.lineWidth = Math.max(1, Math.min(1.6, g*0.13));
+  ctx.strokeStyle = light() ? "#1a1409" : "#f4ead9";
+  form(); ctx.stroke();
+  ctx.restore();
+}
+/* Defence on ONE town: no stretch to draw, so the shield above the town is
+   the drawing. Planned pale, active full, done paler and only with the Done
+   switch - the same states the line carries. */
+function drawEinzel(l, id){
+  const o = einzelSchildOrt(l.pts[0]);
+  if (!o) return;
+  const fremdE = fremdeSeite(l), zsE = (id && !fremdE) ? befehlZustand(id, l) : "aktiv";
+  const fertigE = zsE === "fertig";
+  if (fertigE && !showFertig) return;
+  const vorE = zsE === "plan";
+  const f = col(FACTIONS[l.f]), lf = pfeilFarbe(l.farbe);
+  const [sx, sy, g] = o;
+  ctx.save();
+  ctx.globalAlpha = vorE ? .45 : (fertigE ? .35 : 1);
+  einzelSchildZeichnen(sx, sy, g, f);
+  /* the chosen colour runs as an accent down the middle, as it does on the line */
+  if (lf){
+    ctx.strokeStyle = lf; ctx.lineWidth = Math.max(1.2, g*0.22); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(sx, sy - g*0.6); ctx.lineTo(sx, sy + g*0.86); ctx.stroke();
+  }
+  ctx.restore();
+  if (view.z > 1.2 && (l.label || l.soll || (id && !fremdE && zuordZahlen({art: "line", id}).fest))){
+    ctx.save(); ctx.globalAlpha = vorE ? .72 : (fertigE ? .55 : 1);
+    /* 14 px over the crest: at z about 2 ten left barely a hair of air */
+    const k = befehlSchild(sx, sy - g*1.6 - 14*uiScale, Object.assign({name: l.label, soll: fremdE ? 0 : +l.soll || 0, farbe: lf || null, seite: f},
+      fremdE || !id ? {} : zuordIstFeld("line", id), {ohneBalken: fertigE}));
+    if (k && fertigE) befehlAbzeichen(k.x1, k.y0, "\u2713", lf || f, true);
+    ctx.restore();
+    if (k && id) schildVon.set("line:" + id, k);
+  } else if (fertigE && view.z > 1.1){ ctx.save(); ctx.globalAlpha = .55; befehlAbzeichen(sx, sy - g*1.6, "\u2713", lf || f, true); ctx.restore(); }
+  if (l.folge && view.z > 1.1 && !fertigE) befehlAbzeichen(sx + g*1.2, sy - g*1.2, l.folge, lf || f, true);
+}
+
 /* Defence line: thick line through towns with tick marks on one side,
    the way a held position is drawn on a military map. */
 function drawLine(l, bisMaus, id){
   if (!l || !Array.isArray(l.pts)) return;
+  /* the single city goes its own way; a half-drawn line (bisMaus) never
+     does, it carries no flag and needs its rubber band */
+  if (!bisMaus && istEinzelLinie(l)){ drawEinzel(l, id); return; }
   const pts = l.pts.map(i => MAP.n[i] ? toScr(MAP.n[i][1], MAP.n[i][2]) : null).filter(Boolean);
   if (bisMaus) pts.push(bisMaus);
   if (pts.length < 2) return;
@@ -8658,6 +8747,46 @@ function paraMenueAuf(knopf){
                                       : "Target first: click the target, then an airfield");
   }));
   m.querySelector("#para-menu-typ").addEventListener("change", ev => paraWahlSetzen(null, ev.target.value));
+}
+/* THE DEFENCE TOOL'S OWN MENU, built like the one above: a second click on
+   the button, or key 5 again, opens it. */
+function lineMenueZu(){ const m = document.getElementById("line-menu"); if (m) m.remove(); }
+function lineMenueWechsel(){
+  const k = document.querySelector('.tool[data-t="line"]');
+  if (document.getElementById("line-menu") || !k) lineMenueZu(); else lineMenueAuf(k);
+}
+/* The tooltip on the button says what the next click does. It is read before
+   the hint box down at the map is, so it follows the mode. Written into
+   data-tip as well: werkzeugeAuffrischen puts that back into title at every
+   change of rights. */
+function lineTipFrischen(){
+  const k = document.querySelector('.tool[data-t="line"]');
+  if (!k) return;
+  k.dataset.tip = lineEinzel() ? "Single city: click the town to hold"
+                               : "Defence line: drag across the towns to hold";
+  if (!k.disabled) k.title = k.dataset.tip;
+}
+function lineMenueAuf(knopf){
+  lineMenueZu();
+  const m = document.createElement("div"); m.id = "line-menu";
+  m.innerHTML = `<div class="t">Defence</div>
+    <div class="row">
+      <button type="button" class="btn" data-lmodus="linie" aria-pressed="${!lineEinzel()}">Line of towns</button>
+      <button type="button" class="btn" data-lmodus="einzel" aria-pressed="${lineEinzel()}">Single city</button>
+    </div>`;
+  document.body.appendChild(m);
+  const r = knopf.getBoundingClientRect(), b = m.getBoundingClientRect();
+  let oben = r.top - b.height - 4;
+  if (oben < 4) oben = r.bottom + 4;                        // no room above: below the button
+  m.style.left = Math.max(4, Math.min(innerWidth - b.width - 4, r.left)) + "px";
+  m.style.top  = Math.max(4, Math.min(innerHeight - b.height - 4, oben)) + "px";
+  m.querySelectorAll("[data-lmodus]").forEach(k => k.addEventListener("click", () => {
+    lineWahl.modus = k.dataset.lmodus;
+    lineDraft = null;                    // half a line of the other mode goes with it
+    lineMenueZu(); lineTipFrischen(); tips(); draw();
+    toast(lineEinzel() ? "Single city: click the town to hold"
+                       : "Line: drag across the towns to hold");
+  }));
 }
 /* the tip box's line for the tool: what to click next, with type and reach */
 function paraTipp(){
@@ -9288,6 +9417,7 @@ function griffLoslassen(x, y){
     pts.splice(ed.idx+1, 0, ziel);
     toast(`${MAP.n[ziel][0]} hung into the line`);
   } else if (ziel === null){
+    if (istEinzelLinie(e.v)){ toast("Drop it on a town."); return; }
     if (pts.length <= 2){ toast("A defence line needs at least two towns."); return; }
     pts.splice(ed.idx, 1);
     toast("Town taken out of the line");
@@ -9620,11 +9750,25 @@ function setPara(town, f, plan, extra){
                                             {f, plan: !!plan, art: (alt && alt.art !== undefined) ? alt.art : artNeu()}, extra || {});
   if (v) for (const k of Object.keys(v)) if (v[k] === undefined || v[k] === "" || v[k] === null) delete v[k];
   if (v && v.f === undefined) v.f = f;
-  /* the ok key of a block is its town and gets reused: a removed block, or
-     a new one where none stood, must not inherit an old state. Only who
-     may confirm can clear it; without that right the old entry stays. */
-  if ((f == null || !alt) && darf("bestaetigen") && okEintrag("para:" + town)) stamp("ok", "para:" + town, null, {n: S.name || ""});
-  stamp("para", town, v, {n: S.name || ""});
+  /* the ok key of a block is its town and gets reused: a removed block, a
+     new one where none stood, and one that changes side must not inherit an
+     old state. The change of side drops st and aktT above, but the ok bucket
+     reads active all on its own - so a block switched to another side and
+     back stood there as confirmed again.
+     The order of the two writes decides the rest. A para block carries its
+     owner in its row and the server keeps that row for its author, so
+     writing over somebody else's block only looks as if it worked: the ok
+     entry goes through, the side does not, and the block sits there without
+     its state and without a word. The row goes first, and the ok entry falls
+     only when the row was ours to write - darfWeg answers that, the same
+     question zustandSetzen asks before it sets a block on a finished drop.
+     Only who may confirm can clear it; without that right the old entry
+     stays. */
+  const ez = S.para[town], meineZeile = !alt || darfWeg(ez);
+  const seitenwechsel = !!alt && alt.f !== undefined && +alt.f !== +f;
+  const paraGesetzt = stamp("para", town, v, {n: S.name || ""});
+  if (paraGesetzt && meineZeile && (f == null || !alt || seitenwechsel)
+      && darf("bestaetigen") && okEintrag("para:" + town)) stamp("ok", "para:" + town, null, {n: S.name || ""});
   save();
   return true;
 }
@@ -9706,20 +9850,27 @@ function paraDialog(i){
   const key = befehlKey("para", i), b = {art: "para", id: i, key, v: pb || {}};
   /* another side's block is a sighting: no strength, no chain, no state */
   const fremd = !!pb && fremdeSeite(pb);
-  let seite = pb ? pb.f : null;
+  /* VORWAHL DER CLANSEITE. Ohne Block stand das Fenster auf "none": man
+     musste erst die eigene Seite anklicken, bevor Speichern etwas anlegte.
+     Ein bestehender Block behaelt seine Seite - auch der einer fremden
+     Fraktion, denn der ist eine Sichtung und keine Wahl von uns. */
+  let seite = pb ? pb.f : clanFaktion();
   openDlg(`
     <div class="dlg-h"><h2>Para-block \u00b7 ${esc(MAP.n[i][0])}</h2>
-      <p>${pb ? zustandText(key, pb, e && (e.n || e.by)) : "No block here yet \u2014 pick the side that blocks."}</p>
+      <p>${pb ? zustandText(key, pb, e && (e.n || e.by)) : "No block here yet."}</p>
       ${fremd ? "" : `<p>${paraTextSicher(() => paraErfuellbarText(luftTypen().map(t => t.k), {art: "para", id: i}))}</p>`}</div>
     <div class="dlg-b">
       <div class="own4" style="grid-template-columns:repeat(4,1fr)">
-        ${FACTIONS.map(q=>`<button type="button" data-pbd="${q.id}" style="--f:${q.color}" aria-pressed="${pb && pb.f===q.id}">${q.tag}</button>`).join("")}
-        <button type="button" data-pbd="" style="--f:${NEUTRAL.color}" aria-pressed="${!pb}">none</button>
+        ${FACTIONS.map(q=>`<button type="button" data-pbd="${q.id}" style="--f:${q.color}" aria-pressed="${seite===q.id}">${q.tag}</button>`).join("")}
+        <button type="button" data-pbd="" style="--f:${NEUTRAL.color}" aria-pressed="${seite===null}">none</button>
       </div>
-      <label class="toggle" style="margin-top:6px"><input type="checkbox" id="pd-plan" ${pb && pb.plan ? "checked" : ""}><span>Only planned, not in place yet</span></label>
+      <!-- Ohne Block ist "geplant" die Vorgabe: seit die Seite vorgewaehlt
+           ist, legt schon ein Klick auf Save einen Block an. Eine Absicht
+           nimmt man zurueck, eine gemeldete Tatsache muss jemand widerlegen. -->
+      <label class="toggle" style="margin-top:6px"><input type="checkbox" id="pd-plan" ${!pb || pb.plan ? "checked" : ""}><span>Only planned, not in place yet</span></label>
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Operation name</span>
-        <input type="text" id="pd-lbl" value="${esc((pb && pb.label) || "")}" placeholder="e.g. Seal the airfields" maxlength="40" style="width:150px">
+        <input type="text" id="pd-lbl" value="${esc((pb && pb.label) || "")}" placeholder="e.g. Seal the airfields" maxlength="40" style="width:150px" ${fremd ? "disabled" : ""}>
       </div>
       ${fremd ? "" : `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
@@ -9728,12 +9879,12 @@ function paraDialog(i){
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Chain after</span>
         ${ketteWahl(b, "pd-kette")}
-      </div>`}
+      </div>
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
         <input type="hidden" id="pd-farbe" value="${esc((pb && pb.farbe) || "")}">
         <div class="pf-farben">${farbKnoepfe(pb && pb.farbe)}</div>
-      </div>
+      </div>`}
       ${pb && pb.folge ? `<div class="note">Step <b>${pb.folge}</b> of its operation.</div>` : ""}
       <div class="note">A block seals the town against drops. "Only planned" is your own plan and stays your side's; a block of another side is a sighting.</div>
     </div>
@@ -9756,7 +9907,9 @@ function paraDialog(i){
     const label = document.getElementById("pd-lbl").value.trim();
     const sollEl = document.getElementById("pd-soll");
     const soll = sollEl ? Math.max(0, Math.min(999, +sollEl.value || 0)) : (+(pb && pb.soll) || 0);
-    const farbe = document.getElementById("pd-farbe").value;
+    /* another side's block has no colour row; what stands there stays */
+    const farbeEl = document.getElementById("pd-farbe");
+    const farbe = farbeEl ? farbeEl.value : ((pb && pb.farbe) || "");
     if (seite === null){ if (pb) setPara(i, null, false); closeDlg(); if (sel === i) side(); draw(); tally(); return; }
     if (!setPara(i, seite, plan, {label, soll: soll || undefined, farbe: farbe || undefined})) return;
     const kette = document.getElementById("pd-kette");
@@ -9918,13 +10071,42 @@ function dropEntry(bucket, id){
   save();
   return true;
 }
-function lineSpeichern(pts){
-  if (!darfIchNochMalen("line")) return;
+function lineSpeichern(pts, einzel){
+  if (!darfIchNochMalen("line")) return null;
   const id = Math.random().toString(36).slice(2,10), k = `${id}:${S.me}`;
-  S.line[k] = {v:{pts, f: faction, label: "", art: artNeu()}, t: jetzt(), by: S.me,
-               n: S.name || ""};
+  const v = {pts, f: faction, label: "", art: artNeu()};
+  if (einzel) v.einzel = 1;
+  S.line[k] = {v, t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`line:${k}`); save(); draw();
-  toast(`Defence line over ${pts.length} towns. Click it to label it and set it active.`);
+  toast(einzel ? `Defence of ${MAP.n[pts[0]][0]}`
+               : `Defence line over ${pts.length} towns. Click it to label it and set it active.`);
+  return k;
+}
+/* WAS AUF DIESER STADT STEHT, gleich wer es hingestellt hat. Die Reihe ist
+   die von lineHit und die Merkmale sind seine, also oeffnet der Knopf immer
+   genau das, was auch ein Klick auf das Wappen oeffnet.
+   Nach dem Verfasser zu filtern hiesse: auf dem Wappen eines Kameraden legt
+   der Knopf ein zweites genau darunter. lineHit gibt immer das erste zurueck
+   und in lineDialog fuehrt kein anderer Weg als der Kartenklick - das eigene
+   waere nie mehr zu oeffnen und nie mehr zu loeschen. */
+function einzelLinieAn(i){
+  for (const [id, e] of liveLines())
+    if (istEinzelLinie(e.v) && +e.v.pts[0] === +i && !befehlVersteckt(id, e.v))
+      return {id, e};
+  return null;
+}
+/* Eine Stadt, ein Eintrag, und das Fenster gleich hinterher - der Weg, den
+   der Angriff nimmt, sobald beide Staedte feststehen. Steht dort schon ein
+   Wappen, fuehrt der Weg in dessen Fenster statt auf einen zweiten Eintrag. */
+function lineEinzelAnlegen(i){
+  if (!MAP.n[i]) return;
+  const da = einzelLinieAn(i);
+  if (da){ lineDialog(da.id, da.e); return; }
+  const k = lineSpeichern([i], true);
+  /* frisch und von fremder Seite: kein Fenster. Dieselbe Zeile, die
+     pfeilFrischZeigen zieht - es verbirgt Staerke, Kette und Zustand und
+     stuende fast leer da. */
+  if (k && !fremdeSeite(S.line[k].v)) lineDialog(k, S.line[k]);
 }
 /* extra: fields merged into the area, {aufkl:1, orte?} for a recon request.
    A request is our side's ask whatever the left bar shows; one on towns
@@ -9949,6 +10131,13 @@ function lineFertig(){
 function lineHit(sx, sy){
   for (const [id,e] of liveLines()){
     if (befehlVersteckt(id, e.v)) continue;      // hidden done line: not drawn, not hit
+    /* the single city has no segment: its shield over the town is the whole
+       drawing, and so it is what the hand aims at */
+    if (istEinzelLinie(e.v)){
+      const o = einzelSchildOrt(e.v.pts[0]);
+      if (o && Math.hypot(sx - o[0], sy - o[1]) < Math.max(griffTol(), o[2]*1.3)) return {id, e};
+      continue;
+    }
     const pts = e.v.pts.map(i => MAP.n[i] ? toScr(MAP.n[i][1], MAP.n[i][2]) : null).filter(Boolean);
     for (let i=0;i<pts.length-1;i++)
       if (abstandZuSegment(sx, sy, pts[i], pts[i+1]) < griffTol()) return {id, e};
@@ -10353,7 +10542,7 @@ cv.addEventListener("mousedown", e => {
   }
   const i = hitTest(e.offsetX, e.offsetY);
   if (tool === "arrow" && i !== null){ zieh = {art:"arrow", von:i}; return; }
-  if (tool === "line"  && i !== null){ zieh = {art:"line", pts:[i]}; return; }
+  if (tool === "line" && !lineEinzel() && i !== null){ zieh = {art:"line", pts:[i]}; return; }
   if (tool === "brush"){
     /* rechte Taste = auf "open", dieselbe -1 wie der graue Knopf in der
        Stadtspalte. Alles andere malt die gewaehlte Seite. */
@@ -10564,6 +10753,8 @@ cv.addEventListener("click", e => {
       const neu = pfeilAnlegen(arrowFrom, i); arrowFrom = null;
       pfeilFrischZeigen(neu);
     }
+  } else if (tool === "line" && lineEinzel()){
+    lineEinzelAnlegen(i);
   } else if (tool === "line"){
     if (!lineDraft) lineDraft = {pts:[], f:faction};
     if (lineDraft.pts[lineDraft.pts.length-1] === i) lineFertig();
@@ -10611,7 +10802,10 @@ document.addEventListener("keydown", e => {
      Die uebrigen Ziffern bleiben, wo sie waren. */
   const t = {"1":"inspect","2":"owner","4":"arrow","5":"line","6":"para",
              "7":"area","9":"battle","0":"erase"}[e.key];
-  if (t){ setTool(t); if (t === "para" && tool === "para") paraMenueWechsel(); return; }   // 6 brings the menu along
+  if (t){ setTool(t);
+          if (t === "para" && tool === "para") paraMenueWechsel();                 // 6 brings the menu along
+          if (t === "line" && tool === "line") lineMenueWechsel();                 // 5 likewise
+          return; }
   if (k === "b"){ document.getElementById("b-board").click(); return; }
   if (k === "enter" && lineDraft){ lineFertig(); return; }
   if (k === "q"){ setFaction(0); return; }
@@ -10692,6 +10886,7 @@ function setTool(t){
   if (t !== vorher) paraFlussAbbruch();                  // the drop's marks go with a real tool change
   if (t !== vorher) aufklFlussAbbruch();                 // the recon flow too
   if (t !== "para") paraMenueZu();                       // its menu with any other tool
+  if (t !== "line") lineMenueZu();                       // and the defence menu likewise
   cv.classList.remove("griff");
   document.querySelectorAll(".tool[data-t]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.t === t)));
   /* Beim Werkzeug "Einheit" faehrt das Depot von selbst aus - von dort zieht
@@ -10744,22 +10939,50 @@ document.addEventListener("pointerdown", ev => {
   paraMenueZu();
 });
 document.addEventListener("keydown", ev => { if (ev.key === "Escape") paraMenueZu(); });
+/* The same four for the defence tool's menu. */
+document.querySelector('.tool[data-t="line"]')?.addEventListener("click", () => {
+  if (tool !== "line") return;                 // the tool was refused (line cap)
+  lineMenueWechsel();
+});
+window.addEventListener("resize", lineMenueZu);
+document.addEventListener("pointerdown", ev => {
+  const m = document.getElementById("line-menu");
+  if (!m || m.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest('.tool[data-t="line"]')) return;   // the button toggles
+  lineMenueZu();
+});
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") lineMenueZu(); });
 
 /* Right-click on a town: the para-block as a small menu at the mouse, so
    nobody has to open the detail view for it. */
 function pbMenueZu(){ const m = document.getElementById("pb-menu"); if (m) m.remove(); }
-function pbMenue(i, x, y){
+function pbMenue(i, x, y, standVorher){
   pbMenueZu();
   const pb = paraAt(i);
+  /* VORWAHL DER CLANSEITE. Der Haken "Only planned" weiter unten legt ohne
+     Block einen an; ohne diese Zeile haette der keine Seite. Ein bestehender
+     Block behaelt seine, auch der einer fremden Fraktion - der ist eine
+     Sichtung. Die Knopfreihe bleibt davon unberuehrt: dort wirkt jeder Klick
+     sofort, da ist nichts vorzuwaehlen, und ein gedruecktes "none" ist die
+     Auskunft, dass hier nichts steht. */
+  const vorwahl = pb ? pb.f : clanFaktion();
+  /* Was beim OEFFNEN stand. Nur damit bleibt das Wegnehmen des Hakens eine
+     Ruecknahme; beim Neuzeichnen wandert der Stand mit. */
+  if (standVorher === undefined) standVorher = pb;
+  const verteidigt = einzelLinieAn(i);
   const m = document.createElement("div"); m.id = "pb-menu";
   m.innerHTML = `<div class="t">Para-block · <b>${esc(MAP.n[i][0])}</b></div>
+    <div style="font-size:11px;color:var(--dim);margin:0 2px 6px;max-width:200px">${
+      pb ? zustandText(`para:${i}`, pb, S.para[i] && (S.para[i].n || S.para[i].by)) : "No block here yet."}</div>
     <div class="own4">
       ${FACTIONS.map(q=>`<button data-pb="${q.id}" style="--f:${q.color}" aria-pressed="${pb && pb.f===q.id}">${q.tag}</button>`).join("")}
       <button data-pb="" style="--f:${NEUTRAL.color}" aria-pressed="${!pb}">none</button>
     </div>
     <label class="toggle" style="margin-top:6px"><input type="checkbox" id="pb-menu-plan" ${pb && pb.plan ? "checked" : ""}>
       <span>Only planned</span></label>
-    <button type="button" class="btn" id="pb-menu-fenster" style="margin-top:6px;width:100%;font-size:11px">Order window \u2026</button>`;
+    <button type="button" class="btn" id="pb-menu-fenster" style="margin-top:6px;width:100%;font-size:11px">Order window \u2026</button>
+    <div class="t" style="margin-top:9px">Defence</div>
+    <button type="button" class="btn" id="pb-menu-def" style="width:100%;font-size:11px">${verteidigt ? "Defence window \u2026" : "Defend this city"}</button>`;
   document.body.appendChild(m);
   const b = m.getBoundingClientRect();
   m.style.left = Math.max(4, Math.min(innerWidth - b.width - 4, x)) + "px";
@@ -10770,8 +10993,22 @@ function pbMenue(i, x, y){
     pbMenueZu(); if (sel === i) side(); draw(); tally();
   }));
   m.querySelector("#pb-menu-fenster").addEventListener("click", () => { pbMenueZu(); paraDialog(i); });
+  m.querySelector("#pb-menu-def").addEventListener("click", () => { pbMenueZu(); lineEinzelAnlegen(i); });
   m.querySelector("#pb-menu-plan").addEventListener("change", ev => {
-    if (paraAt(i)) { setPara(i, paraAt(i).f, ev.target.checked); if (sel === i) side(); draw(); }
+    const steht = paraAt(i);
+    /* Der Haken legt ohne Block einen geplanten an, auf der Clanseite. Ihn
+       gleich wieder wegzunehmen muss dann eine RUECKNAHME sein - sonst wuerde
+       die Rueckgaengig-Geste den eben selbst angelegten Plan in Kraft setzen,
+       und das ist die staerkste Aussage, die es hier gibt. Ein Block, der
+       beim Oeffnen schon stand, wird wie bisher in Kraft gesetzt. */
+    if (ev.target.checked) setPara(i, steht ? steht.f : vorwahl, true);
+    else if (steht && standVorher) setPara(i, steht.f, false);
+    else if (steht) setPara(i, null, false);
+    if (sel === i) side(); draw(); tally();
+    /* Neu zeichnen: sonst stehen Zustandszeile und "none" auf dem Stand von
+       vorher. Der Stand beim Oeffnen wandert mit, sonst faengt das
+       Gedaechtnis nach dem ersten Haken von vorn an. */
+    pbMenue(i, x, y, standVorher);
   });
 }
 cv.addEventListener("contextmenu", ev => {
@@ -10826,7 +11063,7 @@ function tips(){
     owner:  `<b>Control</b> — click sets the town to <b>${p}</b>, again releases.`,
     unit:   `<b>Unit</b> — click a town, or drag teams from your depot.`,
     arrow:  `<b>Attack</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
-    line:   `<b>Defence</b> — drag across the towns. For <b>${p}</b>.`,
+    line:   `<b>Defence</b> — ${lineEinzel() ? "click the town to hold" : "drag across the towns"}. For <b>${p}</b>.`,
     para:   `<b>Plan parablock</b> — ${paraTipp()} For <b>${p}</b>.`,
     parablock: `<b>Active parablock</b> — click a town that is blocked right now; click again to clear it. For <b>${p}</b>.`,
     brush:  `<b>Paint</b> — drag over the map; every town under the brush goes to <b>${FACTIONS[faction].name}</b>, right button sets it open. Up to ${PINSEL_ZUG_MAX} per stroke.${pinselRueck ? ` <button class="btn" id="tip-rueck" style="padding:1px 7px;font-size:10.5px">Undo last stroke</button>` : ""}`,
@@ -11737,6 +11974,7 @@ function side(){
       <label class="toggle"><input type="checkbox" id="star-cb" ${starAt(i)?"checked":""}>
         <span>Key objective — highlight for everyone</span></label>
     </div>
+    ${schlachtAbschnitt(i)}
     ${(() => {
       /* WER KANN HIER FLIEGEN? Nur bei einer Hauptstadt und nur, wenn die
          Flugplatzbrille an ist - sonst ist es Fuellsel.
@@ -29942,9 +30180,9 @@ function areaDialog(id, e, neuGezogen){
 function lineDialog(id, e){
   const l = e.v, fremd = fremdeSeite(l);   // another side's line is a sighting
   openDlg(`
-    <div class="dlg-h"><h2>Defence line</h2>
+    <div class="dlg-h"><h2>${istEinzelLinie(l) ? "Defence" : "Defence line"}</h2>
       <p>${zustandText(id, l, e.n || e.by)}</p>
-      <p>${l.pts.length} towns · ${alterText(e.t)}</p></div>
+      <p>${istEinzelLinie(l) ? "Single city" : l.pts.length + " towns"} · ${alterText(e.t)}</p></div>
     <div class="dlg-b">
       <div style="font-size:12px;color:var(--dim)">${l.pts.map(i=>esc(MAP.n[i]?MAP.n[i][0]:"?")).join(" → ")}</div>
       <div class="row" style="align-items:center">
@@ -29967,7 +30205,7 @@ function lineDialog(id, e){
       ${l.folge ? `<div class="note">Step <b>${l.folge}</b> of its operation.</div>` : ""}
     </div>
     <div class="dlg-f">
-      ${darfWeg(e) ? `<button class="btn danger" id="l-del">Delete line</button>` : ""}
+      ${darfWeg(e) ? `<button class="btn danger" id="l-del">${istEinzelLinie(l) ? "Delete defence" : "Delete line"}</button>` : ""}
       ${zustandKnoepfe(id, l, e)}
       <span style="flex:1"></span>
       <button class="btn" id="d-close">Close</button>
@@ -29992,7 +30230,7 @@ function lineDialog(id, e){
   });
   document.getElementById("l-del")?.addEventListener("click", ()=>{
     if (!dropEntry("line", id)) return;   // die Absage steht schon da
-    closeDlg(); draw(); toast("Line removed");
+    closeDlg(); draw(); toast(istEinzelLinie(l) ? "Defence removed" : "Line removed");
   });
 }
 
@@ -30388,7 +30626,17 @@ function intelDialog(tab, seite){
   /* sortable and filterable fields, and the state of filter and sort -
      kept on the function, the dialog is rebuilt on every change */
   for (const [key, d] of proSpieler){
-    d.bekannt = atEcht(feindDepot(key)).length;
+    /* Zwei Zahlen je Spieler: bestaetigt sind die aufgeklaerten Einheiten,
+       die Gesamtzahl nimmt die vermuteten dazu und faellt nie unter das, was
+       die Nummern verlangen - wer AT-012 fuehrt, hat zwoelf, auch wenn erst
+       vier davon gesehen wurden. Gezaehlt wird je Nummernkreis, siehe
+       atMindestensJeStamm. */
+    const dep = feindDepot(key);
+    const echt = atEcht(dep);
+    d.bekannt = echt.length;
+    d.offenAt = atOffen(dep).length;
+    d.atGesamt = Math.max(d.bekannt + d.offenAt, atMindestensJeStamm(dep));
+    d.atTypen = new Set(echt.map(x => x.k).filter(Boolean));
     d.clan = clanIdVon(d.name); d.region = regionVon(d.name);
   }
   const PL_F = (intelDialog.plF === undefined) ? null : intelDialog.plF;
@@ -30396,11 +30644,27 @@ function intelDialog(tab, seite){
   const PL_S = intelDialog.plS || "teams";
   const PL_AB = (intelDialog.plAb === undefined) ? true : intelDialog.plAb;   /* true = descending */
   const PL_KEYS = {name: d => d.name.toLowerCase(), f: d => d.f == null ? -1 : d.f, clan: d => clanTitel(d.clan).toLowerCase(),
-                   region: d => d.region || "", bekannt: d => d.bekannt, teams: d => d.teams, orte: d => d.orte.size, t: d => d.t || 0};
+                   region: d => d.region || "", bekannt: d => d.bekannt, atges: d => d.atGesamt,
+                   teams: d => d.teams, orte: d => d.orte.size, t: d => d.t || 0};
   const liste = [...proSpieler.entries()]
     .filter(([,d]) => nurSeite === null || d.f === nurSeite)
     .sort((a,b)=> b[1].teams - a[1].teams);
-  const plZeig = liste.filter(([,d]) => (PL_F === null || d.f === PL_F) && (!PL_R || d.region === PL_R) && (!PL_C || d.clan === PL_C))
+  /* Welche Einheitentypen ueberhaupt bekannt sind und bei wie vielen
+     Spielern. Gezaehlt an der UNGEFILTERTEN Liste - sonst schruempfte die
+     Auswahl beim ersten Griff auf den einen gewaehlten Typ zusammen und man
+     kaeme nur ueber "any" wieder heraus. Reihenfolge wie im Aufstiegsbaum. */
+  const plAtZahl = new Map();
+  for (const [,d] of liste) for (const k of d.atTypen) plAtZahl.set(k, (plAtZahl.get(k) || 0) + 1);
+  const plAtListe = [...plAtZahl.entries()].sort((a,b)=> atBaumRang(a[0]) - atBaumRang(b[0]));
+  /* Der gemerkte Typ ueberlebt den Neuaufbau, die Daten nicht. Wird die
+     letzte Einheit dieses Typs geloescht, faellt er aus der Auswahl - und
+     ohne diese Zeile stuende sichtbar "any AT type" da, waehrend weiter
+     gefiltert wird: leere Tabelle, kein erkennbarer Grund, und ein erneutes
+     Waehlen von "any AT type" loeste kein change aus. */
+  if (!plAtZahl.has(intelDialog.plAt)) intelDialog.plAt = "";
+  const PL_AT = intelDialog.plAt;
+  const plZeig = liste.filter(([,d]) => (PL_F === null || d.f === PL_F) && (!PL_R || d.region === PL_R)
+      && (!PL_C || d.clan === PL_C) && (!PL_AT || d.atTypen.has(PL_AT)))
     .sort((a,b) => { const ka = PL_KEYS[PL_S](a[1]), kb = PL_KEYS[PL_S](b[1]);
       const r = typeof ka === "string" ? ka.localeCompare(kb) : ka - kb; return PL_AB ? -r : r; });
   const nz = n => n.toLocaleString("en");
@@ -30559,11 +30823,13 @@ function intelDialog(tab, seite){
           ${REGIONEN.map(r=>`<button data-plr="${r.k}" aria-pressed="${PL_R===r.k}">${regionSVG(r.k, 13)}${r.name}<b>${liste.filter(([,d])=>d.region===r.k).length}</b></button>`).join("")}
           <select id="pl-clan" class="mini" style="margin-left:6px"><option value="">any clan</option>${
             clanListe().map(cl=>`<option value="${esc(cl.id)}"${PL_C===cl.id?" selected":""}>${esc(cl.titel)} (${cl.spieler.length})</option>`).join("")}</select>
+          ${plAtListe.length ? `<select id="pl-at" class="mini" style="margin-left:4px"><option value="">any AT type</option>${
+            plAtListe.map(([k,n])=>`<option value="${esc(k)}"${PL_AT===k?" selected":""}>${esc(atName(k))} (${n})</option>`).join("")}</select>` : ""}
           <span style="font-size:11px;color:var(--dim2);margin-left:auto">${plZeig.length} of ${liste.length}</span>
         </div>` : ""}
         ${liste.length ? `<div class="tw"><table>
-          <thead><tr>${[["name","Player"],["clan","Clan"],["f","Fights for"],["region","Region"],["bekannt","Known teams"],["teams","Seen"],["orte","Towns"]].map(([k,n])=>
-            `<th data-ps="${k}" style="cursor:pointer" title="Sort by ${n}">${n}${PL_S===k?(PL_AB?" ▼":" ▲"):""}</th>`).join("")}<th>What</th><th data-ps="t" style="cursor:pointer" title="Sort by last seen">Last${PL_S==="t"?(PL_AB?" ▼":" ▲"):""}</th></tr></thead>
+          <thead><tr>${[["name","Player"],["clan","Clan"],["f","Fights for"],["region","Region"],["teams","Seen"],["orte","Towns"],["atges","Total ATs"]].map(([k,n])=>
+            `<th data-ps="${k}" style="cursor:pointer" title="Sort by ${n}">${n}${PL_S===k?(PL_AB?" ▼":" ▲"):""}</th>`).join("")}<th data-ps="t" style="cursor:pointer" title="Sort by last seen">Last${PL_S==="t"?(PL_AB?" ▼":" ▲"):""}</th></tr></thead>
           <tbody>${plZeig.map(([key,d])=>`<tr>
             <td><a href="#" data-oeffne="${esc(key)}" style="color:var(--accent)">${esc(d.name)}</a>${
               uebergelaufen(key) ? ` <em style="color:var(--accent);font-size:10px">ours</em>` : ""}${
@@ -30576,15 +30842,14 @@ function intelDialog(tab, seite){
               ${FACTIONS.map(f=>`<option value="${f.id}"${d.f===f.id?" selected":""}>${f.tag}</option>`).join("")}
             </select></td>
             <td style="text-align:left;white-space:nowrap">${regionSVG(regionVon(d.name))}${regionWahl(`data-reg="${esc(key)}"`, regionVon(d.name))}</td>
-            <td>${atEcht(feindDepot(key)).length || "—"}</td>
             <td>${d.teams?nz(d.teams):"—"}</td>
             <td>${d.orte.size
               ? `<button class="btn" data-hebe="${esc(key)}" data-hebename="${esc(d.name)}"
                    title="Lift these towns on the map" style="padding:1px 8px;min-width:0">${d.orte.size}</button>`
               : "—"}</td>
-            <td style="text-align:left">${[...d.arten.entries()].map(([k,v])=>
-                `<span title="${esc(atName(k))}" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px">
-                   ${symbolSVG(k, c, 20, 14)}<small>${v}</small></span>`).join("") || "—"}</td>
+            <td${d.atGesamt ? ` data-atzelle="${esc(key)}" data-atname="${esc(d.name)}" style="cursor:help"` : ""}>${
+              d.atGesamt ? `<b>${nz(d.bekannt)}</b>${d.atGesamt > d.bekannt
+                ? ` <span style="color:var(--dim2)">(${nz(d.atGesamt)})</span>` : ""}` : "—"}</td>
             <td style="color:var(--dim2)">${d.t?alterText(d.t):"—"}</td>
           </tr>`).join("")}</tbody></table></div>` : `<div class="empty">Nobody on record yet.</div>`}
         <div class="note">Click a name to record the teams they own.</div>
@@ -30692,6 +30957,44 @@ function intelDialog(tab, seite){
     intelDialog.plR = b.dataset.plr; neuAuf("players"); }));
   { const plc = document.getElementById("pl-clan");
     if (plc) plc.addEventListener("change", ()=>{ intelDialog.plC = plc.value; neuAuf("players"); }); }
+  { const pla = document.getElementById("pl-at");
+    if (pla) pla.addEventListener("change", ()=>{ intelDialog.plAt = pla.value; neuAuf("players"); }); }
+  /* Die ausfuehrliche Liste am Mauszeiger. Sie sitzt in der Karte der
+     Landkarte (#hover): die liegt ueber dem Fenster, waehrend der
+     Tabellenrahmen .tw abschneidet - ein Feld in der Zelle waere halb
+     verschwunden.
+     GEKLEMMT wie das Para-Menue: aufBildschirm setzt nur um, es haelt nichts
+     am Rand, und die Karte eines Spielers mit vielen ATs stand sonst unten
+     zur Haelfte unter dem Schirm - zu holen war sie wegen pointer-events:none
+     nicht. Die Karte traegt zoom:var(--ui), getBoundingClientRect misst aber
+     schon Bildschirmpunkte, dieselben, in denen innerWidth/innerHeight
+     zaehlen; hier darf also gerechnet werden.
+     hoverZeigen(null) ZUERST: sonst bleibt die zuletzt gezeigte Stadt
+     vermerkt, und die Karte zeigt beim naechsten Zeigen auf ebendiese Stadt
+     immer noch diesen Inhalt hier. */
+  { const zellen = [...document.querySelectorAll("#dlg td[data-atzelle]")];
+    const setzen = ev => {
+      const b = hover.getBoundingClientRect();
+      aufBildschirm(hover, Math.max(4, Math.min(innerWidth  - b.width  - 4, ev.clientX + 16)),
+                           Math.max(4, Math.min(innerHeight - b.height - 4, ev.clientY + 14)));
+    };
+    zellen.forEach(z => {
+      z.addEventListener("mouseenter", ev => {
+        hoverZeigen(null);
+        hover.innerHTML = atKarteHtml(z.dataset.atzelle, z.dataset.atname, c);
+        hover.style.display = "block";
+        setzen(ev);
+      });
+      z.addEventListener("mousemove", setzen);
+      z.addEventListener("mouseleave", ()=>hoverZeigen(null));
+    });
+    /* Faellt das Fenster zu, waehrend der Zeiger auf einer Zelle steht, kommt
+       kein mouseleave mehr - der Aufraeumhaken des offenen Fensters holt es.
+       Es gibt nur EINEN Platz dafuer: belegt wird er nur, wenn hier auch
+       wirklich Zuhoerer haengen, sonst nimmt ihn das Intel-Fenster jedem
+       spaeteren Aufraeumer weg. */
+    if (zellen.length) bildAbmelden = () => { hoverZeigen(null); bildAbmelden = null; };
+  }
   document.querySelectorAll("#dlg th[data-ps]").forEach(h => h.addEventListener("click", ()=>{
     const k = h.dataset.ps;
     if ((intelDialog.plS || "teams") === k) intelDialog.plAb = !((intelDialog.plAb === undefined) ? true : intelDialog.plAb);
@@ -33515,6 +33818,57 @@ function atMindestens(liste){
     if (q && q.zahl <= AT_NUMMER_MAX) m = Math.max(m, q.zahl);
   }
   return m;
+}
+/* Dasselbe, aber je Nummernkreis. Wer AT-004 und PARA-012 fuehrt, hat
+   mindestens sechzehn - atMindestens sieht nur die zwoelf, weil es die
+   hoechste Nummer ueber alle Eintraege nimmt. Getrennt wird nach demselben
+   Stamm, den auch atLuecken prueft. Der Reiter Gaps rechnet weiter mit
+   atMindestens; in einer Spalte, die "Total ATs" heisst, faellt die
+   Untertreibung dagegen auf. */
+function atMindestensJeStamm(liste){
+  const hoch = new Map();
+  for (const d of (liste || [])){
+    const q = atNummer(d.tag);
+    if (q && q.zahl <= AT_NUMMER_MAX) hoch.set(q.stamm, Math.max(hoch.get(q.stamm) || 0, q.zahl));
+  }
+  let m = 0;
+  for (const z of hoch.values()) m += z;
+  return m;
+}
+/* Die ausfuehrliche Liste hinter der Spalte "Total ATs" im Intel-Fenster.
+   Nicht aufgeklaerte Einheiten tragen dasselbe Fragezeichen wie im
+   Spielerfenster (.unit .sym.frage) - wer es dort einmal gesehen hat, muss
+   hier nicht neu lernen, was ein "?" bedeutet. Der Rest, den nur die
+   Nummerierung verlangt, steht als Zeile darunter; er hat keinen Eintrag,
+   den man zeigen koennte.
+   ZEHN Zeilen, nicht mehr: eine .unit-Zeile ist 28 Punkte hoch plus 4
+   Abstand, zehn davon mit Kopf und Polster rund 370 - bei Bedienungsgroesse
+   1,4 rund 520 Bildschirmpunkte. Die Karte laesst sich nicht rollen
+   (pointer-events:none), was nicht hineinpasst, waere fort; deshalb steht
+   darunter, wieviele fehlen. */
+const AT_KARTE_ZEILEN = 10;
+function atKarteHtml(key, name, farbe){
+  const dep = feindDepot(key);
+  const echt = atEcht(dep).slice().sort((a,b)=> atBaumRang(a.k) - atBaumRang(b.k));
+  const offen = atOffen(dep);
+  const alle = echt.concat(offen);
+  const gesamt = Math.max(alle.length, atMindestensJeStamm(dep));
+  const zeile = d => {
+    const frage = !!(d.ung || d.verm);
+    return `<div class="unit z1" style="--f:var(--dim2)${frage ? ";opacity:.62" : ""}">
+      <span class="sym${frage ? " frage" : ""}" title="${esc(frage
+        ? (d.verm ? "assumed from the numbering" : "placeholder") : atName(d.k))}">${
+        frage ? "?" : symbolSVG(d.k, farbe)}</span>
+      <span class="n" dir="auto"><b>${esc(d.tag || "")}</b><span style="overflow:hidden;text-overflow:ellipsis">${
+        esc(d.name || (frage ? "not scouted yet" : ""))}</span>${
+        d.k ? `<em><span class="vt">${esc(atKurz(d.k))}</span></em>` : ""}</span></div>`;
+  };
+  const rest = gesamt - alle.length;
+  return `<div class="h-name">${esc(name)}</div>
+    <div class="h-sub">${echt.length} confirmed${gesamt > echt.length ? ` of ${gesamt}` : ""}</div>
+    ${alle.length ? `<div class="grp">${alle.slice(0, AT_KARTE_ZEILEN).map(zeile).join("")}</div>` : ""}
+    ${alle.length > AT_KARTE_ZEILEN ? `<div class="h-hint">${alle.length - AT_KARTE_ZEILEN} more</div>` : ""}
+    ${rest > 0 ? `<div class="h-row">${rest} missing</div>` : ""}`;
 }
 
 /* ---- Zeichenhilfe ----------------------------------------------------
@@ -37949,11 +38303,113 @@ function schlachtUrteil(wir, sie){
   for (const z of zweige){
     const u = (a.get(z)||{best:0}).best, g = (b.get(z)||{best:0}).best;
     if (!g && !u) continue;
-    if (g > 0 && u === 0) fehlt.push(`Nothing to answer their ${zw(z).toLowerCase()} — they can field ${g}, you none.`);
-    else if (g >= 2*u && g - u >= 2) droht.push(`${zw(z)}: they can field ${g}, you ${u}.`);
+    if (g > 0 && u === 0) fehlt.push(`Nothing to answer their ${zw(z).toLowerCase()} — they have ${g}, you none.`);
+    else if (g >= 2*u && g - u >= 2) droht.push(`${zw(z)}: they have ${g}, you ${u}.`);
     else if (u >= 2*g && u - g >= 2) gleich.push(`${zw(z)} is yours — ${u} against ${g}.`);
   }
   return {droht, fehlt, stark: gleich};
+}
+/* ---- Die Lage am Ort ------------------------------------------------
+   Die Funktionen darueber standen fertig im Blatt und hatten keinen
+   einzigen Aufrufer. Angeschlossen werden sie hier, an dem Ort, an dem
+   gerade gekaempft wird.
+
+   DREI ZAHLEN, DREI MASSSTAEBE, und sie duerfen nicht durcheinander:
+   - Eigene Trupps: was hier steht, je Zweig ZUSAMMENGEZAEHLT. Ein
+     Rifleman, ein Assault und ein LMG sind drei Infanterietrupps, nicht
+     einer. Deshalb liefert schlachtZweige einen Eintrag je Zweig - das
+     Maximum, das zweigStaerke daraus zieht, ist dann die Summe, und die
+     Saetze darunter nennen dieselbe Zahl, die in der Zeile steht. Erst
+     damit stimmt auch das Wort "have" in schlachtUrteil.
+   - Gemeldete Trupps: was gesichtet wurde. Mehrere Kameraden melden
+     denselben Ort; je Truppentyp zaehlt die GROESSTE einzelne Meldung,
+     nicht ihre Summe - dieselbe Regel wie bei der Fallschirmbedrohung,
+     sonst steht derselbe Feindtrupp zweimal in der Zeile.
+   - Fraktionsvorrat: was nachgekauft werden kann. Hier ist das Maximum
+     je Zweig richtig, denn ein Vorrat laesst sich nur einmal ausgeben.
+     Weil das ein anderer Massstab ist, steht die Zeile hinter einem
+     Trennstrich und nicht in der Gegenueberstellung.
+
+   OHNE MELDUNG KEIN URTEIL. Steht nur Eigenes am Ort, waere die Gegenseite
+   eine Null, die niemand gemeldet hat - schlachtUrteil machte daraus
+   "Armor is yours". Fehlendes Wissen steht deshalb als fehlendes Wissen
+   da. Was gemeldet WURDE, bleibt trotzdem eine Meldung: ein Zweig, den
+   keiner aufgeschrieben hat, erscheint als 0. Darum steht das Alter der
+   juengsten Meldung in der Kopfzeile.
+
+   Einen Vorrat AM ORT, wie ihn ausRessourcen eigentlich meint, gibt es
+   nirgends: der Topf btl ist dafuer angelegt, aber niemand schreibt ihn,
+   battleStand(i) ist immer null. Er wird hier nicht geraten. */
+function schlachtZweige(jeTyp){
+  const m = new Map();
+  for (const [k, n] of jeTyp){
+    if (!k || !(n > 0)) continue;
+    const z = zweigVon(k);
+    m.set(z, (m.get(z) || 0) + n);
+  }
+  return [...m.entries()].map(([z, n]) => ({k: z, n, zweig: z}));
+}
+function schlachtAbschnitt(i){
+  if (!fightAt(i)) return "";
+  const meine = clanFaktion();
+  const meins = new Map();
+  for (const g of unitsAt(i)) for (const u of g.list)
+    meins.set(u.k, (meins.get(u.k) || 0) + (u.s || 0));
+  /* Eine Sichtung ohne Seitenangabe koennte die eigene sein. Geraten wird
+     nichts - sie bleibt draussen und wird unten beziffert. */
+  const feind = new Map();
+  let ohneSeite = 0, tSicht = 0;
+  for (const g of spotsAt(i)){
+    const je = new Map();
+    let ohne = 0;
+    for (const u of g.list){
+      if (u.f == null){ ohne += u.n || 0; continue; }
+      if (u.f === meine) continue;
+      je.set(u.k, (je.get(u.k) || 0) + (u.n || 0));
+    }
+    for (const [k, n] of je) feind.set(k, Math.max(feind.get(k) || 0, n));
+    if (je.size) tSicht = Math.max(tSicht, g.t || 0);
+    ohneSeite = Math.max(ohneSeite, ohne);
+  }
+  const wir = schlachtZweige(meins), sie = schlachtZweige(feind);
+  if (!wir.length && !sie.length) return "";
+  const a = zweigStaerke(wir), b = zweigStaerke(sie);
+  const best = (m, z) => (m.get(z) || {best: 0}).best;
+  /* Die Ordnung des Spiels zuerst, alles Unbekannte hinterher - ein Zweig,
+     den ZWEIGE nicht kennt, faellt sonst stillschweigend aus der Zeile. */
+  const zweige = [...new Set([...ZWEIGE.map(z => z.k), ...a.keys(), ...b.keys()])]
+    .filter(z => a.has(z) || b.has(z));
+  const zeile = zweige.map(z => sie.length
+    ? `${esc(zweigName(z))} <b>${best(a, z)}</b>:<b>${best(b, z)}</b>`
+    : `${esc(zweigName(z))} <b>${best(a, z)}</b>`);
+  const urteil = sie.length ? schlachtUrteil(wir, sie) : null;
+  const satz = (t, farbe) => `<div class="hint" style="color:${farbe}">${esc(t)}</div>`;
+  /* Der Vorrat nur MIT Herkunft: poolStand rechnet die Ablesung unbegrenzt
+     hoch, eine drei Tage alte Zahl saehe sonst aus wie eine frische. Die
+     Ablesung einer fremden Fraktion sagt hier gar nichts und faellt weg. */
+  const stand = poolStand();
+  const poolZeile = (() => {
+    if (!stand || (stand.f != null && stand.f !== meine)) return "";
+    const pool = zweigStaerke(ausRessourcen(stand.jetzt));
+    const teile = [...new Set([...ZWEIGE.map(z => z.k), ...pool.keys()])]
+      .filter(z => best(pool, z) > 0)
+      .map(z => `${esc(zweigName(z))} <b>${best(pool, z)}</b>`);
+    if (!teile.length) return "";
+    return `<div class="hint" style="color:var(--dim);border-top:1px solid var(--line);margin-top:6px;padding-top:6px">
+      Faction pool: ${teile.join(" \u00b7 ")}
+      <em style="font-style:normal;opacity:.72">read by ${esc(stand.by || "?")} ${alterText(stand.t)}</em></div>`;
+  })();
+  return `<div class="sec">
+      <h3>Match-up${sie.length ? ` <span class="sub">yours : theirs${
+        tSicht ? ` \u00b7 spotted ${alterText(tSicht)}` : ""}</span>` : ""}</h3>
+      <div class="hint">${zeile.join(" \u00b7 ")}</div>
+      ${urteil ? urteil.fehlt.map(t => satz(t, "var(--su)")).join("") : ""}
+      ${urteil ? urteil.droht.map(t => satz(t, "var(--accent)")).join("") : ""}
+      ${urteil ? urteil.stark.map(t => satz(t, "var(--us)")).join("") : ""}
+      ${sie.length || ohneSeite ? "" : `<span class="empty">Nothing spotted here.</span>`}
+      ${ohneSeite ? `<div class="hint" style="color:var(--dim)">${ohneSeite} without a side.</div>` : ""}
+      ${poolZeile}
+    </div>`;
 }
 
 /* ---- Vermutete Zeitzone ----------------------------------------------
@@ -39254,6 +39710,18 @@ function clanDialog(tab){
 
 The depot of that side becomes the active one.`)) return;
     setClanFaktion(f); depotBlick = null;
+    /* DIE ZEICHENFARBE ZIEHT MIT. Wer die Seite des ganzen Clans umstellt,
+       zeichnet ab jetzt in deren Farbe - sonst gingen Pfeil, Linie und
+       Flaeche weiter in der alten hinaus. Und die Handwahl ist damit
+       zurueckgenommen: faction steht wieder auf der Clanseite, also darf der
+       Abgleich sie kuenftig wieder nachziehen (siehe faktionSelbstGewaehlt).
+       Nur wenn die Umstellung wirklich durchging - setClanFaktion weist ab,
+       wer nicht Leiter ist. */
+    if (clanFaktion() === f){
+      faction = f;
+      faktionSelbstGewaehlt = false;
+      fraktionenZeichnen(); tips();
+    }
     rebuildUnits(); kopfzeile(); side(); draw(); tally(); depotZeichnen(); kraftLeiste();
     clanDialog("clan"); toast(`Now fighting as ${FACTIONS[f].tag}`);
   }));
@@ -40430,7 +40898,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5c8a386bd6</span></p></div>
+         installation. <span style="color:var(--dim2)">· build ace52e0b42</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -40602,7 +41070,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "5c8a386bd6";
+const BAU = "ace52e0b42";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
