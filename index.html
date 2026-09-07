@@ -3988,6 +3988,13 @@ function pfeilFreigeben(a){
   S.arrows.push(a); dirty.add(`arrow:${a.id}`);
   entwuerfeSpeichern();
 }
+/* AN ORDER SHOWS ITSELF THE MOMENT IT EXISTS. Until now an arrow was drawn
+   and nothing happened at all - one had to know that "Inspect" opens its
+   window, and the drop's own message said so out loud. A freshly drawn area
+   has opened its window all along; the arrow was the one tool that showed
+   nothing. Not for another side's arrow: there the window hides commitment,
+   strength, chain and state, and would stand nearly empty. */
+const pfeilFrischZeigen = a => { if (a && !fremdeSeite(a)) arrowDialog(a, true); };
 function pfeilAnlegen(von, bis){
   const a = {from:von, to:bis, f:faction, label:"", art:artNeu(), t:jetzt(), by:S.me, id:pfeilId()};
   if (entwurfModus){ a.entwurf = 1; ENTWUERFE.push(a); entwuerfeSpeichern(); save(); return a; }
@@ -8199,8 +8206,11 @@ function paraPfeilAnlegen(von, bis, mehr){
   if (!mehr) paraFlussAbbruch();               // Ctrl held: airfield and ring stay for the next target
   luftSprungStart(a);
   const brett = a.boardId ? `. ${MAP.n[von][0]} is on the board to be taken first` : "";
-  toast(`Drop planned${entwurfModus ? " (draft)" : ""}${brett}. `
-    + (mehr ? "Ctrl-click the next target, Escape ends." : "To name it, click the arrow with Inspect."));
+  toast(`Drop planned${entwurfModus ? " (draft)" : ""}${brett}.`
+    + (mehr ? " Ctrl-click the next target, Escape ends." : ""));
+  /* the window waits for the jump to land - and stays away entirely while
+     Ctrl is chaining targets, that flow is built for going on */
+  if (!mehr) setTimeout(() => pfeilFrischZeigen(a), LUFT_SPRUNG_MS + 60);
   paraVorratWarnung();                         // a second toast when drops outnumber the paras
   side(); tally();
 }
@@ -10173,8 +10183,9 @@ window.addEventListener("mouseup", e => {
   if (zieh.art === "arrow"){
     const bis = hitTest(x, y);
     if (bis !== null && bis !== zieh.von && darfIchNochMalen("arrow")){
-      pfeilAnlegen(zieh.von, bis);
+      const neu = pfeilAnlegen(zieh.von, bis);
       toast(`${MAP.n[zieh.von][0]} → ${MAP.n[bis][0]}${entwurfModus ? " (draft)" : ""}`);
+      pfeilFrischZeigen(neu);
     }
   } else if (zieh.art === "brush"){
     const l = zieh.pts.slice(0, PINSEL_ZUG_MAX);
@@ -10264,7 +10275,8 @@ cv.addEventListener("click", e => {
   } else if (tool === "arrow"){
     if (arrowFrom === null) arrowFrom = i;
     else if (arrowFrom !== i && darfIchNochMalen("arrow")){
-      pfeilAnlegen(arrowFrom, i); arrowFrom = null;
+      const neu = pfeilAnlegen(arrowFrom, i); arrowFrom = null;
+      pfeilFrischZeigen(neu);
     }
   } else if (tool === "line"){
     if (!lineDraft) lineDraft = {pts:[], f:faction};
@@ -11874,7 +11886,10 @@ function flyTo(i){
 }
 
 /* ---------------- arrow dialog: who is joining ---------------- */
-function arrowDialog(a){
+/* frisch: der Pfeil ist gerade erst entstanden. Dann steht oben nicht der
+   Zustandssatz, sondern ein Wort darueber, dass der Befehl schon steht -
+   das Fenster ist keine Rueckfrage, sondern die Gelegenheit zum Benennen. */
+function arrowDialog(a, frisch){
   const mit = joinOf(a.id), meins = mit.find(m => m.mine);
   const gesamt = mit.reduce((s,j)=>s+j.n, 0);
   const raus = deployedBy(S.me), habe = Object.values(raus).reduce((s,n)=>s+n,0);
@@ -11883,7 +11898,8 @@ function arrowDialog(a){
   const fremd = fremdeSeite(a);
   openDlg(`
     <div class="dlg-h"><h2>${esc(MAP.n[a.from][0])} → ${esc(MAP.n[a.to][0])}</h2>
-      <p>${zustandText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>
+      <p>${frisch ? "Give it a name, or just close \u2014 the order stands either way."
+                  : zustandText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>
       ${!fremd && a.luft ? `<p>${paraTextSicher(paraVorratText)}</p>` : ""}
       ${!fremd && (a.sym || a.luft) ? `<p>${paraTextSicher(() => paraErfuellbarText(paraBefehlTypen(a), {art: "arrow", id: a.id}))}</p>` : ""}
       ${fremd ? "" : `<p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
@@ -39986,7 +40002,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 460ab37145</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 00abc0121e</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -40130,7 +40146,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "460ab37145";
+const BAU = "00abc0121e";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
