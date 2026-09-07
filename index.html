@@ -1825,7 +1825,6 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-cl-growth" data-clantab="growth" title="How the clan has grown">Growth</button>
       <button class="btn" id="b-cl-over"   data-clantab="who"    title="Who owns which teams">Team owners</button>
       <button class="btn" id="b-cl-deploy" data-clantab="deploy" title="Where the clan's teams stand">In the field</button>
-      <button class="btn" id="b-cl-req"    data-clantab="req"    title="Calls for help">Requests</button>
       <button class="btn" id="b-cl-people" data-clantab="people" title="Members and their roles">Roles</button>
       <button class="btn" id="b-cl-arsenal" title="What the whole clan can field, and where the gaps are">Clan arsenal</button>
       <button class="btn" id="b-arms">Arsenal</button>
@@ -5864,10 +5863,17 @@ function overtimePruefen(){
    server for the totals (warmap_punkte_stand) and, for the leader or for
    oneself, for the ledger behind them (warmap_punkte_buch): who renames
    his units back and forth shows up there line by line. */
+/* VIER KONTEN, seit dem 07.09.2026. "Leader" ist nicht neu erfunden, es
+   wurde herausgetrennt: der Aussteller eines Befehls wurde bis dahin auf
+   dasselbe Konto gebucht wie die, die ihn erfuellt haben, und damit war
+   nicht zu sehen, wer fuehrt und wer ausfuehrt. Die Trennung sitzt im
+   Server (warmap_punkte_abschluss, erster insert-Block); was vorher gebucht
+   wurde, bleibt unter Orders stehen. */
 const PUNKTE_KONTEN = [
   {k:"recon",    n:"Recon",    kurz:"R"},
   {k:"logistic", n:"Logistic", kurz:"L"},
   {k:"order",    n:"Orders",   kurz:"O"},
+  {k:"leader",   n:"Leader",   kurz:"F"},
 ];
 /* the first-find kinds keep their names from the register (AUFK_NAME) */
 const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
@@ -5894,8 +5900,8 @@ function punkteStand(zeilen){
     if (!p){
       p = {spieler: z.spieler,
            name: z.name || (depotIdx.get(z.spieler) || {}).name || z.spieler,
-           summe: {recon: 0, logistic: 0, order: 0},
-           aktionen: {recon: [], logistic: [], order: []},
+           summe: {recon: 0, logistic: 0, order: 0, leader: 0},
+           aktionen: {recon: [], logistic: [], order: [], leader: []},
            letzte: 0};
       leute.set(z.spieler, p);
     }
@@ -5972,8 +5978,8 @@ function punkteZeichnen(zeilen){
     </div>
     <div class="note">One point for every hand that helps the clan: <b>Recon</b> for first finds,
       battles marked and the map kept, <b>Logistic</b> for the depot kept, <b>Orders</b> for orders
-      given and carried out. The server books them from what you write on the map; this page adds
-      nothing up. Click a row to see what the points were for.</div>`;
+      carried out, <b>Leader</b> for orders given. The server books them from what you write on the
+      map; this page adds nothing up. Click a row to see what the points were for.</div>`;
   feld.querySelectorAll("tr[data-pk]").forEach(tr => tr.addEventListener("click", () => {
     const d = tr.nextElementSibling;
     if (!d || d.dataset.pd === undefined) return;
@@ -8864,7 +8870,17 @@ function drawArrow(a){
   /* accepted assignments outrank the commitments: on the shield, on the
      badge at the foot and in the width of the arrow */
   const staerke = fremd ? zusagen : zuordIst("arrow", a.id, zusagen);
-  const breite = Math.max(2.8, (2.9 + Math.min(staerke,24)*0.5)*Math.sqrt(view.z))*uiScale;
+  /* BREIT GENUG, DASS DAS SCHILD DARIN SITZT. Die Staerke steht auf einer
+     Platte in der Mitte des Pfeils (befehlSchild); war der Schaft schmaler,
+     hing sie oben und unten heraus und lag mit ihren Raendern auf der Karte.
+     Gerechnet bei Zoom 1: die Platte ist rund 25 Punkte hoch, der Schaft war
+     bei zehn zugesagten Einheiten 15,8 - er traegt sie also erst bei zwei
+     Dutzend. Jetzt rund ein Drittel breiter: 8,4 statt 5,8 ohne Zusagen,
+     20,8 statt 15,8 bei zehn, 38,2 statt 29,8 am Anschlag.
+     Die Platte bleibt, wie sie ist - sie haengt am Zoom und nicht an der
+     Staerke, und mitwachsen liesse sie bei einem Pfeil ohne Zusagen ein
+     Schild ohne Pfeil darunter stehen. */
+  const breite = Math.max(3.6, (4.2 + Math.min(staerke,24)*0.62)*Math.sqrt(view.z))*uiScale;
   const pfad = pfeilForm(x1,y1,cx,cy,x2,y2,breite);
   pfadVon.set(a.id, pfad);
   const mitte = [];                       // fuer die Trefferpruefung, siehe griffTol
@@ -16128,7 +16144,7 @@ const unitsFremd = {};
 async function unitsFremdWorker(sprache){
   if (unitsFremd[sprache]) return unitsFremd[sprache];
   await ocrLaden();
-  const w = await window.Tesseract.createWorker(sprache, 1);
+  const w = await window.Tesseract.createWorker(sprache, 1, TESS_TEILE);
   await w.setParameters({tessedit_pageseg_mode: "7"});
   unitsFremd[sprache] = w;
   return w;
@@ -31363,11 +31379,32 @@ let ocrWorker = null, ocrMelder = ()=>{}, ocrPsm = null;
    ehrlicher, den Rahmen zu bemaengeln als etwas zu erfinden. */
 
 
+/* DIE TEXTERKENNUNG LIEGT NEBEN DER SEITE.
+   Vorgabe des Kommodore: keine Verbindungen zu anderen Servern als dem
+   eigenen. Die Bibliothek kam bis zum 07.09.2026 von cdn.jsdelivr.net und
+   ihre Sprachdateien von tessdata.projectnaptha.com - zwei Fremde.
+   Jetzt liegen alle zehn Dateien im Verzeichnis tess neben der Seite, und
+   der Pfad wird aus der Adresse der Seite selbst gebildet: damit stimmt er
+   auf GitHub Pages, in der oertlichen Probe und bei jedem anderen
+   Ablageort, ohne eine fest eingetragene Adresse.
+   Eingebettet werden die Dateien NICHT: gewogen sind es 71 MB, als Base64
+   in der HTML rund 94 MB, und die laedt jeder Besucher am Stueck, bevor die
+   Karte erscheint. Daneben gelegt kosten sie nichts, solange niemand Text
+   erkennen laesst. */
+const TESS_ORT = (() => {
+  try { return new URL("tess/", location.href).href; }
+  catch(e){ return "tess/"; }
+})();
+const TESS_TEILE = {
+  workerPath: TESS_ORT + "worker.min.js",
+  corePath:   TESS_ORT,
+  langPath:   TESS_ORT + "lang",
+};
 async function ocrLaden(){
   if (window.Tesseract) return;
   await new Promise((ok, err) => {
     const s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    s.src = TESS_ORT + "tesseract.min.js";
     s.onload = ok; s.onerror = () => err(new Error("could not be loaded"));
     document.head.appendChild(s);
   });
@@ -31414,11 +31451,12 @@ const OCR_SPRACHEN = "eng";
 let ocrSprachenAktiv = OCR_SPRACHEN;
 async function ocrBereit(psm, weiss, melde){
   ocrMelder = melde || (()=>{});
-  if (!window.Tesseract) ocrMelder("Loading the text recogniser (about 3 MB, first time only) …");
+  if (!window.Tesseract) ocrMelder("Loading the text recogniser (about 15 MB, first time only) …");
   await ocrLaden();
   if (!ocrWorker){
     ocrMelder("Starting the recogniser …");
     ocrWorker = await window.Tesseract.createWorker(ocrSprachenAktiv, 1, {
+      ...TESS_TEILE,
       logger: m => { if (m.status === "recognizing text")
         ocrMelder(`Reading … ${Math.round(m.progress*100)} %`); }
     });
@@ -39448,7 +39486,6 @@ function clanDialog(tab){
       <button data-tab="who"    aria-pressed="false">Team owners</button>
       <button data-tab="deploy" aria-pressed="false">In the field</button>
 
-      <button data-tab="req"    aria-pressed="false">Requests${anfragen.length?` ${anfragen.length}`:""}</button>
       <button data-tab="people" aria-pressed="false">Roles</button>
     </div>
     <div class="dlg-b">
@@ -39655,29 +39692,6 @@ function clanDialog(tab){
 
 
 
-      <div class="tabp" data-tab="req">
-        ${anfragen.length ? `<div style="display:flex;flex-direction:column;gap:5px">
-          ${anfragen.map(([id,e])=>`<div style="background:var(--panel2);border-radius:2px;padding:6px 9px;
-              border-left:3px solid var(--su);display:flex;justify-content:space-between;gap:10px">
-            <span style="font-size:12px">${esc(e.v.text)}
-              ${e.v.town!=null&&MAP.n[e.v.town]?`<a href="#" data-go="${e.v.town}" style="color:var(--accent)"> → ${esc(MAP.n[e.v.town][0])}</a>`:""}</span>
-            <span style="font-size:10px;color:var(--dim2);white-space:nowrap">${esc(e.n||e.by)} · ${alterText(e.t)}
-              ${darfWeg(e)?` · <a href="#" data-del="${id}" style="color:var(--su)">done</a>`:""}</span>
-          </div>`).join("")}
-        </div>` : `<div class="empty">Nothing requested.</div>`}
-        <div class="row" style="flex-wrap:wrap;gap:5px">
-          ${["recon","APCs","armor","heavy armor","planes","infantry","anti-tank","~500 men"]
-            .map(v=>`<button class="btn" data-req="${esc(v)}" style="font-size:11px;padding:3px 8px">${esc(v)}</button>`).join("")}
-        </div>
-        <div class="row">
-          <input type="text" id="rq-txt" placeholder="what do you need?" style="flex:1">
-          <div id="rq-town" style="width:170px"></div>
-          <button class="btn primary" id="rq-add">Request</button>
-        </div>
-        <div class="note">${rqFehlt ? esc(rechtSatz(rqFehlt)) : "A request lands on the board as urgent."} Mark ${
-          darf("loeschen") ? "any request" : "your own request"} <b>done</b> when it is covered.</div>
-      </div>
-
       <div class="tabp" data-tab="people"><div id="cl-people">
         <div class="empty">Loading …</div></div></div>
 
@@ -39739,26 +39753,6 @@ The depot of that side becomes the active one.`)) return;
     rebuildUnits(); depotZeichnen(); kraftLeiste(); side();
     clanDialog("over");
   }));
-  document.querySelectorAll("[data-req]").forEach(b => b.addEventListener("click", ()=>{
-    document.getElementById("rq-txt").value = b.dataset.req;
-  }));
-  if (document.getElementById("rq-town")) stadtWahl(document.getElementById("rq-town"), sel, "anywhere");
-  /* The surface asks first, like the board window does: nobody types a
-     request that addPost would refuse afterwards. */
-  if (rqFehlt){
-    const satz = rechtSatz(rqFehlt);
-    const feld = document.getElementById("rq-txt");
-    if (feld){ feld.readOnly = true; feld.placeholder = satz; feld.title = satz; }
-    const knopf = document.getElementById("rq-add");
-    if (knopf){ knopf.disabled = true; knopf.title = satz; }
-    document.querySelectorAll("#dlg [data-req]").forEach(b => { b.disabled = true; b.title = satz; });
-  }
-  document.getElementById("rq-add")?.addEventListener("click", ()=>{
-    const txt = document.getElementById("rq-txt").value.trim();
-    if (!txt){ toast("Say what you need first."); return; }
-    if (!addPost("Needs " + txt, stadtAus("rq-town"), 2, true)) return;
-    closeDlg(); boardZahl(); draw(); toast("Request posted");
-  });
   document.querySelectorAll("#dlg [data-del]").forEach(a => a.addEventListener("click", ev=>{
     ev.preventDefault();
     /* Die Pruefung sitzt seit dem 01.09.2026 in dropEntry selbst - eine
@@ -40898,7 +40892,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build ace52e0b42</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 8b61e37241</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -41070,7 +41064,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "ace52e0b42";
+const BAU = "8b61e37241";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
