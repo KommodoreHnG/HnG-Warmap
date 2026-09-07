@@ -1563,6 +1563,26 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   /* Enger als am Schreibtisch: mit zwei Beschriftungen mehr wird die Zeile
      sonst breiter als der Schirm. Gemessen bei 390 und bei 360. */
   #top-right .btn{padding:7px 8px;font-size:12px;letter-spacing:.04em}
+
+  /* DIE RAUMLEISTE ROLLT, DIE DREI RECHTEN STEHEN FEST.
+     #top-capture (Radar, Units, Players, Board, Orders) ist 600 Punkte
+     breit. Ohne min-width:0 schrumpft ein Flex-Kind nicht unter seine
+     Inhaltsbreite - also schob es alles Weitere aus dem Schirm, und die
+     Regel weiter oben gab ausgerechnet #top-right das Wachsen. Gemessen bei
+     375x812: b-board, b-orders, b-burger, b-sync und b-gear lagen
+     draussen; ohne den Menuegriff ist auf einem Telefon kein Menue mehr zu
+     erreichen. Jetzt: die Raumleiste nimmt, was uebrig ist, und rollt
+     waagerecht; Griff, Sync und Zahnrad behalten ihren Platz. */
+  #top{flex-wrap:wrap;row-gap:4px}
+  #top-capture{min-width:100%;order:9;flex:1 1 100%;overflow-x:auto;overflow-y:hidden;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch;
+    scroll-snap-type:x proximity;padding-bottom:1px}
+  #top-capture::-webkit-scrollbar{display:none}
+  #top-capture > .btn{flex:0 0 auto;scroll-snap-align:start}
+  #top-right{flex:0 0 auto;margin-left:6px}
+  /* Und die Raumknoepfe etwas enger, damit ohne Rollen schon drei statt
+     zwei zu sehen sind. */
+  #top-capture .btn{padding:7px 8px;font-size:12px;letter-spacing:.04em;gap:5px}
   /* Fuenf Titel passen nebeneinander nicht auf 375 Bildpunkte - sie wurden
      abgeschnitten. Auf dem Telefon also ein Griff, der alles auf einmal
      aufklappt, wie ueberall sonst auch. */
@@ -1813,8 +1833,19 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
         <svg viewBox="0 0 24 24"><path d="M19.5 3.5l1 1-8.2 8.6-1.4-1.4z"/>
           <path d="M10.6 11.8c-2.2.2-3.6 1.4-3.8 3.6-.2 2.1-1.2 3.3-3.3 3.8 3.9 1.6 8-.4 8.5-4.2z"/></svg>
         <span class="lbl" data-txt="tool.brush">Paint</span></button>
+      <!-- GEKREUZTE SAEBEL, seine Vorgabe vom 05.09. Vorher stand hier ein
+           eingekreistes X: keine Klinge, kein Griff, kein Parierstueck -
+           und die Textplaketten des Werkzeugs benutzen das Saebelzeichen
+           laengst. Drei verschiedene Zeichen fuer dieselbe Sache.
+           Je Saebel eine geschwungene Klinge, ein Parierbuegel und ein
+           Knauf; die beiden kreuzen sich oberhalb der Mitte, wie im
+           Wappengebrauch. -->
       <button class="tool" data-t="battle" aria-pressed="false">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M7.7 7.7l8.6 8.6M16.3 7.7l-8.6 8.6"/></svg>
+        <svg viewBox="0 0 24 24">
+          <path d="M4.6 3.4c4.2 1.1 9.4 6.3 12.8 12.4"/>
+          <path d="M19.4 3.4c-4.2 1.1-9.4 6.3-12.8 12.4"/>
+          <path d="M15.6 17.2l3.4 3.4M17.9 14.9l3.4 3.4"/>
+          <path d="M8.4 17.2l-3.4 3.4M6.1 14.9l-3.4 3.4"/></svg>
         <span class="lbl" data-txt="tool.battle">Battle</span><span class="kb">9</span></button>
       <button class="tool" data-t="erase" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M3.8 7.1h16.4"/><path d="M9.4 7.1V4.4h5.2v2.7"/><path d="M6.4 7.1l.9 12.5h9.4l.9-12.5"/><path d="M10.2 10.4v6.1M13.8 10.4v6.1"/></svg>
@@ -1825,7 +1856,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
            Zustand traegt und andere binden kann. Alles darueber
            veraendert nur das Lagebild. -->
       <div class="bar-h" data-werkzeuge="1" data-txt="bar.orders">Orders</div>
-      <button class="tool" data-t="arrow" aria-pressed="false" data-tip="Attack or move: drag from origin to target" title="Attack or move: drag from origin to target">
+      <button class="tool" data-t="arrow" aria-pressed="false" data-tip="Attack: drag from origin to target" title="Attack: drag from origin to target">
         <svg viewBox="0 0 24 24"><path d="M3.7 18.8C7.2 9.3 14 5.6 20.2 5.3"/><path d="M16.5 3.9l3.9 1.4-2.5 3.2"/></svg>
         <span class="lbl" data-txt="tool.arrow">Attack</span><span class="kb">4</span></button>
       <button class="tool" data-t="line" aria-pressed="false" data-tip="Defence line: drag across the towns to hold" title="Defence line: drag across the towns to hold">
@@ -1840,8 +1871,15 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="tool" data-t="area" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M4 11.2L7.6 4.6l7.5-.6 5.2 4.4-1.9 7.2-6.5 4-6.3-2.7z"/></svg>
         <span class="lbl" data-txt="tool.area">Area</span><span class="kb">7</span></button>
+      <!-- FADENKREUZ UEBER FERNGLAS, seine Vorgabe vom 05.09.: "mit einem
+           Fadenkreuz und Fernglas untereinander als Symbol". Vorher war es
+           nur das Fadenkreuz - und ein Fernglas gab es im Haus, aber an
+           einer anderen Sache (dem Knopf "Coverage"). -->
       <button class="tool" data-t="aufkl" aria-pressed="false">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5"/><circle cx="12" cy="12" r="1.2"/></svg>
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="7" r="4.2"/><path d="M12 1.4v3.2M12 9.4v3.2M6.4 7h3.2M14.4 7h3.2"/>
+          <circle cx="7.2" cy="18.4" r="3.1"/><circle cx="16.8" cy="18.4" r="3.1"/>
+          <path d="M10.3 17.5h3.4M7.2 15.3v-3.1h1.9M16.8 15.3v-3.1h-1.9"/></svg>
         <span class="lbl" data-txt="tool.aufkl">Recon</span></button>
 
       <div class="bar-h" data-txt="bar.faction">Faction</div>
@@ -2203,7 +2241,13 @@ function symbolSVG(key, farbe, w=26, h=18){
    Damit liest sich eine Clanzeile als Seite und nicht nur als Kuerzel. */
 /* Where a player plays from - four rough regions, optional. Coarse on
    purpose: a region says when a clan is likely awake, nothing more. */
-const REGIONEN = [{k:"eu", name:"Europe"}, {k:"us", name:"USA"}, {k:"ru", name:"Russia"}, {k:"cn", name:"China"}];
+/* Brasilien und Australien kamen am 07.09.2026 dazu, auf seine Ansage
+   "Bitte noch Brasilien (da steht einer der Server) und Australien
+   hinzufuegen". Der Eintrag hier ist die Pruefinstanz: merkeSpieler verwirft
+   eine Kennung, die in dieser Liste nicht steht - ein Nachtragen allein an
+   der Oberflaeche haette also nichts genuetzt. */
+const REGIONEN = [{k:"eu", name:"Europe"}, {k:"us", name:"USA"}, {k:"ru", name:"Russia"},
+                  {k:"cn", name:"China"}, {k:"br", name:"Brazil"}, {k:"au", name:"Australia"}];
 const regionName = k => (REGIONEN.find(r => r.k === k) || {}).name || "";
 function regionSVG(k, w = 18){
   const st = (cx, cy, r) => Array.from({length: 10}, (_, i) => {
@@ -2225,6 +2269,23 @@ function regionSVG(k, w = 18){
       <rect y="10.66" width="24" height="5.34" fill="#d52b1e"/>`;
   else if (k === "cn")
     inhalt = `<rect width="24" height="16" fill="#de2910"/><polygon points="${st(5, 5.5, 3.2)}" fill="#ffde00"/>`;
+  else if (k === "br")
+    /* Gruen, gelbe Raute, blaue Kugel. Das Spruchband bleibt weg - bei
+       achtzehn Punkten Breite waere es ein grauer Strich. */
+    inhalt = `<rect width="24" height="16" fill="#009b3a"/>`
+           + `<polygon points="12,1.8 22.2,8 12,14.2 1.8,8" fill="#fedf00"/>`
+           + `<circle cx="12" cy="8" r="3.6" fill="#002776"/>`;
+  else if (k === "au")
+    /* Union Jack im Winkel, der Bundesstern darunter, das Kreuz des Suedens
+       rechts - auf diese drei laesst sich die Flagge zusammenziehen, ohne
+       dass sie mit Neuseeland verwechselt wird. */
+    inhalt = `<rect width="24" height="16" fill="#00247d"/>`
+           + `<path d="M0 0 12 8 M12 0 0 8" stroke="#fff" stroke-width="1.6"/>`
+           + `<path d="M6 0v8M0 4h12" stroke="#fff" stroke-width="2.6"/>`
+           + `<path d="M6 0v8M0 4h12" stroke="#cf142b" stroke-width="1.3"/>`
+           + `<polygon points="${st(6, 12, 2.1)}" fill="#fff"/>`
+           + [[17.5,4.4,1.2],[20.6,7.2,1.2],[17.9,11.4,1.2],[15.2,8.6,1.0],[19.2,9.6,0.7]]
+               .map(([x,y,r]) => `<polygon points="${st(x, y, r)}" fill="#fff"/>`).join("");
   else return "";
   return `<svg class="flagge" viewBox="0 0 24 16" width="${w}" height="${Math.round(w*2/3)}"
     role="img" aria-label="${regionName(k)}"><title>${regionName(k)}</title>${inhalt}</svg>`;
@@ -2358,18 +2419,60 @@ const atStufe = k => (AT[k] && AT[k].vision) || 0;
    game prints is not in map units though, so `mass` scales it onto the map;
    with 11 a Fighter Recon watches roughly three towns out. */
 const SICHT_STD = {basis: 0, schritt: 10, mass: 11};
-let sichtCal = (() => {
-  try { return Object.assign({}, SICHT_STD, JSON.parse(localStorage.getItem("hng-warmap-sicht") || "{}")); }
-  catch(e){ return {...SICHT_STD}; }
+/* DIE EICHUNG GEHOERT DEM CLAN. Sie lag frueher in localStorage, also auf
+   dem einzelnen Rechner - und die Pruefung "liegt das Ziel in Sichtweite?"
+   rechnet mit ihr. Zwei Leute beurteilten denselben Aufklaerungsauftrag
+   deshalb verschieden. Der Kommodore am 07.09.: "Die Sichtweite ist ja bei
+   allen gleich fuer jede Kampfeinheit. Daher sollte es diesen Fall
+   eigentlich garnicht geben, dass man fuer gleichen Input was anderes
+   rausbekommt."
+   Jetzt steht sie in meta:sicht. Die oertliche Kopie ist nur noch der
+   Rueckfall fuer den, der ohne Clan arbeitet. */
+let sichtOrt = (() => {
+  try { return JSON.parse(localStorage.getItem("hng-warmap-sicht") || "{}"); }
+  catch(e){ return {}; }
 })();
-const sichtSpiel = k => sichtCal.basis + atStufe(k) * sichtCal.schritt;   // wie im Spiel angezeigt
-const atVision = k => sichtSpiel(k) * sichtCal.mass;                       // in Kartenkoordinaten
+let sichtCal = Object.assign({}, SICHT_STD, sichtOrt);
+let sichtStand;                       // die zuletzt gesehene Clanzeile
+/* Wird in jeder Sichtrechnung gerufen und muss darum billig sein: der
+   Vergleich ist eine Identitaetspruefung, neu gebaut wird nur, wenn der
+   Abgleich wirklich eine andere Zeile gebracht hat. */
+function sichtEichung(){
+  const v = (S.meta && S.meta.sicht && S.meta.sicht.v) || null;
+  if (v !== sichtStand){
+    sichtStand = v;
+    /* Die alte oertliche Eichung gilt NUR noch ohne Clan. Sobald ein Leiter
+       gesetzt ist, zaehlt entweder seine Zahl oder die Vorgabe - sonst
+       schleppte jeder seinen alten Wert weiter, und genau das war der
+       Fehler. */
+    sichtCal = Object.assign({}, SICHT_STD, v || (leaderId() ? null : sichtOrt));
+  }
+  return sichtCal;
+}
+/* Wer sie verstellen darf. Ohne gesetzten Leiter ist die Karte in
+   Privatgebrauch - dann darf jeder eichen, sonst koennte niemand. */
+const sichtDarfEichen = () => istLeader() || istAdmin() || !leaderId();
+const sichtSpiel = k => { const c = sichtEichung(); return c.basis + atStufe(k) * c.schritt; };
+const atVision = k => sichtSpiel(k) * sichtEichung().mass;                 // in Kartenkoordinaten
 /* NICHT SPIEL_MASS. Die Sicht steht in keiner Spieldatei - sie ist von Hand
    geeicht (sichtCal.mass), und diese 8 ist nur die zweite Haelfte derselben
    Eichung. Wer sie an den gemessenen Massstab der Spielzahlen anhaengt,
    halbiert jeden Sichtkreis, ohne dass irgendwer es merkt. */
 const SICHT_TEILER = 8;
-function sichtSpeichern(){ localStorage.setItem("hng-warmap-sicht", JSON.stringify(sichtCal)); }
+/* Oertlich immer (als Rueckfall), beim Clan nur, wenn es jemand darf. Der
+   Griff an den Server steht NICHT im Schieberegler-Ereignis: setMeta meldet
+   sich bei fehlendem Recht mit einer Meldung, und die kaeme sonst bei jedem
+   Pixel der Bewegung. */
+function sichtSpeichern(){
+  sichtOrt = Object.assign({}, sichtCal);
+  try { localStorage.setItem("hng-warmap-sicht", JSON.stringify(sichtCal)); } catch(e){}
+}
+function eichungTeilen(){
+  if (!sichtDarfEichen()) return false;
+  if (!leaderId()) return false;                 // niemand da, mit dem zu teilen waere
+  const c = sichtEichung();
+  return setMeta("sicht", {basis: c.basis, schritt: c.schritt, mass: c.mass});
+}
 /* From step 2 upward it is a genuine scout — drawn more strongly. */
 const istAufklaerer = k => atStufe(k) >= 2;
 const kannAufklaeren = k => zweigVon(k) === "recon" || k === "fighter_recon";
@@ -10584,7 +10687,7 @@ function tips(){
     inspect:"<b>Inspect</b> — click a town, arrow or line. Your own get handles.",
     owner:  `<b>Control</b> — click sets the town to <b>${p}</b>, again releases.`,
     unit:   `<b>Unit</b> — click a town, or drag teams from your depot.`,
-    arrow:  `<b>Attack or move</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
+    arrow:  `<b>Attack</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
     line:   `<b>Defence</b> — drag across the towns. For <b>${p}</b>.`,
     para:   `<b>Plan parablock</b> — ${paraTipp()} For <b>${p}</b>.`,
     parablock: `<b>Active parablock</b> — click a town that is blocked right now; click again to clear it. For <b>${p}</b>.`,
@@ -10639,33 +10742,37 @@ function sichtDialog(){
       <td style="text-align:left">${typen.map(a=>esc(a.name)).join(", ")}</td>
       <td><b class="rw" data-stufe="${s}">${sichtCal.basis + s*sichtCal.schritt}</b></td></tr>`;
   };
+  const darf = sichtDarfEichen(), aus = darf ? "" : " disabled";
   openDlg(`
     <div class="dlg-h"><h2>Vision scale</h2>
-      <p>Set these once so the circles match what you see in game.</p></div>
+      <p>${darf
+        ? "Set these once so the circles match what you see in game. They count for the whole clan."
+        : "Set by the clan leader, the same for everyone."}</p></div>
     <div class="dlg-b">
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);width:112px">Base (step 0)</span>
-        <input type="range" id="sc-basis" min="0" max="60" step="1" value="${sichtCal.basis}" style="flex:1">
+        <input type="range" id="sc-basis" min="0" max="60" step="1" value="${sichtCal.basis}" style="flex:1"${aus}>
         <b id="sc-basis-v" style="width:52px;text-align:right">${sichtCal.basis}</b>
       </div>
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);width:112px">Per step</span>
-        <input type="range" id="sc-schritt" min="0" max="60" step="1" value="${sichtCal.schritt}" style="flex:1">
+        <input type="range" id="sc-schritt" min="0" max="60" step="1" value="${sichtCal.schritt}" style="flex:1"${aus}>
         <b id="sc-schritt-v" style="width:52px;text-align:right">${sichtCal.schritt}</b>
       </div>
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);width:112px">Map scale</span>
-        <input type="range" id="sc-mass" min="2" max="40" step="1" value="${sichtCal.mass}" style="flex:1">
+        <input type="range" id="sc-mass" min="2" max="40" step="1" value="${sichtCal.mass}" style="flex:1"${aus}>
         <b id="sc-mass-v" style="width:52px;text-align:right">×${sichtCal.mass}</b>
       </div>
       <div class="tw"><table>
         <thead><tr><th>Step</th><th>Types</th><th>Vision (as in game)</th></tr></thead>
         <tbody>${stufen.map(zeile).join("")}</tbody></table></div>
-      <div class="note">Leave the first two alone; nudge <b>Map scale</b> until a circle covers the same towns
-        as in game.</div>
+      <div class="note">${darf
+        ? "Leave the first two alone; nudge <b>Map scale</b> until a circle covers the same towns as in game. Saved for the clan when you close."
+        : "These numbers decide whether a recon request counts as in reach. That is why they are the clan's and not this machine's."}</div>
     </div>
     <div class="dlg-f">
-      <button class="btn" id="sc-std">Reset</button>
+      <button class="btn" id="sc-std"${aus}>Reset</button>
       <button class="btn primary" id="d-close">Done</button>
     </div>`);
   const upd = () => {
@@ -10685,7 +10792,12 @@ function sichtDialog(){
   document.getElementById("sc-std").addEventListener("click", ()=>{
     sichtCal = {...SICHT_STD}; sichtSpeichern(); closeDlg(); sichtDialog(); draw();
   });
-  document.getElementById("d-close").addEventListener("click", closeDlg);
+  /* Beim Schliessen einmal an den Clan - waehrend des Schiebens waere es ein
+     Schreibvorgang je Pixel. */
+  document.getElementById("d-close").addEventListener("click", ()=>{
+    if (eichungTeilen()) toast("Vision scale saved for the clan");
+    closeDlg();
+  });
 }
 document.getElementById("b-entwurf").addEventListener("click", function(){
   entwurfModus = !entwurfModus;
@@ -40063,7 +40175,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f3a2d25080</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 7e5f9769cf</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -40137,6 +40249,33 @@ function hilfeDialog(){
    kann, ist keine - und beim ersten Anmelden war genau das der Fall: der
    Klick daneben und die Escape-Taste kamen beide daran vorbei. */
 let dlgPflicht = false;
+/* KOPFZEILEN GEHOEREN UEBER IHRE SPALTE.
+   Der Kommodore am 05.09.: "Nochmal ueberpruefen, ob die Ueberschriften alle
+   ueber den Inhalten stehen, Clan steht bspw. zu weit rechts fuer die
+   Auswahlfelder." Die Ursache ist eine einzige Regel: .tw th setzt jede
+   Kopfzelle ausser der ersten rechtsbuendig - richtig fuer Zahlenspalten,
+   falsch fuer die elf Spalten, deren Zellen ausdruecklich linksbuendig
+   stehen (Clan, Region, Side, Faction, What, Why, Which towns ...).
+   Eine reine Stilregel kann das nicht: welche Spalte linksbuendig ist,
+   steht erst in den Zellen. Darum hier, nach dem Aufbau JEDES Fensters:
+   jede Kopfzelle nimmt die Ausrichtung der ersten Zelle ihrer Spalte an.
+   Verbundene Kopfzellen bleiben, wie sie sind. */
+function tabellenkoepfeAusrichten(wo){
+  for (const t of wo.querySelectorAll(".tw table")){
+    const kopf = t.tHead && t.tHead.rows.length ? t.tHead.rows[t.tHead.rows.length - 1] : null;
+    const erste = t.tBodies[0] && t.tBodies[0].rows[0];
+    if (!kopf || !erste) continue;
+    const zellen = [...erste.cells];
+    let i = 0;
+    for (const th of kopf.cells){
+      const z = zellen[i];
+      i += th.colSpan || 1;
+      if (!z || (th.colSpan || 1) > 1) continue;
+      const a = getComputedStyle(z).textAlign;
+      if (a === "left" || a === "center") th.style.textAlign = a;
+    }
+  }
+}
 function openDlg(html, breit, pflicht){
   if (bildAbmelden) bildAbmelden();     // Zuhoerer des vorigen Fensters
   const d = document.getElementById("dlg");
@@ -40151,6 +40290,7 @@ function openDlg(html, breit, pflicht){
     d.prepend(x);
   }
   document.getElementById("veil").classList.add("on");
+  tabellenkoepfeAusrichten(d);
 }
 /* Sichtbar machen, dass das Absicht ist. Ein Fenster, das auf einen Klick
    gar nicht reagiert, wirkt kaputt. */
@@ -40207,7 +40347,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f3a2d25080";
+const BAU = "7e5f9769cf";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
