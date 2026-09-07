@@ -2038,14 +2038,27 @@ function spanneFuer(mx, my, ziel){
   return Math.round(hi);
 }
 const istFlugplatz = i => MAP.n[i] && MAP.n[i][3] >= 3;
+/* DER MASSSTAB DER SPIELZAHLEN, an einem Bildschirmfoto gemessen und nicht
+   geraten. Auf "Pfadfinder Reichweiten.png" steht eine Pfadfinder-Einheit in
+   Nucice mit ihren beiden Kreisen. Ueber die Ortsknoten ist das Bild auf die
+   Kartendaten gelegt (4,4011 Punkte je Karteneinheit, 826 Orte, Rest 0,70
+   Punkte), danach sind die Kreise abgelesen:
+     rot   123,2 Karteneinheiten   attack_r   1950   Teiler 15,8
+     blau  239,0 Karteneinheiten   transport_r 3800  Teiler 15,9
+   Der Rest zu 16 ist die Breite des gezeichneten Randes. Das Verhaeltnis der
+   beiden Kreise misst sich zu 1,941 gegen 1,949 aus den Spieldaten - damit
+   ist auch belegt, welcher Kreis welcher ist.
+   VORHER STAND HIER 8. Damit lag der Angriffskreis des Werkzeugs genau auf
+   dem Verlegungskreis des Spiels: doppelt so weit, und eine Hauptstadt galt
+   als bedroht, die gar nicht erreicht werden kann. */
+const SPIEL_MASS = 16;
 /* Wie weit ein Jaeger von seinem Flugplatz aus zuschlagen kann, in
    Karteneinheiten. Die Spieldaten nennen 950 fuer den leichten und 1650 fuer
-   den schweren Verband; das Werkzeug rechnet Reichweiten ueberall durch 8
-   auf die Karte um (siehe der Schlagkreis beim Zeichnen).
+   den schweren Verband.
    Genommen wird der schwere - er ist die vorsichtige Annahme. Wer nur den
    leichten fuerchten muss, sieht die kleinere Zahl daneben. */
-const JAEGER_WEIT = 1650/8;     // 206,2 Karteneinheiten
-const JAEGER_ENG  =  950/8;     // 118,8
+const JAEGER_WEIT = 1650/SPIEL_MASS;     // 103,1 Karteneinheiten
+const JAEGER_ENG  =  950/SPIEL_MASS;     //  59,4
 const ortAbstand = (a, b) => {
   const A = MAP.n[a], B = MAP.n[b];
   return (A && B) ? Math.hypot(A[1]-B[1], A[2]-B[2]) : Infinity;
@@ -2348,6 +2361,11 @@ let sichtCal = (() => {
 })();
 const sichtSpiel = k => sichtCal.basis + atStufe(k) * sichtCal.schritt;   // wie im Spiel angezeigt
 const atVision = k => sichtSpiel(k) * sichtCal.mass;                       // in Kartenkoordinaten
+/* NICHT SPIEL_MASS. Die Sicht steht in keiner Spieldatei - sie ist von Hand
+   geeicht (sichtCal.mass), und diese 8 ist nur die zweite Haelfte derselben
+   Eichung. Wer sie an den gemessenen Massstab der Spielzahlen anhaengt,
+   halbiert jeden Sichtkreis, ohne dass irgendwer es merkt. */
+const SICHT_TEILER = 8;
 function sichtSpeichern(){ localStorage.setItem("hng-warmap-sicht", JSON.stringify(sichtCal)); }
 /* From step 2 upward it is a genuine scout — drawn more strongly. */
 const istAufklaerer = k => atStufe(k) >= 2;
@@ -2355,7 +2373,7 @@ const kannAufklaeren = k => zweigVon(k) === "recon" || k === "fighter_recon";
 /* Which towns a unit standing here would reveal */
 function siehtStaedte(town, radius){
   if (!radius) return [];
-  const n = MAP.n[town], r2 = (radius/8)*(radius/8);
+  const n = MAP.n[town], r2 = (radius/SICHT_TEILER)*(radius/SICHT_TEILER);
   const raus = [];
   for (let i=0;i<MAP.n.length;i++){
     if (i === town) continue;
@@ -5133,7 +5151,7 @@ function paraBedrohungKarte(frisch){
       d.n = Math.max(d.spot, d.dep);
       if (!d.n){ karte.delete(i); continue; }
       let weit = 0;
-      for (const k of d.typen) weit = Math.max(weit, atRadius(k) / 8);
+      for (const k of d.typen) weit = Math.max(weit, atRadius(k) / SPIEL_MASS);
       d.r = weit || luftReichweite(null);
       d.caps = [];
       for (let j = 0; j < MAP.n.length; j++)
@@ -5229,7 +5247,7 @@ function paraBedrohungEtikett(x, y, n){
    vision of one of our towns. Nothing new goes to the server. */
 function aufklTypen(){ return MAP.at.filter(t => kannAufklaeren(t.k)).map(t => t.k); }
 /* a scout's vision in map units, as siehtStaedte reads it */
-function aufklWeite(k){ return atVision(k)/8; }
+function aufklWeite(k){ return atVision(k)/SICHT_TEILER; }
 /* the scouts sitting in any clan depot on the war side */
 function aufklImDepot(){
   const drin = new Set();
@@ -7008,7 +7026,7 @@ function draw(){
       /* ROT: so weit kann zugeschlagen werden. die Vorgabe, und dieselbe
          Farbe wie im Spiel. Durchgezogen, weil es die harte Grenze ist. */
       if (schlag){
-        const rp = (schlag/8)*z;
+        const rp = (schlag/SPIEL_MASS)*z;
         if (rp > 6){
           ctx.strokeStyle = "#e05545"; ctx.globalAlpha = .5;
           ctx.lineWidth = 1.6*uiScale; ctx.setLineDash([]);
@@ -7019,7 +7037,7 @@ function draw(){
          Flugplatz und nur zu eigenen. Deshalb gestrichelt: es ist keine
          Bedrohungsgrenze, sondern eine Bewegungsmoeglichkeit. */
       if (transfer && transfer > schlag){
-        const rp = (transfer/8)*z;
+        const rp = (transfer/SPIEL_MASS)*z;
         if (rp > 6){
           ctx.strokeStyle = "#5b9fd8"; ctx.globalAlpha = .34;
           ctx.lineWidth = 1.3*uiScale; ctx.setLineDash([2,6]);
@@ -7031,7 +7049,7 @@ function draw(){
         /* Every unit sees something, so a single faint disc per town is
            right: where they overlap the blue deepens on its own and the
            map turns into an honest picture of what the clan can watch. */
-        const rp = (sicht/8)*z;
+        const rp = (sicht/SICHT_TEILER)*z;
         if (rp > 5){
           const gross = besteStufe >= 2;             // Aufklaerer heben sich ab
           /* GELB, nicht blau. die Vorgabe, und es musste ohnehin sein:
@@ -8053,11 +8071,11 @@ function pfeilForm(x1,y1,cx,cy,x2,y2,breite){
    A drop is not an advance. Its start must be an airfield, its target may
    be anywhere, it has no belly - troops in the air do not walk round from
    the north - and it reaches exactly as far as the game lets it.
-   THE RANGE IS NOT INVENTED: it stands in the game's own data, and the
-   scale is the one the tool has always drawn its red strike circles with -
-   the figure divided by eight. Paratroopers 1850, Pathfinders 1950, so 231
-   and 244 map units. An order that names a unit sign is measured by that
-   sign; otherwise by the plain paratroopers. */
+   THE RANGE IS NOT INVENTED: it stands in the game's own data, at the scale
+   measured off a screenshot of the war map - the figure divided by sixteen.
+   Paratroopers 1850, Pathfinders 1950, so 116 and 122 map units. An order
+   that names a unit sign is measured by that sign; otherwise by the plain
+   paratroopers. */
 const LUFT_ZWEIG = "airborne";
 /* How far the flight bows out. Larger than any belly on the ground, so a
    drop is told from an advance at a glance. */
@@ -8065,9 +8083,9 @@ const LUFT_BOGEN = 0.30;
 const luftTypen = () => MAP.at.filter(t => t.branch === LUFT_ZWEIG);
 function luftReichweite(a){
   const t = a && a.sym ? MAP.at.find(x => x.k === a.sym && x.branch === LUFT_ZWEIG) : null;
-  if (t) return atRadius(t.k) / 8;
+  if (t) return atRadius(t.k) / SPIEL_MASS;
   const p = MAP.at.find(x => x.k === "paratroopers") || luftTypen()[0];
-  return p ? atRadius(p.k) / 8 : 0;
+  return p ? atRadius(p.k) / SPIEL_MASS : 0;
 }
 /* May this arrow be an airborne order? Two questions, both answerable from
    the map alone - who holds the airfield is a third and is asked later,
@@ -11499,7 +11517,7 @@ function side(){
               : "No airborne teams in the clan depot yet."}</div>
           <div class="hint" style="color:var(--dim);opacity:.8">
             Paras have to start from an airfield you hold, within
-            ${Math.round(atTransfer(billig.k)/8)} map units.</div>`;
+            ${Math.round(atRadius(billig.k)/SPIEL_MASS)} map units.</div>`;
         })()}
         ${feindWeit.length > 6 ? `<div class="hint" style="color:var(--dim)">
           Blocking every one of them is unlikely — the para drop only pays off
@@ -39998,7 +40016,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c3607672f7</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bbee3ba06c</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -40142,7 +40160,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "c3607672f7";
+const BAU = "bbee3ba06c";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
