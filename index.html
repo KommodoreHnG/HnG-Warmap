@@ -4210,7 +4210,7 @@ function pfeilFreigeben(a){
    has opened its window all along; the arrow was the one tool that showed
    nothing. Not for another side's arrow: there the window hides commitment,
    strength, chain and state, and would stand nearly empty. */
-const pfeilFrischZeigen = a => { if (a && !fremdeSeite(a)) arrowDialog(a); };
+const pfeilFrischZeigen = a => { if (a && !fremdeSeite(a)) arrowDialog(a, true); };
 function pfeilAnlegen(von, bis){
   const a = {from:von, to:bis, f:faction, label:"", art:artNeu(), t:jetzt(), by:S.me, id:pfeilId()};
   if (entwurfModus){ a.entwurf = 1; ENTWUERFE.push(a); entwuerfeSpeichern(); save(); return a; }
@@ -5752,6 +5752,67 @@ function aufklRingeZeichnen(){
       ctx.beginPath(); ctx.arc(x, y, (isCap(i) ? r0*STERN_RAGT : r0) + 4*uiScale, 0, 6.284); ctx.stroke();
     }
   }
+  ctx.restore();
+}
+
+/* ---- DER GESETZTE STARTORT eines Zweipunktbefehls -------------------
+   Der erste Klick mit dem Pfeilwerkzeug setzt arrowFrom und sonst nichts:
+   kein sel, keine Meldung. Sichtbar war arrowFrom bisher an genau einer
+   Stelle - dem Gummifaden im Zeichenweg, und der steht unter der Bedingung
+   "&& lastMouse". lastMouse wird nur im mousemove der Maus beschrieben.
+   Die Fingersteuerung nimmt ihre pointer-Ereignisse selbst an, ruft in
+   beiden ev.preventDefault() (damit auch keine Ersatz-Mausereignisse) und
+   schickt am Ende nur einen gebauten Klick los - ein mousemove ist nie
+   dabei. Auf dem Telefon blieb der gesetzte Startort damit unsichtbar, an
+   der Maus so lange, wie die Maus nach dem Klick stillstand.
+
+   NICHT genommen: lastMouse beim Tippen mitsetzen. Der Wert wird nirgends
+   geloescht - der Gummifaden zeigte dann auf einen Punkt, an dem laengst
+   kein Finger mehr liegt, und drei weitere Leser (Verteidigungslinie,
+   Pfeilbauch, Griffzug) bekaemen einen erfundenen Mauspunkt.
+
+   KOSTEN: die Ortsschleife bleibt unberuehrt. Hier wird EIN Ort gezeichnet,
+   nicht 1438 - zwei Kreisboegen je Bild, und nur solange ein Startort
+   gesetzt ist; sonst ein Vergleich gegen null.
+
+   LAGE: rAussen + 8,5 liegt vor den sechs konzentrischen Nachbarringen
+   (Sicht +2,2, Kampf +3,6/+6,4, Flugplatz +4,2, Zielort +5,4, Auswahl +6,
+   Aufklaerung rA+4*uiScale). AUF DEM AUFMARSCHRING liegt er dagegen mit
+   Absicht: der beginnt bei rA+8*uiScale und ist bei 40 Einheiten und
+   vierfachem Zoom rund 15 Punkte breit - der halbe Befehl in der Hand
+   gewinnt gegen ihn, nachgemessen schneidet der Ring dort eine Rinne durch
+   das innere Drittel. Gestrichelt, damit er nicht wie einer der sechs
+   aussieht; der dunkle Unterstrich traegt dieselbe Strichelung, sonst
+   stuende in den Luecken ein voller schwarzer Ring.
+   IN DER UEBERSICHT UMSCHLIESST ER NACHBARN: bei kleinem Zoom misst er
+   13,3 Punkte, der Median-Abstand benachbarter Staedte liegt dort bei 13,6
+   und beim Fit-Zoom bei 5,1 (gemessen ueber 2661 Kanten). Das teilt er mit
+   dem Aufmarschring, der heute schon bei 12,7 sitzt; zum Antippen muss man
+   ohnehin hineinzoomen, die Trefferflaeche ist dort 7,1 Punkte. */
+function startPunktZeichnen(){
+  const i = arrowFrom;
+  if (i === null || i === undefined || !MAP.n[i]) return;
+  const [x, y] = toScr(MAP.n[i][1], MAP.n[i][2]);
+  const r0 = ortRadius();
+  /* 8,5 auch dann, wenn der Regler "Everything" kleiner als 100 Prozent
+     steht: die sechs Nachbarringe rechnen in ROHEN Punkten ohne uiScale.
+     Bei 70 Prozent laege dieser Ring sonst auf +5,95 - innerhalb des
+     Auswahlrings (+6) und des Kampfrings (+6,4), und der dunkle Strich
+     deckte den Meldering (+5,4) zu. Nachgemessen von einem Gegenleser. */
+  const R  = (isCap(i) ? r0*STERN_RAGT : r0) + Math.max(8.5, 8.5*uiScale);
+  ctx.save();
+  ctx.globalAlpha = 1;
+  /* stumpfe Enden: draw() steht an dieser Stelle auf lineCap "round", und
+     eine runde Kappe von 2,3*uiScale je Ende frisst die Luecke von
+     4,5*uiScale vollstaendig auf - der dunkle Unterstrich waere dann ein
+     voller schwarzer Ring statt einer Strichelung. Gemessen von einem
+     Gegenleser. */
+  ctx.lineCap = "butt";
+  ctx.setLineDash([6*uiScale, 4.5*uiScale]);
+  ctx.strokeStyle = "rgba(5,8,12,.85)"; ctx.lineWidth = 4.6*uiScale;
+  ctx.beginPath(); ctx.arc(x, y, R, 0, 6.284); ctx.stroke();
+  ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 2.2*uiScale;
+  ctx.beginPath(); ctx.arc(x, y, R, 0, 6.284); ctx.stroke();
   ctx.restore();
 }
 
@@ -7887,6 +7948,12 @@ function draw(){
     }
     ctx.globalAlpha = 1;
   }
+
+  /* Der gesetzte Startort eines Zweipunktbefehls. Ueber den Scheiben und
+     ueber dem Aufmarschring - solange ein halber Befehl in der Hand liegt,
+     gewinnt der halbe Befehl. Unter den Namen, damit der Stadtname lesbar
+     bleibt. */
+  startPunktZeichnen();
 
   /* --- enemy sightings, drawn above everything so they cannot be missed --- */
   for (const d of allSpots()){
@@ -10920,6 +10987,7 @@ window.addEventListener("mouseup", e => {
       toast(`${MAP.n[zieh.von][0]} → ${MAP.n[bis][0]}${entwurfModus ? " (draft)" : ""}`);
       pfeilFrischZeigen(neu);
     }
+    dragged = true;                       // den folgenden Klick verschlucken
   } else if (zieh.art === "brush"){
     /* Gemalt ist schon - hier wird nur noch geschickt und gemeldet. */
     const wohin = zieh.ziel >= 0 ? FACTIONS[zieh.ziel].name : "open";
@@ -11281,6 +11349,7 @@ function setFaction(f){
   faktionSelbstGewaehlt = true;   // ab jetzt nicht mehr nachziehen
   document.querySelectorAll(".fac").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.f === f)));
   tips(); if (sel !== null) side();
+  draw();                          // die Farbe des halben Befehls haengt daran
 }
 /* THE OWN SIDE STANDS FIRST. The buttons are drawn again once the clan's
    side arrives from the server - until then the order and the tick could
@@ -12671,7 +12740,12 @@ function flyTo(i){
 }
 
 /* ---------------- arrow dialog: who is joining ---------------- */
-function arrowDialog(a){
+/* frisch: der Pfeil ist in dieser Sekunde gezogen worden. Dieselbe Rolle wie
+   neuGezogen bei areaDialog. Gesetzt wird es NUR von pfeilFrischZeigen; die
+   beiden anderen Aufrufe - Inspect auf einen liegenden Pfeil und die
+   Rueckkehr aus der Zuordnung - lassen es weg, sonst stuende "Just drawn"
+   an einem Pfeil von gestern. */
+function arrowDialog(a, frisch){
   const mit = joinOf(a.id), meins = mit.find(m => m.mine);
   const gesamt = mit.reduce((s,j)=>s+j.n, 0);
   const raus = deployedBy(S.me), habe = Object.values(raus).reduce((s,n)=>s+n,0);
@@ -12680,7 +12754,8 @@ function arrowDialog(a){
   const fremd = fremdeSeite(a);
   openDlg(`
     <div class="dlg-h"><h2>${esc(MAP.n[a.from][0])} → ${esc(MAP.n[a.to][0])}</h2>
-      <p>${zustandText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>
+      <p>${frisch ? `Give it a short label — that is what everyone reads on the map.`
+                  : zustandText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>
       ${!fremd && a.luft ? `<p>${paraTextSicher(paraVorratText)}</p>` : ""}
       ${!fremd && (a.sym || a.luft) ? `<p>${paraTextSicher(() => paraErfuellbarText(paraBefehlTypen(a), {art: "arrow", id: a.id}))}</p>` : ""}
       ${fremd ? "" : `<p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
@@ -12762,11 +12837,14 @@ function arrowDialog(a){
       ${darfWeg(a) ? `<button class="btn danger" id="a-del">Delete arrow</button>` : ""}
       ${a.op && ENTWUERFE.some(x => x.op === a.op) ? `<button class="btn" id="a-kette-frei"
         title="Publish every draft of this operation">Publish chain</button>` : ""}
-      ${a.entwurf ? "" : zustandKnoepfe(a.id, a, a)}
+      ${a.entwurf || frisch ? "" : zustandKnoepfe(a.id, a, a)}
       <span style="flex:1"></span>
-      <button class="btn primary" id="d-close">Close</button>
+      <button class="btn${frisch ? "" : " primary"}" id="d-close">Close</button>
+      ${frisch ? `<button class="btn primary" id="a-fertig">Save</button>` : ""}
     </div>`);
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  document.getElementById("a-fertig")?.addEventListener("click", ()=>
+    document.getElementById("a-join")?.click());
   zustandVerdrahten();
   document.getElementById("a-zuord")?.addEventListener("click", ()=>{
     const b = alleBefehle(true).find(x => x.art === "arrow" && x.id === a.id)
@@ -27205,14 +27283,21 @@ function ortZeugeNoetig(){
     const v = document.getElementById("veil");
     if (v && v.classList.contains("on")) return false;
   } catch(e){}
-  /* Der Erkenner kommt von einem CDN ("It is loaded from a CDN on demand -
-     the map works without it, this is the one place that needs the
-     network"), beim ersten Mal rund 3 MB. Ein stiller Hintergrundtakt darf
-     das nicht unbemerkt ausloesen - also einmal ansagen und dann laden. */
+  /* Der Erkenner liegt seit dem 07.09.2026 NEBEN DER SEITE (TESS_ORT), nicht
+     mehr auf einem CDN. Beim ersten Mal kommen rund 15 MB herunter:
+     tesseract.min.js 65 KB, worker.min.js 121 KB, der LSTM-Kern 3,8 MB und
+     lang/eng.traineddata.gz 10,4 MB.
+     HIER STAND 3 MB. Das war die Bibliothek allein zur CDN-Zeit - die
+     Sprachdatei kam damals von tessdata.projectnaptha.com und wurde nie
+     mitgezaehlt. ocrBereit sagt an derselben Sache seit jeher 15 MB, und
+     der Nutzer sieht BEIDE Ansagen: wache.meldung steht im Radarraum vor
+     ihm. Zwei Zahlen fuer denselben Ladevorgang sind eine Zusage zuviel.
+     Ein stiller Hintergrundtakt darf das nicht unbemerkt ausloesen - also
+     einmal ansagen und dann laden. */
   if (!ocrWorker && !wache.ortGesagt){
     wache.ortGesagt = true;
     if (!wache.meldung)
-      wache.meldung = "reading a town name to find the map — loading the text recogniser once (about 3 MB)";
+      wache.meldung = "reading a town name to find the map — loading the text recogniser once (about 15 MB)";
   }
   return true;
 }
@@ -32256,8 +32341,8 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
    dark half-transparent panel over a busy map. Turning that around before
    handing the picture over is worth far more than any amount of tidying up
    the text afterwards - it is the difference between one team read and all
-   of them. The engine itself is loaded from a CDN on demand; the map works
-   without it, this is the one place that needs the network. */
+   of them. The engine itself is fetched on demand out of the tess folder
+   beside this page (TESS_ORT); the map works without it. */
 let ocrWorker = null, ocrMelder = ()=>{}, ocrPsm = null;
 /* Merker fuer den einen Fall, der sich nicht reparieren laesst: der Rahmen
    umschliesst nicht nur die Liste, sondern auch ein Stueck Karte. Deren gruene
@@ -34264,10 +34349,10 @@ const zahlWert = s => {
   return Math.round(m[2] ? v * (m[2].toLowerCase() === "k" ? 1000 : 1e6) : v);
 };
 
-/* Reading names off a screenshot needs a real OCR engine. It is loaded from a
-   CDN on demand — the map works without it, this is the one place that needs
-   the network. Results are always shown for confirmation, never taken as-is:
-   game fonts plus decorated names make mistakes certain. */
+/* Reading names off a screenshot needs a real OCR engine. It is fetched on
+   demand out of the tess folder beside this page — no other server is asked,
+   and the map works without it. Results are always shown for confirmation,
+   never taken as-is: game fonts plus decorated names make mistakes certain. */
 let ocrLaeuft = null;
 function ocrDialog(){
   openDlg(`
@@ -37161,7 +37246,7 @@ function zahnradZeichnen(){
     </div>
 
     <h3>Help</h3>
-    <button class="btn" id="zr-hilfe">How this works …</button>
+    <button class="btn" id="zr-hilfe">Info …</button>
 
     <h3>Something wrong?</h3>
     <div class="note" style="margin-top:0">Lands on the admin's list with your name.</div>
@@ -41784,18 +41869,31 @@ function after(){
   kopfzeile(); depotZeichnen(); boardZahl(); ordersZahl(); kraftLeiste();
 }
 
-/* The help window - opened from the gear menu. */
+/* The Info window - opened from the gear menu.
+   HIESS BIS ZUM 08.09.2026 "How this works". Der Kommodore: "Die koennen
+   wir zum einen in Tutorial oder Info umbenennen, hier wuerde sowas aber
+   auch reingehoeren." Info, nicht Tutorial: ein Tutorial verspricht eine
+   Anleitung, und die Reiter sind ein Nachschlagewerk.
+   DER NAME STEHT AN ZWEI STELLEN - hier im h2 und auf dem Knopf im Zahnrad
+   (zr-hilfe). Wer nur eine aendert, hat zwei Namen fuer dasselbe Fenster.
+   Der Reiter Privacy steht am ENDE: wer das Fenster aufmacht, sucht die
+   Tasten, nicht die Erklaerung. Die Leiste vertraegt ihn - .tabs steht auf
+   flex-wrap:wrap, auf dem Telefon auf overflow-x:auto; sie bricht also
+   hoechstens um, statt ueberzulaufen.
+   Jeder Satz in Privacy ist am Quelltext belegt. Wer dort etwas aendert,
+   aendert eine Zusage: erst nachsehen, dann schreiben. */
 function hilfeDialog(){
   const c = light() ? "#1a2029" : "#dce4ee";
   openDlg(`
-    <div class="dlg-h"><h2>How this works</h2>
+    <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build de3ba26764</span></p></div>
+         installation. <span style="color:var(--dim2)">· build a2d9b38e41</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
       <button data-tab="win"    aria-pressed="false">The windows</button>
       <button data-tab="sym"    aria-pressed="false">Symbols</button>
+      <button data-tab="priv"   aria-pressed="false">Data</button>
     </div>
     <div class="dlg-b">
       <div class="tabp" data-tab="keys">
@@ -41853,6 +41951,46 @@ function hilfeDialog(){
         <div class="symgrid">
           ${MAP.at.map(a=>`<div>${symbolSVG(a.k,c)}<span>${esc(a.name)}</span></div>`).join("")}
         </div>
+      </div>
+
+      <div class="tabp" data-tab="priv">
+        <div class="note" style="margin-top:0"><b>The map came out of the game once.</b> Towns,
+          supply lines, assault-team types, weapons, vehicles, ranks and the map picture were read
+          out of the installation when this page was built. The page carries the result; your
+          browser never touches the game's files.</div>
+        <div class="note"><b>While you play, nothing is read from the game unless you hand over a
+          window.</b> No page can pick a window by itself — the browser asks you, and hands over
+          only what you picked. Hand over a whole screen instead and the sharing is stopped on the
+          spot. There is no other way in: uploading a screenshot and pasting one were taken out.</div>
+        <div class="note"><b>Nothing ever goes to the game.</b> No key is pressed for you, no click
+          is made for you. The three shortcuts of the browser extension run the other way — the
+          browser registers them and hands them to this page while the game holds the focus.</div>
+        <div class="note"><b>What is stored</b> is what the clan puts in: who holds which town,
+          where fighting is, sightings and strength estimates, orders and their state, the board,
+          depots, arsenals and soldiers, members, ranks and roles, points, notes, and who is at the
+          map right now. Every row carries who wrote it and when.</div>
+        <div class="note"><b>It goes to one server: your clan's room.</b> ${hatBuiltin()
+            ? "Its address is built into this page — live sync asks only for your invite code."
+            : "Its address is the project URL you enter under live sync."} Nothing goes to the
+          game, to Reto-Moto or to a third party. The text recogniser is no exception: it sits in a
+          folder beside this page, is fetched only when text is actually read, and costs about
+          15 MB the first time.</div>
+        <div class="note"><b>What it does not do.</b> It does not read your keyboard — the three
+          shortcuts above are the browser's, registered by the extension, not by this page. It
+          installs nothing and runs nothing in the background: there is no service worker, and once
+          the tab is gone nothing of it is still going. It does not know which window you shared,
+          only that you shared one and whether it was a window or a whole screen.</div>
+        <div class="note"><b>What stays on this computer.</b> This browser keeps the room's address
+          and the key it is reached with, your settings and layout, a copy of the clan's picture so
+          the map opens without waiting, the key to your notebook, and the secret that keeps anyone
+          else from writing your soldier row — plus your invite code, as long as you stay signed in.
+          The sync window says so where you switch that on. A new war clears the copy.</div>
+        <div class="note"><b>Who sees what.</b> Everyone in the room sees the clan's picture — that
+          is what it is for. What differs is what you may change, and the leader sets that through
+          the roles. The server checks the same rule, not only this page: a browser that asks for
+          something it may not do is refused there as well. Your depot, your arsenal and your
+          soldiers only you may write, and your notebook is locked with your own password before it
+          leaves — nobody can open it, not even whoever holds the database.</div>
       </div>
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Got it</button></div>`, true);
@@ -41926,6 +42064,13 @@ function tabsAktiv(host, start){
   const waehle = name => {
     btns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.tab === name)));
     host.querySelectorAll(".tabp").forEach(p => p.classList.toggle("on", p.dataset.tab === name));
+    /* Auf dem Telefon rollt die Leiste seitwaerts und zeigt keinen Balken.
+       Gemessen bei 375 Punkten: sie ist 313 breit, das Clanfenster braucht
+       529, Info 379, Intel 362 - wer ein Fenster gezielt auf einem Reiter
+       aufmacht, staende sonst vor einer Leiste, in der sein Reiter draussen
+       liegt. "nearest" ruehrt nichts an, was schon im Bild steht. */
+    const b = btns.find(x => x.dataset.tab === name);
+    if (b && b.scrollIntoView) try { b.scrollIntoView({inline: "nearest", block: "nearest"}); } catch(e){}
   };
   btns.forEach(b => b.addEventListener("click", ()=>waehle(b.dataset.tab)));
   waehle(btns.some(b => b.dataset.tab === start) ? start : btns[0].dataset.tab);
@@ -41962,7 +42107,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "de3ba26764";
+const BAU = "a2d9b38e41";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
