@@ -831,6 +831,28 @@ body.meld-modus{cursor:help}
 #kabine.an{display:grid}
 #kabine .rd-kopf{grid-area:kopf;background:#101216;border-bottom-color:#22252c}
 #kabine .rd-pult{grid-area:pult}
+/* the battle desk, laid out like the cabin next door */
+#gefstand{position:fixed;inset:0;z-index:120;display:none;background:#0b0c10;
+  grid-template-columns:auto 1fr auto;grid-template-rows:auto 1fr;
+  grid-template-areas:"kopf kopf kopf" "links schirm pult";
+  font-family:var(--schmal)}
+#gefstand.an{display:grid}
+#gefstand .rd-kopf{grid-area:kopf;background:#101216;border-bottom-color:#22252c}
+#gefstand .rd-pult{grid-area:pult}
+/* .kb-abstand carries no general rule, only one per desk (#kabine and
+   #spieler above) - without this line the spacer is 0 tall here and the
+   switch sits against the note under it */
+#gefstand .rd-pult .kb-abstand{height:14px}
+/* the two score bars, drawn as they stand in the game's head strip */
+.gf-balken{display:grid;grid-template-columns:64px 1fr 56px;gap:8px;align-items:center;
+  margin:6px 0;font-size:13px}
+.gf-balken .kasten{height:16px;border:1px solid #6a5f43;border-radius:2px;background:#d8d2c2;
+  overflow:hidden}
+.gf-balken .kasten i{display:block;height:100%;background:#7a8a99}
+.gf-balken .zahl{text-align:right;font-weight:700}
+.gf-ton{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid #6a5f43;
+  vertical-align:-1px;margin-right:5px}
+.gf-nichts{color:#6b6250;font-style:italic}
 .kb-links{grid-area:links;width:260px;background:#0e1013;border-right:1px solid #22252c;
   padding:14px;color:#a9b0b8;font-size:13px;line-height:1.5;overflow:auto}
 .kb-links h3{margin:0 0 6px;font-size:10px;letter-spacing:.14em;color:#6d7680;text-transform:uppercase}
@@ -1780,6 +1802,17 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
                 fill="currentColor" stroke="var(--panel2,#241d16)" stroke-width="1.1"/>
         </svg><span class="txt">Units</span>
       </button>
+      <button class="btn" id="b-gefstand" title="Read the score bars of the battle you are in">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+          <!-- the head strip of a hold-and-take battle: two score boxes with
+               the emblem between them, the left one filled further -->
+          <rect x="1.2" y="8.2" width="8.6" height="5.2" rx="0.6"/>
+          <rect x="1.2" y="8.2" width="5.6" height="5.2" fill="currentColor" stroke="none"/>
+          <rect x="14.2" y="8.2" width="8.6" height="5.2" rx="0.6"/>
+          <rect x="14.2" y="8.2" width="2.8" height="5.2" fill="currentColor" stroke="none"/>
+          <path d="M12 6.6 V15.0 M10.2 10.8 H13.8"/>
+        </svg><span class="txt">Battle</span>
+      </button>
       <button class="btn" id="b-spieler" title="Read the players of a battle from the war map">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
           <!-- a soldier in profile: helmet, tilted brim, face, shoulders -->
@@ -2037,6 +2070,15 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   </div>
   <aside class="rd-pult" id="kb-pult"></aside>
   <button class="rd-zu" id="kb-zu" title="Close">&times;</button>
+</div>
+<!-- The battle desk: the score bars, read from the shared game window.
+     Same layout as the cabin. -->
+<div id="gefstand" data-fest>
+  <div class="rd-kopf" id="gf-kopf"></div>
+  <aside class="rd-links kb-links" id="gf-links"></aside>
+  <div class="kb-schirm" id="gf-schirm"><div class="kb-blatt" id="gf-blatt"></div></div>
+  <aside class="rd-pult" id="gf-pult"></aside>
+  <button class="rd-zu" id="gf-zu" title="Close">&times;</button>
 </div>
 <div id="spieler" data-fest>
   <div class="rd-kopf" id="sp-kopf"></div>
@@ -3248,7 +3290,7 @@ const TOPFTAFEL = {
   anon:   {wer:0, recht:"anon",  krieg:1},         // anonyme Soldatenliste
   para:   {wer:0, recht:"",      krieg:0},         // Parablock, Eigentum in der Zeile
   rolle:  {wer:0, recht:"anfordern", krieg:0},     // Rollenanforderung, Eigentum in der Zeile
-  gefecht:{wer:0, recht:"aufklaerung", krieg:0},   // Gefechtsstand: Verlaengerungsuhr {ot, hud}, spaeter der Battlereader
+  gefecht:{wer:0, recht:"aufklaerung", krieg:0},   // Gefechtsstand: Verlaengerungsuhr {ot, hud} und Gefechtsleser {bat}
   akt:    {wer:0, recht:"",      krieg:0},         // Anwesenheitsmeldung
   /* krieg:1 since 05.09.2026: a report to the admin is about the clan, not
      about the war; the server drops the settled ones at the war cut and
@@ -5717,6 +5759,8 @@ function overtimeStart(i, wann){
   if (!darf("aufklaerung")) return darfNicht("aufklaerung");
   if (!fightAt(i)) return false;
   const v = Object.assign(gefechtRest(i), {ot: +wann || jetzt(), hud: wann ? 1 : 0});
+  delete v.otby; delete v.otn;           // this is the hand that starts it, see gefSchreiben
+  gefAlterHalten(v, S.gefecht[i]);       // the reading in this row keeps its age, see gefAlterHalten
   if (!stamp("gefecht", i, v, {n: S.name || ""})) return false;
   save();
   return true;
@@ -5727,19 +5771,48 @@ function overtimeClear(i){
   save();
   return true;
 }
-/* silent: the clock falls with the battle mark when we may write; other
-   fields of the row stay, the row itself goes when nothing else is in it */
-function overtimeFallen(i){
+/* silent: the clock falls when we may write; other fields of the row stay -
+   the battle reader's score among them, because this also hangs on the
+   "Clear" button of the overtime line and nobody presses that meaning to
+   throw the clan's reading away. The row itself goes when nothing else is in
+   it. */
+function overtimeFallen(i){ return gefechtWeg(i, false); }
+/* auchStand: the battle mark has been set or cleared, so this is another
+   battle - then the reading goes with the clock, or the next battle for the
+   same town would carry the score of the last one for a quarter of an hour.
+   Only setFight asks for that. */
+function gefechtWeg(i, auchStand){
   const e = S.gefecht[i];
   if (!e || !e.v || !darf("aufklaerung")) return false;
-  const rest = gefechtRest(i); delete rest.ot; delete rest.hud;
+  const rest = gefechtRest(i);
+  delete rest.ot; delete rest.hud; delete rest.otby; delete rest.otn;
+  if (auchStand) delete rest.bat; else gefAlterHalten(rest, e);
   return stamp("gefecht", i, Object.keys(rest).length ? rest : null);
+}
+/* THE AGE OF THE READING BELONGS TO THE READING, not to the row. The reading
+   is shown for a quarter of an hour and says how old it is, and both come from
+   the row's server time - which is right while the reader is the only one
+   writing this row. But the clock lives in the same row: press "Clear" on a
+   timer started by mistake, or let the battle mark fall, and the row is
+   stamped anew. Measured in the browser: a reading fourteen minutes old then
+   told the whole clan "read from a game window just now", and its quarter of
+   an hour started over. So anything that stamps this row for the clock's sake
+   freezes the reading's own time into it first, and gefStand asks that time
+   before the row's. A fresh reading carries none - it is as old as its row. */
+function gefAlterHalten(rest, e){
+  if (rest && rest.bat && rest.bat.li !== undefined && rest.bat.t === undefined && e && e.t)
+    rest.bat = Object.assign({}, rest.bat, {t: e.t});
+  return rest;
 }
 /* the side panel line under the battle switch */
 function overtimeSatz(e){
   const ms = otMs(e);
   if (ms >= OT_DAUER) return {text: "Overtime is over (60:00): defenders win unless the attackers took all three.", vorbei: true};
-  return {text: "Overtime " + otMmSs(ms) + " of 60:00, started by " + werWar(e), vorbei: false};
+  /* the starter, from the clock itself where it stands - the row's author is
+     whoever wrote last, and since the battle reader writes into this row every
+     fifteen seconds, that is no longer the person who started the clock. */
+  const wer = (e.v && e.v.otn !== undefined) ? werWar({by: e.v.otby, n: e.v.otn}) : werWar(e);
+  return {text: "Overtime " + otMmSs(ms) + " of 60:00, started by " + wer, vorbei: false};
 }
 function overtimeZeile(i){
   const e = gefechtStand(i);
@@ -7535,6 +7608,12 @@ function draw(){
       let oben = y - r - 3 - (teamsAt(i) ? Math.max(9, 8*Math.sqrt(z))*uiScale + 2 : 0);
       const dro = istFlugplatz(i) ? paraBedrohungAn(i) : null;
       if (dro) oben -= paraBedrohungEtikett(x, oben, dro.n) + 2;
+      /* the battle reader's score, also only with the battle mark, see
+         BATTLE READER. Drawn before the clock so that it sits under it: the
+         stack grows upwards. No tick of its own - this plate does not count
+         by itself, it changes when somebody reads and writes. */
+      const gb = gefAn(i);
+      if (gb) oben -= gefEtikett(x, oben, gb) + 2;
       /* the overtime clock, only with the battle mark, see OVERTIME CLOCK */
       const ot = overtimeAn(i);
       if (ot){ oben -= overtimeEtikett(x, oben, ot) + 2; if (!zeitReise && otMs(ot) < OT_DAUER) otTaktStarten(); }
@@ -9583,7 +9662,7 @@ addEventListener("pagehide", ()=>{ if (sparOffen) saveSofort(); });
 function setOwner(i, f){ stamp("owner", i, f); save(); }
 function setFight(i, an){
   stamp("fight", i, an ? 1 : null);
-  overtimeFallen(i);                     // a mark set or cleared is a new battle: the clock goes, see OVERTIME CLOCK
+  gefechtWeg(i, true);                   // a mark set or cleared is a new battle: clock and reading go, see OVERTIME CLOCK
   save();
 }
 function dropArrow(id){
@@ -10603,6 +10682,7 @@ function hoverZeigen(i, mx, my){
       ${starAt(i)?'<span class="chip">key</span>':""}
       ${fightAt(i)?'<span class="chip fight">⚔ contested</span>':""}
       ${(e => e ? `<span class="chip" id="h-ot" style="border-color:#f0a030;color:#f0a030">${overtimeKurz(e)}</span>` : "")(overtimeAn(i))}
+      ${(g => g ? `<span class="chip" style="border-color:${GEF_FARBE};color:${GEF_FARBE}">${esc(gefKurz(g))}</span>` : "")(gefAn(i))}
       ${pb?`<span class="chip" style="border-color:var(--accent);color:var(--accent)">para ${
         pb.plan?"planned":"blocked"}${fremdeSeite(pb) ? "" : " · " + ZUSTAND_NAME[befehlZustand(`para:${i}`, pb)]}</span>`:""}
     </div>`:""}
@@ -11987,6 +12067,7 @@ function side(){
       <label class="toggle"><input type="checkbox" id="fight-cb" ${fightAt(i)?"checked":""}>
         <span>Fighting here right now</span></label>
       ${fightAt(i) ? overtimeZeile(i) : ""}
+      ${fightAt(i) ? gefZeile(i) : ""}
       <label class="toggle"><input type="checkbox" id="star-cb" ${starAt(i)?"checked":""}>
         <span>Key objective — highlight for everyone</span></label>
     </div>
@@ -21185,7 +21266,8 @@ function kbLiveStop(auchFreigabe){
   kbRauschenAus();
   kbOrtFlaeche.c = null; kbOrtFlaeche.g = null;
   /* the share is the page's: it ends only when no room is watching */
-  if (auchFreigabe && !(typeof PG !== "undefined" && PG && PG.live) && !wacheLaeuft()) bildFreigabeBeenden();
+  if (auchFreigabe && !(typeof PG !== "undefined" && PG && PG.live)
+      && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()) bildFreigabeBeenden();
   kbZeichnen();
 }
 /* one picture, for checks without the game */
@@ -22075,7 +22157,8 @@ function pgLiveStop(auchFreigabe){
      megabytes each, nothing to keep while nobody looks */
   PG.R = null; pgFlaeche.c = null; pgFlaeche.g = null;
   /* the share is the page's: it ends only when no room is watching */
-  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live) && !wacheLaeuft()) bildFreigabeBeenden();
+  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)
+      && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()) bildFreigabeBeenden();
   pgZeichnen();
 }
 async function pgBild(datei){
@@ -22335,17 +22418,674 @@ document.getElementById("kb-links").addEventListener("change", ev => {
 });
 document.addEventListener("keydown", ev => { if (ev.key === "Escape" && kbOffen) kabineZu(); });
 
-/* ONE ROOM AT A TIME. All three full-screen rooms sit on the same
+/* the battle desk: one room, one state. Declared before the reader so
+   that the reader may remember where it last found the boxes. */
+let gefOffen = false, GEF = null;
+/* ==== BATTLE READER: THE SCORE BARS =====================================
+   GEF-03, the Kommodore on 05.09.2026: "Bei Einnehmen und Halten Kaempfen
+   [...] sind zudem 2 Balken fuer die Punkte der Teams vorhanden. Diese
+   koennte man auslesen und ebenfalls in das Tool integrieren, damit
+   Clanmitglieder aus ihren Kaempfen deren Zustand extrahieren koennen, ohne
+   aus dem Spiel gehen zu muessen."
+
+   THE END OF THE BATTLE IS NOT READ HERE, and that is on purpose. A reader
+   for the end screen was built and taken out again: over the Erfurt recording
+   at a tenth of a second it called eight end screens before the real one,
+   five of them "won", on the capture badges under the K.O. line and on the
+   scoreboard, which carries the same three-line head block as the end screen;
+   and when the shared window arrives at 1920 instead of 3840 it calls
+   twenty-one and misses the real one entirely. A wrong WON goes to the whole
+   clan. Whoever picks it up again: the line-count proof does not separate the
+   badges from the end screen, and a tenth-of-a-second run is the only one
+   that shows the false alarms at all - at one look a second there are none to
+   see.
+
+   THE GAME'S DISPLAY DOES NOT SCALE WITH THE RESOLUTION. Measured over two
+   recordings of the same game: one played at 1920x1080 and upscaled to 3840,
+   one played at 3840 - the same template fits the second at scale 0,50 with
+   0,971 and at no other scale above 0,31. Converted back, the head strip
+   stands at the SAME absolute points down from the top in both, and
+   horizontally centred.
+   So nothing here is expected at a place. The band is measured in absolute
+   points down from the top and around the middle, everything inside it is
+   SEARCHED, and what does not pass the proofs is null, not a guess. And
+   because the display does not scale, absolute SIZES may be demanded of what
+   is found - which is the one proof the first version of this reader lacked.
+
+   WHAT THE FIRST VERSION GOT WRONG, measured on the Kommodore's own
+   recordings and repaired here:
+   a) It reported a score in a battle that has no score bars at all. Over "4K
+      Erfurt kompletter Kampf.mkv", an assault, it spoke at 5 of 268 points,
+      once "100 : 100" - what it took for the two boxes were the two capture
+      badges, 43 and 51 points wide. The three filling proofs cannot catch
+      that: they weigh the FILLING, not whether the thing found is a box at
+      all. What catches it is the absolute size, and the numbers for it had
+      been measured all along: a real pair is 150 and 152 points wide and
+      spans 376 (300, 304 and 752 on a display drawn at double size), while
+      every one of those false pairs was 43 to 71 wide and spanned 102 to 160.
+   b) The box width jittered from frame to frame (measured 47 to 150 against a
+      steady 150), and a box read too short lifts the percentage - up to eight
+      points, all in the same direction. The measurement pins the boxes down
+      first and allows eight points of play; this reader now does the same.
+   c) The anchor counted looks, not pictures. bildNeu falls open once the
+      share has gone 2000 ms without a new picture, and always in a browser
+      without requestVideoFrameCallback, so a standing window was read once a
+      second and the same picture counted as three confirmations. Measured:
+      frame 153480 of the Erfurt recording - the K.O. line - read eight times
+      over gave "100 : 100" from the third look on. The state now carries a
+      mark of the head strip, and a look whose mark equals the last one does
+      not count towards the anchor.
+
+   WHAT IS DELIBERATELY MISSING: the capture-point badges of the second row.
+   They have been photographed but never measured - not one number for their
+   place, size or colour exists. A reader built on that would be invented.
+   AND: which bar is ours. The measurement names the left bar by its hammer
+   and sickle and the right by its cross; it does not say what colour either
+   of them is. So the reader keeps them as left and right and shows the colour
+   it measured, and nobody is told a side he was not shown. */
+const GEF_TAKT = (() => {
+  /* ONE LOOK A SECOND. The bar moves about two and a half points in four
+     seconds (23 to 98 percent over four minutes, 31 steps), so a look every
+     second is far faster than the thing it watches. ?gtakt= moves it from the
+     address bar, the way ?takt= does for the cabin. */
+  try {
+    const t = +new URLSearchParams(location.search).get("gtakt");
+    return t >= 200 && t <= 20000 ? t : 1000;
+  } catch(e){ return 1000; }
+})();
+const GEF_SAT = 60;              // above this a column of the bar counts as filled
+const GEF_KASTEN_MIN = 60;       // the measurement's own floor for a run to be a box
+/* THE ABSOLUTE SIZES, straight out of Battlereader/einnehmen_halten/
+   punktebalken.json: box 150 and 152 wide, pair spanning 376. Nothing outside
+   these bounds is a score bar, whatever its filling looks like.
+   THE UPPER BOUNDS ARE NOT REACHABLE TODAY, and that is on purpose. A display
+   drawn at double size would put the pair at 752 points, but the band this
+   reader cuts out is 680 points wide at 1920 and 2560 and 692 at 3840 - such a
+   pair does not fit in it, the run hits the band's edge and is thrown away
+   there (see gefPaarSuchen). So a display drawn at double size is not read at
+   all; it is not read wrongly. Widening the band would be the way to read it,
+   and that is measured against for now: the wide window takes in terrain whose
+   colour spoils the background reference, and the boxes were then found in one
+   frame of ten instead of three. Whoever widens it later finds the bounds here
+   already fitting. */
+/* and how tall: grown out of the picture the box came to 16 points at 3840,
+   so twice that on a display drawn at double size. The reinforcement panel of
+   the game makes a pair 48 points tall and falls at this bound. */
+const GEF_KASTEN_BREIT = [100, 320], GEF_PAAR_WEIT = [300, 800], GEF_KASTEN_HOCH = [6, 40];
+/* the measurement's own play: the boxes are pinned down once and every frame
+   whose boxes sit more than eight points off is thrown away */
+const GEF_SPIEL = 8, GEF_ANKER_N = 3;
+/* the working surface for the band. The bar row wants a NARROW window: the
+   wide one takes in terrain whose colour spoils the background reference -
+   measured, the boxes were then found in one frame of ten instead of three. */
+const gefFlaechen = {};
+function gefFlaeche(art, bw, bh){
+  let f = gefFlaechen[art];
+  if (!f){
+    const c = document.createElement("canvas");
+    f = gefFlaechen[art] = {c: c, g: c.getContext("2d", {willReadFrequently: true})};
+  }
+  if (f.c.width !== bw || f.c.height !== bh){ f.c.width = bw; f.c.height = bh; }
+  return f;
+}
+function gefFlaechenWeg(){ for (const k of Object.keys(gefFlaechen)) delete gefFlaechen[k]; }
+const gefGrau = (px, o) => 0.299*px[o] + 0.587*px[o+1] + 0.114*px[o+2];
+/* WAS THAT REALLY A NEW PICTURE? bildNeu cannot answer it: it falls open as
+   soon as the share has gone 2000 ms without a new frame, and always in a
+   browser without requestVideoFrameCallback. A standing window - loading
+   screen, K.O. screen, the game switched away - is then read once a second
+   and hands the anchor the same picture three times as three confirmations.
+   Measured on frame 153480 of the Erfurt recording, the K.O. line: read eight
+   times over it gave "100 : 100" from the third look on, and that would have
+   gone out at the first look reported.
+   So the picture is asked itself. FNV-1a over every third row and every fifth
+   column of the band; equal mark, and the look does not count for the anchor.
+   What it costs was measured too: over 240 looks of a real battle the mark
+   never came out equal twice in a row, and the row of readings is the same
+   number for number with and without it.
+   WHAT IT CANNOT DO: it catches the picture that is really the same, not a
+   still window that delivers two frames a hair apart. Measured - frames
+   153480 and 153481 of the Erfurt recording, a sixtieth of a second apart,
+   read in turn, do anchor. What holds that case in real use is the tick: at
+   200 ms and slower the K.O. line's boxes have already jumped too far to
+   agree. Anyone making the look faster has to measure this again. */
+const GEF_MARKE_Y = 3, GEF_MARKE_X = 5;
+function gefBildMarke(px, bw, bh){
+  let h = 2166136261;
+  for (let y = 0; y < bh; y += GEF_MARKE_Y){
+    const z = y*bw;
+    for (let x = 0; x < bw; x += GEF_MARKE_X){
+      const o = (z + x)*4;
+      h = Math.imul(h ^ (px[o] + (px[o+1] << 8) + (px[o+2] << 16)), 16777619);
+    }
+  }
+  return h >>> 0;
+}
+/* ---- the score bars ----------------------------------------------------
+   BOTH BOXES, FOUND ROW BY ROW. The measurement could not find them by
+   brightness - the box is barely brighter than the sky behind it (sky BGR
+   145/121/109, empty bar 126/125/127) and the threshold found nothing at all.
+   What carries: take the colour at the left edge of the band, where nothing
+   of the display lies, as the background and look for what differs from it
+   clearly; then both boxes and the emblem between them fall out.
+   Two boxes OF THE MEASURED SIZE, nearly the same width, a gap between them,
+   sitting about the middle. Whichever row that first happens in is not the
+   answer: the box is taller than the probe window and the window can sit on
+   its rim, so from there the box is grown up and down, and the reading itself
+   decides - a pair whose filling does not pass the three proofs is not the
+   bar, and the search goes on. That holds for the anchor too: only a pair
+   whose filling reads cleanly is handed back at all.
+   IT IS NOT ENOUGH, and the earlier version of this comment claimed it was.
+   Measured: the "K.O." line of the Erfurt battle makes two runs 137 and 150
+   points wide, 386 apart - the size of a real pair almost exactly - and it
+   PASSES all three filling proofs. What stops it is the anchor: over the
+   forty seconds around it, on a tenth-of-a-second grid, that pair turns up in
+   three frames and their box places lie 30 to 50 points apart, so three of
+   them never agree. */
+function gefPaarSuchen(px, bw, bh, W, merk){
+  const HOCH = 8;
+  const bis = Math.min(bh - HOCH - 1, 120);
+  const reihe = [];
+  if (merk !== null && merk !== undefined && merk >= 4 && merk <= bis) reihe.push(merk);
+  for (let y = 4; y <= bis; y += 2) reihe.push(y);
+  for (let n = 0; n < reihe.length; n++){
+    const y = reihe[n];
+    let gr = 0, gg = 0, gb = 0;
+    for (let r = 0; r < HOCH; r++) for (let c = 4; c < 8; c++){
+      const o = ((y + r)*bw + c)*4; gr += px[o]; gg += px[o+1]; gb += px[o+2];
+    }
+    gr /= HOCH*4; gg /= HOCH*4; gb /= HOCH*4;
+    const lauf = [];
+    let start = -1;
+    for (let x = 0; x < bw; x++){
+      let sum = 0;
+      for (let r = 0; r < HOCH; r++){
+        const o = ((y + r)*bw + x)*4;
+        sum += Math.abs(px[o] - gr) + Math.abs(px[o+1] - gg) + Math.abs(px[o+2] - gb);
+      }
+      if (sum/HOCH > 18){ if (start < 0) start = x; }
+      else if (start >= 0){ if (start > 0 && x - start > GEF_KASTEN_MIN) lauf.push([start, x]); start = -1; }
+    }
+    /* A RUN THAT TOUCHES THE EDGE OF THE BAND IS THROWN AWAY - the one still
+       open at the right edge here, and the one beginning in column 0 above.
+       Such a run was cut to length by the BAND, not by the box, so its width
+       is the band's; measuring the filling over it gives a number that is too
+       high. Measured on a display drawn at double size: 45 readings over the
+       one recorded hold-and-take battle, every single one 6 to 20 points above
+       the same second read at 1:1. What follows now is silence, not a wrong
+       number. */
+    for (let i = 0; i + 1 < lauf.length; i++){
+      const li = lauf[i], re = lauf[i+1];
+      const bl = li[1] - li[0], br = re[1] - re[0];
+      if (bl < GEF_KASTEN_BREIT[0] || bl > GEF_KASTEN_BREIT[1]) continue;   // 150 and 152 measured
+      if (br < GEF_KASTEN_BREIT[0] || br > GEF_KASTEN_BREIT[1]) continue;
+      if (Math.abs(bl - br) > 0.25*Math.max(bl, br)) continue;              // 150 against 152
+      const luecke = re[0] - li[1];
+      if (luecke < 0.1*bl || luecke > bl) continue;                         // the emblem stands in it
+      const weit = re[1] - li[0];
+      if (weit < GEF_PAAR_WEIT[0] || weit > GEF_PAAR_WEIT[1]) continue;     // 376 measured
+      if (Math.abs((li[0] + re[1])/2 - bw/2) > Math.max(60, 0.03*W)) continue;
+      /* how tall the box really is: from here up and down while the box's own
+         columns still differ from the background */
+      let o = y, u = y + HOCH;
+      while (o > 0 && gefSpaltenAbstand(px, bw, o - 1, li, re, gr, gg, gb) > 18) o--;
+      while (u < bh && gefSpaltenAbstand(px, bw, u, li, re, gr, gg, gb) > 18) u++;
+      const hoch = u - o;
+      if (hoch < GEF_KASTEN_HOCH[0] || hoch > GEF_KASTEN_HOCH[1]) continue;
+      /* the middle three fifths, as the measurement took the middle of the
+         box and left its two rims out */
+      const ein = Math.round(hoch*0.2), yy = o + ein, hh = Math.max(4, hoch - 2*ein);
+      if (gefFuellung(px, bw, yy, hh, li[0], li[1]) !== null
+       && gefFuellung(px, bw, yy, hh, re[0], re[1]) !== null)
+        return {y: yy, h: hh, li: li, re: re, fund: y};
+    }
+  }
+  return null;
+}
+/* how far one row of the two boxes' own columns stands from the background */
+function gefSpaltenAbstand(px, bw, y, li, re, gr, gg, gb){
+  let sum = 0, n = 0;
+  for (let x = li[0]; x < li[1]; x++){
+    const o = (y*bw + x)*4;
+    sum += Math.abs(px[o] - gr) + Math.abs(px[o+1] - gg) + Math.abs(px[o+2] - gb); n++;
+  }
+  for (let x = re[0]; x < re[1]; x++){
+    const o = (y*bw + x)*4;
+    sum += Math.abs(px[o] - gr) + Math.abs(px[o+1] - gg) + Math.abs(px[o+2] - gb); n++;
+  }
+  return n ? sum/n : 0;
+}
+const gefGleich = (a, b) => Math.abs(a.li[0] - b.li[0]) <= GEF_SPIEL && Math.abs(a.li[1] - b.li[1]) <= GEF_SPIEL
+                         && Math.abs(a.re[0] - b.re[0]) <= GEF_SPIEL && Math.abs(a.re[1] - b.re[1]) <= GEF_SPIEL;
+const gefMitte = w => { const s = w.slice().sort((a, b) => a - b); return s[(s.length - 1) >> 1]; };
+function gefAnkerAus(p){
+  const m = f => gefMitte(p.map(f));
+  return {li: [m(k => k.li[0]), m(k => k.li[1])], re: [m(k => k.re[0]), m(k => k.re[1])],
+          y: m(k => k.y), h: m(k => k.h)};
+}
+/* THE MEASUREMENT'S FOURTH PROOF, the one the first version of this reader
+   left out. The measurement pins the boxes down before it reads anything -
+   the median of five probes - and throws away every frame whose boxes sit
+   more than eight points off that. Here the same, only running: three looks
+   that agree within eight points make the anchor, from then on the filling is
+   measured AT THE ANCHOR and not where this one frame happened to see an
+   edge, and a look whose pair does not sit at the anchor gives nothing. That
+   is what stopped the box width from jittering between 47 and 150 points, and
+   with it the systematic climb of the percentage. The anchor is not dropped
+   by silence, only replaced by three looks that agree somewhere else - so a
+   covered head strip costs readings, never the anchor.
+   THREE LOOKS, AND EACH ONE A PICTURE OF ITS OWN: a look that brought the
+   same head strip as the one before it does not count here. Without that a
+   standing window confirmed itself.
+   WHAT THIS IS NOT: a clock. A look that finds nothing does not break the
+   chain, so the three finds may lie seconds apart - measured, the anchor of
+   the recorded hold-and-take battle grows out of the finds at 27, 31 and
+   32 s. Breaking the chain on every empty look was measured as well and
+   thrown out: it anchors there at 98 s instead of 32 s and leaves 49 of 69
+   readings. */
+function gefBalken(px, bw, bh, W, z){
+  const marke = gefBildMarke(px, bw, bh);
+  const dasselbeBild = z.marke === marke;
+  z.marke = marke;
+  const fund = gefPaarSuchen(px, bw, bh, W, z.kastenY);
+  if (!fund) return null;
+  z.kastenY = fund.fund;
+  if (!dasselbeBild){
+    if (z.proben && z.proben.length && gefGleich(z.proben[z.proben.length - 1], fund)){
+      z.proben.push(fund);
+      if (z.proben.length > GEF_ANKER_N) z.proben.shift();
+    } else z.proben = [fund];
+    if (z.proben.length >= GEF_ANKER_N) z.anker = gefAnkerAus(z.proben);
+  }
+  const a = z.anker;
+  if (!a || !gefGleich(a, fund)) return null;
+  const fl = gefFuellung(px, bw, a.y, a.h, a.li[0], a.li[1]);
+  const fr = gefFuellung(px, bw, a.y, a.h, a.re[0], a.re[1]);
+  if (fl === null || fr === null) return null;
+  return {li: Math.round(fl*100), re: Math.round(fr*100),
+          liTon: gefTon(px, bw, a.y, a.h, a.li[0], a.li[1], fl),
+          reTon: gefTon(px, bw, a.y, a.h, a.re[0], a.re[1], fr)};
+}
+/* HOW FAR ONE BOX IS FILLED, with the three proofs of the measurement.
+   Without them four of sixty measurements jumped to 74 and 100 percent in the
+   middle of an otherwise cleanly rising row, because a bright sky or an
+   explosion colours the whole strip. With them 32 of 60 stayed valid and not
+   one of those was wrong. Returns null when the reading is not to be trusted,
+   and then nothing is shown and nothing is written. */
+function gefFuellung(px, bw, y, h, a, b){
+  const x0 = a + 3, n = (b - 3) - x0;
+  if (n < 8 || h < 4) return null;
+  const sat = new Float64Array(n);
+  let streu = 0;
+  for (let k = 0; k < n; k++){
+    let ss = 0, g1 = 0, g2 = 0;
+    for (let r = 0; r < h; r++){
+      const o = ((y + r)*bw + x0 + k)*4;
+      const R = px[o], G = px[o+1], B = px[o+2];
+      const mx = R > G ? (R > B ? R : B) : (G > B ? G : B);
+      const mn = R < G ? (R < B ? R : B) : (G < B ? G : B);
+      ss += mx === 0 ? 0 : (mx - mn)*255/mx;
+      const gy = gefGrau(px, o);
+      g1 += gy; g2 += gy*gy;
+    }
+    sat[k] = ss/h;
+    const m = g1/h;
+    streu += Math.sqrt(Math.max(0, g2/h - m*m));
+  }
+  streu /= n;
+  /* 1. the bar fills FROM THE LEFT: the coloured columns start at the left
+        edge and hang together; coloured columns behind a gap are background */
+  let voll = 0;
+  while (voll < n && sat[voll] > GEF_SAT) voll++;
+  let hinter = 0, rest = 0;
+  for (let k = voll; k < n; k++){ if (sat[k] > GEF_SAT) hinter++; rest += sat[k]; }
+  rest = voll < n ? rest/(n - voll) : 0;
+  /* 2. the empty rest is a flat grey   3. the columns are even down the bar */
+  if (hinter > 2 || rest >= 45 || streu >= 16) return null;
+  return voll/n;
+}
+/* the mean colour of the filled part, for the swatch on the sheet. Shown, not
+   interpreted: nobody is told which side a colour belongs to. An empty bar
+   has no filled part and therefore no colour - null, and no swatch. */
+function gefTon(px, bw, y, h, a, b, anteil){
+  const x0 = a + 3, n = (b - 3) - x0;
+  const bis = Math.min(n, Math.round(n*anteil));
+  if (bis < 1) return null;
+  let R = 0, G = 0, B = 0;
+  for (let k = 0; k < bis; k++) for (let r = 0; r < h; r++){
+    const o = ((y + r)*bw + x0 + k)*4; R += px[o]; G += px[o+1]; B += px[o+2];
+  }
+  const c = bis*h;
+  const zwei = v => { const t = Math.max(0, Math.min(255, Math.round(v/c))).toString(16); return t.length < 2 ? "0" + t : t; };
+  return "#" + zwei(R) + zwei(G) + zwei(B);
+}
+/* ONE LOOK. One window out of the shared picture, at its own size - no
+   scaling, because everything measured here is measured in points. */
+function gefLesen(bild, z){
+  z = z || {};
+  const W = bild.width || 0, H = bild.height || 0;
+  if (W < 320 || H < 160) return null;
+  const mitte = Math.round(W/2);
+  let balken = null;
+  /* the bar row: narrow window, 140 points down from the top */
+  const halb = Math.max(340, Math.round(W*0.09));
+  const bx = Math.max(0, mitte - halb), bw = Math.min(W, mitte + halb) - bx;
+  const bh = Math.min(H, 140);
+  const f = gefFlaeche("balken", bw, bh);
+  f.g.drawImage(bild, bx, 0, bw, bh, 0, 0, bw, bh);
+  let px = null;
+  try { px = f.g.getImageData(0, 0, bw, bh).data; } catch(e){ px = null; }
+  if (px) balken = gefBalken(px, bw, bh, W, z);
+  return {w: W, h: H, balken: balken};
+}
+/* ---- what the clan is told ---------------------------------------------
+   HOW OFTEN. Not with every look. Over four minutes the bar moved about two
+   and a half points every four seconds, so a line every fifteen seconds
+   loses nothing of the course, and in between only a move of two points or
+   more is worth a word at all. */
+const GEF_SCHREIB_MS = 15000, GEF_SPRUNG = 2;
+/* the reading is the state of a battle going on now, not a record: shown
+   while the battle mark stands and the line is younger than a quarter of an
+   hour. Nobody reads a battle for longer without the number moving. */
+const GEF_FRISCH = 15*60000;
+/* THE AGE COMES FROM THE ROW'S SERVER TIME, not from the reader's own clock.
+   The overtime clock next door does the same and says why: "A clock started
+   by hand counts from the row's server time, so two machines with different
+   clocks read the same overtime." A clan mate whose clock runs twenty minutes
+   slow would otherwise never be seen, or never fall out of the window. */
+function gefStand(i){
+  const e = S.gefecht[i];
+  const b = (imKrieg(e) && imZeit(e) && e.v && e.v.bat && e.v.bat.li !== undefined) ? e.v.bat : null;
+  if (!b || !e.t) return null;
+  const t = b.t || e.t;                                 // frozen time first, see gefAlterHalten
+  return ((zeitReise || jetzt()) - t <= GEF_FRISCH) ? Object.assign({}, b, {t: t}) : null;
+}
+const gefAn = i => (fightAt(i) && gefStand(i)) || null;
+/* the plate over the town and the chip on the hover card */
+const gefKurz = b => b.li + ":" + b.re;
+const gefSatz = b => "Score " + b.li + " to " + b.re + " (left bar to right bar)";
+/* one reading, one colour: the plate never says anything but a score */
+const GEF_FARBE = "#3f7fa8";
+/* the plate above the town, next to the overtime clock: y is the bottom
+   edge, the height comes back. Same shape as overtimeEtikett. */
+function gefEtikett(x, y, b){
+  const gr = Math.max(8, Math.min(11, 6.5*Math.sqrt(view.z)))*uiScale;
+  const text = gefKurz(b);
+  ctx.save();
+  ctx.font = `700 ${gr}px ${SCHMAL}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const bb = ctx.measureText(text).width + gr*0.9, h = gr*1.4;
+  ctx.globalAlpha = .92;
+  ctx.fillStyle = GEF_FARBE;
+  ctx.fillRect(x - bb/2, y - h, bb, h);
+  ctx.globalAlpha = 1; ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, x, y - h/2 + 0.5);
+  ctx.restore();
+  return h;
+}
+/* the line under the overtime clock in the side panel */
+function gefZeile(i){
+  const b = gefStand(i);
+  if (!b) return "";
+  return `<div class="ot-zeile"><span style="color:${GEF_FARBE}">${esc(gefSatz(b))}</span>
+        <div class="note">read from a game window ${esc(alterText(b.t))}</div></div>`;
+}
+/* THE SAME ROW THE OVERTIME CLOCK USES, under its own key. "hud" is taken:
+   the clock writes {ot, hud} with hud as the 0/1 mark saying that ot is a
+   real moment ("e.v.hud ? e.v.ot : e.t"), and an object there would have
+   moved the clock. gefechtRest keeps everything else in the row, so clock
+   and reading stand side by side in the one bucket.
+   The battle mark is asked first, exactly as overtimeStart asks it: a town
+   whose mark has fallen is not in a battle, and writing into it would keep an
+   old row alive.
+   AND THE READER MUST NOT PUT THE OVERTIME CLOCK BACK. stamp sets t to now,
+   and a clock started by hand counts from exactly that t ("otMs = ... e.v.hud
+   ? e.v.ot : (e.t || e.v.ot)", and hud is 0 for every clock started by hand).
+   Until now only overtimeStart and overtimeFallen wrote into this row, so t
+   stood still and the clock ran true; a reader writing every fifteen seconds
+   would have shown the whole clan "Overtime 00:12 of 60:00" forty minutes in,
+   and the sixty-minute mark would never have come.
+   hud is there for this. A running clock has its origin frozen before the row
+   is stamped anew - ot set to the server time the row carries now, hud to 1 -
+   and from then on the clock is independent of t. The value is the same one
+   the clock was reading a moment ago, so nothing on the screen moves.
+   A clock left over from an older war is a different matter: it is not shown
+   today, but the fresh stamp would pull the whole row into this war and wake
+   it. It goes. */
+function gefSchreiben(i, neu){
+  if (!darf("aufklaerung")) return darfNicht("aufklaerung");
+  if (!fightAt(i)) return false;
+  const e = S.gefecht[i];
+  const v = Object.assign(gefechtRest(i), {bat: neu});
+  if (v.ot > 0){
+    if (!imKrieg(e) || !e.t){ delete v.ot; delete v.hud; delete v.otby; delete v.otn; }
+    else if (!v.hud){ v.ot = e.t; v.hud = 1; }
+  }
+  /* AND THE CLOCK KEEPS ITS OWN STARTER. The side panel says "started by ..."
+     and took that name from the row's author - which was right as long as only
+     the person starting the clock ever wrote this row. A reader writing every
+     fifteen seconds becomes that author, and the whole clan would then read
+     that the reader started a clock somebody else started. So the starter is
+     frozen into the clock itself the first time anything else writes the row,
+     and overtimeSatz reads it from there. The row's author stays true: it is
+     whoever wrote last, which is what it says everywhere else in this tool. */
+  if (v.ot > 0 && v.otn === undefined){ v.otby = e.by || ""; v.otn = e.n || ""; }
+  if (!stamp("gefecht", i, v, {n: S.name || ""})) return false;
+  save();
+  if (GEF){ GEF.geschrieben = neu; GEF.gesendet = jetzt(); }
+  draw(); if (sel === i) side();
+  return true;
+}
+function gefMelden(){
+  if (!GEF || !GEF.stand) return;
+  const i = GEF.ort;
+  if (i === null || i === undefined) return;
+  if (!darf("aufklaerung") || !fightAt(i)) return;
+  const R = GEF.stand;
+  if (!R.balken) return;                                  // nothing certain, nothing written
+  const neu = {li: R.balken.li, re: R.balken.re};
+  const alt = GEF.geschrieben;
+  const weit = !GEF.gesendet || jetzt() - GEF.gesendet >= GEF_SCHREIB_MS;
+  const bewegt = !alt || Math.abs(neu.li - alt.li) >= GEF_SPRUNG
+                      || Math.abs(neu.re - alt.re) >= GEF_SPRUNG;
+  if (!(weit && bewegt)) return;
+  gefSchreiben(i, neu);
+}
+
+/* ---- the room ----------------------------------------------------------
+   Built like the cabin: open, ask for the window, look on a tick, show what
+   was read, close, and start again from the desk. NO DOORMAN here. The cabin
+   skips a look when its strip has not moved, measured on a thumbnail of 96 by
+   24 cells - but two points of score in a strip 3840 points wide do not move
+   a single one of those cells, so the doorman would starve exactly the
+   reading he is meant to guard. A look a second is cheap enough without him;
+   only "has a new picture arrived" (bildNeu) still holds, and it saves work
+   here, nothing more - it falls open whenever the frame counter is not
+   running, so the anchor asks the picture itself (marke) and does not believe
+   it. */
+function gefNeu(){
+  return {live: null, laeuft: false, bildNr: 0, ort: null, stand: null,
+          kastenY: null, anker: null, proben: [], marke: null,
+          geschrieben: null, gesendet: 0, orteSchluessel: null,
+          status: "Waiting for the game window ..."};
+}
+function gefOrte(){
+  const aus = [];
+  for (let i = 0; i < MAP.n.length; i++) if (fightAt(i)) aus.push(i);
+  return aus;
+}
+function gefLiveStart(){
+  if (!GEF || GEF.live) return;
+  if (!darf("aufklaerung")){ GEF.status = rechtSatz("aufklaerung"); gefZeichnen(); return; }
+  if (!kannTeilen()){ GEF.status = "This browser cannot share a window here."; gefZeichnen(); return; }
+  GEF.live = setInterval(gefTick, GEF_TAKT);
+  GEF.status = "Live";
+  gefZeichnen(); gefTick();
+}
+/* Stopping the tick is not stopping the share, and the share is the page's:
+   it ends only when no other room and no watch is on it. The rooms shut each
+   other (raeumeSchliessen), so two of them can never read at once - but the
+   other three ask after GEF as well now, so a stop over there cannot pull the
+   share out from under this room either.
+   The last reading goes with the tick. A stopped capture that still shows the
+   last score reads exactly like a running one, and that is a claim nobody
+   made. The working surfaces go too, three of them and about three megabytes
+   at 3840x2160, as the player room does it next door. */
+function gefLiveStop(auchFreigabe){
+  if (!GEF) return;
+  if (GEF.live){ clearInterval(GEF.live); GEF.live = null; }
+  GEF.stand = null; GEF.anker = null; GEF.proben = []; GEF.kastenY = null; GEF.marke = null;
+  gefFlaechenWeg();
+  if (GEF.status === "Live") GEF.status = "Capture stopped.";
+  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)
+      && !(typeof PG !== "undefined" && PG && PG.live) && !wacheLaeuft()) bildFreigabeBeenden();
+  gefZeichnen();
+}
+async function gefTick(){
+  if (!GEF || !GEF.live || GEF.laeuft) return;
+  if (!bildNeu(GEF)) return;
+  GEF.laeuft = true;
+  let bild = null;
+  try {
+    bild = await bildLive();
+    if (!GEF || !GEF.live) return;
+    const R = gefLesen(bild, GEF);
+    if (!GEF || !GEF.live) return;
+    GEF.stand = R;
+    GEF.status = R ? "Live" : "The picture came back empty.";
+    gefMelden();
+    gefZeichnen();
+  } catch(e){
+    if (GEF){
+      GEF.status = String((e && e.message) || e);
+      /* the reading dies with the look. Otherwise the room keeps the last
+         score on the screen and reads as if it were still running. */
+      GEF.stand = null;
+      /* a share the Kommodore ended, or a window that will not read: stop the
+         tick instead of repeating the same error once a second */
+      if (!bildStrom || !bildStrom.active) gefLiveStop(false);
+      gefZeichnen();
+    }
+  } finally {
+    if (bild && bild.close) bild.close();
+    if (GEF) GEF.laeuft = false;
+  }
+}
+function gefPult(){
+  const pult = document.getElementById("gf-pult");
+  if (!pult || !GEF) return;
+  const live = !!GEF.live;
+  pult.innerHTML = `
+    <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="gf-kraft">${ICO_CAPTURE}${
+      live ? "Capture running" : "Capture the game"}</button>
+    <div class="kb-abstand"></div>
+    <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run
+      borderless or windowed. Only the town picked on the left is written to, and only the score
+      goes into it.</div>`;
+  document.getElementById("gf-kraft").addEventListener("click", () => {
+    if (GEF && GEF.live) gefLiveStop(true); else gefLiveStart(); });
+}
+function gefZeichnen(){
+  if (!GEF) return;
+  const kopf = document.getElementById("gf-kopf"), links = document.getElementById("gf-links"),
+        blatt = document.getElementById("gf-blatt");
+  if (!kopf || !links || !blatt) return;
+  const R = GEF.stand, b = R && R.balken;
+  const ortName = (GEF.ort !== null && GEF.ort !== undefined && MAP.n[GEF.ort]) ? MAP.n[GEF.ort][0] : null;
+  kopf.innerHTML = `
+    <div class="rd-kf weit ${ortName ? "ort" : ""}"><div class="t">Town</div>
+      <div class="v">${ortName ? `<b class="kb-ortname">${esc(ortName)}</b>` : "<small>none picked, choose one on the left</small>"}</div></div>
+    <div class="rd-kf"><div class="t">Score, left to right</div>
+      <div class="v">${b ? `${b.li}<small> : </small>${b.re}` : "-"}</div>
+      <div class="bar"><i style="width:${b ? b.li : 0}%"></i></div></div>
+    <div class="rd-kf"><div class="t">Capture</div>
+      <div class="v"><small>${GEF.live && R ? `${R.w}x${R.h}, every ${GEF_TAKT} ms` : esc(GEF.status)}</small></div>
+      <div class="bar"></div></div>`;
+  const orte = gefOrte();
+  const schl = orte.join(",");
+  if (links.dataset.gebaut !== "1" || GEF.orteSchluessel !== schl){
+    GEF.orteSchluessel = schl;
+    links.innerHTML = `
+    <h3>Town</h3>
+    <select id="gf-ort" style="width:100%;background:#15181d;border:1px solid #2a2e36;color:#e8d9a8;padding:6px 8px;border-radius:3px">
+      <option value="">?</option>
+      ${orte.map(i => `<option value="${i}"${i === GEF.ort ? " selected" : ""}>${esc(MAP.n[i][0])}</option>`).join("")}
+    </select>
+    ${orte.length ? "" : `<div class="note" style="margin-top:6px">No town carries the battle mark. Set it on the map first.</div>`}
+    <h3 style="margin-top:14px">Reading</h3>
+    Share the game window and play. The head strip is read every ${GEF_TAKT} ms, and the two boxes are only measured once they have been found at the same place in three looks. A look that brought the same picture as the one before it does not count towards those three. The town's line goes to the clan every fifteen seconds while the score moves.
+    Hold-and-take battles carry the two bars, assaults do not.
+    <h3 style="margin-top:14px">What was measured</h3>
+    <div class="note">Over a recorded assault, which carries no bars at all, the reader said nothing in 2677 looks a second apart. Over the one recorded hold-and-take battle it read 69 times; at the ten points where a stored measurement of the same battle also holds, it stood between 1,2 points under and 1,2 points over it. That is the whole comparison there is. A display drawn at double size is not read at all - the pair of boxes is then wider than the strip cut out here, and half a box is not measured. The end of a battle is not read here.</div>`;
+    links.dataset.gebaut = "1";
+    const of = links.querySelector("#gf-ort");
+    if (of) of.addEventListener("change", ev => {
+      const v = ev.target.value;
+      GEF.ort = v === "" ? null : +v;
+      GEF.geschrieben = null; GEF.gesendet = 0;
+      gefZeichnen();
+    });
+  }
+  blatt.innerHTML = `
+    <div class="kb-titel">Battle state</div>
+    ${b ? `
+      <div class="gf-balken"><span>left</span>
+        <div class="kasten"><i style="width:${b.li}%;background:${esc(b.liTon || "#7a8a99")}"></i></div>
+        <span class="zahl">${b.li}%</span></div>
+      <div class="gf-balken"><span>right</span>
+        <div class="kasten"><i style="width:${b.re}%;background:${esc(b.reTon || "#7a8a99")}"></i></div>
+        <span class="zahl">${b.re}%</span></div>
+      <div class="note">${b.liTon ? `<span class="gf-ton" style="background:${esc(b.liTon)}"></span>left bar` : ""}${
+        b.reTon ? `<span class="gf-ton" style="margin-left:12px;background:${esc(b.reTon)}"></span>right bar` : ""}
+        <div style="margin-top:4px">${b.liTon || b.reTon ? "Measured colours of the filled part. Which side is yours is not read." : "Neither bar carries a filled part yet."}</div></div>
+      <div class="note">In none of the recordings was the left bar ever seen filled, so its filled colour has never been measured.</div>`
+    : `<div class="gf-nichts">No score bars read.</div>`}
+    ${!darf("aufklaerung") ? `<div class="note" style="margin-top:16px">${esc(rechtSatz("aufklaerung"))} Nothing is sent.</div>`
+      : GEF.ort === null || GEF.ort === undefined ? `<div class="note" style="margin-top:16px">Pick a town on the left, or nothing is sent to the clan.</div>`
+      : GEF.gesendet ? `<div class="note" style="margin-top:16px">Last sent to the clan ${esc(alterText(GEF.gesendet))}.</div>`
+      : `<div class="note" style="margin-top:16px">Nothing sent yet.</div>`}`;
+  gefPult();
+}
+async function gefstandAuf(){
+  if (gefOffen) return;
+  raeumeSchliessen("gefstand");
+  gefOffen = true;
+  GEF = gefNeu();
+  /* the town chosen on the map when it is a battle, otherwise the only one */
+  const orte = gefOrte();
+  if (sel !== null && sel !== undefined && fightAt(sel)) GEF.ort = sel;
+  else if (orte.length === 1) GEF.ort = orte[0];
+  const li = document.getElementById("gf-links");
+  if (li) li.dataset.gebaut = "";
+  document.getElementById("gefstand").classList.add("an");
+  gefZeichnen();
+  /* opening the desk means wanting to read - ask for the window at once, as
+     the cabin does. gefLiveStart says itself why it will not. */
+  gefLiveStart();
+  gefZeichnen();
+}
+function gefstandZu(){
+  if (!gefOffen) return;
+  gefOffen = false;
+  gefLiveStop(true);
+  document.getElementById("gefstand").classList.remove("an");
+  GEF = null;
+}
+document.getElementById("b-gefstand").addEventListener("click", gefstandAuf);
+document.getElementById("gf-zu").addEventListener("click", gefstandZu);
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && gefOffen) gefstandZu(); });
+
+/* ONE ROOM AT A TIME. All four full-screen rooms sit on the same
    position:fixed inset:0 z-index:120, and none of them asked after the
    others: two open rooms lay exactly on top of each other, the later one in
-   the HTML hiding the earlier one completely. On top of that three Escape
-   handlers hang on the document, so one press closed every open room at
-   once. Whoever opens a room now closes the other two, and then only one of
-   the three "open" flags can be true. */
+   the HTML hiding the earlier one completely. On top of that an Escape
+   handler per room hangs on the document, so one press closed every open room
+   at once. Whoever opens a room now closes the others, and then only one of
+   the four "open" flags can be true. */
 function raeumeSchliessen(ausser){
-  if (ausser !== "radar"   && typeof radarOffen !== "undefined" && radarOffen) radarZu();
-  if (ausser !== "kabine"  && typeof kbOffen    !== "undefined" && kbOffen)    kabineZu();
-  if (ausser !== "spieler" && typeof pgOffen    !== "undefined" && pgOffen)    spielerraumZu();
+  if (ausser !== "radar"    && typeof radarOffen !== "undefined" && radarOffen) radarZu();
+  if (ausser !== "kabine"   && typeof kbOffen    !== "undefined" && kbOffen)    kabineZu();
+  if (ausser !== "spieler"  && typeof pgOffen    !== "undefined" && pgOffen)    spielerraumZu();
+  if (ausser !== "gefstand" && typeof gefOffen   !== "undefined" && gefOffen)   gefstandZu();
 }
 
 /* ==== TEST BENCH FOR THE READER ==========================================
@@ -28853,7 +29593,8 @@ function wacheStop(vonAussen){
   try { wache.video.srcObject = null; } catch(e){}
   /* the share is the page's, not the radar's: it ends only when no other
      room is watching through it */
-  const andere = (typeof KB !== "undefined" && KB && KB.live) || (typeof PG !== "undefined" && PG && PG.live);
+  const andere = (typeof KB !== "undefined" && KB && KB.live) || (typeof PG !== "undefined" && PG && PG.live)
+      || (typeof GEF !== "undefined" && GEF && GEF.live);
   if (!andere) bildFreigabeBeenden();
   document.querySelector(".rd-schirm")?.classList.remove("live");
   const gesehen = wache.gesehen ? wache.gesehen.size : 0, geaendert = wache.gesamt;
@@ -40892,7 +41633,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 8b61e37241</span></p></div>
+         installation. <span style="color:var(--dim2)">· build e2d87b9e63</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -41064,7 +41805,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "8b61e37241";
+const BAU = "e2d87b9e63";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
