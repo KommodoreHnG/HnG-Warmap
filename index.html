@@ -233,6 +233,13 @@ select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
   background:var(--accent);opacity:0;transition:opacity .12s}
 #zieher-o:hover::before,#zieher-o:focus-visible::before,body.zieht-h #zieher-o::before{opacity:.85}
 #zieher-o:focus-visible{outline:none}
+/* Der Griff an der OBERKANTE der Werkzeugleiste. Es gibt ihn nur auf dem
+   Telefon: dort steht die Leiste unten und waechst in der Hoehe, am
+   Schreibtisch steht sie links und waechst in der Breite - dafuer ist
+   #zieher-l da, und eine Hoehe hat sie dort gar nicht zu vergeben. */
+#zieher-u{display:none}
+body.zieht-u{cursor:row-resize;user-select:none}
+body.zieht-u #mapwrap canvas{pointer-events:none}
 body.zieht-h{cursor:row-resize;user-select:none}
 body.zieht-h #mapwrap canvas{pointer-events:none}
 /* Nur die Werkzeuge rollen. Die Fraktionswahl bleibt unten stehen, wo sie
@@ -1535,6 +1542,18 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 .tw td.sy+td{text-align:left}
 .tw tr.me{background:rgba(217,164,65,.09)}
 .tw tr.me em{font-style:normal;color:var(--accent);font-size:10.5px}
+/* DIE ZUSAGELISTE IM PFEILFENSTER. Achtzehn Zeilen, je ein Zahlenfeld. Die
+   Felder stehen in einer .tw-Tabelle und damit ausserhalb von .row, das
+   sonst jedes Eingabefeld eines Fensters kleidet - ohne diese Regel saessen
+   sie in der Voreinstellung des Browsers mitten in der Tafel.
+   tr.leer: ein Typ, von dem im Depot nichts liegt und fuer den auch nichts
+   zugesagt ist, tritt zurueck. Das FELD bleibt hell - man darf einen Typ
+   zusagen, den man erst noch kauft. */
+.tw input.zat{width:54px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:var(--r);padding:3px 5px;outline:0;color:var(--text);font:inherit;
+  font-size:11.5px;text-align:right;font-variant-numeric:tabular-nums}
+.tw input.zat:focus{border-color:var(--accent)}
+.tw tr.leer td.sy,.tw tr.leer td.zat-name,.tw tr.leer td.zat-hab{opacity:.5}
 .bar{height:5px;background:var(--panel2);border-radius:3px;overflow:hidden;min-width:52px}
 .bar i{display:block;height:100%;background:var(--accent)}
 /* Ueber dem Radarraum (120), unter dem Tor (200): der Radarraum deckt den
@@ -1708,6 +1727,62 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   #factions .fac{justify-content:center;padding:7px 4px}
   #factions .fac .lbl{font-size:10px}
 
+  /* DER GRIFF AN DER OBERKANTE - VIER RASTEN, KEINE FREIE HOEHE.
+     Die freie Hoehe ist genau der Weg zurueck in die Havarie, die zwanzig
+     Zeilen weiter oben steht ("the map left with 285"). Nachgestellt:
+     #toolwrap auf flex-wrap:wrap und Hoehe frei - bei 375x812 wird die
+     Leiste 318.4 hoch und die Karte faellt auf 352.5 von 812 (43.4 %),
+     denn die elf Werkzeuge brauchen bei 312.5 Punkten Breite DREI Reihen
+     (scrollHeight 219 = 3 x 73). Also Rasten, jede eine gemessene Hoehe,
+     und keine, die je einen halben Knopf abschneidet:
+
+       Raste 3  Zeichen, Wort und Ziffer   Leiste 159.5  Karte 511.3
+       Raste 2  nur die Zeichen            Leiste 118.1  Karte 552.7
+       Raste 1  Streifen weg, Farben da    Leiste  68.2  Karte 602.7
+       Raste 0  nur der Griff              Leiste  27.4  Karte 643.5
+     (Bildschirmpunkte bei 375x812, Bedienungsgroesse 1.2, Kopfzeile 141.2;
+      vorher stand die Leiste fest auf 152.3 und die Karte auf 518.5)
+
+     Nach OBEN geht es nicht weiter, und das ist gemessen und nicht
+     gespart: zwei Reihen kosten die Karte 80 Punkte und zeigen trotzdem
+     nur 8 der 13 Kacheln. Ein Daumenwisch quer durch eine Reihe erreicht
+     alle elf. */
+  #zieher-u{display:block;position:absolute;left:0;right:0;top:0;height:12px;
+    z-index:12;cursor:row-resize;background:transparent;touch-action:none}
+  /* Ein sichtbarer Balken, kein unsichtbarer Rand wie am Schreibtisch: mit
+     der Maus faehrt man einen Rand an und sieht ihn aufleuchten, mit dem
+     Daumen greift man, was man sieht. */
+  #zieher-u::before{content:"";position:absolute;left:50%;top:4px;margin-left:-23px;
+    width:46px;height:4px;border-radius:2px;background:var(--dim2);opacity:.7;
+    transition:opacity .12s,background .12s}
+  #zieher-u:hover::before,#zieher-u:focus-visible::before,
+  body.zieht-u #zieher-u::before{opacity:1;background:var(--accent)}
+  #zieher-u:focus-visible{outline:none}
+  /* Der Griff braucht 12 Punkte an der Oberkante. Sechs davon hole ich
+     zurueck, damit die Vorgabe nicht teurer wird als noetig: der Streifen
+     hatte oben 4 Punkte Luft und jede Kachel noch einmal 7. Rechnung geht
+     auf, gemessen: 152.3 + 12x1.2 - 6x1.2 = 159.5. */
+  #bar{padding-top:12px}
+  #bar #toolwrap,#bar.zwei #toolwrap{padding-top:0}
+  #bar .tool{padding-top:5px}
+  /* Raste 2: die Zeichen allein. Sie sind unterscheidbar genug - Pfeil,
+     Fahne, Pinsel, gekreuzte Saebel -, und wer sie doch nachschlagen will,
+     zieht den Griff eine Raste hoch. */
+  #bar.s2 .tool .lbl,#bar.s2 .tool .kb{display:none}
+  /* Raste 1: der Streifen geht, die Fraktionswahl bleibt. Nach ihr greift
+     man im Spiel am oeftesten, und sie ist mit 52.8 Punkten die billigste
+     Zeile der Leiste.
+     Die Zweispaltenregel traegt Kennung UND Merkmal und muss hier mit
+     genannt werden, sonst gewinnt sie - dieselbe Falle wie oben. */
+  #bar.s1 #toolwrap,#bar.s1.zwei #toolwrap{display:none}
+  /* Raste 0: nur die Karte. Der Griff bleibt stehen, sonst gaebe es keinen
+     Weg zurueck - und er wird hier hoeher, weil er dann das einzige ist,
+     was der Daumen noch treffen kann: 22 statt 12 Punkte, Leiste 27.4. */
+  #bar.s0 #toolwrap,#bar.s0.zwei #toolwrap,#bar.s0 #factions{display:none}
+  #bar.s0{padding-top:22px}
+  #bar.s0 #zieher-u{height:22px}
+  #bar.s0 #zieher-u::before{top:9px}
+
   /* Die rechte Spalte als Blatt von unten */
   #rechts{position:fixed;left:0;right:0;bottom:0;top:auto;width:auto;z-index:60;
     max-height:72vh;border-left:0;border-top:2px solid var(--accent-dk);
@@ -1752,7 +1827,14 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 /* Der Griff, der das Blatt holt. Nur auf dem Telefon sichtbar. */
 #blattgriff{display:none}
 @media (max-width: 760px){
-  #blattgriff{display:flex;position:fixed;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);
+  /* UEBER DER LEISTE, NICHT AUF IHR. Hier stand eine feste 96 - eine Zahl,
+     die nichts von der Leiste weiss. Gemessen bei 375x812: der Griff
+     reichte bis 716, die Leiste beginnt bei 659.7, er lag also 56.3 Punkte
+     ueber dem Streifen und verdeckte dort das fuenfte Werkzeug. Mit einer
+     verstellbaren Leiste waere das mal schlimmer, mal sinnlos.
+     --leiste-h steht in BILDSCHIRMpunkten: dieser Knopf schwebt am
+     Bildschirm und traegt den zoom der Leiste nicht mit. */
+  #blattgriff{display:flex;position:fixed;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + var(--leiste-h,96px) + 8px);
     z-index:61;align-items:center;gap:6px;padding:10px 14px;border-radius:20px;
     background:var(--panel);border:1px solid var(--accent-dk);color:var(--accent);
     font-family:var(--schmal);font-size:12px;letter-spacing:.06em;text-transform:uppercase;
@@ -1896,6 +1978,9 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
     <nav id="bar" aria-label="Tools">
       <div id="zieher-l" role="separator" aria-orientation="vertical" tabindex="0"
            title="Drag to resize the tool bar — double-click to reset"></div>
+      <!-- Nur auf dem Telefon sichtbar, siehe #zieher-u im Stilblatt. -->
+      <div id="zieher-u" role="separator" aria-orientation="horizontal" tabindex="0"
+           title="Drag down to give the map more room — double-click to reset"></div>
       <div class="bar-h" data-werkzeuge="1" data-txt="bar.tool">Tool</div>
       <button class="tool" data-t="inspect" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M6 3.6v13.1l3.3-3.2 2.1 4.7 2.3-1-2.1-4.6h4.5z"/></svg>
@@ -5073,6 +5158,20 @@ function zuordFreieTeams(){
   for (const z of meineZuord()) for (const id of z.ats) belegt.add(id);
   return aufSeite(myDepotAlle(), clanFaktion()).filter(d => !belegt.has(d.id));
 }
+/* WIEVIEL ICH VON EINEM TYP HABE, UND WIEVIEL DAVON NOCH FREI IST.
+   Beide Zahlen kommen aus den zwei Listen, die diese Frage im Werkzeug
+   ohnehin schon beantworten: mein Depot auf der Kriegsseite, und
+   zuordFreieTeams - dasselbe "frei", das das Zuordnungsfenster darueber
+   anbietet. Damit koennen die beiden Fenster sich nicht widersprechen.
+   EIN Gang ueber das Depot fuer alle achtzehn Zeilen, nicht einer je Zeile.
+   Gerufen wird das beim Oeffnen eines Pfeilfensters, nie in draw(). */
+function zusageVorrat(){
+  const raus = {};
+  for (const t of MAP.at) raus[t.k] = {hat: 0, frei: 0};
+  for (const d of aufSeite(myDepotAlle(), clanFaktion())) if (raus[d.k]) raus[d.k].hat++;
+  for (const d of zuordFreieTeams()) if (raus[d.k]) raus[d.k].frei++;
+  return raus;
+}
 /* teams onto an order by hand: they leave any other row of mine, join my
    row on this order, and the row stands accepted - picking is accepting */
 function zuordZuweisen(b, ids){
@@ -5196,7 +5295,7 @@ function zuordWahl(b, zurueck){
   openDlg(`
     <div class="dlg-h"><h2>Assign to ${esc(b.name || "")}</h2>
       <p>${esc(befehlArtName(b))}${ort ? ` \u00b7 ${esc(ort)}` : ""} \u00b7 ${ZUSTAND_NAME[b.zs] || b.zs || "planned"}${
-        b.v && +b.v.soll ? ` \u00b7 target ${+b.v.soll}` : ""}</p></div>
+        b.art !== "arrow" && b.v && +b.v.soll ? ` \u00b7 target ${+b.v.soll}` : ""}</p></div>
     <div class="dlg-b">
       ${frei.length ? `<div class="zuord-liste">${frei.map(d => { const grund = aufklSperre(b, d, lage); return `<label${
           grund ? ` title="${esc(grund)}" style="opacity:.45;cursor:default"` : ""}><input type="checkbox" data-zteam="${esc(d.id)}"${grund ? " disabled" : ""}>
@@ -5339,7 +5438,7 @@ function ordersDialog(tab){
       <td style="text-align:left">${b.v.folge ? `<small style="color:var(--dim)">#${+b.v.folge}</small> ` : ""}${esc(b.name)}</td>
       <td style="text-align:left">${esc(befehlOrtName(b))}</td>
       <td style="text-align:left">${zsSpan(b.zs)}</td>
-      <td>${+b.v.soll || "\u2014"}</td>
+      <td>${(b.art === "arrow" ? 0 : +b.v.soll) || "\u2014"}</td>
       <td>${fest}${pend ? ` <small style="color:var(--su)">+${pend} pending</small>` : ""}</td>
       <td style="text-align:left">${esc(befehlWer(b))}</td>
       <td><button class="btn" data-zwahl="${esc(b.art)}" data-zid="${esc(String(b.id))}" ${klein}${
@@ -5998,6 +6097,40 @@ function startPunktZeichnen(){
   ctx.beginPath(); ctx.arc(x, y, R, 0, 6.284); ctx.stroke();
   ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 2.2*uiScale;
   ctx.beginPath(); ctx.arc(x, y, R, 0, 6.284); ctx.stroke();
+  /* MOEGLICHE ZIELE (MOB-2, zweiter Teil): "Start gesetzt, moegliche Ziele
+     leuchten." Ein Angriffspfeil darf ueberallhin - eine Zielmenge gab es
+     darum nicht. Sie steht aber an der Kante: die NACHBARN des gesetzten
+     Startorts, die diese Seite nicht haelt, sind die, die als naechstes zu
+     nehmen sind.
+     NICHT die Wegsuche. Die kostet bis zu 1.033.203 Vergleiche; hier
+     genuegt ein Blick in kantenVon, die Nachbarliste, die kantenFeld
+     ohnehin einmal aufbaut - 2*2661/1438 = 3,70 Nachbarn im Mittel, also
+     rund vier Staedte und acht Kreisboegen je Bild, und nur solange ein
+     Startort gesetzt ist.
+     Gemessen gegen faction: genau die Fraktion, die pfeilAnlegen dem neuen
+     Pfeil gibt, und dieselbe, deren Farbe der Ring oben schon traegt.
+     Duenner und blasser als der Startring, mit derselben Strichelung: der
+     halbe Befehl in der Hand bleibt das Hellste auf der Karte. Sind alle
+     Nachbarn schon unsere, leuchtet nichts - dann ist von hier aus nichts
+     zu nehmen, und das ist die Auskunft. */
+  ctx.globalAlpha = .7;
+  for (const [v] of kantenVon(i)){
+    if (!MAP.n[v] || ownerOf(v) === faction) continue;
+    const [vx, vy] = toScr(MAP.n[v][1], MAP.n[v][2]);
+    const RV = (isCap(v) ? r0*STERN_RAGT : r0) + Math.max(8.5, 8.5*uiScale);
+    /* NUR, WENN DIE RINGE SICH NICHT INS GEHEGE KOMMEN. Bei kleinem Zoom
+       liegen die Nachbarn dichter beieinander als zwei Ringdurchmesser, und
+       dann schneidet jeder Zielring den Startring - ein Gegenleser hat es
+       im Fit-Zoom gemessen: Ringradius 11,1 Punkte, die vier Nachbarn 8,6
+       bis 13,0 Punkte entfernt, auf dem Telefon ein geschlossener Fleck.
+       Das naehme genau das zurueck, wofuer der Startring gebaut wurde.
+       Ist es zu eng, leuchtet gar nichts - hineinzoomen zeigt es. */
+    if (Math.hypot(vx - x, vy - y) < R + RV + 2*uiScale) continue;
+    ctx.strokeStyle = "rgba(5,8,12,.85)"; ctx.lineWidth = 2.8*uiScale;
+    ctx.beginPath(); ctx.arc(vx, vy, RV, 0, 6.284); ctx.stroke();
+    ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 1.4*uiScale;
+    ctx.beginPath(); ctx.arc(vx, vy, RV, 0, 6.284); ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -6042,6 +6175,13 @@ const gefechtRest = i => { const e = S.gefecht[i]; return (e && e.v && typeof e.
 function overtimeStart(i, wann){
   if (!darf("aufklaerung")) return darfNicht("aufklaerung");
   if (!fightAt(i)) return false;
+  /* A HANDED-IN MOMENT DECIDES THE WHOLE CLAN'S CLOCK: with hud at 1 otMs
+     takes it as it is, off one machine's clock, and until now nothing here
+     looked at it at all. Two bounds, both the clock's own - a moment that has
+     not happened yet is none, and one older than the whole overtime would put
+     the plate on "OT over" the second it is written. A clock started by hand
+     hands in no moment and is not touched. */
+  if (wann && (+wann > jetzt() || jetzt() - +wann > OT_DAUER)) return false;
   const v = Object.assign(gefechtRest(i), {ot: +wann || jetzt(), hud: wann ? 1 : 0});
   delete v.otby; delete v.otn;           // this is the hand that starts it, see gefSchreiben
   gefAlterHalten(v, S.gefecht[i]);       // the reading in this row keeps its age, see gefAlterHalten
@@ -7758,7 +7898,9 @@ function draw(){
     ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(lastMouse[0], lastMouse[1]); ctx.stroke();
     ctx.setLineDash([]);
   }
+  angriffsWegBild();                      // hoechstens EINE Wegsuche in diesem Bild
   for (const a of liveArrows()) drawArrow(a);
+  angriffsWegNachfassen();                // blieb eine liegen, noch ein Bild
   if (arrowFrom !== null && lastMouse){
     const [x1,y1] = toScr(MAP.n[arrowFrom][1], MAP.n[arrowFrom][2]);
     ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 2; ctx.setLineDash([5,4]);
@@ -9394,6 +9536,12 @@ function drawArrow(a){
     mitte.push([u*u*x1 + 2*u*t*cx + t*t*x2, u*u*y1 + 2*u*t*cy + t*t*y2]);
   }
   mitteVon.set(a.id, mitte);
+  /* DER KUERZESTE WEG, unter dem Pfeilkoerper und unter den Stadtscheiben:
+     er liegt auf dem Boden, wie jeder Befehl auf dieser Karte. Nur ein
+     aktiver eigener Bodenpfeil bekommt ihn, alles Weitere entscheidet
+     angriffsWeg - hier steht nur der Aufruf. Farbe wie der Rand des
+     Pfeils: die gewaehlte, sonst die der Fraktion. */
+  angriffsWegZeichnen(a, pfeilFarbe(a.farbe) || f);
 
   /* Ein Vorschlag sieht aus wie einer: blass, gestrichelt umrandet. Wer ueber
      die Karte schaut, soll auf einen Blick sehen, was gilt und was jemand
@@ -9443,12 +9591,12 @@ function drawArrow(a){
      strength is set, "12/20 (60 %)". */
   /* THE SHIELD sits on the middle of the curve, horizontal - name, sign,
      strength against plan as a bar. Its box is kept for the hit test. */
-  if (sprung >= 1 && view.z > 1.1 && (staerke || a.label || a.soll || a.sym)){
+  if (sprung >= 1 && view.z > 1.1 && (staerke || a.label || a.sym)){
     const mx = .25*x1 + .5*cx + .25*x2, my = .25*y1 + .5*cy + .25*y2;
     const bild = a.sym ? pfeilSymbolBild(a.sym, light() ? "#1a1409" : "#f4ead9") : null;
     ctx.save(); ctx.globalAlpha = vor ? .72 : (fertig ? .55 : 1);
     const kasten = befehlSchild(mx, my, fremd ? {name: a.label, bild, farbe: fb || null, seite: f}
-      : {name: a.label, soll: +a.soll || 0, ist: staerke, bild, farbe: fb || null, seite: f, ohneBalken: fertig});
+      : {name: a.label, ist: staerke, bild, farbe: fb || null, seite: f, ohneBalken: fertig});
     if (kasten && fertig) befehlAbzeichen(kasten.x1, kasten.y0, "\u2713", fb || f, true);
     ctx.restore();
     if (kasten) schildVon.set(a.id, kasten);
@@ -9499,6 +9647,62 @@ const schildVon = new Map();
 const joinOf = id => Object.keys(S.join)
   .filter(k => k.startsWith(id + ":") && imKrieg(S.join[k]) && S.join[k].v)
   .map(k => ({who: k.slice(id.length+1), n: S.join[k].v, name: S.join[k].n || "", mine: k.endsWith(":"+S.me)}));
+/* ---------------- what somebody brings, by type ----------------
+   Eine Zusage war EINE Zahl. Seit dem 08.09.2026 steht daneben, WAS
+   mitkommt: ein Feld "at" in derselben Zeile, {Typ: Anzahl}.
+
+   v BLEIBT DIE SUMME und wird beim Schreiben aus dieser Tafel gerechnet.
+   Daran haengt alles, was eine Zusage bisher gelesen hat - die Kopfzeile,
+   die Pfeilbreite, das Schild, der Paravorrat - und zwar an der teuersten
+   Stelle der Datei: joinOf laeuft in drawArrow, also je Pfeil und je Bild.
+   Ein Feld anzuhaengen kostet diese Leser nichts, v zu aendern haette sie
+   alle gekostet, dazu jede aeltere Seite im Clan, die nur v kennt.
+   Deshalb wird joinOf oben NICHT angefasst. Wer die Typen braucht, fragt
+   hier - zweimal je geoeffnetem Pfeilfenster, sonst nirgends. */
+function zusageArten(id){
+  const raus = [];
+  for (const k of Object.keys(S.join)){
+    const e = S.join[k];
+    if (!k.startsWith(id + ":") || !imKrieg(e) || !e.v) continue;
+    raus.push({who: k.slice(id.length+1), n: e.v,
+               at: (e.at && typeof e.at === "object") ? e.at : null,
+               mine: k.endsWith(":"+S.me)});
+  }
+  return raus;
+}
+/* meine eigene Zusage als Tafel - leer, wenn ich nichts zugesagt habe oder
+   meine Zeile noch aus der Zeit vor den Typen stammt */
+function meineZusage(id){
+  const e = S.join[`${id}:${S.me}`];
+  const at = (e && imKrieg(e) && e.v && e.at && typeof e.at === "object") ? e.at : null;
+  const raus = {};
+  if (at) for (const t of MAP.at) if (+at[t.k] > 0) raus[t.k] = +at[t.k];
+  return raus;
+}
+/* DIE ACHTZEHN ZEILEN. Je Zeile das Taktikzeichen, der Name, ein Zahlenfeld
+   und dahinter, was mein eigenes Depot davon haelt.
+   Aufgebaut wird das einmal beim Oeffnen. Zum Vergleich, was dasselbe
+   Fenster ohnehin zahlt: sammelText ruft sammelzeit, und die sucht mit
+   wegSuche einen Weg durch die 1438 Staedte, im Zweifel zweimal. */
+function zusageTabelle(a){
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const hab = zusageVorrat(), meins = meineZusage(a.id);
+  const alt = S.join[`${a.id}:${S.me}`];
+  const grob = !!(alt && imKrieg(alt) && alt.v && !(alt.at && typeof alt.at === "object"));
+  return `<div style="font-size:12px;color:var(--dim)">What you bring</div>
+    ${grob ? `<div class="note">Your commitment of <b>${+alt.v}</b> team${+alt.v === 1 ? "" : "s"}
+      names no types. Fill the rows in and save, and they take its place.</div>` : ""}
+    <div class="tw" style="max-height:238px;overflow-y:auto">
+      <table><thead><tr><th colspan="2">Type</th><th>Bring</th><th style="text-align:left">Yours</th></tr></thead>
+      <tbody>${MAP.at.map(t => {
+        const v = hab[t.k], n = +meins[t.k] || 0;
+        return `<tr${!v.hat && !n ? ` class="leer"` : ""}><td class="sy">${symbolSVG(t.k, c, 24, 17)}</td>
+          <td class="zat-name">${esc(atName(t.k))}</td>
+          <td><input class="zat" type="number" data-zat="${esc(t.k)}" min="0" max="99" value="${n || ""}" placeholder="0"></td>
+          <td class="zat-hab" style="text-align:left;color:var(--dim)">(${v.hat} in depot, ${v.frei} free)</td></tr>`;
+      }).join("")}</tbody></table>
+    </div>`;
+}
 
 /* ---------------- gathering time ----------------
    How long until the teams for an order can stand at its origin: the
@@ -9539,8 +9743,14 @@ function kantenVon(i){
   return kantenFeld[i] || [];
 }
 /* Dijkstra from several starts at once; passierbar(i) says which towns may
-   be walked through (start and target always may). */
-function wegSuche(starts, ziel, passierbar){
+   be walked through (start and target always may).
+   KANTENGEWICHT WAHLWEISE: ohne kosten() zaehlen Karteneinheiten, wie seit
+   je - sammelzeit misst damit eine Marschstrecke. Mit kosten(u, v, l) zaehlt,
+   was der Aufrufer sagt; angriffsWeg gibt darueber die Zahl der noch zu
+   nehmenden Staedte herein. laenge traegt dann diese Summe, nicht Meter.
+   Die Bedingung des Verfahrens bleibt gewahrt, solange kosten nie negativ
+   ist - beide heutigen Gewichte sind es nicht. */
+function wegSuche(starts, ziel, passierbar, kosten){
   const n = MAP.n.length, dist = new Float64Array(n).fill(Infinity), her = new Int32Array(n).fill(-1);
   const offen = new Set();
   for (const st of starts){ dist[st] = 0; offen.add(st); }
@@ -9551,7 +9761,7 @@ function wegSuche(starts, ziel, passierbar){
     if (u === ziel) break;
     for (const [v, l] of kantenVon(u)){
       if (v !== ziel && !passierbar(v)) continue;
-      const d = dist[u] + l;
+      const d = dist[u] + (kosten ? kosten(u, v, l) : l);
       if (d < dist[v]){ dist[v] = d; her[v] = u; offen.add(v); }
     }
   }
@@ -9559,6 +9769,225 @@ function wegSuche(starts, ziel, passierbar){
   const weg = []; for (let k = ziel; k >= 0; k = her[k]) weg.push(k);
   weg.reverse();
   return {laenge: dist[ziel], hops: weg.length - 1, weg, von: weg[0]};
+}
+
+/* ---- DER KUERZESTE WEG AM ANGRIFFSPFEIL (08.09.2026) ------------------
+   Der Auftrag: "Bei aktiven Angriffspfeilen den kuerzesten Weg zeigen."
+   Und die Antwort auf die teure Frage, woertlich: "INAKTIVE BEFEHLE
+   BRAEUCHTEN DIE HIGHLIGHTS AUSSERDEM NICHT." Also nur aktive.
+
+   WAS GEZAEHLT WIRD, sind Schlachten, nicht Karteneinheiten: jede Stadt
+   auf dem Weg, die diese Seite noch nicht haelt, kostet 1. Darunter liegt
+   ein Feinanteil aus dem Abstand zur gezeichneten Kurve (der Schwenk des
+   Pfeils - derselbe Steuerpunkt wie in drawArrow), aus der Kantenlaenge
+   und aus der Kampfmarke. Der Feinanteil je Kante ist durch 1/1438
+   gedeckelt und ein einfacher Weg hat hoechstens 1437 Kanten: die Summe
+   bleibt unter 1 und kann eine Schlacht nie aufwiegen. Innerhalb gleicher
+   Schlachtenzahl entscheidet damit der Schwenk - und genau das war
+   gemeint.
+
+   DER STEUERPUNKT WIRD IN KARTENEINHEITEN GEBILDET. toScr ist Streckung
+   plus Verschiebung ohne Spiegelung, also ergibt dieselbe Formel dieselbe
+   Kurve - und der Weg haengt weder am Zoom noch am Bildausschnitt.
+   Schieben der Karte wirft nichts weg.
+
+   RECHENZEIT. wegSuche sucht das Minimum linear ueber die offene Menge:
+   bei 1438 Staedten hoechstens 1438*1437/2 = 1.033.203 Vergleiche je
+   Aufruf, dazu hoechstens 2*2661 = 5.322 Kantenentspannungen und
+   hoechstens 1438*13 = 18.694 quadrierte Abstaende zur Kurve. Zum
+   Vergleich: draw() macht zwei Durchlaeufe ueber 1438 Staedte je Bild -
+   eine einzige Wegsuche kann bis zu 719 davon sein. In draw() gehoert das
+   nicht, und darum stehen hier ZWEI Deckel:
+     - ein Zwischenspeicher je Pfeil, 2000 ms, nach dem Muster von
+       paraBedrohungKarte (5 s) und rolleOrteKarte (500 ms), zeitReise
+       eingeschlossen;
+     - und darueber ANGRIFF_WEG_BILD: hoechstens EINE frische Wegsuche je
+       Bild, was auch immer auf der Karte steht. Bleibt Arbeit liegen, holt
+       ein angefordertes Bild sie nach; zehn aktive Pfeile sind nach zehn
+       Bildern durch. Mehr als 40 Pfeile hat niemand (MARKEN_GRENZE.arrow),
+       und aktiv sind davon wenige.
+
+   WANN DER GESPEICHERTE WEG GELOGEN IST - drei Quellen, drei Pruefungen:
+     der Pfeil selbst steht im Schluessel (from, to, f, Bauch);
+     Besitz und Kampfmarken AUF DEM WEG stehen in einer Marke, die je Bild
+       neu gebildet und verglichen wird - faellt eine Stadt auf dem Weg,
+       wird sofort neu gesucht;
+     alles daneben - eine Stadt abseits faellt und macht einen besseren Weg
+       moeglich - faengt die Verfallszeit. Keines der beiden reicht allein.
+
+   OHNE WEG WIRD NICHTS GEZEICHNET UND NICHTS BEHAUPTET. Und die zwei
+   Durchgaenge aus sammelzeit werden NICHT uebernommen: dort ist der erste
+   "ruhig" (nur eigene oder freie Staedte ohne Kampfmarke), weil eine
+   Nachschubkolonne durch eigenes Land geht. Hier ist die feindliche Stadt
+   nicht das Hindernis, sondern der Auftrag - "ruhig" schloesse aus, worum
+   es geht, und jeder Angriff mit etwas zu nehmen fiele ohnehin auf den
+   zweiten Durchgang durch. Ein Durchgang mit allem erlaubt; das Kaempfen
+   wird bepreist statt verboten. Findet der nichts, fuehrt ueber MAP.e
+   keine Kette hin - dann gibt es nichts zu sagen. */
+const ANGRIFF_WEG_MS       = 2000;   // Verfallszeit eines gespeicherten Weges
+const ANGRIFF_WEG_BILD     = 1;      // frische Wegsuchen je Bild, hoechstens
+const ANGRIFF_WEG_PROBEN   = 12;     // Stuetzstellen auf der Kurve, wie in drawArrow
+const ANGRIFF_WEG_KETTE_MS = 1500;   // so lange darf sich das Nachfassen selbst Bilder holen
+const ANGRIFF_WEG_MERK     = 200;    // so viele Pfeile behaelt der Speicher
+const angriffsWegSpeicher = new Map();
+let angriffsWegRest = 0, angriffsWegOffen = false, angriffsWegKetteAb = 0;
+
+/* Wer den Weg bekommt: ein AKTIVER Befehl unserer Seite, der ueber Boden
+   geht. Ein Entwurf und ein geplanter Befehl nicht - der Kommodore hat es
+   gesagt. Ein fremder Pfeil nicht: eine Sichtung hat gar keinen Zustand,
+   "aktiv" laesst sich an ihr nicht entscheiden (drawArrow setzt ihn nur
+   ersatzweise). Ein Absprung nicht: Maenner in der Luft nehmen keine Stadt
+   auf dem Weg. */
+function angriffsWegGilt(a){
+  if (!a || a.luft || a.entwurf) return false;
+  if (a.from === a.to || !MAP.n[a.from] || !MAP.n[a.to]) return false;
+  if (fremdeSeite(a)) return false;
+  return befehlZustand(a.id, a) === "aktiv";
+}
+/* Besitz und Kampfmarke der Staedte AUF DEM WEG, als eine Zeichenkette.
+   Aendert sich eine davon, ist der gespeicherte Weg falsch. */
+function angriffsWegMarke(weg, f){
+  let m = "";
+  for (const i of weg) m += (ownerOf(i) === f ? "1" : "0") + (fightAt(i) ? "k" : "-");
+  return m;
+}
+/* Die Suche selbst. Kein Zwischenspeicher hier drin - der sitzt eine Ebene
+   hoeher, damit diese Funktion genau das tut, was sie heisst. */
+function angriffsWegNeu(a){
+  const A = MAP.n[a.from], B = MAP.n[a.to], n = MAP.n.length;
+  const x1 = A[1], y1 = A[2], x2 = B[1], y2 = B[2];
+  const dx = x2 - x1, dy = y2 - y1, sehne = Math.hypot(dx, dy);
+  if (!(sehne > 0)) return null;
+  /* Steuerpunkt wie in drawArrow, nur in Karteneinheiten. */
+  const bauch = pfeilBauch(a);
+  const cx = (x1 + x2)/2 - dy*bauch, cy = (y1 + y2)/2 + dx*bauch;
+  const kx = [], ky = [];
+  for (let i = 0; i <= ANGRIFF_WEG_PROBEN; i++){
+    const t = i/ANGRIFF_WEG_PROBEN, u = 1 - t;
+    kx.push(u*u*x1 + 2*u*t*cx + t*t*x2);
+    ky.push(u*u*y1 + 2*u*t*cy + t*t*y2);
+  }
+  /* Abstand einer Stadt zur Kurve, je Stadt einmal gerechnet und gemerkt:
+     ohne das Gedaechtnis waeren es 13 Abstaende je Kantenentspannung statt
+     13 je beruehrter Stadt. Quadriert verglichen, einmal die Wurzel. */
+  const nah = new Float64Array(n).fill(-1);
+  const kurvNah = i => {
+    let d = nah[i];
+    if (d >= 0) return d;
+    const N = MAP.n[i];
+    let q = Infinity;
+    for (let k = 0; k < kx.length; k++){
+      const ax = N[1] - kx[k], ay = N[2] - ky[k], e = ax*ax + ay*ay;
+      if (e < q) q = e;
+    }
+    d = Math.sqrt(q); nah[i] = d; return d;
+  };
+  const f = a.f;
+  const anteil = (v, m) => v/(v + m);          // 0 bis unter 1, ohne Ausreisser
+  /* EINE SCHLACHT KOSTET 1, alles andere zusammen weniger als 1/1438. */
+  const kosten = (u, v, l) => (ownerOf(v) === f ? 0 : 1)
+    + (0.55*anteil(kurvNah(v), sehne) + 0.30*anteil(l, sehne) + 0.15*(fightAt(v) ? 1 : 0))/n;
+  const weg = wegSuche([a.from], a.to, () => true, kosten);
+  if (!weg) return null;
+  /* Der Startort zaehlt nicht mit: dort steht die Kolonne schon, sie nimmt
+     ihn nicht im Zuge dieses Befehls. Das Ziel zaehlt mit. */
+  const nehmen = [];
+  for (let k = 1; k < weg.weg.length; k++) if (ownerOf(weg.weg[k]) !== f) nehmen.push(weg.weg[k]);
+  return {weg: weg.weg, nehmen, hops: weg.hops};
+}
+/* Der Weg eines Pfeils, aus dem Speicher oder frisch - oder null. */
+function angriffsWeg(a){
+  if (!angriffsWegGilt(a)) return null;
+  const schl = a.from + "|" + a.to + "|" + a.f + "|" + pfeilBauch(a);
+  const t = jetzt(), alt = angriffsWegSpeicher.get(a.id);
+  const passt = alt && alt.schl === schl && alt.zreise === zeitReise;
+  /* Ohne Weg gibt es nichts nachzurechnen: passierbar ist immer wahr, also
+     haengt das Ergebnis allein an MAP.e - und das steht die Sitzung ueber
+     fest. Einmal leer, immer leer. */
+  if (passt && alt.leer) return null;
+  if (passt && t - alt.zeit < ANGRIFF_WEG_MS && alt.marke === angriffsWegMarke(alt.weg, a.f)) return alt;
+  if (angriffsWegRest <= 0){
+    angriffsWegOffen = true;                   // im naechsten Bild weiter
+    /* Steht keine frische Suche mehr zur Verfuegung, gilt der alte Weg
+       weiter, SOLANGE ER NOCH STIMMT - die Marke aus Besitz und
+       Kampfmarken auf dem Weg sagt das. Vorher hing das an der Uhr allein:
+       nach jeder Pause von mehr als zwei Sekunden verschwanden bei zehn
+       aktiven Pfeilen neun Ketten und krochen ueber neun Bilder zurueck,
+       obwohl sich nichts geaendert hatte. Von einem Gegenleser
+       vorgefuehrt. */
+    return passt && !alt.leer && alt.marke === angriffsWegMarke(alt.weg, a.f) ? alt : null;
+  }
+  angriffsWegRest--;
+  const z = angriffsWegNeu(a);
+  if (angriffsWegSpeicher.size > ANGRIFF_WEG_MERK) angriffsWegSpeicher.clear();
+  if (!z){
+    angriffsWegSpeicher.set(a.id, {schl, zeit: t, zreise: zeitReise, leer: 1, weg: [], nehmen: []});
+    return null;
+  }
+  z.schl = schl; z.zeit = t; z.zreise = zeitReise; z.marke = angriffsWegMarke(z.weg, a.f);
+  angriffsWegSpeicher.set(a.id, z);
+  return z;
+}
+/* Vor der Pfeilschleife: der Deckel dieses Bildes. */
+function angriffsWegBild(){ angriffsWegRest = ANGRIFF_WEG_BILD; angriffsWegOffen = false; }
+/* Nach der Pfeilschleife: blieb eine Suche liegen, noch ein Bild holen.
+   Die Kette bricht nach ANGRIFF_WEG_KETTE_MS von selbst ab - sie soll die
+   Karte unter keinen Umstaenden festhalten koennen. */
+function angriffsWegNachfassen(){
+  if (!angriffsWegOffen){ angriffsWegKetteAb = 0; return; }
+  angriffsWegOffen = false;
+  const t = jetzt();
+  if (!angriffsWegKetteAb) angriffsWegKetteAb = t;
+  else if (t - angriffsWegKetteAb > ANGRIFF_WEG_KETTE_MS){ angriffsWegKetteAb = 0; return; }
+  requestAnimationFrame(draw);
+}
+/* Die Kette am Pfeil. Ein Bein in eine noch zu nehmende Stadt ist dick und
+   traegt auf seiner Mitte einen Querstrich - dort ist freier Boden. Der
+   Median-Abstand ueber die 2661 Kanten betraegt 14,62 Karteneinheiten
+   (10,34 ist der Median des NAECHSTEN Nachbarn - hier stand zuerst die
+   falsche der beiden Zahlen). In Bildpunkten sind das beim Fit-Zoom rund
+   5, und darum wird der Strich am Bein gedeckelt, statt fest zu stehen.
+   Kein Ring um eine Stadt: dort stehen schon sechs. Dunkel unter, Farbe
+   darauf - dieselbe Reihenfolge, die die Schrift dieser Karte benutzt, und
+   die einzige, die auf beiden Gruenden haelt. */
+function angriffsWegZeichnen(a, farbe){
+  const z = angriffsWeg(a);
+  if (!z || !z.weg || z.weg.length < 2) return;
+  const nimm = new Set(z.nehmen), zm = view.z;
+  const dick = Math.max(1.7, 2.0*Math.sqrt(zm))*uiScale;
+  const duenn = Math.max(0.9, 1.0*Math.sqrt(zm))*uiScale;
+  const quer = Math.max(2.6, 2.4*Math.sqrt(zm))*uiScale;
+  const kette = schlacht => {
+    ctx.beginPath();
+    let p0 = toScr(MAP.n[z.weg[0]][1], MAP.n[z.weg[0]][2]);
+    for (let k = 1; k < z.weg.length; k++){
+      const p1 = toScr(MAP.n[z.weg[k]][1], MAP.n[z.weg[k]][2]);
+      if (nimm.has(z.weg[k]) === schlacht){
+        ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]);
+        if (schlacht){
+          const ex = p1[0] - p0[0], ey = p1[1] - p0[1], L = Math.hypot(ex, ey) || 1;
+          const mx = (p0[0] + p1[0])/2, my = (p0[1] + p1[1])/2;
+          /* nie laenger als das Bein, auf dem er sitzt: bei kleinem Zoom
+             misst das Median-Bein rund 5 Punkte, der Strich stuende sonst
+             mit 5,2 quer darueber hinaus. Von einem Gegenleser gemessen. */
+          const qL = Math.min(quer, L*0.35);
+          const qx = -ey/L*qL, qy = ex/L*qL;
+          ctx.moveTo(mx - qx, my - qy); ctx.lineTo(mx + qx, my + qy);
+        }
+      }
+      p0 = p1;
+    }
+  };
+  ctx.save();
+  ctx.setLineDash([]); ctx.lineCap = "round"; ctx.lineJoin = "round";
+  /* erst beide dunklen Unterlagen, dann beide Farben: sonst legt die
+     dickere Unterlage an den Knicken einen dunklen Fleck auf die duennere
+     Farbe */
+  ctx.globalAlpha = .62; ctx.strokeStyle = "rgba(5,8,12,.9)";
+  for (const [sch, br] of [[false, duenn], [true, dick]]){ kette(sch); ctx.lineWidth = br + 2.2*uiScale; ctx.stroke(); }
+  ctx.globalAlpha = .82; ctx.strokeStyle = farbe;
+  for (const [sch, br] of [[false, duenn], [true, dick]]){ kette(sch); ctx.lineWidth = br; ctx.stroke(); }
+  ctx.restore();
 }
 /* ---- COULD IT HAVE GOT THERE? -----------------------------------------
    Two captured lines can carry the same tag and still be two units. It
@@ -9650,7 +10079,20 @@ function sammelzeit(a){
   }
   if (!arten.size){
     quelle = "zugesagt";
-    for (const m of joinOf(a.id)) for (const k of Object.keys(deployedBy(m.who))) if (AT[k]) arten.add(k);
+    /* DIE ZUSAGE NENNT IHRE TYPEN SELBST, seit dem 08.09.2026. Was ein
+       Zusagender sonst noch irgendwo auf der Karte stehen hat, ist damit
+       nur noch der Rueckfall dahinter: eine Zeile von vor diesem Tag, oder
+       von einer aelteren Seite im Clan, traegt eine Summe und keine Typen
+       und wird gelesen wie bisher. Faellt auch nur eine Zeile darauf
+       zurueck, sagt der Satz im Fenster den alten Grund. */
+    let grobDabei = false;
+    for (const m of zusageArten(a.id)){
+      const typen = m.at ? Object.keys(m.at).filter(k => AT[k] && +m.at[k] > 0) : [];
+      if (typen.length){ for (const k of typen) arten.add(k); continue; }
+      grobDabei = true;
+      for (const k of Object.keys(deployedBy(m.who))) if (AT[k]) arten.add(k);
+    }
+    if (grobDabei) quelle = "grob";
   }
   let geraten = false;
   if (!arten.size){
@@ -9681,7 +10123,8 @@ function sammelText(a){
     z.fremdeHauptstadt ? " (no capital of this side yet)" : ""} — ${z.luft ? "straight flight" : `${z.hops} hop${z.hops === 1 ? "" : "s"}`}, ${
     z.umweg ? `<b>no uncontested path</b>, +${SAMMEL_UMWEG_MIN} min` : "uncontested"}; slowest ${esc(atName(z.typ))}${
     z.quelle === "zugeordnet" ? " of the assigned teams"
-      : z.quelle === "zugesagt" ? " of what the committed players have on the map"
+      : z.quelle === "zugesagt" ? " of the types the players put in their commitment"
+      : z.quelle === "grob" ? " of what the committed players have on the map"
       : " (nobody has taken this order yet, so the game's slowest type is assumed)"}.</span>`;
 }
 
@@ -10195,12 +10638,36 @@ function setMyArms(arms){
   }
   if (anonAn()) anonSchreiben(arms); else depotSchreiben({arms});
 }
-function setJoin(arrowId, n){
+function setJoin(arrowId, arten){
+  /* DIE ZUSAGE, NACH TYPEN. arten ist {Typ: Anzahl}; v wird daraus als
+     SUMME geschrieben, weil alles, was eine Zusage liest, v liest: die
+     Kopfzeile des Fensters, die Breite des Pfeils, das Schild, der
+     Paravorrat - und jede Seite im Clan, die aelter ist als der 08.09.2026.
+     Je Typ hoechstens 99, wie das abgeloeste Feld a-n. Eine leere Tafel
+     raeumt die Zeile; so nimmt man eine Zusage zurueck. */
+  const at = {};
+  let summe = 0;
+  for (const t of MAP.at){
+    /* GANZE TRUPPS. Ohne das Runden addieren sich 0,1 und 0,2 zu
+       0,30000000000000004, und die Zahl steht woertlich in der Kopfzeile,
+       auf dem Kartenschild und am Pfeilfuss - beim abgeloesten Einzelfeld
+       gab es keine Addition und darum nie dieses Artefakt.
+       UND DER DECKEL GILT DER GANZEN ZUSAGE, nicht jedem Typ: das abgeloeste
+       Feld a-n stand auf hoechstens 99 fuer alles zusammen. Je Typ 99 waeren
+       achtzehnmal so viel - 1782 Trupps von einem Mann auf einem Pfeil, und
+       die Zahl flieusst in paraVorrat und in den Absprung-Warnton. */
+    const z = Math.max(0, Math.min(99, Math.round(+((arten || {})[t.k]) || 0)));
+    if (z){ at[t.k] = z; summe += z; }
+  }
+  if (summe > 99){                       // derselbe Deckel wie beim alten a-n
+    toast("A commitment tops out at 99 teams.");
+    return false;
+  }
   /* a commitment answers somebody's order; the author does not answer his
      own arrow. Taking an old one back to nothing stays open */
-  if (n && eigenerBefehl({art: "arrow", id: arrowId})){ toast(EIGEN_BEFEHL_WORT); return false; }
+  if (summe && eigenerBefehl({art: "arrow", id: arrowId})){ toast(EIGEN_BEFEHL_WORT); return false; }
   const k = `${arrowId}:${S.me}`;
-  S.join[k] = {v: n || null, t: jetzt(), by: S.me, n: S.name || ""};
+  S.join[k] = {v: summe || null, t: jetzt(), by: S.me, n: S.name || "", at: summe ? at : undefined};
   dirty.add(`join:${k}`); save();
   return true;
 }
@@ -12483,6 +12950,191 @@ function topGroesseSetzen(f, merken){
     else if (e.key === "Home"){ standard(); e.preventDefault(); }
   });
 })();
+/* ============== DIE WERKZEUGLEISTE AUF DEM TELEFON ========================
+   Unten steht sie, in der Hoehe wird sie gezogen - und zwar in vier
+   gemessenen Rasten, nicht frei. Die Begruendung steht im Stilblatt bei
+   #zieher-u; kurz: frei laufende Hoehe fuehrt geradewegs in die Havarie vom
+   07.09. (nachgestellt: Leiste 318.4, Karte 352.5 von 812).
+
+   KEIN breitenMassstab HIER, und das ist Absicht. #zieher-l braucht ihn,
+   weil es eine Laenge in die EIGENEN Punkte der Leiste schreibt (--bar-w)
+   und zoom die noch einmal vergroessert. Dieser Griff schreibt in #bar
+   keine Laenge: er vergleicht den Fingerweg (clientY) mit den vier
+   Rastenhoehen, und die kommen aus getBoundingClientRect - beides derselbe
+   Bildschirmrahmen. Nachgeprueft: #bar rechnet 126.13, zeichnet 151.4
+   (= 126.13 x 1.2); #zieher-u rechnet 12.0, zeichnet 14.4. Ein Faktor waere
+   hier der Fehler, nicht der Schutz.
+
+   JE BILD KOSTET DAS NICHTS. draw() bekommt keine Zeile. Alle vier
+   Rastenhoehen zu messen kostet zusammen 1.9 ms im Mittel (p90 2.2) und
+   laeuft beim Anfassen des Griffs und beim Drehen des Geraets. */
+const LEISTE_ST  = "warmap.leisteStufe";
+const LEISTE_KL  = ["s0", "s1", "s2", "s3"];
+const LEISTE_VOR = 3;                       // Vorgabe: der heutige Zustand
+/* DER HARTE DECKEL. Er misst gegen die KARTE, nicht gegen die Leiste - die
+   Leiste teilt sich den Schirm ja mit der Kopfzeile, und genau daran ist es
+   am 07.09. gescheitert. Die Karte behaelt die halbe Fensterhoehe, nie
+   weniger als 200 Punkte. Gemessen: 375x812 -> 264.8 (alle vier Rasten
+   erlaubt), 414x896 -> 336.8 (alle vier), 375x500 -> 108.8 (nur Raste 0
+   und 1; die Karte behaelt dort 290.7 von 500 statt der 199.3, die ihr
+   Raste 3 ohne Deckel liesse). */
+function leisteDeckel(){
+  const t = document.getElementById("top");
+  const oben = t ? t.getBoundingClientRect().height : 0;
+  return window.innerHeight - oben - Math.max(200, Math.round(window.innerHeight * 0.5));
+}
+/* Die vier Hoehen werden GEMESSEN, nicht hingeschrieben: sie haengen an der
+   Bedienungsgroesse (--ui), am Regler "Tool bar" (--f-bar) und an der Zahl
+   der Werkzeuge. Eine Zahl im Quelltext waere schon beim naechsten Werkzeug
+   falsch. */
+function leisteHoehen(){
+  const b = document.getElementById("bar");
+  const alt = b.className, h = [];
+  for (let i = 0; i < LEISTE_KL.length; i++){
+    b.classList.remove("s0", "s1", "s2", "s3");
+    b.classList.add(LEISTE_KL[i]);
+    h.push(b.getBoundingClientRect().height);
+  }
+  b.className = alt;
+  void b.offsetHeight;
+  return h;
+}
+/* Setzt die Raste und gibt zurueck, welche daraus GEWORDEN ist - die beiden
+   sind nicht dasselbe, sobald der Deckel dazwischengeht. Gemerkt wird
+   ausserhalb und immer der WUNSCH, nie das Ergebnis: sonst frisst ein Dreh
+   ins Querformat, das gerade nur Raste 1 zulaesst, die Wahl des Kommodore
+   still auf, und beim Zurueckdrehen ist sie weg. */
+function leisteStufeSetzen(n){
+  const b = document.getElementById("bar"), mw = document.getElementById("mapwrap");
+  if (!b || !mw) return LEISTE_VOR;
+  /* AUF DEM SCHREIBTISCH GAR NICHT. Die Rastenklassen stehen alle im
+     760er Block und sind dort wirkungslos - aber die Klasse selbst bliebe
+     an #bar haengen, und "s0" heisst "alles ausgeblendet". Die erste
+     .s0-Regel, die jemand ausserhalb der Medienabfrage schriebe, leerte
+     damit die Werkzeugleiste des grossen Schirms. Von einem Gegenleser bei
+     1400x900 gemessen: className war "s0". */
+  if (!matchMedia("(max-width:760px)").matches) return LEISTE_VOR;
+  const h = leisteHoehen(), deckel = leisteDeckel();
+  let st = Math.max(0, Math.min(3, Math.round(n)));
+  /* DER DECKEL DARF DIE WERKZEUGE NICHT WEGNEHMEN, nur die Beschriftung.
+     Raste 0 blendet #toolwrap UND #factions aus - danach ist kein einziges
+     Werkzeug mehr erreichbar, und ein Zug nach oben hilft nicht, weil die
+     Schleife sofort wieder herunterrechnet. Ein Gegenleser hat das quer
+     vorgefuehrt: bei 667x375 (Telefon seitwaerts, iPhone 6/7/8/SE) ist der
+     Deckel 63,8 und die kleinste Raste mit Inhalt 67,9 - vier Punkte zu
+     hoch, und alle elf Werkzeuge samt Fraktionswahl verschwanden. Bei
+     736x414 dasselbe eine Raste milder.
+     Der Deckel greift darum nur bis Raste 1 herunter. Wird es dort ZU eng,
+     ist die kleinere Karte das kleinere Uebel: eine Karte ohne Werkzeuge
+     ist keine Karte mehr. */
+  while (st > 1 && h[st] > deckel) st--;
+  const vorher = mw.getBoundingClientRect().height;
+  b.classList.remove("s0", "s1", "s2", "s3");
+  b.classList.add(LEISTE_KL[st]);
+  const nachher = mw.getBoundingClientRect().height;
+  /* DIE MITTE DER KARTE BLEIBT STEHEN, nicht der Bildpunkt unter dem
+     Finger - und das ist eine Wahl, keine Selbstverstaendlichkeit.
+     BERICHTIGT nach einem Gegenleser: hier stand, ohne diese Zeile rutsche
+     die Karte. Gemessen stimmt das Gegenteil - die Oberkante von #mapwrap
+     steht in allen vier Rasten auf derselben Hoehe, die Flaeche waechst
+     ausschliesslich nach unten, und OHNE die Zeile bliebe jeder Kartenpunkt
+     exakt stehen. MIT ihr wandert view.y ueber die vier Rasten um 66 Punkte.
+     Sie bleibt trotzdem: das Kartenbild liegt mittig im Briefkasten, und wer
+     die Leiste hochzieht, will die Mitte behalten, nicht den oberen Rand.
+     view.y zaehlt in Stilblattpunkten der Zeichenflaeche (draw setzt die
+     Geraeteaufloesung erst danach), und #mapwrap traegt keinen zoom - die
+     beiden Masse sind dasselbe Mass. Vor dem ersten fit() nichts anfassen,
+     sonst verschiebt man eine Ansicht, die es noch gar nicht gibt. */
+  if (eingepasst) view.y += (nachher - vorher) / 2;
+  document.documentElement.style.setProperty("--leiste-h",
+    Math.round(b.getBoundingClientRect().height) + "px");
+  requestAnimationFrame(resize);
+  return st;
+}
+(function zieherUntenBauen(){
+  const griff = document.getElementById("zieher-u");
+  const b = document.getElementById("bar");
+  if (!griff || !b) return;
+  let start = 0, startH = 0, hoehen = null, zieht = false;
+  /* wunsch = was der Kommodore gewaehlt hat, jetzt = was der Deckel daraus
+     gemacht hat. Nur der Wunsch wird gemerkt. */
+  let wunsch = (() => {
+    const v = parseInt(lies(LEISTE_ST, "") || "", 10);
+    return (v >= 0 && v <= 3) ? v : LEISTE_VOR;
+  })();
+  let jetzt = wunsch;
+  const merken = () => schreib(LEISTE_ST, String(wunsch));
+
+  function anfang(y){
+    hoehen = leisteHoehen();
+    startH = b.getBoundingClientRect().height;
+    start = y; zieht = true;
+    document.body.classList.add("zieht-u");
+  }
+  function bewegen(y){
+    if (!zieht) return;
+    /* Nach OBEN ziehen macht die Leiste hoeher, deshalb start minus y.
+       Gesucht ist die Raste, die dem Finger am naechsten liegt; sie liegen
+       41 bis 50 Punkte auseinander, ein Zittern von ein paar Punkten kippt
+       also nichts. Und gerechnet wird gegen die Hoehe beim ANFASSEN, nicht
+       gegen die laufende - sonst zoege sich der Griff selbst weiter. */
+    const ziel = startH + (start - y);
+    let best = 0;
+    for (let i = 1; i < 4; i++)
+      if (Math.abs(hoehen[i] - ziel) < Math.abs(hoehen[best] - ziel)) best = i;
+    /* Gegen den WUNSCH verglichen, nicht gegen das Ergebnis: sonst laeuft
+       der Setzer bei jeder Zeigerbewegung neu, sobald der Deckel die
+       Wunschraste abfaengt und immer dieselbe kleinere zurueckgibt. */
+    if (best !== wunsch){ wunsch = best; jetzt = leisteStufeSetzen(best); }
+  }
+  function ende(){
+    if (!zieht) return;
+    zieht = false;
+    document.body.classList.remove("zieht-u");
+    merken();
+  }
+
+  griff.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    /* Den Zeiger festhalten: die Leiste schrumpft unter dem Finger weg, und
+       ohne das reisst der Zug ab, sobald sie ihm entwischt ist. */
+    try { griff.setPointerCapture(e.pointerId); } catch(err){}
+    anfang(e.clientY);
+  });
+  griff.addEventListener("pointermove", e => bewegen(e.clientY));
+  griff.addEventListener("pointerup",     ende);
+  griff.addEventListener("pointercancel", ende);
+  griff.addEventListener("dblclick", () => {
+    wunsch = LEISTE_VOR; jetzt = leisteStufeSetzen(wunsch); merken();
+  });
+  /* Mit der Tastatur, wie an den anderen beiden Griffen: hoch macht die
+     Leiste groesser, runter gibt der Karte Platz, Pos1 zurueck.
+     Gezaehlt wird von dem aus, was DASTEHT. Wer auf einem kurzen Fenster
+     bei der vom Deckel erzwungenen Raste 1 steht, kaeme sonst mit Pfeil ab
+     von einem unsichtbaren Wunsch 3 auf 2 - und auf dem Schirm passierte
+     nichts. */
+  griff.addEventListener("keydown", e => {
+    if (e.key === "ArrowUp"){ wunsch = Math.min(3, jetzt + 1); }
+    else if (e.key === "ArrowDown"){ wunsch = Math.max(0, jetzt - 1); }
+    else if (e.key === "Home"){ wunsch = LEISTE_VOR; }
+    else return;
+    jetzt = leisteStufeSetzen(wunsch); merken(); e.preventDefault();
+  });
+
+  /* Der Deckel wird nachgezogen, wenn sich das Fenster aendert - sonst
+     ueberlebte eine Raste, die im Hochformat noch passte, das Drehen ins
+     Querformat und naehme der Karte, was ihr zusteht. Ein Bild Verzoegerung,
+     damit die neue Kopfzeilenhoehe schon steht. */
+  let wartet = 0;
+  const nachziehen = () => {
+    if (wartet) return;
+    wartet = requestAnimationFrame(() => { wartet = 0; jetzt = leisteStufeSetzen(wunsch); });
+  };
+  window.addEventListener("resize", nachziehen);
+  window.addEventListener("orientationchange", nachziehen);
+  nachziehen();
+})();
 /* Alle achtzehn, nicht die ersten zehn. Wer die Zeichenerklaerung aufmacht,
    will nicht fuer den Rest ins Hilfefenster wechseln - und ausgerechnet die
    Panzerjaeger und die Flieger, die vorher fehlten, sind die, die man selten
@@ -13514,7 +14166,7 @@ function flyTo(i){
    Rueckkehr aus der Zuordnung - lassen es weg, sonst stuende "Just drawn"
    an einem Pfeil von gestern. */
 function arrowDialog(a, frisch){
-  const mit = joinOf(a.id), meins = mit.find(m => m.mine);
+  const mit = joinOf(a.id);
   const gesamt = mit.reduce((s,j)=>s+j.n, 0);
   const raus = deployedBy(S.me), habe = Object.values(raus).reduce((s,n)=>s+n,0);
   /* another side's arrow is a sighting: label, sign and colour, nothing
@@ -13546,18 +14198,14 @@ function arrowDialog(a, frisch){
       </div>`;
       })()}
       <div class="row" style="align-items:center">
-        ${fremd ? `<span style="flex:1"></span>` : `<span style="font-size:12px;color:var(--dim);flex:1">Your commitment</span>
-        <input type="number" id="a-n" min="0" max="99" value="${meins ? meins.n : 0}">`}
-        <button class="btn primary" id="a-join">Save</button>
-      </div>
-      <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Operation name</span>
         <input type="text" id="a-lbl" value="${esc(a.label||"")}" placeholder="e.g. Push to Berlin" maxlength="40" style="width:150px">
       </div>
-      ${fremd ? "" : `<div class="row" style="align-items:center">
-        <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
-        <input type="number" id="a-soll" min="0" max="999" value="${+a.soll || ""}" placeholder="—" style="width:70px">
-      </div>`}
+      ${fremd || a.entwurf ? "" : zusageTabelle(a)}
+      <div class="row" style="align-items:center">
+        <span style="flex:1"></span>
+        <button class="btn primary" id="a-join">Save</button>
+      </div>
       ${a.by === S.me && !fremd ? `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Chain after</span>
         ${ketteWahl({art: "arrow", id: a.id, key: befehlKey("arrow", a.id), v: a}, "a-kette")}
@@ -13632,16 +14280,39 @@ function arrowDialog(a, frisch){
     save(); closeDlg(); draw(); toast(`${liste.length} order${liste.length === 1 ? "" : "s"} published`);
   });
   document.getElementById("a-join").addEventListener("click", ()=>{
-    const nEl = document.getElementById("a-n");
-    if (!a.entwurf && nEl) setJoin(a.id, Math.max(0, Math.min(99, +nEl.value || 0)));
+    /* die achtzehn Felder, so wie sie stehen. Alle leer raeumt meine Zeile -
+       so nimmt man eine Zusage zurueck. Ein Entwurf traegt die Liste gar
+       nicht, dann wird auch nichts geschrieben (wie vorher bei a-n). */
+    const felder = [...document.querySelectorAll("#dlg input[data-zat]")];
+    if (!a.entwurf && felder.length){
+      const arten = {};
+      let getippt = 0;
+      for (const el of felder){ const z = +el.value || 0; arten[el.dataset.zat] = z; getippt += z; }
+      /* EINE ALTE ZUSAGE OHNE TYPEN WIRD NICHT STILL WEGGERAEUMT. Eine Zeile
+         von vor dem 08.09.2026 traegt nur eine Gesamtzahl und kein Feld at;
+         meineZusage liefert dafuer nichts, die achtzehn Felder stehen also
+         leer, und ein Klick auf Save - der jeden anderen Grund haben kann,
+         Name, Farbe, Zeichen, Kette - haette sie auf null gesetzt. Von einem
+         Gegenleser im Browser vorgefuehrt: {v:5} wurde zu {v:null}. Am Tag
+         des Einspielens stuende jede Zusage im Clan so da.
+         Wer wirklich zuruecknehmen will, tippt eine Zahl und loescht sie
+         wieder - dann steht at, und die Zeile geht den gewohnten Weg. */
+      const alt = S.join[`${a.id}:${S.me}`];
+      const altOhneTypen = alt && alt.v && !(alt.at && typeof alt.at === "object");
+      if (!(altOhneTypen && !getippt)) setJoin(a.id, arten);
+    }
     const lbl = document.getElementById("a-lbl").value.trim();
-    const sollEl = document.getElementById("a-soll");
-    const soll = sollEl ? Math.max(0, Math.min(999, +sollEl.value || 0)) : (+a.soll || 0);
     const farbeEl = document.getElementById("a-farbe");
     const farbe = farbeEl ? farbeEl.value : (a.farbe||"");
     let neu = false;
     if (lbl !== (a.label||"")){ a.label = lbl; neu = true; }
-    if (soll !== (+a.soll || 0)){ a.soll = soll || undefined; neu = true; }
+    /* "Planned strength" ist am 08.09.2026 aus diesem Fenster gefallen: die
+       Typenliste darueber sagt, was kommt, und eine von Hand getippte
+       Zielzahl sagte nichts, was die Liste nicht besser sagt. a.soll wird
+       in alten Pfeilen NICHT geloescht - es wird bei einem Pfeil nur
+       nirgends mehr gelesen (Schild, Zuordnungsfenster, Posteingang), damit
+       keine Zahl stehenbleibt, die niemand mehr aendern kann. Linie,
+       Flaeche und Parablock behalten ihr soll. */
     if (farbe !== (a.farbe||"")){ a.farbe = farbe || undefined; neu = true; }
     /* a sighting's window has no airborne row; then the old value stands */
     const luftEl = document.getElementById("a-luft");
@@ -23759,6 +24430,119 @@ function gefTon(px, bw, y, h, a, b, anteil){
   const zwei = v => { const t = Math.max(0, Math.min(255, Math.round(v/c))).toString(16); return t.length < 2 ? "0" + t : t; };
   return "#" + zwei(R) + zwei(G) + zwei(B);
 }
+/* ---- THE COUNTDOWN LINE IN THE HEAD STRIP  (GEF-02) --------------------
+   THE CLOCK NEVER SHOWS 0. Measured on the Erfurt recording sixty frames a
+   second: at 1525,3 to 1525,8 s the strip says "00:01", and at 1525,9 s the
+   digits are gone and a red word stands at x 1704..1732. "00:00" is in none
+   of the 160.567 frames. What takes the clock's place is the game's own
+   line ActionGameoverWarnings/GoSuddenDeath - a highlighted word, a colon, a
+   sentence - and it stands there for the whole overtime: 18 minutes and 48
+   seconds in that battle, its red pixels at the same four numbers in frames
+   eighteen minutes apart.
+   So the moment the overtime clock wants is not a number to be read. It is
+   the CHANGE: the digit box was there in one look and the long line with the
+   highlighted word is there in the next. That needs no text recogniser, and
+   so it does not go near ocrKette or its second a line.
+
+   WHY THE DIGITS ARE NOT READ, though they can be. A template reader locked
+   to their place - which knows more than any general model - was measured
+   over the whole recording: 1066 readings, 2 of them wrong (07:28 as
+   "07:20", 07:27 as "09:19", a snowflake drifting through the strip). Worse,
+   over a battle that HAS no clock it invented four, "92:94" among them - the
+   emblem between the two score boxes makes five bright runs with a narrow
+   one in the middle, the shape of mm:ss. A number nobody needs is a number
+   that can be wrong.
+   AND THE CLOCK DOES NOT ONLY RUN DOWN: measured, it jumped up by 34, 66, 57
+   and 119 seconds in that one battle (the game's own
+   ActionHUD/GameGuide/Assault_Extended_Playtime_Attacker, "+%i Sek."). So
+   "00:26 now, so overtime in 26 seconds" is wrong four times over.
+
+   THE PROOFS, and each one has a counter-case from the same recording. Over
+   2676 looks the digit box vanishes from one look to the next 61 times
+   (counted with the measuring reader, which is looser than this one):
+     at 785, 859 and 925 s the TIME BONUS takes its place - a long bright
+       line, 373 wide, 1904 to 1929 bright points. Only the red holds it: it
+       has none.
+     at 153 s a red capture marker of the game world drifts through the line,
+       106 red points. The bright count (67) and the red's centre of gravity
+       (684, right of the middle 346) hold it.
+     at 1525 s the real change: 406 wide, 1935 bright, 134 red, centre 140.
+   In a hold-and-take battle the red alone holds nothing at all - the German
+   score bar IS red and stands in this very line, 648 and 1549 red points on
+   the two frames measured. What holds it is its centre (433 and 469, right of
+   the middle) and the bright count (459 and 654, under 800).
+   COUNTED, not argued: one look a second over all three recordings, 3541
+   looks - this fires once, at the real change, and nowhere else. The digit
+   box is found 1074 times in the assault and NOT ONCE in the hold-and-take
+   battle or on the display drawn at double size; the long line with a
+   highlighted word turns up twice on the double-size recording, so that half
+   alone is not clean. It is the pair that is. */
+const GEF_LINIE = [14, 40];        // the text line, in points from the top
+const GEF_UHR_BREIT = 45;          // half the window around the strip's middle
+const GEF_UHR_HELL = 150;          // above this grey a point is glyph
+const GEF_UHR_ZIFFER = [3, 14];    // a digit's run, measured 5 to 10
+const GEF_UHR_PUNKT = 5;           // the colon is no wider than this
+const GEF_UHR_ROT = 30;            // this many red points make a highlighted word
+const GEF_BANNER = [250, 800];     // the long line: span and count of bright points
+const GEF_UHR_LUECKE = 3000;       // two looks further apart than this prove nothing
+/* one walk over the line, on the buffer gefLesen already holds */
+function gefUhrLinie(px, bw, bh){
+  const y0 = Math.min(GEF_LINIE[0], bh), y1 = Math.min(GEF_LINIE[1], bh);
+  if (y1 - y0 < 8 || bw < 200) return null;
+  const spalte = new Uint8Array(bw);
+  let hell = 0, rot = 0, rotSum = 0;
+  for (let y = y0; y < y1; y++){
+    const zz = y*bw;
+    for (let x = 0; x < bw; x++){
+      const o = (zz + x)*4, r = px[o], g = px[o+1], b = px[o+2];
+      if (0.299*r + 0.587*g + 0.114*b > GEF_UHR_HELL){ hell++; spalte[x] = 1; }
+      if (r > 90 && r - g > 40 && r - b > 40){ rot++; rotSum += x; }
+    }
+  }
+  let erst = -1, letzt = -1;
+  for (let x = 0; x < bw; x++) if (spalte[x]){ if (erst < 0) erst = x; letzt = x; }
+  /* the digit box, in the middle of the strip: mm:ss is five bright runs with
+     a narrow one between them. A run cut by the edge of the window is not a
+     digit - its width is the window's, not the glyph's. */
+  const mitte = bw >> 1;
+  const xa = Math.max(0, mitte - GEF_UHR_BREIT), xe = Math.min(bw, mitte + GEF_UHR_BREIT);
+  const br = []; let st = -1, rand = false;
+  for (let x = xa; x < xe; x++){
+    if (spalte[x]){ if (st < 0){ st = x; if (x === xa) rand = true; } }
+    else if (st >= 0){ br.push(x - st); st = -1; }
+  }
+  if (st >= 0){ br.push(xe - st); rand = true; }
+  let kasten = !rand && br.length === 5 && br[2] <= GEF_UHR_PUNKT;
+  if (kasten) for (let n = 0; n < 5; n++)
+    if (n !== 2 && (br[n] < GEF_UHR_ZIFFER[0] || br[n] > GEF_UHR_ZIFFER[1])) kasten = false;
+  return {kasten: kasten, spanne: erst < 0 ? 0 : letzt - erst, hell: hell,
+          rot: rot, rotMitte: rot ? Math.round(rotSum/rot) : -1, mitte: mitte};
+}
+/* the line that replaces the clock: long, bright, with a highlighted word in
+   front of the middle */
+const gefBannerZeile = L => !!L && L.spanne >= GEF_BANNER[0] && L.hell >= GEF_BANNER[1]
+                          && L.rot >= GEF_UHR_ROT && L.rotMitte >= 0 && L.rotMitte < L.mitte;
+/* NO PICTURE MARK HERE, unlike the bars' anchor. This one fires on a
+   DIFFERENCE between two looks; a standing window delivers the same picture
+   twice and so no change at all. The case that broke the anchor - the same
+   frame three times counted as three confirmations - cannot arise. */
+function gefUhrPruefen(px, bw, bh, z){
+  const L = gefUhrLinie(px, bw, bh);
+  const nun = jetzt(), vor = z.uhrZeile, vorT = z.uhrZeit || 0;
+  z.uhrZeile = L; z.uhrZeit = nun;
+  if (z.uhrVorschlag) return;                       // the first change is the one
+  if (!L || !vor || !vor.kasten || L.kasten) return;
+  if (!gefBannerZeile(L)) return;
+  if (nun - vorT > GEF_UHR_LUECKE) return;          // a gap proves nothing
+  /* DER ORT GEHOERT DAZU. Ein Wechsel der Stadt im Waehler setzt geschrieben
+     und gesendet zurueck, den Vorschlag aber nicht - und "der erste Wechsel
+     ist der eine" laesst ihn bis zu einer Stunde stehen. Ohne den Ort boete
+     der Knopf danach an, die Uhr der GERADE gewaehlten Stadt auf einen
+     Augenblick zu setzen, der zu einer anderen gehoert. Von einem Gegenleser
+     vorgefuehrt. */
+  z.uhrVorschlag = {t: Math.round((vorT + nun)/2), spanne: nun - vorT,
+                    ort: (typeof GEF !== "undefined" && GEF) ? GEF.ort : null};
+}
 /* ONE LOOK. One window out of the shared picture, at its own size - no
    scaling, because everything measured here is measured in points. */
 function gefLesen(bild, z){
@@ -23776,6 +24560,9 @@ function gefLesen(bild, z){
   let px = null;
   try { px = f.g.getImageData(0, 0, bw, bh).data; } catch(e){ px = null; }
   if (px) balken = gefBalken(px, bw, bh, W, z);
+  /* the same buffer once more, for the text line above the bars. gefBalken
+     first: it may return early, and this must run at every look. */
+  if (px) gefUhrPruefen(px, bw, bh, z);
   return {w: W, h: H, balken: balken};
 }
 /* ---- what the clan is told ---------------------------------------------
@@ -23905,6 +24692,7 @@ function gefMelden(){
 function gefNeu(){
   return {live: null, laeuft: false, bildNr: 0, ort: null, stand: null,
           kastenY: null, anker: null, proben: [], marke: null,
+          uhrZeile: null, uhrZeit: 0, uhrVorschlag: null,
           geschrieben: null, gesendet: 0, orteSchluessel: null,
           status: "Waiting for the game window ..."};
 }
@@ -24042,7 +24830,51 @@ function gefZeichnen(){
     ${!darf("aufklaerung") ? `<div class="note" style="margin-top:16px">${esc(rechtSatz("aufklaerung"))} Nothing is sent.</div>`
       : GEF.ort === null || GEF.ort === undefined ? `<div class="note" style="margin-top:16px">Pick a town on the left, or nothing is sent to the clan.</div>`
       : GEF.gesendet ? `<div class="note" style="margin-top:16px">Last sent to the clan ${esc(alterText(GEF.gesendet))}.</div>`
-      : `<div class="note" style="margin-top:16px">Nothing sent yet.</div>`}`;
+      : `<div class="note" style="margin-top:16px">Nothing sent yet.</div>`}
+    ${(() => {
+      /* THE PROPOSAL, AND IT STAYS A PROPOSAL. The row gefecht:<town> is read
+         by the whole clan, and at 60:00 the side panel says who wins. Nothing
+         goes in there off a picture alone.
+         Not offered when a clock already stands, and not once the moment has
+         run past the overtime itself - a clock started from there would put
+         the plate on "OT over" the second it is written. */
+      const V = GEF.uhrVorschlag, i = GEF.ort;
+      if (!V || !darf("aufklaerung")) return "";
+      const alt = Math.max(0, jetzt() - V.t);
+      const wo = (i !== null && i !== undefined && fightAt(i));
+      /* NICHT IN DER ZEITREISE. Der Handknopf zwei Zeilen weiter oben ist an
+         zwei Stellen dagegen gesperrt, dieser war es nicht - und weder
+         overtimeStart noch stamp haben eine eigene Sperre. Im Rueckblick
+         meldet gefechtStand(i) durch imZeit ausserdem faelschlich "keine
+         Uhr", der Knopf erschien also gerade dann, wenn er am meisten
+         anrichtet: ein Klick haette die laufende Uhr des Clans
+         ueberschrieben und ihren Starter geloescht.
+         UND NUR AN DER STADT, ZU DER DER VORSCHLAG GEHOERT. */
+      const passt = V.ort === null || V.ort === undefined || V.ort === i;
+      const knopf = wo && passt && !zeitReise && !gefechtStand(i) && alt < OT_DAUER;
+      return `<div class="ot-zeile" style="margin-top:16px">
+        <span style="color:${GEF_FARBE}">The countdown stood in the head strip, then a line with a highlighted word took its place, ${esc(otMmSs(alt))} ago.</span>
+        ${knopf ? `<button class="mini" id="gf-ot">Start the clan's clock at that moment</button>` : ""}
+        <div class="note">Read from the strip itself, not from the clock's digits: the box of four digits was there in one look and gone in the next, and the line that took its place carries a highlighted word. Which line it is, is not read — the game puts a highlighted word in the sudden-death line and in both exhaustion lines. The moment lies in the ${V.spanne} ms between those two looks.${
+          !wo ? " No town picked, so there is nothing to start it on." :
+          !passt ? " That reading belongs to another town." :
+          gefechtStand(i) ? " A clock already stands on this town." :
+          alt >= OT_DAUER ? " That is longer ago than the whole overtime, so it is not offered here." : ""}</div></div>`;
+    })()}`;
+  /* AUF pointerdown, NICHT AUF click. Das Blatt wird bei jedem Blick neu
+     geschrieben (GEF_TAKT), und ein Klick entsteht nur, wenn Druecken und
+     Loslassen denselben Knoten treffen - faellt der Neubau dazwischen, ist
+     der Knoten von unter dem Finger weg und es kommt kein Klick. Von einem
+     Gegenleser mit echten Klicks vorgefuehrt: drei Druecke, vier Neubauten,
+     null Ereignisse. Ein Druck ist eindeutig und geht nicht verloren. */
+  document.getElementById("gf-ot")?.addEventListener("pointerdown", ev => {
+    ev.preventDefault();
+    if (!GEF || !GEF.uhrVorschlag || zeitReise) return;
+    const i = GEF.ort, V = GEF.uhrVorschlag;
+    if (i === null || i === undefined) return;
+    if (V.ort !== null && V.ort !== undefined && V.ort !== i) return;
+    if (overtimeStart(i, V.t)){ side(); draw(); gefZeichnen(); }
+  });
   gefPult();
 }
 async function gefstandAuf(){
@@ -42720,7 +43552,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 9a2670948f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 5f3cb53693</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -42948,7 +43780,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "9a2670948f";
+const BAU = "5f3cb53693";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
