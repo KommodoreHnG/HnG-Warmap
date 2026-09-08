@@ -1723,8 +1723,16 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
     padding:4px 4px 6px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
   #bar .tool{min-width:60px;flex:0 0 auto;scroll-snap-align:center;padding:7px 4px 5px}
   #bar > .bar-h{display:none}
-  #factions{display:flex;flex-direction:row;gap:4px;padding:0 4px 6px}
-  #factions .fac{justify-content:center;padding:7px 4px}
+  /* Der Kommodore am 08.09.2026: "Du kannst die Fraktionszeile aber noch
+     schmaler machen, die ist ja sehr hoch." Innenrand 4 statt 7, unten 4
+     statt 6. GEMESSEN bei 375x812, drei Zustaende: vorher 52,8 - so 50,4 -
+     zusaetzlich mit kleineren Zeichen 49,2. Der Gewinn ist also 2,4 Punkte.
+     Mehr ist ueber das Stilblatt nicht zu holen: die Hoehe haengt an der
+     Bediengroesse, nicht am Rand - #bar traegt zoom 1,2 und der Knopfinhalt
+     steht auf 13,5 Punkten Schrift, der Knopf ist damit 45,6 hoch. Der
+     Regler dafuer ist "Everything" im Zahnrad. */
+  #factions{display:flex;flex-direction:row;gap:3px;padding:0 4px 4px}
+  #factions .fac{justify-content:center;padding:4px 4px}
   #factions .fac .lbl{font-size:10px}
 
   /* DER GRIFF AN DER OBERKANTE - VIER RASTEN, KEINE FREIE HOEHE.
@@ -6366,17 +6374,17 @@ function overtimePruefen(){
    nicht zu sehen, wer fuehrt und wer ausfuehrt. Die Trennung sitzt im
    Server (warmap_punkte_abschluss, erster insert-Block); was vorher gebucht
    wurde, bleibt unter Orders stehen. */
-/* WAS EIN ORT WIEGT, seit dem 08.09.2026. Ein Ort, den das Spiel selbst mit
-   einem Stern fuehrt - isCap(i), also MAP.n[i][4] !== 0: die drei
-   Heimathauptstaedte und zehn weitere Staedte -, wiegt beim Markieren eines
-   Gefechts (recon/fight) und beim Kartenpflegen (recon/map) mehr als jeder
-   andere. NICHT die Zielmarkierung des Clans: die setzt ein Mensch, und weil
-   der Server nur die erste Buchung einer Sache haelt, haenge der Zuschlag
-   sonst an der Reihenfolge der Klicks.
-   Die Hoehe steht an EINER Stelle, am Server in warmap_ort_gewicht; die Seite
-   rechnet nichts nach. Sie zeigt, was der Server summiert:
-   warmap_punkte_stand liefert sum(betrag), warmap_punkte_buch den betrag je
-   Zeile. */
+/* WAS EIN ORT WIEGT, steht heute nicht zur Debatte: betrag ist ueberall 1.
+   Am 08.09.2026 war fuer ein paar Stunden ein Zuschlag fuer die dreizehn
+   Sternorte des Spiels eingebaut - drei fuer eine Heimathauptstadt, zwei fuer
+   die uebrigen. Die Zahlen waren MEIN Vorschlag und sind dem Kommodore als
+   seiner vorgelegt worden; er hat beides zurueckgewiesen, die Zuschreibung
+   und die Sache: "die Heimathauptstadt ist strategisch nicht mehr Wert als
+   die anderen". Zurueckgenommen, am Server wie hier.
+   Die Seite rechnet ohnehin nichts nach - sie zeigt, was der Server
+   summiert (warmap_punkte_stand liefert sum(betrag)). Wer den Zuschlag
+   wieder aufnimmt, findet die dreizehn Ortskennungen und die Begruendung in
+   warmap/sql/2026-09-08_punkte_wichtige_orte.sql. */
 const PUNKTE_KONTEN = [
   {k:"recon",    n:"Recon",    kurz:"R"},
   {k:"logistic", n:"Logistic", kurz:"L"},
@@ -6394,6 +6402,42 @@ const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
 const PUNKTE_AKTION_KONTO = {leader: {done: "Orders given"}};
 const punkteAktionName = (a, k) => (PUNKTE_AKTION_KONTO[k] || {})[a]
   || PUNKTE_AKTION[a] || String(a || "");
+/* WOFUER DER PUNKT WAR, in Worten. Die Sache ist der Schluessel, mit dem der
+   Server die Buchung eindeutig haelt - fuer einen Menschen sagt sie nichts.
+   Uebersetzt wird nur, was sich sicher uebersetzen laesst; alles andere
+   bleibt stehen, wie es ist. Erfunden wird hier nichts, und "undefined" darf
+   in keiner Zelle landen. */
+function punkteSacheName(z){
+  const roh = String((z && z.sache) || "");
+  if (!roh) return "";
+  const teil = roh.split("|");
+  const tag = t => /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
+  if (z.aktion === "fight" || z.aktion === "map"){
+    const i = +teil[0], n = MAP.n[i];
+    if (!n || !/^\d+$/.test(teil[0])) return roh;
+    return n[0] + (tag(teil[1]) ? " \u00b7 " + teil[1] : "");
+  }
+  if (z.aktion === "unit"){
+    if (teil.length < 2) return roh;
+    const wer = (depotIdx.get(teil[0]) || {}).name || teil[0];
+    const rest = teil.slice(1, teil.length - (tag(teil[teil.length-1]) ? 1 : 0)).join("|");
+    return wer + (rest ? " \u00b7 " + rest : "")
+         + (tag(teil[teil.length-1]) ? " \u00b7 " + teil[teil.length-1] : "");
+  }
+  if (z.aktion === "done"){
+    /* <schluessel>|<spieler>, und der Schluessel kann selbst einen
+       Doppelpunkt tragen (line:<id>:<autor>) - der Spieler steht hinter dem
+       LETZTEN senkrechten Strich. */
+    const p = roh.lastIndexOf("|");
+    if (p < 0) return roh;
+    const schl = roh.slice(0, p), wer = roh.slice(p + 1);
+    const b = befehlVonSchluessel(schl);
+    const name = (b && b.name) || schl;
+    const werName = (depotIdx.get(wer) || {}).name || wer;
+    return name + " \u00b7 " + werName;
+  }
+  return roh;                          // ein Erstfund traegt seinen Hash
+}
 const punkteKontoName  = k => (PUNKTE_KONTEN.find(x => x.k === k) || {n: String(k || "")}).n;
 
 /* one minute of memory, so that switching tabs does not ask the server anew */
@@ -6493,9 +6537,9 @@ function punkteZeichnen(zeilen){
     </div>
     <div class="note">A point for every hand that helps the clan: <b>Recon</b> for first finds,
       battles marked and the map kept, <b>Logistic</b> for the depot kept, <b>Orders</b> for orders
-      carried out, <b>Leader</b> for an order you gave, once it is marked done. Battles marked and
-      the map kept count for more at a capital. The server books them from what you write on the
-      map; this page adds nothing up. Click a row to see what the points were for.</div>`;
+      carried out, <b>Leader</b> for an order you gave, once it is marked done. The server books
+      them from what you write on the map; this page adds nothing up. Click a row to see what the
+      points were for.</div>`;
   feld.querySelectorAll("tr[data-pk]").forEach(tr => tr.addEventListener("click", () => {
     const d = tr.nextElementSibling;
     if (!d || d.dataset.pd === undefined) return;
@@ -6537,7 +6581,7 @@ async function punkteBuch(spieler, name){
         <td>${esc(z.wann ? new Date(z.wann).toLocaleString() : "")}</td>
         <td style="text-align:left">${esc(punkteKontoName(z.konto))}</td>
         <td style="text-align:left">${esc(punkteAktionName(z.aktion, z.konto))}</td>
-        <td style="text-align:left;color:var(--dim)">${esc(z.sache || "")}</td>
+        <td style="text-align:left;color:var(--dim)" title="${esc(z.sache || "")}">${esc(punkteSacheName(z))}</td>
         <td>${esc(z.betrag == null ? 1 : z.betrag)}</td>
         <td style="text-align:left;color:var(--dim2)">${esc(z.quelle || "")}</td>
       </tr>`).join("")}</tbody></table></div>`
@@ -9782,9 +9826,14 @@ function wegSuche(starts, ziel, passierbar, kosten){
    Pfeils - derselbe Steuerpunkt wie in drawArrow), aus der Kantenlaenge
    und aus der Kampfmarke. Der Feinanteil je Kante ist durch 1/1438
    gedeckelt und ein einfacher Weg hat hoechstens 1437 Kanten: die Summe
-   bleibt unter 1 und kann eine Schlacht nie aufwiegen. Innerhalb gleicher
-   Schlachtenzahl entscheidet damit der Schwenk - und genau das war
-   gemeint.
+   bleibt unter 0,70 Sehnen und kann einen Umweg nie erzwingen. Bei
+   annaehernd gleicher Laenge entscheidet damit der Schwenk - und nur dort.
+   BIS ZUM 08.09.2026 STAND HIER EINE ANDERE WERTUNG: eine Schlacht kostete
+   1, die Laenge lag im Feinanteil, und der Weg machte lieber dreissig
+   Etappen durch eigenes Land als eine Schlacht. Sie stammte aus dem
+   Uebergabeblatt. Der Kommodore dazu: "Gefechte sollen nicht vermieden
+   werden. Es geht immer um den direktesten Weg, egal was dazwischen
+   liegt." 
 
    DER STEUERPUNKT WIRD IN KARTENEINHEITEN GEBILDET. toScr ist Streckung
    plus Verschiebung ohne Spiegelung, also ergibt dieselbe Formel dieselbe
@@ -9884,9 +9933,19 @@ function angriffsWegNeu(a){
   };
   const f = a.f;
   const anteil = (v, m) => v/(v + m);          // 0 bis unter 1, ohne Ausreisser
-  /* EINE SCHLACHT KOSTET 1, alles andere zusammen weniger als 1/1438. */
-  const kosten = (u, v, l) => (ownerOf(v) === f ? 0 : 1)
-    + (0.55*anteil(kurvNah(v), sehne) + 0.30*anteil(l, sehne) + 0.15*(fightAt(v) ? 1 : 0))/n;
+  /* DER DIREKTESTE WEG, EGAL WAS DAZWISCHEN LIEGT. Der Kommodore am
+     08.09.2026: "Gefechte sollen nicht vermieden werden." Hier stand vorher
+     eine Schlacht mit Kosten 1 und die Laenge nur im Feinanteil - der Weg
+     machte damit lieber dreissig Etappen durch eigenes Land als eine
+     Schlacht. Die Wertung kam aus dem Uebergabeblatt, nicht von ihm.
+     Jetzt kostet eine Kante ihre LAENGE, und ein feindlicher Ort kostet
+     nichts extra: er ist der Zweck, nicht das Hindernis.
+     Der Zusatz haelt den Weg an der gezeichneten Kurve und zieht ihn bei
+     gleicher Laenge dorthin, wo schon gekaempft wird. Er ist je Kante auf
+     0,70/1438 der Sehne gedeckelt und kann einen Umweg darum nie erzwingen -
+     bei hoechstens 1437 Kanten summiert er sich auf unter 0,70 Sehnen. */
+  const kosten = (u, v, l) => l
+    + (0.55*anteil(kurvNah(v), sehne) + 0.15*(fightAt(v) ? 1 : 0))*sehne/n;
   const weg = wegSuche([a.from], a.to, () => true, kosten);
   if (!weg) return null;
   /* Der Startort zaehlt nicht mit: dort steht die Kolonne schon, sie nimmt
@@ -11933,7 +11992,16 @@ function gruppeMitgliederWahl(gid, zurueck){
   const g = gruppenListe().find(x => x.id === gid);
   if (!g){ if (zurueck) zurueck(); else closeDlg(); return; }
   const c = light() ? "#1a2029" : "#e9e2d5";
-  const alleD = myDepotAlle();
+  /* NUR DAS DEPOT DER SEITE, auf die man sieht. Der Kommodore am 08.09.2026:
+     "Eine AT-Gruppe wird von jedem User selber erstellt nur aus dem eigenen
+     Depot ... Das darf natuerlich nicht fraktionsuebergreifend sein."
+     Vorher stand hier myDepotAlle(), und eine Gruppe konnte Teams von zwei
+     Seiten halten - dieselbe Gruppe stand dann im Groups-Reiter mit drei
+     Teams und im Postfach mit einem.
+     Eine alte, gemischte Gruppe verliert dabei nichts: gruppenListe siebt
+     weiterhin gegen alle Depots, das fremde Team bleibt in der Zeile stehen
+     und taucht wieder auf, sobald man auf seine Seite sieht. */
+  const alleD = myDepot();
   const drin = new Set(g.ats);
   const andere = new Map();
   for (const x of gruppenListe()) if (x.id !== gid) for (const id of x.ats) andere.set(id, gruppeName(x));
@@ -43552,7 +43620,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5f3cb53693</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 747cd01483</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -43780,7 +43848,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "5f3cb53693";
+const BAU = "747cd01483";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
