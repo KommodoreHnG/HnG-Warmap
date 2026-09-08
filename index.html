@@ -380,8 +380,11 @@ body.zieht #mapwrap canvas{pointer-events:none}
 /* the para-block menu at the mouse */
 #pb-menu{position:fixed;z-index:60;min-width:150px;padding:6px;background:var(--panel);
   border:1px solid var(--line);border-radius:3px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-size:12px}
-#pb-menu .t{color:var(--dim);margin:0 2px 5px;white-space:nowrap}
+#pb-menu .t{color:var(--dim);margin:0 2px 5px;white-space:nowrap;
+  max-width:240px;overflow:hidden;text-overflow:ellipsis}
 #pb-menu .own4{grid-template-columns:repeat(4,1fr)}
+/* die Zustandsknoepfe im Menue an Pfeil, Linie und Flaeche - wie im Werkzeugmenue */
+#pb-menu .row .btn{flex:1;padding:4px 6px;font-size:11px}
 /* the para tool's menu over its button - on the body like #pb-menu, the bar clips and zooms */
 #para-menu{position:fixed;z-index:60;min-width:172px;padding:6px;background:var(--panel);
   border:1px solid var(--line);border-radius:3px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-size:12px}
@@ -1992,7 +1995,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="tool row" id="b-names" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M4.4 7.6V5.2h15.2v2.4"/><path d="M12 5.2v13.6"/><path d="M8.9 18.8h6.2"/></svg>
         <span class="lbl" data-txt="view.names">Labels</span></button>
-      <button class="tool row" id="b-entwurf" aria-pressed="false" title="New orders stay private until you publish them">
+      <button class="tool row" id="b-entwurf" aria-pressed="false" title="Attacks, defences and areas stay private until you publish them. A para-block or a recon request always goes to the clan.">
         <svg viewBox="0 0 24 24"><path d="M4.5 19.5l3.2-.7 10.4-10.4-2.5-2.5L5.2 16.3z"/><path d="M14.2 7.3l2.5 2.5"/></svg>
         <span class="lbl" data-txt="view.entwurf">Drafts</span></button>
       <button class="tool row" id="b-fertig" aria-pressed="false" title="Show orders that are done">
@@ -2039,6 +2042,10 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
           <button class="btn mit-ico" id="dep-shot" title="Capture the game's assault team list and read it"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M3.5 8.2 h4.2 l1.9-2.7 h4.8 l1.9 2.7 h4.2 v10.6 h-17 z"/>
             <circle cx="12" cy="13.3" r="3.3"/></svg>Read teams from the game …</button>
+          <!-- Der Absprung ins Depotfenster. Gezogen wird weiter HIER, in der
+               Liste darueber - das Fenster liegt hinter #veil und kommt an die
+               Karte nicht heran. Es steht im Fenster selbst. -->
+          <button class="btn" id="dep-mgr" title="Rename, upgrade, group and delete — dragging onto the map stays in this column">Manage teams &amp; groups …</button>
         </div>
       </section>
     </div>
@@ -4180,8 +4187,23 @@ const liveArrows= () => S.arrows.filter(a => a && MAP.n[a.from] && MAP.n[a.to]
 
    Die Zahlen sind Vorschlaege und stehen hier beieinander, damit sie in
    einem Griff zu aendern sind. Langfristig soll sie der Clan-Leader
-   setzen, wie die Abkuehlzeiten. */
-const MARKEN_GRENZE = { arrow: 40, line: 15, area: 10 };
+   setzen, wie die Abkuehlzeiten.
+
+   DREI STUFEN, seit dem 08.09.2026. Der Kommodore: "40 Pfeile pro Person ist
+   auch zu viel. Da sind eher so 10 noetig, der Leader kann gerne mehr haben
+   oder die Generaele." Also Grundstock, Fuehrung, Leiter. Der Leiter behaelt
+   bei allen drei Arten die alte Zahl, und bei Linie und Flaeche bleibt auch
+   der Grundstock, wie er war - gesprochen war von Pfeilen.
+   Die mittlere Stufe haengt am Recht "bestaetigen", dem einzigen clanweiten
+   Befehlsrecht: wer jeden Befehl unserer Seite scharfstellen darf, plant den
+   Krieg. Am Spielrang haengt sie ABSICHTLICH nicht - der steht nur fuer die,
+   deren Rangkarte jemand gepflegt hat, und die Rollenliste schreibt der
+   Leiter ohnehin selbst um. */
+const MARKEN_GRENZE = {
+  arrow: {grund: 10, fuehrung: 25, leiter: 40},
+  line:  {grund: 15, fuehrung: 25, leiter: 40},
+  area:  {grund: 10, fuehrung: 20, leiter: 30},
+};
 /* Drafts: orders only their author sees. They live in this browser and
    never reach the server until published - a mere client-side filter would
    still send them to everyone. */
@@ -4190,6 +4212,90 @@ let ENTWUERFE = [];
 try { ENTWUERFE = JSON.parse(lies(ENTWURF_STORE, "[]") || "[]") || []; } catch (e){ ENTWUERFE = []; }
 if (!Array.isArray(ENTWUERFE)) ENTWUERFE = [];
 const entwuerfeSpeichern = () => schreib(ENTWURF_STORE, JSON.stringify(ENTWUERFE));
+/* THE SAME PRIVATE STAGE FOR DEFENCE LINES AND AREAS. Their rows look like
+   the ones in S.line and S.area, but they lie in their own pots and never
+   enter S: syncStart puts every own key of every bucket into the queue once
+   ("for (const b of BUCKETS) ... dirty.add"), so a draft parked in S.line
+   would reach the whole clan on the next connect. That is why an arrow's
+   draft lives in ENTWUERFE and not in S.arrows, and these follow it. */
+const ENTW_LINIE_STORE = "warmap.entwuerfe.line", ENTW_AREA_STORE = "warmap.entwuerfe.area";
+const entwLesen = k => { try { const o = JSON.parse(lies(k, "{}") || "{}");
+  return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; } catch (e){ return {}; } };
+let ENTW_LINIE = entwLesen(ENTW_LINIE_STORE), ENTW_AREA = entwLesen(ENTW_AREA_STORE);
+const entwTopf = art => art === "line" ? ENTW_LINIE : art === "area" ? ENTW_AREA : null;
+const entwSpeichern = art => schreib(art === "line" ? ENTW_LINIE_STORE : ENTW_AREA_STORE,
+                                     JSON.stringify(entwTopf(art) || {}));
+const istEntwurfZeile = (art, id) => !!(entwTopf(art) || {})[id];
+/* the row of a line or an area, wherever it lies - the shared pot or the
+   private one. Everything that used to reach into S.line[id] goes here. */
+const markeZeile = (art, id) => (art === "line" ? S.line[id] : art === "area" ? S.area[id] : null)
+  || (entwTopf(art) || {})[id] || null;
+/* write it back on its own road: a draft stays here, a shared one goes out */
+function markeZeileSetzen(art, id, v){
+  const zeile = {v, t: jetzt(), by: S.me, n: S.name || ""};
+  if (istEntwurfZeile(art, id)){ entwTopf(art)[id] = zeile; entwSpeichern(art); return zeile; }
+  (art === "line" ? S.line : S.area)[id] = zeile;
+  dirty.add(`${art}:${id}`);
+  return zeile;
+}
+/* the live rows of a private pot, filtered like the shared ones. No
+   tombstone can stand on them - a draft is dropped, not buried. */
+const entwEintraege = art => Object.entries(entwTopf(art) || {})
+  .filter(([, e]) => e && e.v && imKrieg(e) && imZeit(e));
+/* PUBLISH ONE DRAFT, whatever its kind. v: the edited value, if the window
+   has one in hand; otherwise what stands. A published draft is planned, so
+   the state fields go, exactly as pfeilFreigeben drops them. */
+function entwurfFreigeben(art, id, v){
+  if (art === "arrow"){
+    const a = ENTWUERFE.find(x => x && x.id === id);
+    if (!a) return false;
+    pfeilFreigeben(a); return true;
+  }
+  const t = entwTopf(art), e = t && t[id];
+  if (!e) return false;
+  const w = Object.assign({}, v || e.v);
+  delete w.entwurf; delete w.st; delete w.aktT;
+  /* DER SCHLUESSEL TRAEGT DEN VERFASSER (TOPFTAFEL: line und area stehen auf
+     wer:2, der Name steht hinter dem letzten Doppelpunkt). Wer das Konto
+     wechselt, wird in syncStart umgeschluesselt - die privaten Toepfe aber
+     nicht, die haengen an localStorage und nicht an S. Ohne diese Zeile ginge
+     der Entwurf mit dem alten Namensteil hinaus, syncPushInner wuerfe ihn
+     wegen fremdem Verfasser stumm weg, und der Knopf meldete trotzdem
+     "1 order published". Von einem Gegenleser vorgefuehrt. */
+  let schl = String(id);
+  const dp = schl.lastIndexOf(":");
+  if (dp >= 0 && schl.slice(dp + 1) !== S.me) schl = schl.slice(0, dp + 1) + S.me;
+  delete t[id]; entwSpeichern(art);
+  (art === "line" ? S.line : S.area)[schl] = {v: w, t: jetzt(), by: S.me, n: S.name || ""};
+  dirty.add(`${art}:${schl}`);
+  return true;
+}
+/* AND BACK INTO THE DRAWER. A shared line or area cannot simply be hidden:
+   the others already have it. So it goes the arrow's road - a tombstone for
+   the clan and a fresh key here. Returns the new key, or null when the
+   removal was refused. */
+function entwurfZurueck(art, id, v){
+  if (!dropEntry(art, id)) return null;
+  const neu = Math.random().toString(36).slice(2,10) + ":" + S.me;
+  const w = Object.assign({}, v);
+  delete w.st; delete w.aktT; w.entwurf = 1;
+  entwTopf(art)[neu] = {v: w, t: jetzt(), by: S.me, n: S.name || ""};
+  entwSpeichern(art);
+  return neu;
+}
+/* every draft of one operation, whatever its kind - what "Publish chain"
+   lets go of. Until now it only ever found arrows. */
+function entwuerfeDerOp(op){
+  if (!op) return [];
+  const raus = ENTWUERFE.filter(a => a && a.op === op).map(a => ({art: "arrow", id: a.id}));
+  for (const art of ["line", "area"]){
+    const t = entwTopf(art) || {};
+    for (const id of Object.keys(t)) if (t[id] && t[id].v && t[id].v.op === op) raus.push({art, id});
+  }
+  return raus;
+}
+/* THE ONE THING A DRAFT COSTS, and it is the same in all three windows. */
+const ENTWURF_WARNUNG = `<div class="note">Only in this browser. Clear its storage and it is gone — the server never had it.</div>`;
 let entwurfModus = false;
 const pfeilId = () => Math.random().toString(36).slice(2,10);
 /* one arrow changed - a draft is kept here, a shared one goes to the sync */
@@ -4203,6 +4309,7 @@ function pfeilFreigeben(a){
   delete a.entwurf; delete a.st; delete a.zb; a.t = jetzt();   // published: planned
   S.arrows.push(a); dirty.add(`arrow:${a.id}`);
   entwuerfeSpeichern();
+  luftBoardAnfordern(a);        // als Entwurf zurueckgehalten, siehe dort
 }
 /* AN ORDER SHOWS ITSELF THE MOMENT IT EXISTS. Until now an arrow was drawn
    and nothing happened at all - one had to know that "Inspect" opens its
@@ -4258,22 +4365,31 @@ function markenZahl(art){
   if (art === "area")  return liveAreas().filter(([, e]) => e.by === S.me).length;
   return 0;
 }
+/* Die Stufe, die fuer mich gilt. Der Leiter zuerst, weil er das Recht
+   ohnehin hat und die hoehere Zahl bekommen soll. */
+function markenGrenzeFuerMich(art){
+  const g = MARKEN_GRENZE[art];
+  if (!g) return 0;
+  return istLeader() ? g.leiter : darf("bestaetigen") ? g.fuehrung : g.grund;
+}
 function darfIchNochMalen(art){
   /* OHNE ANSCHLUSS KEINE GRENZE. Sie schuetzt den geteilten Raum; im
      Alleinbetrieb gibt es keinen, und dann ist sie eine Schranke gegen
      niemanden. */
   if (!CFG) return true;
-  const g = MARKEN_GRENZE[art];
+  const g = markenGrenzeFuerMich(art);
   if (!g || markenZahl(art) < g) return true;
   toast(`You already have ${g} ${MARKEN_WORT[art]} on the map. `
       + `Remove one before adding another.`);
   return false;
 }
+const liniePts = e => Array.isArray(e.v.pts) && (e.v.pts.length >= 2 || istEinzelLinie(e.v));
 const liveLines = () => Object.entries(S.line)
-  .filter(([id,e]) => lebt(id,e) && Array.isArray(e.v.pts)
-    && (e.v.pts.length >= 2 || istEinzelLinie(e.v)));
+  .filter(([id,e]) => lebt(id,e) && liniePts(e))
+  .concat(entwEintraege("line").filter(([,e]) => liniePts(e)));
 const liveAreas = () => Object.entries(S.area)
-  .filter(([id,e]) => lebt(id,e) && Array.isArray(e.v.pts) && e.v.pts.length >= 3);
+  .filter(([id,e]) => lebt(id,e) && Array.isArray(e.v.pts) && e.v.pts.length >= 3)
+  .concat(entwEintraege("area").filter(([,e]) => Array.isArray(e.v.pts) && e.v.pts.length >= 3));
 const livePosts = () => Object.entries(S.post).filter(([id,e]) => lebt(id,e) && e.v.text != null)
                         .sort((a,b) => (b[1].t||0) - (a[1].t||0));
 /* Sightings are keyed "<town>:<player>" so several people can report the same town */
@@ -4571,8 +4687,10 @@ function befehlVonSchluessel(key){
   }
   const a = liveArrows().find(q => q.id === key);
   if (a) return {art: "arrow", id: a.id, key: a.id, v: a, by: a.by};
-  if (S.line[key] && S.line[key].v) return {art: "line", id: key, key: befehlKey("line", key), v: S.line[key].v, by: S.line[key].by};
-  if (S.area[key] && S.area[key].v) return {art: "area", id: key, key: befehlKey("area", key), v: S.area[key].v, by: S.area[key].by};
+  const zl = markeZeile("line", key);
+  if (zl && zl.v) return {art: "line", id: key, key: befehlKey("line", key), v: zl.v, by: zl.by};
+  const za = markeZeile("area", key);
+  if (za && za.v) return {art: "area", id: key, key: befehlKey("area", key), v: za.v, by: za.by};
   return null;
 }
 /* another side's mark is a sighting: no state, no chain, no commitment */
@@ -4843,8 +4961,12 @@ function zuordSchreiben(b, ats, st){
     toast(`${d ? (d.name || atName(d.k)) : id} already follows ${x.name}.`);
     return false;
   }
+  /* grps ist die HERKUNFT, nie die Wahrheit: die Teams stehen einzeln in
+     ats, daran haengt die Sperre oben. Hergeleitet statt mitgeschleppt -
+     kuerzt zuordNachruecken die Liste, laeuft das durch genau diese Stelle,
+     der Vermerk wird neu gerechnet und kann nicht danebenstehen. */
   const ok = stamp("zuord", zuordSchluessel(b.art, b.id) + ":" + S.me,
-                   {ats: liste, grps: [], st: st ? 1 : 0}, {n: S.name || ""});
+                   {ats: liste, grps: grpHerkunft(liste), st: st ? 1 : 0}, {n: S.name || ""});
   if (ok) save();
   return ok;
 }
@@ -5058,6 +5180,19 @@ function zuordWahl(b, zurueck){
   const frei = zuordFreieTeams();
   const ort = befehlOrtName(b);
   const lage = b.art === "area" && b.v && b.v.aufkl ? aufklLage(aufklPunkte(b.v)) : null;   // a recon request: scouts that reach it only
+  /* Die Gruppen als Sammelgriff - aber nur mit den Teams, die hier auch
+     wirklich zur Wahl stehen. Ein Griff, der ein gebundenes Team mitnaehme,
+     waere gelogen. */
+  /* NUR DIE, DIE HIER AUCH WIRKLICH GEHEN. Frei zu sein genuegt nicht: bei
+     einer Aufklaerungsanfrage sperrt aufklSperre je Team, und der Kasten
+     steht dann abgeblendet da. Zaehlte der Griff sie mit, staende auf ihm
+     eine Zahl, die er nicht haelt - ein Gegenleser hat es vorgefuehrt:
+     Knopf "3", angehakt eins. Die Antwort danach war ehrlich, kam aber zu
+     spaet. */
+  const nehmbar = new Set(frei.filter(d => !aufklSperre(b, d, lage)).map(d => d.id));
+  const zuGrp = gruppenListe()
+    .map(g => ({id: g.id, name: gruppeName(g), ats: g.ats.filter(id => nehmbar.has(id))}))
+    .filter(g => g.ats.length);
   openDlg(`
     <div class="dlg-h"><h2>Assign to ${esc(b.name || "")}</h2>
       <p>${esc(befehlArtName(b))}${ort ? ` \u00b7 ${esc(ort)}` : ""} \u00b7 ${ZUSTAND_NAME[b.zs] || b.zs || "planned"}${
@@ -5067,6 +5202,9 @@ function zuordWahl(b, zurueck){
           grund ? ` title="${esc(grund)}" style="opacity:.45;cursor:default"` : ""}><input type="checkbox" data-zteam="${esc(d.id)}"${grund ? " disabled" : ""}>
           <span>${symbolSVG(d.k, c, 22, 15)}</span><span class="n"><span>${esc(d.name || atName(d.k))}${
           d.tag ? ` <small>${esc(d.tag)}</small>` : ""}</span><em>${esc(atName(d.k))}</em></span></label>`; }).join("")}</div>
+        ${zuGrp.length ? `<div class="sp-filter" style="margin:6px 0 0">${zuGrp.map(g =>
+          `<button data-zgrp="${esc(g.id)}" title="Tick every free team of this group">${
+            esc(g.name)}<b>${g.ats.length}</b></button>`).join("")}</div>` : ""}
         <div class="row" style="align-items:center">
           <button class="btn" id="zu-alle" style="font-size:11px;padding:3px 8px">All</button>
           <button class="btn" id="zu-keine" style="font-size:11px;padding:3px 8px">None</button>
@@ -5087,6 +5225,17 @@ function zuordWahl(b, zurueck){
   kaesten.forEach(k => k.addEventListener("change", zaehlen));
   document.getElementById("zu-alle")?.addEventListener("click", ()=>{ kaesten.forEach(k => { if (!k.disabled) k.checked = true; }); zaehlen(); });
   document.getElementById("zu-keine")?.addEventListener("click", ()=>{ kaesten.forEach(k => { k.checked = false; }); zaehlen(); });
+  document.querySelectorAll("#dlg [data-zgrp]").forEach(b => b.addEventListener("click", ()=>{
+    const g = zuGrp.find(x => x.id === b.dataset.zgrp);
+    if (!g) return;
+    const drin = new Set(g.ats);
+    let n = 0;
+    kaesten.forEach(k => { if (!k.disabled && drin.has(k.dataset.zteam)){ k.checked = true; n++; } });
+    zaehlen();
+    /* Was die Aufklaerungssperre draussen laesst, wird gesagt - sonst
+       stuende da eine Gruppe mit acht Teams und sechs Haken. */
+    if (n < g.ats.length) toast(`${g.ats.length - n} team${g.ats.length - n === 1 ? "" : "s"} of ${g.name} cannot go on this order.`);
+  }));
   document.getElementById("zu-zurueck").addEventListener("click", ()=>{ if (zurueck) zurueck(); else closeDlg(); });
   document.getElementById("zu-ok").addEventListener("click", ()=>{
     const ids = kaesten.filter(k => k.checked).map(k => k.dataset.zteam);
@@ -5123,7 +5272,7 @@ function ordersDialog(tab){
     ZUSTAND_NAME[zs] || zs}</span>`;
   const klein = `style="font-size:11px;padding:3px 8px"`;
 
-  const teamZeilen = teams.map(d => {
+  const zeileFuer = d => {
     const z = wo.get(d.id), b = z ? zuordBefehl(z, alle) : null;
     const town = townOfTeam(d.id);
     let auftrag = `<span style="color:var(--dim2)">free</span>`, stand = "", knopf = "";
@@ -5149,7 +5298,38 @@ function ordersDialog(tab){
       <td style="text-align:left">${auftrag}</td>
       <td style="text-align:left">${stand}</td>
       <td>${knopf}</td></tr>`;
-  }).join("");
+  };
+  /* EINE ZEILE JE GRUPPE, ueber ihren Teams. Sie fasst zusammen, was der
+     Blick sonst zusammensuchen muss: wie viele frei sind und ob alle auf
+     demselben Befehl stehen. Sie ist ein GRIFF, keine Wahrheit - darunter
+     stehen die Teams weiter einzeln, so wie sie auch in ats einzeln stehen
+     (siehe grpHerkunft). Teams ohne Gruppe kommen danach. */
+  const grListe = gruppenListe();
+  const inGrp = new Set();
+  for (const g of grListe) for (const id of g.ats) inGrp.add(id);
+  const teamZeilen = grListe.map(g => {
+    const mit = teams.filter(d => g.ats.includes(d.id));
+    if (!mit.length) return "";
+    const belegt = mit.map(d => wo.get(d.id)).filter(Boolean);
+    const eine = belegt.length === mit.length && belegt.every(z => z.key === belegt[0].key) ? belegt[0] : null;
+    const bb = eine ? zuordBefehl(eine, alle) : null;
+    const stand = !belegt.length ? `<span style="color:var(--dim2)">all free</span>`
+      : bb ? `${esc(bb.name)} <small style="color:var(--dim)">${esc(befehlArtName(bb))}</small>`
+      : `<span style="color:var(--dim)">${belegt.length} of ${mit.length} on orders</span>`;
+    /* KEIN class="me": in dieser Tabelle vergibt zeileFuer es
+       ausschliesslich bei st === 0, also "wartet auf dein Wort", und .tw
+       tr.me hinterlegt die Zeile. Eine Gruppenzeile wartet nie - sie stuende
+       sonst als einzige hervorgehoben da, waehrend die Teams darunter
+       farblos sind. */
+    return `<tr class="gruppe">
+      <td class="sy"></td>
+      <td colspan="2"><b>${esc(gruppeName(g))}</b> <small style="color:var(--dim)">${
+        mit.length} team${mit.length === 1 ? "" : "s"}</small></td>
+      <td style="text-align:left">${stand}</td>
+      <td style="text-align:left">${bb ? zsSpan(bb.zs) : ""}</td>
+      <td>${belegt.length ? `<button class="btn" data-gfrei="${esc(g.id)}" title="Take every team of this group off its order" ${klein}>Release group</button>` : ""}</td></tr>`
+      + mit.map(zeileFuer).join("");
+  }).join("") + teams.filter(d => !inGrp.has(d.id)).map(zeileFuer).join("");
 
   const befehlZeilen = offen.map(b => {
     const {fest, offen: pend} = zuordZahlen(b);
@@ -5218,6 +5398,11 @@ function ordersDialog(tab){
   document.querySelectorAll("#dlg [data-zfrei]").forEach(k => k.addEventListener("click", ev => {
     ev.stopPropagation();
     if (zuordTeamFrei(k.dataset.zfrei)) toast("Released");
+    wieder();
+  }));
+  document.querySelectorAll("#dlg [data-gfrei]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    if (gruppeFrei(k.dataset.gfrei)) toast("Released"); else toast("Nothing to release there.");
     wieder();
   }));
   document.querySelectorAll("#dlg [data-zwahl]").forEach(k => k.addEventListener("click", ev => {
@@ -6022,10 +6207,10 @@ function overtimePruefen(){
 }
 
 /* ---- THE POINTS ACCOUNT (05.09.2026) ----
-   Every hand that helps the clan earns a point. Three accounts per player:
+   Every hand that helps the clan earns points. Four accounts per player:
    recon (first finds, battles marked, the map kept), logistic (the depot
-   kept) and orders (given and carried out). The weighting is a field on
-   every booking and will be tuned later; for now everything counts one.
+   kept), orders (carried out) and leader (given). What a booking is worth
+   stands in its own field, betrag - not everything counts one.
 
    THE PAGE ADDS NOTHING UP. The server books every point from the rows it
    already receives - first:, fight:, owner:, depot:, ok: and the order rows
@@ -6041,6 +6226,17 @@ function overtimePruefen(){
    nicht zu sehen, wer fuehrt und wer ausfuehrt. Die Trennung sitzt im
    Server (warmap_punkte_abschluss, erster insert-Block); was vorher gebucht
    wurde, bleibt unter Orders stehen. */
+/* WAS EIN ORT WIEGT, seit dem 08.09.2026. Ein Ort, den das Spiel selbst mit
+   einem Stern fuehrt - isCap(i), also MAP.n[i][4] !== 0: die drei
+   Heimathauptstaedte und zehn weitere Staedte -, wiegt beim Markieren eines
+   Gefechts (recon/fight) und beim Kartenpflegen (recon/map) mehr als jeder
+   andere. NICHT die Zielmarkierung des Clans: die setzt ein Mensch, und weil
+   der Server nur die erste Buchung einer Sache haelt, haenge der Zuschlag
+   sonst an der Reihenfolge der Klicks.
+   Die Hoehe steht an EINER Stelle, am Server in warmap_ort_gewicht; die Seite
+   rechnet nichts nach. Sie zeigt, was der Server summiert:
+   warmap_punkte_stand liefert sum(betrag), warmap_punkte_buch den betrag je
+   Zeile. */
 const PUNKTE_KONTEN = [
   {k:"recon",    n:"Recon",    kurz:"R"},
   {k:"logistic", n:"Logistic", kurz:"L"},
@@ -6155,11 +6351,11 @@ function punkteZeichnen(zeilen){
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">
       ${PUNKTE_KONTEN.map(spalte).join("")}
     </div>
-    <div class="note">One point for every hand that helps the clan: <b>Recon</b> for first finds,
+    <div class="note">A point for every hand that helps the clan: <b>Recon</b> for first finds,
       battles marked and the map kept, <b>Logistic</b> for the depot kept, <b>Orders</b> for orders
-      carried out, <b>Leader</b> for an order you gave, once it is marked done. The server books
-      them from what you write on the map; this page adds nothing up. Click a row to see what the
-      points were for.</div>`;
+      carried out, <b>Leader</b> for an order you gave, once it is marked done. Battles marked and
+      the map kept count for more at a capital. The server books them from what you write on the
+      map; this page adds nothing up. Click a row to see what the points were for.</div>`;
   feld.querySelectorAll("tr[data-pk]").forEach(tr => tr.addEventListener("click", () => {
     const d = tr.nextElementSibling;
     if (!d || d.dataset.pd === undefined) return;
@@ -8453,6 +8649,12 @@ function drawArea(a, eintrag, entwurf, id){
     }
     if (a.folge && view.z > 1.1 && !fertigA) befehlAbzeichen(p[0][0], p[0][1], a.folge, af || f, true);
   }
+  /* the D of a draft. It stands outside the shield's branch: an area
+     without a label has no shield, and it is exactly then that nothing
+     else on the map would say the clan cannot see it.
+     entwurf here is the half-drawn shape under the hand, not the order. */
+  if (a.entwurf && !entwurf && view.z > 1.1)
+    befehlAbzeichen(p[p.length-1][0], p[p.length-1][1], "D", af || f, true);
 }
 
 /* Where the shield of a single-city defence hangs: right above the town's
@@ -8520,6 +8722,7 @@ function drawEinzel(l, id){
     if (k && id) schildVon.set("line:" + id, k);
   } else if (fertigE && view.z > 1.1){ ctx.save(); ctx.globalAlpha = .55; befehlAbzeichen(sx, sy - g*1.6, "\u2713", lf || f, true); ctx.restore(); }
   if (l.folge && view.z > 1.1 && !fertigE) befehlAbzeichen(sx + g*1.2, sy - g*1.2, l.folge, lf || f, true);
+  if (l.entwurf && view.z > 1.1) befehlAbzeichen(sx - g*1.2, sy - g*1.2, "D", lf || f, true);
 }
 
 /* Defence line: thick line through towns with tick marks on one side,
@@ -8580,6 +8783,9 @@ function drawLine(l, bisMaus, id){
     if (k && id) schildVon.set("line:" + id, k);
   } else if (fertigL && view.z > 1.1){ ctx.save(); ctx.globalAlpha = .55; befehlAbzeichen(pts[0][0], pts[0][1], "\u2713", lf || f, true); ctx.restore(); }
   if (l.folge && view.z > 1.1 && !fertigL) befehlAbzeichen(pts[0][0], pts[0][1], l.folge, lf || f, true);
+  /* the D of a draft, the same one an arrow carries: on the map it is the
+     only thing that says the clan cannot see this one */
+  if (l.entwurf && view.z > 1.1) befehlAbzeichen(pts[pts.length-1][0], pts[pts.length-1][1], "D", lf || f, true);
 }
 
 /* A movement arrow is one filled body that tapers into a broad head — the
@@ -9622,7 +9828,7 @@ function griffeListe(ziel){
       raus.push({x: (x1+x2)/2 - dy*b*0.5, y: (y1+y2)/2 + dx*b*0.5, kind:"bauch", idx:2});
     }
   } else {
-    const e = S.line[ziel.id];
+    const e = markeZeile("line", ziel.id);
     if (!e || !e.v) return [];
     const p = e.v.pts.map(i => MAP.n[i] ? toScr(MAP.n[i][1], MAP.n[i][2]) : null);
     p.forEach((q,i)=>{ if (q) raus.push({x:q[0], y:q[1], kind:"pt", idx:i}); });
@@ -9723,7 +9929,7 @@ function griffLoslassen(x, y){
     toast(`${MAP.n[von][0]} → ${MAP.n[bis][0]}`);
     return;
   }
-  const e = S.line[ed.id];
+  const e = markeZeile("line", ed.id);
   if (!e || !e.v) return;
   const pts = e.v.pts.slice();
   if (ed.kind === "mid"){
@@ -9741,8 +9947,7 @@ function griffLoslassen(x, y){
     if (pts.includes(ziel)){ toast("That town is already on this line."); return; }
     pts[ed.idx] = ziel;
   }
-  S.line[ed.id] = {v:{...e.v, pts}, t: jetzt(), by: S.me, n: S.name || ""};
-  dirty.add(`line:${ed.id}`); save();
+  markeZeileSetzen("line", ed.id, {...e.v, pts}); save();
 }
 
 /* ---------------- state writes ---------------- */
@@ -10096,9 +10301,9 @@ function alleBefehle(alles){
   for (const a of liveArrows()) raus.push({art: "arrow", id: a.id, key: befehlKey("arrow", a.id), v: a, by: a.by,
     name: a.label || (MAP.n[a.from][0] + " \u2192 " + MAP.n[a.to][0]), entwurf: !!a.entwurf});
   for (const [id, e] of liveLines()) raus.push({art: "line", id, key: befehlKey("line", id), v: e.v, by: e.by,
-    name: e.v.label || ("Defence " + (MAP.n[e.v.pts[0]] ? MAP.n[e.v.pts[0]][0] : "")), entwurf: false});
+    name: e.v.label || ("Defence " + (MAP.n[e.v.pts[0]] ? MAP.n[e.v.pts[0]][0] : "")), entwurf: !!e.v.entwurf});
   for (const [id, e] of liveAreas()) raus.push({art: "area", id, key: befehlKey("area", id), v: e.v, by: e.by,
-    name: e.v.label || (e.v.aufkl ? "Recon " + aufklZiele(e.v) : "Area"), entwurf: false});
+    name: e.v.label || (e.v.aufkl ? "Recon " + aufklZiele(e.v) : "Area"), entwurf: !!e.v.entwurf});
   for (const p of allPara()){
     const e = S.para[p.town];
     raus.push({art: "para", id: p.town, key: befehlKey("para", p.town), v: paraAt(p.town) || {}, by: e && e.by,
@@ -10117,10 +10322,9 @@ function alleBefehle(alles){
 function befehlSchreiben(b, aend){
   if (!b) return;
   if (b.art === "arrow"){ Object.assign(b.v, aend); pfeilGeaendert(b.v); return; }
-  if (b.art === "line"){ const e = S.line[b.id]; if (!e) return;
-    S.line[b.id] = {v: Object.assign({}, e.v, aend), t: jetzt(), by: S.me, n: S.name || ""}; dirty.add(`line:${b.id}`); save(); return; }
-  if (b.art === "area"){ const e = S.area[b.id]; if (!e) return;
-    S.area[b.id] = {v: Object.assign({}, e.v, aend), t: jetzt(), by: S.me, n: S.name || ""}; dirty.add(`area:${b.id}`); save(); return; }
+  if (b.art === "line" || b.art === "area"){
+    const e = markeZeile(b.art, b.id); if (!e) return;
+    markeZeileSetzen(b.art, b.id, Object.assign({}, e.v, aend)); save(); return; }
   if (b.art === "para"){ const pb = paraAt(b.id); if (!pb) return; setPara(b.id, pb.f, pb.plan, aend); }
 }
 /* THE CHAIN: an order hangs after a predecessor of any kind. The
@@ -10201,7 +10405,8 @@ function paraDialog(i){
         <div class="pf-farben">${farbKnoepfe(pb && pb.farbe)}</div>
       </div>`}
       ${pb && pb.folge ? `<div class="note">Step <b>${pb.folge}</b> of its operation.</div>` : ""}
-      <div class="note">A block seals the town against drops. "Only planned" is your own plan and stays your side's; a block of another side is a sighting.</div>
+      <div class="note">A block seals the town against drops. "Only planned" is your own plan and stays your side's; a block of another side is a sighting.
+        It cannot be a draft: a town carries one block, so yours and a comrade's would be the same entry.</div>
     </div>
     <div class="dlg-f">
       ${pb ? `<button class="btn danger" id="pd-del">Remove block</button>` : ""}
@@ -10379,6 +10584,9 @@ function addPost(text, town, prio, req){
    Gibt zurueck, OB geloescht wurde. Ein Aufrufer, der das wegwirft, meldet
    sonst "Removed" ueber eine Absage hinweg. */
 function dropEntry(bucket, id){
+  /* a draft never reached anybody: forget it, no tombstone for the clan */
+  const et = entwTopf(bucket);
+  if (et && et[id]){ delete et[id]; entwSpeichern(bucket); save(); return true; }
   const e = S[bucket] && S[bucket][id];
   if (e && !darfWeg(e)){ darfNicht("loeschen"); return false; }
   S.gone[id] = {t: jetzt(), by: S.me}; dirty.add(`gone:${id}`);
@@ -10391,10 +10599,20 @@ function lineSpeichern(pts, einzel){
   const id = Math.random().toString(36).slice(2,10), k = `${id}:${S.me}`;
   const v = {pts, f: faction, label: "", art: artNeu()};
   if (einzel) v.einzel = 1;
-  S.line[k] = {v, t: jetzt(), by: S.me, n: S.name || ""};
-  dirty.add(`line:${k}`); save(); draw();
-  toast(einzel ? `Defence of ${MAP.n[pts[0]][0]}`
-               : `Defence line over ${pts.length} towns. Click it to label it and set it active.`);
+  /* draft mode holds it back: the row stays in this browser, and the key it
+     already carries is the one it keeps when it is published */
+  if (entwurfModus){
+    v.entwurf = 1;
+    ENTW_LINIE[k] = {v, t: jetzt(), by: S.me, n: S.name || ""};
+    entwSpeichern("line");
+  } else {
+    S.line[k] = {v, t: jetzt(), by: S.me, n: S.name || ""};
+    dirty.add(`line:${k}`);
+  }
+  save(); draw();
+  toast((einzel ? `Defence of ${MAP.n[pts[0]][0]}`
+                : `Defence line over ${pts.length} towns. Click it to label it and set it active.`)
+      + (entwurfModus ? " Draft — only you see it." : ""));
   return k;
 }
 /* WAS AUF DIESER STADT STEHT, gleich wer es hingestellt hat. Die Reihe ist
@@ -10421,7 +10639,8 @@ function lineEinzelAnlegen(i){
   /* frisch und von fremder Seite: kein Fenster. Dieselbe Zeile, die
      pfeilFrischZeigen zieht - es verbirgt Staerke, Kette und Zustand und
      stuende fast leer da. */
-  if (k && !fremdeSeite(S.line[k].v)) lineDialog(k, S.line[k]);
+  const zeile = k ? markeZeile("line", k) : null;
+  if (zeile && !fremdeSeite(zeile.v)) lineDialog(k, zeile);
 }
 /* extra: fields merged into the area, {aufkl:1, orte?} for a recon request.
    A request is our side's ask whatever the left bar shows; one on towns
@@ -10431,10 +10650,21 @@ function areaSpeichern(pts, extra){
   const id = Math.random().toString(36).slice(2,10), k = `${id}:${S.me}`;
   const rund = pts.map(p => [Math.round(p[0]*10)/10, Math.round(p[1]*10)/10]);
   const aufkl = !!(extra && extra.aufkl);
-  S.area[k] = {v: Object.assign({pts: rund, f: aufkl ? clanFaktion() : faction, label: "", art: artNeu()}, extra || {}),
-               t: jetzt(), by: S.me, n: S.name || ""};
-  dirty.add(`area:${k}`); save(); draw();
-  if (!(extra && extra.orte)) areaDialog(k, S.area[k], true);
+  const v = Object.assign({pts: rund, f: aufkl ? clanFaktion() : faction, label: "", art: artNeu()}, extra || {});
+  /* A RECON REQUEST IS THE ASK ITSELF, so it is never a draft: one only I
+     can see asks nobody. Everything else drawn here is held back. */
+  const entw = entwurfModus && !aufkl;
+  if (entw){
+    v.entwurf = 1;
+    ENTW_AREA[k] = {v, t: jetzt(), by: S.me, n: S.name || ""};
+    entwSpeichern("area");
+  } else {
+    S.area[k] = {v, t: jetzt(), by: S.me, n: S.name || ""};
+    dirty.add(`area:${k}`);
+  }
+  save(); draw();
+  if (entwurfModus && aufkl) toast("A request only you can see asks nobody — it went to the clan.");
+  if (!(extra && extra.orte)) areaDialog(k, markeZeile("area", k), true);
   return k;
 }
 function lineFertig(){
@@ -10640,7 +10870,11 @@ async function kriegsschnittServer(){
     kriegsstandWegwerfen();
     setMeta("epoch", jetzt());
     const stst = startStaedte();
-    for (const f of [0,1,2]) if (stst[f] != null) stamp("owner", String(stst[f]), f);
+    /* OHNE VERFASSER, und das ist Absicht: den Anfangsstand hat niemand
+       gemeldet. Der Punkte-Ausloeser steigt bei leerem "by" sofort aus, also
+       bucht der Knopf niemandem etwas - vor dem Zuschlag fuer wichtige Orte
+       waren es drei Punkte fuer einen Klick, danach waeren es neun. */
+    for (const f of [0,1,2]) if (stst[f] != null) stamp("owner", String(stst[f]), f, {by: "", n: ""});
     /* THE SENDING FAILS SILENTLY, and that is where the capitals went.
        syncPush begins with
            if (!CFG || !dirty.size || pushing) return;
@@ -10789,7 +11023,7 @@ function neuerKrieg(){
       if (b === "owner" && startBei.has(id)) continue;
       if (S[b][id] && S[b][id].v != null) stamp(b, id, null);
     }
-  for (const [id, f] of startBei) stamp("owner", id, f);
+  for (const [id, f] of startBei) stamp("owner", id, f, {by: "", n: ""});   // ohne Verfasser, siehe oben
   /* Fremde Reihen weist der Server ab - das ist gewollt. Ihre Eintraege sind
      ueber den Zeitstempel oben ohnehin schon aus dem Bild. */
   for (const b of ["units", "join", "spot", "est", "rollezu"])
@@ -10814,6 +11048,11 @@ function deployTeam(town, id){
   setMyUnits(town, myUnits(town).concat([{id, k: team.k, s: 1}]));
   return true;
 }
+/* NIMMT NUR VOM FELD, NICHT AUS DEM DEPOT. Eine Gruppe wird hier deshalb
+   NICHT mitgeraeumt: das Team steht danach weiter im Depot und gehoert
+   weiter dazu. Nachgesehen am 08.09.2026, weil der Verdacht bestand, hier
+   muesse eine Gruppe mitfallen - sie muss nicht. Geraeumt wird in
+   teamLoeschen, dem einzigen Weg, der ein Team wirklich herausnimmt. */
 function withdrawTeam(id){
   const alt = townOfTeam(id);
   if (alt !== null) setMyUnits(alt, myUnits(alt).filter(u => u.id !== id));
@@ -10832,9 +11071,435 @@ function teamLoeschen(id){
              + `This cannot be undone.`)) return;
   withdrawTeam(id);
   setMyDepot(myDepot().filter(x => x.id !== id));
+  /* Der einzige Weg, der ein Team wirklich aus dem Depot nimmt - also die
+     einzige Stelle, an der eine Gruppe eine tote Kennung bekommen kann.
+     gruppenListe() siebt sie beim Lesen ohnehin aus; hier fliegt sie auch
+     aus der Zeile, damit sie nicht mitgeschleppt wird. */
+  gruppenAufraeumen();
   depotZeichnen(); side(); draw(); kraftLeiste(); tally();
   toast(`${wie} deleted`);
 }
+
+/* ---- GRUPPEN EIGENER ASSAULT TEAMS -----------------------------------
+   Mehrere eigene Teams unter einem Namen, damit man sie nicht Stueck fuer
+   Stueck durch das Postfach schieben muss.
+
+   SIE LIEGEN IN EINER EIGENEN ZEILE grp:<spieler>, nicht im Depoteintrag.
+   namenAbstreifen wirft vor JEDEM Schreiben Felder aus dem Eintrag; ein
+   dort abgelegtes Gruppenfeld waere entweder still weg oder muesste in
+   jene Liste - und dann saehe es der ganze Clan, was depotSchreiben
+   ausdruecklich nicht will ("Name und Kuerzel gehen NICHT mit").
+
+   WAS DER CLAN TROTZDEM SIEHT: diese Zeile geht ueber den Server wie jede
+   andere, der Gruppenname steht also darin. Anders als bei den Teamnamen
+   ist das gewollt - eine Gruppe gibt es nur in diesem Werkzeug und soll
+   dem Spieler auf sein zweites Geraet folgen. Der Satz steht auch im
+   Fenster, denn von aussen sieht man es nicht.
+
+   KRIEGSSCHNITT: grp traegt krieg:1 wie depot. Beide stehen zusammen in
+   KRIEG_BLEIBT, werden zusammen von altlastFegen uebersprungen, von
+   kriegsstandWegwerfen und vom Wegwerfen der oertlichen Kopie behalten,
+   und der Server schont beide in warmap_raum_leeren. Gruppe und Teams
+   ueberleben den Schnitt gemeinsam - hier ist nichts nachzuziehen.
+
+   DIE GEFAEHRLICHE STELLE IST DER START, nicht der Schnitt: ein leeres
+   Depot sieht genauso aus wie "alle Teams geloescht". Siehe die Sperre in
+   gruppenAufraeumen und gruppenBereit. */
+const GRUPPE_MAX = 24;                  // Gruppen je Spieler
+const GRUPPE_NAME_MAX = 24;
+/* ALLE VIER ALS function, nicht als const-Pfeil: grpHerkunft haengt an
+   ihnen und wird aus zuordSchreiben gerufen, das dreitausend Zeilen weiter
+   OBEN steht. Eine const waere dort noch in der toten Zone und wuerfe beim
+   ersten Zugriff. Deklarationen werden gehoben, const wird es nicht. */
+function gruppenRoh(){
+  const e = S.grp[S.me];
+  return (e && Array.isArray(e.v)) ? e.v : [];
+}
+/* Vor dem ersten Abruf ist das Depot leer. Wer in diesem Zustand an den
+   Gruppen schreibt, leert sie - also gar nicht erst anbieten. */
+function gruppenBereit(){ return !(CFG && !ersterAbrufDurch); }
+/* Die Gruppen, wie sie gelten. Tote Kennungen fallen schon beim LESEN
+   heraus: teamLoeschen raeumt zwar nach, aber eine Sicherung von gestern
+   oder ein zweites Geraet bringt jederzeit eine Kennung mit, zu der es
+   kein Team mehr gibt. Eine Gruppe darf nie ein geloeschtes Team zeigen. */
+function gruppenListe(){
+  const da = new Set(myDepotAlle().map(d => d.id));
+  return gruppenEindeutig(gruppenRoh().filter(g => g && g.id).map(g => ({
+    id: String(g.id),
+    n: String(g.n == null ? "" : g.n),
+    ats: (Array.isArray(g.ats) ? g.ats : []).filter(id => da.has(id))
+  })));
+}
+function gruppeName(g){ return (g && String(g.n || "").trim()) || "Unnamed group"; }
+/* EIN TEAM, EINE GRUPPE - auch beim Lesen. Geschrieben wird das nie, aber
+   eine Sicherung oder ein zweites Geraet kann eine Zeile mitbringen, in der
+   dieselbe Kennung zweimal steht; im Postfach staende das Team dann doppelt,
+   mit Confirm und Decline doppelt, waehrend die Depotspalte nur eine der
+   beiden Gruppen naennte. Die erste Gruppe behaelt es. */
+function gruppenEindeutig(liste){
+  const gesehen = new Set();
+  for (const g of liste || []){
+    g.ats = (g.ats || []).filter(id => !gesehen.has(id) && (gesehen.add(id), true));
+  }
+  return liste;
+}
+function gruppeSchreiben(liste){
+  const rein = (liste || []).filter(g => g && g.id).slice(0, GRUPPE_MAX).map(g => ({
+    id: String(g.id),
+    n: String(g.n == null ? "" : g.n).trim().slice(0, GRUPPE_NAME_MAX),
+    ats: [...new Set((g.ats || []).filter(Boolean))]
+  }));
+  if (!stamp("grp", S.me, rein.length ? rein : null, {n: S.name || ""})) return false;
+  save();
+  return true;
+}
+/* Tote Kennungen wirklich aus der Zeile werfen, nicht nur beim Lesen
+   ausblenden. DIE DREI SPERREN OBEN SIND DER GANZE WITZ: vor dem ersten
+   Abruf, waehrend eines Abrufs und bei leerem Depot sieht "noch nichts da"
+   genauso aus wie "alles geloescht" - ein Lauf ohne sie leerte JEDE Gruppe,
+   ohne dass jemand etwas angefasst haette. */
+function gruppenAufraeumen(){
+  if (!gruppenBereit()) return false;
+  if (pulling) return false;
+  const roh = gruppenRoh();
+  if (!roh.length) return false;
+  const da = new Set(myDepotAlle().map(d => d.id));
+  if (!da.size) return false;
+  let weg = 0;
+  const gereinigt = roh.map(g => {
+    const alt = Array.isArray(g && g.ats) ? g.ats : [];
+    const ats = alt.filter(id => da.has(id));
+    weg += alt.length - ats.length;
+    return Object.assign({}, g, {ats});
+  });
+  if (!weg) return false;
+  return gruppeSchreiben(gereinigt);
+}
+/* Ein Team gehoert zu HOECHSTENS EINER Gruppe. Eine Zugehoerigkeit an zwei
+   Stellen waere beim Sammelgriff im Postfach eine Falle: zwei Griffe
+   zoegen an demselben Team. */
+function gruppeSetzen(teamId, ziel){
+  if (!gruppenBereit()) return false;
+  const liste = gruppenListe().map(g => Object.assign({}, g, {ats: g.ats.filter(x => x !== teamId)}));
+  if (ziel){
+    const g = liste.find(x => x.id === ziel);
+    if (!g) return false;
+    g.ats.push(teamId);
+  }
+  return gruppeSchreiben(liste);
+}
+function gruppeAnlegen(name){
+  if (!gruppenBereit()) return null;
+  const liste = gruppenListe();
+  if (liste.length >= GRUPPE_MAX){
+    toast(`${GRUPPE_MAX} groups is the ceiling. Delete one before adding another.`);
+    return null;
+  }
+  const id = Math.random().toString(36).slice(2, 9);
+  liste.push({id, n: String(name || "").trim().slice(0, GRUPPE_NAME_MAX), ats: []});
+  return gruppeSchreiben(liste) ? id : null;
+}
+function gruppeWeg(gid){
+  if (!gruppenBereit()) return false;
+  return gruppeSchreiben(gruppenListe().filter(g => g.id !== gid));
+}
+/* DIE HERKUNFT, NIE DIE WAHRHEIT. In der Zuweisungszeile stehen die Teams
+   EINZELN in ats - daran haengt "ein Team, ein aktiver Befehl" in
+   zuordBelegung, und eine Gruppe an ihrer Stelle liesse die Sperre
+   ausfallen: ein Team folgte zwei Befehlen. grps vermerkt nur, welche
+   Gruppe VOLLSTAENDIG auf dieser Zeile steht.
+   Hergeleitet, nicht mitgeschleppt - und genau das ist der Punkt: kuerzt
+   zuordNachruecken die Liste, laeuft das durch dasselbe zuordSchreiben,
+   der Vermerk wird neu gerechnet und faellt von selbst weg. Eine
+   Gruppenangabe, die daneben stehenbleibt und luegt, kann so gar nicht
+   erst entstehen. */
+function grpHerkunft(ats){
+  const drin = new Set(ats || []);
+  return gruppenListe().filter(g => g.ats.length && g.ats.every(id => drin.has(id))).map(g => g.id);
+}
+/* Sammelgriff im Postfach: jedes Team der Gruppe faellt aus der Zeile, auf
+   der es steht. Ein Durchgang je Zeile, nicht je Team - zuordTeamFrei
+   schriebe sonst dieselbe Zeile zwoelfmal neu. */
+function gruppeFrei(gid){
+  const g = gruppenListe().find(x => x.id === gid);
+  if (!g || !g.ats.length) return false;
+  const raus = new Set(g.ats);
+  let getan = false;
+  for (const z of meineZuord()){
+    const rest = z.ats.filter(id => !raus.has(id));
+    if (rest.length === z.ats.length) continue;
+    if (zuordSchreiben({art: z.art, id: z.id}, rest, z.st)) getan = true;
+  }
+  return getan;
+}
+
+/* ---- Umbenennen und Aufruesten: je EINE Stelle -----------------------
+   Beide gab es bisher nur eingebaut in die Depotliste. Das Depotfenster
+   braucht sie auch, und zwei Abschriften derselben Schreibregel waeren
+   genau die Fehlerquelle, vor der die Datei sonst ueberall warnt. Also
+   herausgeloest - die Liste in der Spalte ruft ab jetzt dasselbe. */
+/* Gibt den bereinigten Wert zurueck, damit der Aufrufer sein Feld
+   nachziehen kann, und ob wirklich etwas geschrieben wurde. */
+function teamUmbenennen(id, feld, roh){
+  const wert = feld === "tag" ? atTagSauber(roh) : eigenNameKern(roh);
+  const vorher = myDepot().find(d => d.id === id) || {};
+  const alt = vorher[feld] || "";
+  /* OWN NAMES CUT OFF: a name saved here without trailing dots is the
+     whole name and the mark falls; saved with dots it stays cut */
+  const cutNeu = feld === "name" ? (!!wert && eigenNameAbgeschnitten(roh)) : !!vorher.cut;
+  if (alt === wert && cutNeu === !!vorher.cut) return {wert, geaendert: false};
+  setMyDepot(myDepot().map(d => d.id === id
+    ? eigenCutSetzen(Object.assign({}, d, {[feld]: wert}), cutNeu) : d));
+  if (alt && alt !== wert) toast(`Renamed: ${alt} → ${wert || "(none)"}`);
+  return {wert, geaendert: true};
+}
+function teamHochstufen(id, zu){
+  const d = teamById(id);
+  if (!d || !atKinder(d.k).includes(zu)) return false;
+  /* Wer schon draussen steht, wird zuerst zurueckgeholt. Eine Einheit auf
+     der Karte, die unter der Hand den Typ wechselt, waere eine stille
+     Falschmeldung an den ganzen Clan - die Nachbarn saehen weiter das alte
+     Zeichen, bis sie zufaellig neu laden. */
+  if (townOfTeam(id) !== null) withdrawTeam(id);
+  setMyDepot(myDepot().map(x => x.id === id ? Object.assign({}, x, {k: zu}) : x));
+  toast(`${d.name || atName(d.k)} → ${atName(zu)}`);
+  return true;
+}
+
+/* ---- DAS DEPOTFENSTER ------------------------------------------------
+   ZIEHEN GEHT HIER NICHT, und das steht auch im Fenster. Der Griff haengt
+   an den .dep-Zeilen in #depot-list und wirft beim Loslassen auf die
+   Kartenflaeche; dieses Fenster liegt hinter #veil, und #veil verdeckt die
+   Karte. Hier steht deshalb nur Buchhaltung.
+
+   EINE ZEICHENSTRECKE JE DARSTELLUNG: die Depotliste zeichnet weiter
+   allein depotZeichnen in #depot-list. Dieses Fenster zeichnet eine
+   TABELLE - dieselben Daten in anderer Form, so wie das Postfach es mit
+   denselben Teams auch tut - und ruft nach jeder Aenderung
+   depotZeichnen(), damit die Spalte dahinter nie etwas anderes zeigt.
+   Geschrieben wird ausschliesslich ueber setMyDepot, teamUmbenennen,
+   teamHochstufen, withdrawTeam und teamLoeschen. */
+let depotDlgFilter = "all", depotDlgSuche = "";
+function depotDialog(tab){
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const alleD = myDepotAlle();
+  const teamVon = new Map(alleD.map(d => [d.id, d]));
+  const alle = myDepot();
+  const fl = FILTER.find(x => x.k === depotDlgFilter) || FILTER[0];
+  const mein = alle.filter(d => AT[d.k] && fl.passt(AT[d.k]));
+  const gruppen = gruppenListe();
+  const bereit = gruppenBereit();
+  const grVon = new Map();
+  for (const g of gruppen) for (const id of g.ats) grVon.set(id, g);
+  const feldStil = `background:var(--panel);border:1px solid var(--line);border-radius:2px;`
+                 + `padding:2px 5px;outline:0;font-size:11.5px`;
+  const klein = `style="font-size:11px;padding:3px 8px"`;
+
+  const zeile = d => {
+    const town = townOfTeam(d.id);
+    const kinder = atKinder(d.k);
+    const g = grVon.get(d.id);
+    const heu = `${d.name || ""} ${d.tag || ""} ${atName(d.k)} ${g ? gruppeName(g) : ""}`.toLowerCase();
+    return `<tr data-such="${esc(heu)}">
+      <td class="sy">${symbolSVG(d.k, c, 24, 17)}</td>
+      <td><input class="dm-n" data-id="${esc(d.id)}" value="${esc(d.name || "")}" spellcheck="false"
+            maxlength="${TEAM_NAME_MAX}" placeholder="${esc(d.cut ? "cut off, complete it" : atName(d.k))}"
+            style="width:148px;${feldStil}"></td>
+      <td style="text-align:left"><input class="dm-t" data-id="${esc(d.id)}" value="${esc(d.tag || "")}"
+            spellcheck="false" maxlength="${TEAM_TAG_MAX}" placeholder="TAG"
+            style="width:70px;${feldStil}"></td>
+      <td style="text-align:left">${esc(atName(d.k))}</td>
+      <td style="text-align:left">${bereit && gruppen.length
+        ? `<select data-gsel="${esc(d.id)}" style="width:130px;${feldStil}">
+             <option value="">—</option>
+             ${gruppen.map(x => `<option value="${esc(x.id)}"${g && g.id === x.id ? " selected" : ""}>${
+               esc(gruppeName(x))}</option>`).join("")}
+           </select>`
+        : `<span style="color:var(--dim2)">${g ? esc(gruppeName(g)) : "—"}</span>`}</td>
+      <td style="text-align:left">${town !== null && MAP.n[town]
+        ? esc(MAP.n[town][0]) : `<span style="color:var(--dim2)">in depot</span>`}</td>
+      <td>${kinder.length
+        ? `<select data-dhoch="${esc(d.id)}" style="width:132px;${feldStil}">
+             <option value="">Upgrade …</option>
+             ${kinder.map(k => `<option value="${esc(k)}">${esc(atName(k))}</option>`).join("")}
+           </select>` : ""}</td>
+      <td>${town !== null ? `<button class="btn" data-dpull="${esc(d.id)}" ${klein}>Pull back</button> ` : ""}<button
+            class="btn" data-dweg="${esc(d.id)}" ${klein}>Delete</button></td></tr>`;
+  };
+
+  const grBlock = g => {
+    const mit = g.ats.map(id => teamVon.get(id)).filter(Boolean);
+    return `<div style="border:1px solid var(--line);border-radius:var(--r);padding:7px 8px;margin-bottom:6px">
+      <div class="row" style="align-items:center;gap:8px">
+        <input data-gname="${esc(g.id)}" value="${esc(g.n || "")}" placeholder="Group name"
+               maxlength="${GRUPPE_NAME_MAX}" spellcheck="false" style="flex:1;min-width:0;${feldStil}">
+        <span style="font-size:11px;color:var(--dim)">${mit.length} team${mit.length === 1 ? "" : "s"}</span>
+        <button class="btn" data-gmit="${esc(g.id)}" ${klein}>Members …</button>
+        <button class="btn" data-gweg="${esc(g.id)}" ${klein}>Delete</button>
+      </div>
+      <div style="font-size:11px;color:var(--dim2);margin-top:4px">${
+        mit.length ? mit.map(d => esc(d.name || atName(d.k))).join(" · ") : "No teams in it yet."}</div>
+    </div>`;
+  };
+
+  openDlg(`
+    <div class="dlg-h"><h2>Depot</h2>
+      <p>${esc(FACTIONS[aktiveSeite()].tag)}${aktiveSeite() !== clanFaktion() ? " · viewing only" : ""} · Bookkeeping. Dragging a team onto the map stays in the right-hand column — this window sits over the map.</p></div>
+    <div class="tabs">
+      <button data-tab="teams"  aria-pressed="true">Teams</button>
+      <button data-tab="groups" aria-pressed="false">Groups</button>
+    </div>
+    <div class="dlg-b">
+      <div class="tabp on" data-tab="teams">
+        <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
+          <div class="sp-filter" style="margin:0">${FILTER.map(x => {
+            const n = alle.filter(d => AT[d.k] && x.passt(AT[d.k])).length;
+            return `<button data-dfl="${x.k}" aria-pressed="${x.k === depotDlgFilter}">${x.name}${
+              n ? `<b>${n}</b>` : ""}</button>`;
+          }).join("")}</div>
+          <input id="dm-such" value="${esc(depotDlgSuche)}" placeholder="Filter by name, tag, type or group"
+                 spellcheck="false" style="flex:1;min-width:140px;${feldStil}">
+        </div>
+        ${mein.length ? `<div class="tw"><table><thead><tr><th></th><th>Team</th><th>Tag</th><th>Type</th>
+            <th>Group</th><th>Where</th><th></th><th></th></tr></thead>
+          <tbody>${mein.map(zeile).join("")}</tbody></table></div>`
+          : `<div class="empty">${alle.length ? "Nothing of this type." : "Nothing in this depot yet."}</div>`}
+      </div>
+      <div class="tabp" data-tab="groups">
+        ${bereit ? `${gruppen.map(grBlock).join("")}
+        <div class="row" style="align-items:center;gap:8px">
+          <input id="gr-name" placeholder="New group" maxlength="${GRUPPE_NAME_MAX}" spellcheck="false"
+                 style="flex:1;min-width:0;${feldStil}">
+          <button class="btn" id="gr-neu" ${klein}${gruppen.length >= GRUPPE_MAX
+            ? ` disabled title="${GRUPPE_MAX} groups is the ceiling"` : ""}>Add group</button>
+        </div>
+        <div class="note">A team belongs to one group at a time. Groups go to the server in a row of their own, so the clan can read their names — team names stay in this browser.</div>`
+        : `<div class="empty">Waiting for the first sync — your depot is not here yet, and groups stay untouched until it is.</div>`}
+      </div>
+    </div>
+    <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
+  tabsAktiv(document.getElementById("dlg"), tab || "teams");
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  const wieder = () => {
+    const akt = document.querySelector("#dlg .tabs button[aria-pressed='true']");
+    depotDialog(akt ? akt.dataset.tab : "teams");
+  };
+
+  /* Die Suche blendet Zeilen aus, statt die Tabelle neu zu bauen - sonst
+     verlaere das Feld bei jedem Tastendruck den Eingabepunkt. */
+  const sucheAn = () => {
+    const q = depotDlgSuche.trim().toLowerCase();
+    document.querySelectorAll("#dlg tr[data-such]").forEach(tr => {
+      tr.hidden = !!q && !tr.dataset.such.includes(q);
+    });
+  };
+  const such = document.getElementById("dm-such");
+  if (such){
+    such.addEventListener("input", ()=>{ depotDlgSuche = such.value; sucheAn(); });
+    sucheAn();
+  }
+  document.querySelectorAll("#dlg [data-dfl]").forEach(b => b.addEventListener("click", ()=>{
+    depotDlgFilter = b.dataset.dfl; wieder();
+  }));
+  /* Umbenennen laeuft durch teamUmbenennen - dieselbe Stelle wie in der
+     Spalte. Kein Neuaufbau: change kommt beim Verlassen des Feldes, und
+     ein Fenster, das dabei springt, ist unbrauchbar. */
+  document.querySelectorAll("#dlg .dm-n,#dlg .dm-t").forEach(inp => {
+    inp.addEventListener("keydown", ev => { if (ev.key === "Enter") inp.blur(); });
+    inp.addEventListener("change", ()=>{
+      const r = teamUmbenennen(inp.dataset.id, inp.classList.contains("dm-t") ? "tag" : "name", inp.value);
+      if (inp.value !== r.wert) inp.value = r.wert;
+      if (r.geaendert) depotZeichnen();
+    });
+  });
+  document.querySelectorAll("#dlg [data-gsel]").forEach(sel => sel.addEventListener("change", ()=>{
+    if (gruppeSetzen(sel.dataset.gsel, sel.value)) depotZeichnen();
+    wieder();
+  }));
+  document.querySelectorAll("#dlg [data-dhoch]").forEach(sel => sel.addEventListener("change", ()=>{
+    if (!sel.value){ return; }
+    if (teamHochstufen(sel.dataset.dhoch, sel.value)){ depotZeichnen(); side(); draw(); tally(); kraftLeiste(); }
+    wieder();
+  }));
+  document.querySelectorAll("#dlg [data-dpull]").forEach(b => b.addEventListener("click", ()=>{
+    withdrawTeam(b.dataset.dpull); depotZeichnen(); side(); draw(); tally(); kraftLeiste();
+    wieder();
+  }));
+  document.querySelectorAll("#dlg [data-dweg]").forEach(b => b.addEventListener("click", ()=>{
+    /* teamLoeschen fragt selbst nach, raeumt die Gruppe mit und zeichnet
+       die Spalte neu. Ob wirklich geloescht wurde, sagt es nicht - der
+       Neuaufbau zeigt es. */
+    teamLoeschen(b.dataset.dweg);
+    wieder();
+  }));
+  document.querySelectorAll("#dlg [data-gname]").forEach(inp => {
+    inp.addEventListener("keydown", ev => { if (ev.key === "Enter") inp.blur(); });
+    inp.addEventListener("change", ()=>{
+      const gid = inp.dataset.gname, wert = inp.value.trim().slice(0, GRUPPE_NAME_MAX);
+      const liste = gruppenListe().map(g => g.id === gid ? Object.assign({}, g, {n: wert}) : g);
+      if (gruppeSchreiben(liste)) depotZeichnen();
+    });
+  });
+  document.querySelectorAll("#dlg [data-gmit]").forEach(b => b.addEventListener("click", ()=>{
+    gruppeMitgliederWahl(b.dataset.gmit, ()=>depotDialog("groups"));
+  }));
+  document.querySelectorAll("#dlg [data-gweg]").forEach(b => b.addEventListener("click", ()=>{
+    const g = gruppenListe().find(x => x.id === b.dataset.gweg);
+    if (!g) return;
+    if (!confirm(`Delete the group ${gruppeName(g)}?\n\nThe ${g.ats.length} team${
+      g.ats.length === 1 ? "" : "s"} in it stay in your depot.`)) return;
+    if (gruppeWeg(b.dataset.gweg)){ depotZeichnen(); toast(`${gruppeName(g)} deleted`); }
+    wieder();
+  }));
+  document.getElementById("gr-neu")?.addEventListener("click", ()=>{
+    const feld = document.getElementById("gr-name");
+    const name = feld ? feld.value.trim() : "";
+    if (!name){ toast("Give the group a name first."); if (feld) feld.focus(); return; }
+    if (gruppeAnlegen(name)){ depotZeichnen(); wieder(); }
+  });
+}
+/* Die Mitglieder einer Gruppe. Eigenes Fenster statt eines Kastens im
+   Depotfenster: eine Liste von bis zu 300 Kaestchen sprengt jeden Reiter,
+   und der Weg zurueck ist derselbe wie bei zuordWahl - der Aufrufer sagt,
+   was danach wieder aufgehen soll. */
+function gruppeMitgliederWahl(gid, zurueck){
+  const g = gruppenListe().find(x => x.id === gid);
+  if (!g){ if (zurueck) zurueck(); else closeDlg(); return; }
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const alleD = myDepotAlle();
+  const drin = new Set(g.ats);
+  const andere = new Map();
+  for (const x of gruppenListe()) if (x.id !== gid) for (const id of x.ats) andere.set(id, gruppeName(x));
+  openDlg(`
+    <div class="dlg-h"><h2>${esc(gruppeName(g))}</h2>
+      <p>A team belongs to one group at a time — ticking it here takes it out of the other.</p></div>
+    <div class="dlg-b">
+      ${alleD.length ? `<div class="zuord-liste">${alleD.map(d => `<label><input type="checkbox"
+          data-gteam="${esc(d.id)}"${drin.has(d.id) ? " checked" : ""}>
+          <span>${symbolSVG(d.k, c, 22, 15)}</span><span class="n"><span>${esc(d.name || atName(d.k))}${
+          d.tag ? ` <small>${esc(d.tag)}</small>` : ""}</span><em>${esc(atName(d.k))}${
+          andere.has(d.id) ? ` · ${esc(andere.get(d.id))}` : ""}</em></span></label>`).join("")}</div>`
+        : `<div class="empty">No teams in your depot yet.</div>`}
+    </div>
+    <div class="dlg-f">
+      <button class="btn" id="gm-zurueck">Back</button>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="gm-ok"${alleD.length ? "" : " disabled"}>Save</button>
+    </div>`, true);
+  const kaesten = [...document.querySelectorAll("#dlg [data-gteam]")];
+  document.getElementById("gm-zurueck").addEventListener("click", ()=>{ if (zurueck) zurueck(); else closeDlg(); });
+  document.getElementById("gm-ok").addEventListener("click", ()=>{
+    const ids = kaesten.filter(k => k.checked).map(k => k.dataset.gteam);
+    /* In einem Zug: was hier angekreuzt ist, faellt bei allen anderen
+       Gruppen heraus - sonst stuende ein Team in zweien. */
+    const liste = gruppenListe().map(x => x.id === gid
+      ? Object.assign({}, x, {ats: ids})
+      : Object.assign({}, x, {ats: x.ats.filter(id => !ids.includes(id))}));
+    if (gruppeSchreiben(liste)) depotZeichnen();
+    if (zurueck) zurueck(); else closeDlg();
+  });
+}
+document.getElementById("dep-mgr").addEventListener("click", ()=>depotDialog("teams"));
 
 /* ---------------- interaction ----------------
    Everything that has a from and a to is drawn by dragging: arrows, defence
@@ -11270,11 +11935,27 @@ document.addEventListener("pointerdown", ev => {
 });
 document.addEventListener("keydown", ev => { if (ev.key === "Escape") lineMenueZu(); });
 
-/* Right-click on a town: the para-block as a small menu at the mouse, so
-   nobody has to open the detail view for it. */
+/* ---- DAS MENUE AN DER RECHTEN TASTE ---------------------------------
+   Die Stadt hatte eins, sonst nichts: auf Pfeil, Verteidigungslinie,
+   Flaeche und leerer Karte fiel die rechte Taste an den Browser durch.
+   EIN Kasten, und EINE Stelle, die ihn setzt. Was drinsteht, bringt
+   jeder Aufrufer selbst mit. */
 function pbMenueZu(){ const m = document.getElementById("pb-menu"); if (m) m.remove(); }
-function pbMenue(i, x, y, standVorher){
+function menueAn(x, y, innen){
   pbMenueZu();
+  const m = document.createElement("div"); m.id = "pb-menu";
+  m.innerHTML = innen;
+  document.body.appendChild(m);
+  /* erst anhaengen und messen, dann setzen - sonst haengt der Kasten am
+     rechten oder unteren Rand halb ausserhalb des Fensters */
+  const b = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(innerWidth - b.width - 4, x)) + "px";
+  m.style.top  = Math.max(4, Math.min(innerHeight - b.height - 4, y)) + "px";
+  return m;
+}
+/* Die Stadt: der Fallschirmblock als kleines Menue an der Maus, damit
+   niemand dafuer die Detailspalte aufmachen muss. */
+function pbMenue(i, x, y, standVorher){
   const pb = paraAt(i);
   /* VORWAHL DER CLANSEITE. Der Haken "Only planned" weiter unten legt ohne
      Block einen an; ohne diese Zeile haette der keine Seite. Ein bestehender
@@ -11287,8 +11968,7 @@ function pbMenue(i, x, y, standVorher){
      Ruecknahme; beim Neuzeichnen wandert der Stand mit. */
   if (standVorher === undefined) standVorher = pb;
   const verteidigt = einzelLinieAn(i);
-  const m = document.createElement("div"); m.id = "pb-menu";
-  m.innerHTML = `<div class="t">Para-block · <b>${esc(MAP.n[i][0])}</b></div>
+  const m = menueAn(x, y, `<div class="t">Para-block · <b>${esc(MAP.n[i][0])}</b></div>
     <div style="font-size:11px;color:var(--dim);margin:0 2px 6px;max-width:200px">${
       pb ? zustandText(`para:${i}`, pb, S.para[i] && (S.para[i].n || S.para[i].by)) : "No block here yet."}</div>
     <div class="own4">
@@ -11299,11 +11979,7 @@ function pbMenue(i, x, y, standVorher){
       <span>Only planned</span></label>
     <button type="button" class="btn" id="pb-menu-fenster" style="margin-top:6px;width:100%;font-size:11px">Order window \u2026</button>
     <div class="t" style="margin-top:9px">Defence</div>
-    <button type="button" class="btn" id="pb-menu-def" style="width:100%;font-size:11px">${verteidigt ? "Defence window \u2026" : "Defend this city"}</button>`;
-  document.body.appendChild(m);
-  const b = m.getBoundingClientRect();
-  m.style.left = Math.max(4, Math.min(innerWidth - b.width - 4, x)) + "px";
-  m.style.top  = Math.max(4, Math.min(innerHeight - b.height - 4, y)) + "px";
+    <button type="button" class="btn" id="pb-menu-def" style="width:100%;font-size:11px">${verteidigt ? "Defence window \u2026" : "Defend this city"}</button>`);
   m.querySelectorAll("[data-pb]").forEach(k => k.addEventListener("click", () => {
     const v = k.dataset.pb, plan = m.querySelector("#pb-menu-plan").checked;
     setPara(i, v === "" ? null : +v, plan);
@@ -11328,16 +12004,114 @@ function pbMenue(i, x, y, standVorher){
     pbMenue(i, x, y, standVorher);
   });
 }
+/* Das Menue an einem gezeichneten Befehl - Pfeil, Verteidigungslinie,
+   Flaeche. Neues Koennen entsteht hier keins: die Knoepfe sind DIESELBEN,
+   die auch im Fenster stehen (zustandKnoepfe, verdrahtet mit
+   zustandVerdrahten), und der letzte Eintrag oeffnet genau das Fenster,
+   das der Linksklick oeffnet.
+
+   RECHTE. zustandKnoepfe gibt von sich aus nichts aus, wo darfZustand nein
+   sagt - und ebenso nichts an einer fremden Seite oder einem Entwurf.
+   EINE AUSNAHME BLEIBT, und hier stand zuerst das Gegenteil: "Set active"
+   wird auch an einem Luftpfeil angeboten, dessen Flugplatz uns noch nicht
+   gehoert; zustandSetzen weist ihn dann ab und sagt warum ("... is not ours
+   yet. Take the airfield first."). Das ist dieselbe Antwort, die das Fenster
+   gibt - dort steht derselbe Knopf -, und sie erklaert etwas, das der Spieler
+   wissen will. Der Eintrag bleibt also; falsch war nur der Satz, hier stuende
+   nichts Abweisbares.
+
+   Das LOESCHEN fehlt mit Absicht. Es fragt bei einer fremden Marke nach,
+   bevor es sie fuer den ganzen Clan von der Karte nimmt, und diese Frage
+   steht im Fenster. Sie hier ein zweites Mal zu schreiben hiesse, sie
+   zweimal zu pflegen. */
+function befehlMenue(b, x, y, fenster){
+  const zs = zustandKnoepfe(b.ok, b.v, {by: b.by});
+  /* "Defence · Defence Berlin" waere doppelt gemoppelt: ohne eigenen Namen
+     traegt der Befehl seine Art schon im Namen. */
+  const art = esc(befehlArtName(b)), nam = esc(b.name);
+  const kopf = nam.toLowerCase().indexOf(art.toLowerCase()) === 0 ? `<b>${nam}</b>` : `${art} · <b>${nam}</b>`;
+  const m = menueAn(x, y, `<div class="t">${kopf}</div>
+    <div style="font-size:11px;color:var(--dim);margin:0 2px 6px;max-width:210px">${
+      zustandText(b.ok, b.v, befehlWer(b))}</div>
+    ${zs ? `<div class="row" style="margin-bottom:6px">${zs}</div>` : ""}
+    <button type="button" class="btn" id="pb-menu-auf" style="width:100%;font-size:11px">Open window …</button>`);
+  zustandVerdrahten(m);
+  /* zustandVerdrahten setzt den Zustand und frischt die Spalte auf, laesst
+     das Menue aber stehen - mit Knoepfen, die dann nicht mehr stimmen.
+     NUR WENN ES GEKLAPPT HAT: schlaegt das Setzen fehl, bleibt der Kasten
+     offen und zeigt, was steht. So haelt es das Fenster auch ("the window
+     stays open and shows what stands"); ein Kasten, der sich nach einer
+     abgewiesenen Handlung wegnimmt, sieht aus, als waere sie durchgegangen. */
+  m.querySelectorAll("[data-zskey]").forEach(k => k.addEventListener("click", () => {
+    const b2 = befehlVonSchluessel(k.dataset.zskey);
+    const soll = ["plan", "aktiv", "fertig"][+k.dataset.zs || 0];
+    if (!b2 || befehlZustand(k.dataset.zskey, b2.v) === soll) pbMenueZu();
+  }));
+  m.querySelector("#pb-menu-auf").addEventListener("click", () => { pbMenueZu(); fenster(); });
+}
+/* Die leere Karte. Zwei Schalter, die genau dann fehlen, wenn man ins Leere
+   getroffen hat: das Bild einpassen, und die fertigen Befehle sichtbar
+   machen - ein fertiger Befehl wird nicht gezeichnet, und das ist der
+   haeufigste Grund, warum an einer Stelle nichts steht.
+   Der Eintrag fuer die fertigen Befehle DRUECKT DEN KNOPF in der Leiste,
+   statt selbst zu schalten: so bleibt sein aria-pressed die eine Wahrheit
+   ueber seinen Stand. Das Einpassen ruft fit() unmittelbar - der Fit-Knopf
+   traegt kein aria-pressed und hat buchstaeblich fit als Zuhoerer, da kann
+   nichts auseinanderlaufen. */
+function kartenMenue(x, y){
+  const m = menueAn(x, y, `<div class="t">Map</div>
+    <button type="button" class="btn" id="km-fit" style="width:100%;font-size:11px">Fit to screen</button>
+    <button type="button" class="btn" id="km-fertig" style="width:100%;font-size:11px;margin-top:4px">${
+      showFertig ? "Hide done orders" : "Show done orders"}</button>`);
+  m.querySelector("#km-fit").addEventListener("click", () => { pbMenueZu(); fit(); });
+  m.querySelector("#km-fertig").addEventListener("click", () => {
+    pbMenueZu(); document.getElementById("b-fertig").click();
+  });
+}
 cv.addEventListener("contextmenu", ev => {
   /* Der Pinsel hat die rechte Taste selbst: sie setzt auf "open". Waehrend
      er gewaehlt ist, darf das Stadtmenue nicht darueberspringen. */
   if (tool === "brush"){ ev.preventDefault(); return; }
-  /* a drop being planned: the right button only calls it off */
+  /* NUR DIE ECHTE RECHTE MAUSTASTE. Ein langes Antippen loest auf manchen
+     Telefonen ein contextmenu aus - mitten im Schieben der Karte spraenge
+     dann ein Menue auf, das kein Finger gerufen hat. Die Maus meldet
+     Taste 2, das lange Antippen meldet 0; wer nicht 2 meldet, behaelt sein
+     Browsermenue, genau wie bisher. */
+  if (ev.button !== 2 && ev.pointerType !== "mouse") return;
+  /* WAS GEZOGEN WIRD, BEKOMMT KEIN MENUE. Unter Windows kommt contextmenu
+     NACH mouseup, also fiele das Menue sonst ans Ende eines Zuges: wer die
+     Karte mit gedrueckter Taste schiebt und dabei rechts klickt, bekaeme es
+     unter den Zeiger. Der Linksklick hat denselben Waechter ("if (dragged)
+     return;"), der Rechtsklick hatte ihn nicht. Von einem Gegenleser mit dem
+     wortgleichen Zuhoerer vorgefuehrt: view.x stand auf 120 und das Menue
+     stand da. */
+  if (dragged || dragging || zieh){ ev.preventDefault(); return; }
+  /* Was gerade gezogen wird, bricht die rechte Taste ab - dieselbe Leiter,
+     die Escape weiter oben abarbeitet. Bisher konnte das nur der
+     Fallschirmfluss; bei einem halben Pfeil und einer halben Linie kam das
+     Browsermenue ueber die Karte. */
   if (paraFlussAktiv()){ ev.preventDefault(); paraFlussAbbruch(); draw(); return; }
-  const i = hitTest(ev.offsetX, ev.offsetY);
-  if (i === null || i === undefined || i < 0) return;
+  if (aufklFluss){ ev.preventDefault(); aufklFlussAbbruch(); draw(); return; }
+  if (arrowFrom !== null){ ev.preventDefault(); arrowFrom = null; draw(); return; }
+  if (lineDraft){ ev.preventDefault(); lineDraft = null; toast("Defence line cancelled"); draw(); return; }
   ev.preventDefault();
-  pbMenue(i, ev.clientX, ev.clientY);
+  const i = hitTest(ev.offsetX, ev.offsetY);
+  if (i !== null && i !== undefined && i >= 0){ pbMenue(i, ev.clientX, ev.clientY); return; }
+  /* Sonst dieselbe Reihenfolge wie der Linksklick: erst der Pfeil, dann die
+     Linie, dann die Flaeche. Was nicht gezeichnet ist, wird auch nicht
+     getroffen - die Trefferfunktionen lesen die Pfade, die draw()
+     hinterlaesst, und ein fertiger Befehl hat dort keinen. */
+  const pfeil = arrowHit(ev.offsetX, ev.offsetY) || arrowNah(ev.offsetX, ev.offsetY, griffTol());
+  const lin = pfeil ? null : lineHit(ev.offsetX, ev.offsetY);
+  const ar  = pfeil || lin ? null : areaHit(ev.offsetX, ev.offsetY);
+  const ziel = pfeil ? {art: "arrow", id: pfeil.id, auf: () => arrowDialog(pfeil)}
+             : lin   ? {art: "line",  id: lin.id,   auf: () => lineDialog(lin.id, lin.e)}
+             : ar    ? {art: "area",  id: ar.id,    auf: () => areaDialog(ar.id, ar.e)}
+             : null;
+  if (!ziel){ kartenMenue(ev.clientX, ev.clientY); return; }
+  const b = alleBefehle(true).find(q => q.art === ziel.art && String(q.id) === String(ziel.id));
+  if (b) befehlMenue(b, ev.clientX, ev.clientY, ziel.auf);
+  else ziel.auf();                    // nicht in der Liste: dann eben das Fenster
 });
 document.addEventListener("pointerdown", ev => {
   const m = document.getElementById("pb-menu");
@@ -11381,12 +12155,12 @@ function tips(){
     owner:  `<b>Control</b> — click sets the town to <b>${p}</b>, again releases.`,
     unit:   `<b>Unit</b> — click a town, or drag teams from your depot.`,
     arrow:  `<b>Attack</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
-    line:   `<b>Defence</b> — ${lineEinzel() ? "click the town to hold" : "drag across the towns"}. For <b>${p}</b>.`,
-    para:   `<b>Plan parablock</b> — ${paraTipp()} For <b>${p}</b>.`,
-    parablock: `<b>Active parablock</b> — click a town that is blocked right now; click again to clear it. For <b>${p}</b>.`,
+    line:   `<b>Defence</b> — ${lineEinzel() ? "click the town to hold" : "drag across the towns"}. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
+    para:   `<b>Plan parablock</b> — ${paraTipp()} For <b>${p}</b>.${entwurfModus ? " A town carries one block, so this one cannot be a draft — it goes out at once." : ""}`,
+    parablock: `<b>Active parablock</b> — click a town that is blocked right now; click again to clear it. For <b>${p}</b>.${entwurfModus ? " A town carries one block, so this one cannot be a draft — it goes out at once." : ""}`,
     brush:  `<b>Paint</b> — drag over the map; every town under the brush goes to <b>${FACTIONS[faction].name}</b>, right button sets it open. Up to ${PINSEL_ZUG_MAX} per stroke.${pinselRueck ? ` <button class="btn" id="tip-rueck" style="padding:1px 7px;font-size:10.5px">Undo last stroke</button>` : ""}`,
-    area:   `<b>Area</b> — draw a shape, then label it. For <b>${p}</b>.`,
-    aufkl:  `<b>Recon</b> — ${aufklTipp()}`,
+    area:   `<b>Area</b> — draw a shape, then label it. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
+    aufkl:  `<b>Recon</b> — ${aufklTipp()}${entwurfModus ? " A request only you can see asks nobody — it goes out at once." : ""}`,
     spot:   "<b>Sighting</b> — click the town, then record what you saw.",
     battle: "<b>Battle</b> — click marks a town contested, again clears it.",
     erase:  darf("aufklaerung")
@@ -11496,7 +12270,7 @@ document.getElementById("b-entwurf").addEventListener("click", function(){
   entwurfModus = !entwurfModus;
   this.setAttribute("aria-pressed", String(entwurfModus));
   tips();
-  toast(entwurfModus ? "Draft mode: new orders stay with you until you publish them"
+  toast(entwurfModus ? "Draft mode: attacks, defences and areas stay with you. Para-blocks and recon requests do not."
                      : "Draft mode off: new orders go to the clan at once");
 });
 document.getElementById("b-names").addEventListener("click", function(){
@@ -11799,6 +12573,12 @@ function depotZeichnen(){
       }
     }
   }
+  /* Die Gruppe steht in der Zeile mit - sonst gaebe es sie nur im
+     Depotfenster, und ausgerechnet in der Spalte, aus der man zieht, waere
+     sie unsichtbar. EINMAL nachgeschlagen und nicht je Zeile: gruppenListe()
+     geht selbst durch das ganze Depot, das waeren bei 300 Teams 300 Laeufe. */
+  const grVon = new Map();
+  for (const g of gruppenListe()) for (const id of g.ats) grVon.set(id, gruppeName(g));
   const raus = deployedIds(S.me);
   {
     /* Welches der drei Depots hier steht, muss dranstehen - erst recht, wenn
@@ -11834,7 +12614,7 @@ function depotZeichnen(){
             <input class="ttag" data-id="${esc(d.id)}" value="${esc(d.tag||"")}"
               placeholder="TAG" spellcheck="false" maxlength="10"
               ${d.tag ? 'readonly title="Double-click to change"' : ""}></span>
-          <em>${esc(atName(d.k))} · ${atText(d.k)}${drin?` · ${esc(MAP.n[town][0])}`:""}${Array.isArray(d.st) && d.st.length ? ` · <b>${stSymbole(d.k, d.st)}</b>${d.stT ? ` ${alterText(d.stT*1000)}` : ""}` : ""}</em></span>
+          <em>${esc(atName(d.k))} · ${atText(d.k)}${drin?` · ${esc(MAP.n[town][0])}`:""}${grVon.has(d.id) ? ` · <span style="color:var(--accent)">${esc(grVon.get(d.id))}</span>` : ""}${Array.isArray(d.st) && d.st.length ? ` · <b>${stSymbole(d.k, d.st)}</b>${d.stT ? ` ${alterText(d.stT*1000)}` : ""}` : ""}</em></span>
         <span class="rechts">
           ${atKinder(d.k).length ? `<button class="hoch" data-hoch="${esc(d.id)}"
              title="Upgrade this team to ${esc(atKinder(d.k).map(atName).join(" or "))}">▲</button>` : ""}
@@ -11869,20 +12649,13 @@ function depotZeichnen(){
          woanders kommt. Der Riegel gehoert an den Schreibweg, nicht an die
          Tastatur. */
       if (inp.readOnly){ inp.value = inp.defaultValue; return; }
-      const feld = inp.classList.contains("ttag") ? "tag" : "name";
       /* the bolt sits on the way in, not on the keyboard - a value may
-         reach here from anywhere */
-      const roh = inp.value;
-      const wert = feld === "tag" ? atTagSauber(roh) : eigenNameKern(roh);
-      if (inp.value !== wert) inp.value = wert;
-      const vorher = myDepot().find(d => d.id === inp.dataset.id) || {};
-      const alt = vorher[feld] || "";
-      /* OWN NAMES CUT OFF: a name saved here without trailing dots is the
-         whole name and the mark falls; saved with dots it stays cut */
-      const cutNeu = feld === "name" ? (!!wert && eigenNameAbgeschnitten(roh)) : !!vorher.cut;
-      if (alt === wert && cutNeu === !!vorher.cut) return;
-      setMyDepot(myDepot().map(d => d.id === inp.dataset.id ? eigenCutSetzen({...d, [feld]: wert}, cutNeu) : d));
-      if (alt && alt !== wert) toast(`Renamed: ${alt} → ${wert || "(none)"}`);
+         reach here from anywhere. Der Schreibweg selbst steht in
+         teamUmbenennen; das Depotfenster ruft dieselbe Stelle, damit es
+         die Regel nur EINMAL gibt. */
+      const r = teamUmbenennen(inp.dataset.id, inp.classList.contains("ttag") ? "tag" : "name", inp.value);
+      if (inp.value !== r.wert) inp.value = r.wert;
+      if (!r.geaendert) return;
       depotZeichnen();
     });
   });
@@ -11979,15 +12752,10 @@ function hochWahl(knopf, id){
   hochOffen = p;
   p.querySelectorAll("[data-zu]").forEach(b => b.addEventListener("click", ev => {
     ev.stopPropagation();
-    const zu = b.dataset.zu;
-    /* Wer schon draussen steht, wird zuerst zurueckgeholt. Eine Einheit auf
-       der Karte, die unter der Hand den Typ wechselt, waere eine stille
-       Falschmeldung an den ganzen Clan - die Nachbarn saehen weiter das
-       alte Zeichen, bis sie zufaellig neu laden. */
-    if (townOfTeam(id) !== null) withdrawTeam(id);
-    setMyDepot(myDepot().map(x => x.id === id ? {...x, k: zu} : x));
+    /* Der Umbau selbst steht in teamHochstufen - samt dem Zurueckholen
+       vom Feld und der Meldung. Das Depotfenster ruft dieselbe Stelle. */
+    if (!teamHochstufen(id, b.dataset.zu)) return;
     hochZu(); depotZeichnen(); side(); draw(); tally(); kraftLeiste();
-    toast(`${d.name || atName(d.k)} \u2192 ${atName(zu)}`);
   }));
 }
 function bewegeGhost(ev){
@@ -12798,6 +13566,7 @@ function arrowDialog(a, frisch){
         <span style="font-size:12px;color:var(--dim);flex:1">Draft <small>(only you see it)</small></span>
         <label class="toggle"><input type="checkbox" id="a-entwurf" ${a.entwurf ? "checked" : ""}><span></span></label>
       </div>` : ""}
+      ${a.entwurf ? ENTWURF_WARNUNG : ""}
       ${a.folge ? `<div class="note">Step <b>${a.folge}</b> of its operation${a.entwurf ? " — still a draft" : ""}.</div>` : ""}
       ${fremd ? "" : (() => {
         /* THE ORDER'S OWN KIND. Switching it on asks the two questions the
@@ -12835,7 +13604,7 @@ function arrowDialog(a, frisch){
     </div>
     <div class="dlg-f">
       ${darfWeg(a) ? `<button class="btn danger" id="a-del">Delete arrow</button>` : ""}
-      ${a.op && ENTWUERFE.some(x => x.op === a.op) ? `<button class="btn" id="a-kette-frei"
+      ${a.op && entwuerfeDerOp(a.op).length ? `<button class="btn" id="a-kette-frei"
         title="Publish every draft of this operation">Publish chain</button>` : ""}
       ${a.entwurf || frisch ? "" : zustandKnoepfe(a.id, a, a)}
       <span style="flex:1"></span>
@@ -12858,8 +13627,8 @@ function arrowDialog(a, frisch){
     document.querySelectorAll("#dlg .pf-farben button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
   }));
   document.getElementById("a-kette-frei")?.addEventListener("click", ()=>{
-    const liste = ENTWUERFE.filter(x => x.op === a.op);
-    for (const x of liste) pfeilFreigeben(x);
+    const liste = entwuerfeDerOp(a.op);
+    for (const x of liste) entwurfFreigeben(x.art, x.id);
     save(); closeDlg(); draw(); toast(`${liste.length} order${liste.length === 1 ? "" : "s"} published`);
   });
   document.getElementById("a-join").addEventListener("click", ()=>{
@@ -31120,13 +31889,20 @@ function areaDialog(id, e, neuGezogen){
         <input type="hidden" id="ar-farbe" value="${esc(a.farbe||"")}">
         <div class="pf-farben">${farbKnoepfe(a.farbe)}</div>
       </div>`}
-      ${a.folge ? `<div class="note">Step <b>${a.folge}</b> of its operation.</div>` : ""}
+      ${meins && !a.aufkl ? `<div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Draft <small>(only you see it)</small></span>
+        <label class="toggle"><input type="checkbox" id="ar-entwurf" ${a.entwurf ? "checked" : ""}><span></span></label>
+      </div>` : ""}
+      ${a.entwurf ? ENTWURF_WARNUNG : ""}
+      ${a.folge ? `<div class="note">Step <b>${a.folge}</b> of its operation${a.entwurf ? " — still a draft" : ""}.</div>` : ""}
       ${a.aufkl ? `<div class="note">Eyes are asked from our nearest town; a scout that sees that far can take it. Mark it done by hand.</div>`
                 : `<div class="note">The colour of the area follows the faction selected on the left — pick the enemy
         before drawing and the area reads as theirs; the outline colour is your own accent.</div>`}
     </div>
     <div class="dlg-f">
       ${darfWeg(e) ? `<button class="btn danger" id="ar-del">Delete</button>` : ""}
+      ${a.op && entwuerfeDerOp(a.op).length ? `<button class="btn" id="ar-kette-frei"
+        title="Publish every draft of this operation">Publish chain</button>` : ""}
       ${neuGezogen ? "" : zustandKnoepfe(id, a, e)}
       <span style="flex:1"></span>
       <button class="btn" id="d-close">Close</button>
@@ -31138,6 +31914,11 @@ function areaDialog(id, e, neuGezogen){
     document.getElementById("ar-lbl").value = b.dataset.vor;
   }));
   farbVerdrahten("ar-farbe");
+  document.getElementById("ar-kette-frei")?.addEventListener("click", ()=>{
+    const liste = entwuerfeDerOp(a.op);
+    for (const x of liste) entwurfFreigeben(x.art, x.id);
+    save(); closeDlg(); draw(); toast(`${liste.length} order${liste.length === 1 ? "" : "s"} published`);
+  });
   document.getElementById("ar-save")?.addEventListener("click", ()=>{
     const label = document.getElementById("ar-lbl").value.trim();
     const sollEl = document.getElementById("ar-soll");
@@ -31147,14 +31928,30 @@ function areaDialog(id, e, neuGezogen){
     const v = {...a, label};
     if (soll) v.soll = soll; else delete v.soll;
     if (farbe) v.farbe = farbe; else delete v.farbe;
-    S.area[id] = {v, t: jetzt(), by: S.me, n: S.name || ""};
-    dirty.add(`area:${id}`); save();
+    /* draft <-> shared, the arrow's road. A shared area that steps back
+       vanishes for the others and comes back here under a fresh key. */
+    const entwEl = document.getElementById("ar-entwurf");
+    const warEntw = !!a.entwurf, willEntw = entwEl ? !!entwEl.checked : warEntw;
+    let zid = id;
+    if (warEntw === willEntw){
+      if (willEntw) v.entwurf = 1; else delete v.entwurf;
+      markeZeileSetzen("area", id, v);
+    } else if (willEntw){
+      zid = entwurfZurueck("area", id, v);
+      if (!zid) return;                       // the removal was refused, its word already stands
+    } else {
+      entwurfFreigeben("area", id, v);
+    }
+    save();
     const kette = document.getElementById("ar-kette");
-    if (kette && kette.value !== (a.vor || "")) ketteSetzen({art: "area", id, key: befehlKey("area", id), v: S.area[id].v}, kette.value);
-    closeDlg(); draw(); toast("Saved");
+    const zeileJetzt = markeZeile("area", zid);
+    if (kette && kette.value !== (a.vor || "") && zeileJetzt)
+      ketteSetzen({art: "area", id: zid, key: befehlKey("area", zid), v: zeileJetzt.v}, kette.value);
+    closeDlg(); draw(); toast(willEntw ? "Saved as a draft" : warEntw ? "Published" : "Saved");
     /* "recon wanted" is a request, not a note: it also goes to the board as
-       a call for help, pinned to the town nearest the area's centre. */
-    if (!a.aufkl && /^recon\b/i.test(label) && a.pts && a.pts.length){   // a recon request is the ask itself
+       a call for help, pinned to the town nearest the area's centre.
+       A draft never posts: the board is the whole clan. */
+    if (!a.aufkl && !willEntw && /^recon\b/i.test(label) && a.pts && a.pts.length){   // a recon request is the ask itself
       const sx = a.pts.reduce((t, p) => t + p[0], 0)/a.pts.length;
       const sy = a.pts.reduce((t, p) => t + p[1], 0)/a.pts.length;
       let best = -1, bd = Infinity;
@@ -31197,10 +31994,17 @@ function lineDialog(id, e){
         <input type="hidden" id="l-farbe" value="${esc(l.farbe||"")}">
         <div class="pf-farben">${farbKnoepfe(l.farbe)}</div>
       </div>`}
-      ${l.folge ? `<div class="note">Step <b>${l.folge}</b> of its operation.</div>` : ""}
+      ${e.by === S.me ? `<div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Draft <small>(only you see it)</small></span>
+        <label class="toggle"><input type="checkbox" id="l-entwurf" ${l.entwurf ? "checked" : ""}><span></span></label>
+      </div>` : ""}
+      ${l.entwurf ? ENTWURF_WARNUNG : ""}
+      ${l.folge ? `<div class="note">Step <b>${l.folge}</b> of its operation${l.entwurf ? " — still a draft" : ""}.</div>` : ""}
     </div>
     <div class="dlg-f">
       ${darfWeg(e) ? `<button class="btn danger" id="l-del">${istEinzelLinie(l) ? "Delete defence" : "Delete line"}</button>` : ""}
+      ${l.op && entwuerfeDerOp(l.op).length ? `<button class="btn" id="l-kette-frei"
+        title="Publish every draft of this operation">Publish chain</button>` : ""}
       ${zustandKnoepfe(id, l, e)}
       <span style="flex:1"></span>
       <button class="btn" id="d-close">Close</button>
@@ -31209,6 +32013,11 @@ function lineDialog(id, e){
   document.getElementById("d-close").addEventListener("click", closeDlg);
   zustandVerdrahten();
   farbVerdrahten("l-farbe");
+  document.getElementById("l-kette-frei")?.addEventListener("click", ()=>{
+    const liste = entwuerfeDerOp(l.op);
+    for (const x of liste) entwurfFreigeben(x.art, x.id);
+    save(); closeDlg(); draw(); toast(`${liste.length} order${liste.length === 1 ? "" : "s"} published`);
+  });
   document.getElementById("l-save")?.addEventListener("click", ()=>{
     const sollEl = document.getElementById("l-soll");
     const soll = sollEl ? Math.max(0, Math.min(999, +sollEl.value || 0)) : (+l.soll || 0);
@@ -31217,11 +32026,26 @@ function lineDialog(id, e){
     const v = {...l, label: document.getElementById("l-lbl").value.trim()};
     if (soll) v.soll = soll; else delete v.soll;
     if (farbe) v.farbe = farbe; else delete v.farbe;
-    S.line[id] = {v, t: jetzt(), by: S.me, n: S.name || ""};
-    dirty.add(`line:${id}`); save();
+    /* draft <-> shared, the arrow's road. A shared line that steps back
+       vanishes for the others and comes back here under a fresh key. */
+    const entwEl = document.getElementById("l-entwurf");
+    const warEntw = !!l.entwurf, willEntw = entwEl ? !!entwEl.checked : warEntw;
+    let zid = id;
+    if (warEntw === willEntw){
+      if (willEntw) v.entwurf = 1; else delete v.entwurf;
+      markeZeileSetzen("line", id, v);
+    } else if (willEntw){
+      zid = entwurfZurueck("line", id, v);
+      if (!zid) return;                       // the removal was refused, its word already stands
+    } else {
+      entwurfFreigeben("line", id, v);
+    }
+    save();
     const kette = document.getElementById("l-kette");
-    if (kette && kette.value !== (l.vor || "")) ketteSetzen({art: "line", id, key: befehlKey("line", id), v: S.line[id].v}, kette.value);
-    closeDlg(); draw(); toast("Saved");
+    const zeileJetzt = markeZeile("line", zid);
+    if (kette && kette.value !== (l.vor || "") && zeileJetzt)
+      ketteSetzen({art: "line", id: zid, key: befehlKey("line", zid), v: zeileJetzt.v}, kette.value);
+    closeDlg(); draw(); toast(willEntw ? "Saved as a draft" : warEntw ? "Published" : "Saved");
   });
   document.getElementById("l-del")?.addEventListener("click", ()=>{
     if (!dropEntry("line", id)) return;   // die Absage steht schon da
@@ -37766,6 +38590,10 @@ const meldungen = () => Object.entries(S.todo)
    airborne, once, with the airfield named. */
 function luftBoardAnfordern(a){
   if (!a || !a.luft || !luftGesperrt(a)) return;
+  /* Ein Entwurf meldet nichts: die Zeile nennt Flugplatz, Ziel und
+     Beschriftung, und niemand ausser dem Verfasser soll den Entwurf kennen.
+     pfeilFreigeben holt sie nach. */
+  if (a.entwurf) return;
   if (a.boardId) return;                       // already asked for, once is enough
   const ort = MAP.n[a.from][0], ziel = MAP.n[a.to][0];
   try {
@@ -41538,7 +42366,7 @@ function startStaedteNachtragen(){
   /* does anybody hold anything at all? one is enough to stay out */
   for (let i = 0; i < MAP.n.length; i++) if (ownerOf(i) >= 0) return;
   let n = 0;
-  for (const f of soll) if (stamp("owner", String(stst[f]), f)) n++;
+  for (const f of soll) if (stamp("owner", String(stst[f]), f, {by: "", n: ""})) n++;   // ohne Verfasser, siehe kriegsschnitt
   if (!n) return;
   save(); syncPush();
   toast(`The new war had no start towns — ${n} set again.`);
@@ -41865,6 +42693,11 @@ function after(){
   /* Erst raeumen, dann neu aufbauen: sonst steht die alte Lage noch im
      Speicher, wenn gleich darauf gesichert wird. */
   altlastFegen();
+  /* Eine eingespielte Sicherung kann ein Depot mitbringen, in dem Teams
+     fehlen, die eine Gruppe noch nennt. Die drei Sperren in
+     gruppenAufraeumen fangen dabei den einen Fall ab, in dem ein leeres
+     Depot nur "noch nicht da" heisst. */
+  gruppenAufraeumen();
   rebuildUnits(); sel = null; save(); side(); tally(); draw();
   kopfzeile(); depotZeichnen(); boardZahl(); ordersZahl(); kraftLeiste();
 }
@@ -41887,7 +42720,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build a2d9b38e41</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 9a2670948f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -41928,6 +42761,10 @@ function hilfeDialog(){
           button; hold <kbd>Ctrl</kbd> on the target to add more). <b>Active parablock</b> marks a town
           as blocked right now, a second click clears it. Para-blocks also sit on the town's right-click
           menu.</div>
+        <div class="note"><b>The right button opens a menu.</b> On a town the para-block; on an
+          arrow, a defence line or an area the same state buttons its window carries — and the
+          window itself. On open ground: fit the map, or show what is already done. With the brush
+          it paints open instead, and it takes back a half-set click chain.</div>
       </div>
 
       <div class="tabp" data-tab="win">
@@ -42016,7 +42853,11 @@ let dlgPflicht = false;
 function tabellenkoepfeAusrichten(wo){
   for (const t of wo.querySelectorAll(".tw table")){
     const kopf = t.tHead && t.tHead.rows.length ? t.tHead.rows[t.tHead.rows.length - 1] : null;
-    const erste = t.tBodies[0] && t.tBodies[0].rows[0];
+    /* Als Massstab taugt nur eine Zeile OHNE verbundene Zellen: eine Zeile mit
+       colspan hat weniger Zellen als der Kopf Spalten, und dann bekaeme jede
+       Ueberschrift ab dort die Ausrichtung ihrer Nachbarspalte. */
+    const erste = [...((t.tBodies[0] && t.tBodies[0].rows) || [])]
+      .find(r => [...r.cells].every(c => (c.colSpan || 1) === 1));
     if (!kopf || !erste) continue;
     const zellen = [...erste.cells];
     let i = 0;
@@ -42107,7 +42948,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "a2d9b38e41";
+const BAU = "9a2670948f";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
