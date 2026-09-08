@@ -1859,6 +1859,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-cl-over"   data-clantab="who"    title="Who owns which teams">Team owners</button>
       <button class="btn" id="b-cl-deploy" data-clantab="deploy" title="Where the clan's teams stand">In the field</button>
       <button class="btn" id="b-cl-people" data-clantab="people" title="Members and their roles">Roles</button>
+      <button class="btn" id="b-cl-punkte" data-clantab="punkte" title="Who has earned which points">Points</button>
       <button class="btn" id="b-cl-arsenal" title="What the whole clan can field, and where the gaps are">Clan arsenal</button>
       <button class="btn" id="b-arms">Arsenal</button>
       <button class="btn" id="b-mydepot" title="Your assault teams — the column on the right (D)">Depot</button>
@@ -5265,7 +5266,9 @@ document.getElementById("b-orders").addEventListener("click", ()=>ordersDialog("
 /* ---- PARA SUPPLY AND THREAT (05.09.2026) ----
    Three sums over data the map already holds, nothing new is stored:
    A. the clan's para supply: airborne teams in every member's depot on the
-      war side, less the ones deployed and the ones accepted on a live drop
+      war side, less the ones deployed and the ones accepted on a live
+      order of any kind - a drop, an attack, a line, an area, a para-block:
+      a team on one of them is turned away from the next
       (committed counts are the fallback for a drop without assignments);
    B. enemy paras sighted on an enemy airfield (spot rows and the enemy
       depot's last-seen town, a day at most), their reach as a ring, and
@@ -5309,40 +5312,75 @@ function paraBelegteTeams(ausser){
 }
 /* A. the supply */
 function paraVorrat(){
-  const teams = new Map(), raus = new Map();
+  /* PER OWNER, not one heap. A team id is unique inside one depot, not
+     across them - depotListe builds `${d.k}-${i}` for older entries, so two
+     members both hold "para-0". Asked as one set, an assignment row of one
+     member would answer for the other member's team: measured, a team left
+     behind on a line by somebody who has since changed faction took a team
+     of ours out of "free" and set the warning off. */
+  const teamsVon = new Map(), raus = new Map();
+  const LEER = new Set();
   let gesamt = 0, drin = 0, unbekannt = 0;
   for (const who of paraMitglieder()){
     const liste = paraDepotVon(who);
     if (!liste){ unbekannt++; continue; }
     const weg = deployedIds(who); raus.set(who, weg);
+    let meine = teamsVon.get(who);
     for (const t of liste){
       if (!t || !paraTypIst(t.k)) continue;
       gesamt++;
       if (weg.has(t.id)) drin++;
-      teams.set(t.id, who);
+      if (!meine){ meine = new Set(); teamsVon.set(who, meine); }
+      meine.add(t.id);
     }
   }
-  /* planned: accepted teams on live drops of our side, the committed
-     counts when a drop has no assignment at all */
-  let geplant = 0, drops = 0, gedeckt = 0;
+  /* PLANNED: accepted teams on live orders of ours, whatever the kind.
+     A team on an attack arrow, a line, an area or a para-block is turned
+     away from every further order just as one on a drop is - zuordBelegung
+     reads meineZuord() without an art filter - so it may not stand under
+     "free". Held per writer as a set of team ids: an old row carrying the
+     same team on two orders is deducted once, while two members whose
+     depots both hold "para-0" stay two teams (an id is unique inside one
+     depot, not across them).
+     drops and gedeckt keep to the drops alone - a line is no drop and must
+     not raise the count the warning reads.
+     Three walks, none inside another: the orders, the assignment rows, the
+     drops. */
+  let drops = 0, gedeckt = 0;
   const alle = alleBefehle(true), zeilen = zuordAlle();
+  const lebtIdx = new Map();
+  for (const b of alle) if (!b.fremd && b.zs !== "fertig") lebtIdx.set(b.key, b);
+  const belegtIdx = new Map(), hatZeileIdx = new Set(), traegtIdx = new Set();
+  for (const z of zeilen){
+    if (!lebtIdx.has(befehlKey(z.art, z.id))) continue;
+    /* A row still waiting for its owner's word (st 0) binds the team just
+       the same - zuordBelegung reads meineZuord() with no state filter and
+       turns it away from every other order. It is no commitment though, so
+       it neither stands in for the committed counts nor makes a drop count
+       as covered: those two ask for an accepted row. */
+    const an = z.st === 1;
+    const pfeil = z.art === "arrow" ? String(z.id) : null;
+    if (pfeil !== null && an) hatZeileIdx.add(pfeil);
+    const weg = raus.get(z.who) || deployedIds(z.who);
+    const seine = teamsVon.get(z.who) || LEER;
+    let mein = belegtIdx.get(z.who);
+    for (const id of z.ats){
+      if (weg.has(id)){ if (pfeil !== null && an) traegtIdx.add(pfeil); continue; }  // deployed already, counted above
+      if (!seine.has(id)) continue;                                                  // only a team from that member's own depot
+      if (!mein){ mein = new Set(); belegtIdx.set(z.who, mein); }
+      mein.add(id);
+      if (pfeil !== null && an) traegtIdx.add(pfeil);
+    }
+  }
+  let geplant = 0;
+  for (const [, mein] of belegtIdx) geplant += mein.size;
   for (const b of alle){
     if (b.art !== "arrow" || !b.v || !b.v.luft || b.fremd || b.zs === "fertig") continue;
     drops++;
-    let fest = 0, unterwegs = 0, zeile = false;
-    for (const z of zeilen){
-      if (z.art !== "arrow" || String(z.id) !== String(b.id) || z.st !== 1) continue;
-      zeile = true;
-      const weg = raus.get(z.who) || deployedIds(z.who);
-      for (const id of z.ats){
-        if (weg.has(id)){ unterwegs++; continue; }   // deployed already, counted above
-        if (teams.has(id)) fest++;                   // only a team from a depot we counted
-      }
-    }
     /* the committed counts stand in only for a drop without any accepted row */
-    if (!zeile) fest = joinOf(b.id).reduce((sum, j) => sum + (+j.n || 0), 0);
-    if (fest || unterwegs) gedeckt++;
-    geplant += fest;
+    const zusage = hatZeileIdx.has(b.key) ? 0 : joinOf(b.id).reduce((sum, j) => sum + (+j.n || 0), 0);
+    if (traegtIdx.has(b.key) || zusage) gedeckt++;
+    geplant += zusage;
   }
   const hand = gesamt - drin;
   return {gesamt, drin, geplant, hand, frei: Math.max(0, hand - geplant), drops, ungedeckt: drops - gedeckt, unbekannt};
@@ -5946,12 +5984,19 @@ const PUNKTE_KONTEN = [
   {k:"recon",    n:"Recon",    kurz:"R"},
   {k:"logistic", n:"Logistic", kurz:"L"},
   {k:"order",    n:"Orders",   kurz:"O"},
-  {k:"leader",   n:"Leader",   kurz:"F"},
+  {k:"leader",   n:"Leader",   kurz:"Ld"},
 ];
 /* the first-find kinds keep their names from the register (AUFK_NAME) */
 const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
   fight: "Battles marked", map: "Map kept", unit: "Units kept", done: "Orders done"});
-const punkteAktionName = a => PUNKTE_AKTION[a] || String(a || "");
+/* 'done' wird zweimal gebucht, fuer denselben Befehl: auf order fuer jeden,
+   der ihn erfuellt hat, auf leader fuer den, der ihn erteilt hat. Gleiche
+   Aktion, zwei Bedeutungen - also entscheidet das Konto ueber den Namen.
+   Beide Aufrufer geben es mit: die Aufschluesselung in punkteZeichnen und die
+   Tabelle im Buch. Wer einen vergisst, bekommt "undefined" in die Zelle. */
+const PUNKTE_AKTION_KONTO = {leader: {done: "Orders given"}};
+const punkteAktionName = (a, k) => (PUNKTE_AKTION_KONTO[k] || {})[a]
+  || PUNKTE_AKTION[a] || String(a || "");
 const punkteKontoName  = k => (PUNKTE_KONTEN.find(x => x.k === k) || {n: String(k || "")}).n;
 
 /* one minute of memory, so that switching tabs does not ask the server anew */
@@ -5989,7 +6034,7 @@ function punkteStand(zeilen){
 }
 
 async function punkteFuellen(){
-  const feld = document.getElementById("in-punkte");
+  const feld = document.getElementById("cl-punkte");
   if (!feld) return;
   if (!CFG){
     feld.innerHTML = `<div class="note">Points are counted on the server; sign in to see them.</div>`;
@@ -5999,17 +6044,17 @@ async function punkteFuellen(){
   let zeilen;
   try { zeilen = await punkteLaden(); }
   catch(e){
-    const f2 = document.getElementById("in-punkte");
+    const f2 = document.getElementById("cl-punkte");
     if (f2) f2.innerHTML = `<div class="note">Could not read the points: ${
       esc(String(e.message || e).slice(0,140))}</div>`;
     return;
   }
-  if (!document.getElementById("in-punkte")) return;      // window already closed
+  if (!document.getElementById("cl-punkte")) return;      // window already closed
   punkteZeichnen(zeilen || []);
 }
 
 function punkteZeichnen(zeilen){
-  const feld = document.getElementById("in-punkte");
+  const feld = document.getElementById("cl-punkte");
   if (!feld) return;
   const leute = punkteStand(zeilen);
   const ich = leute.get(S.me);
@@ -6030,7 +6075,7 @@ function punkteZeichnen(zeilen){
           <td colspan="2" style="text-align:left;white-space:normal;background:var(--panel2)">
           ${p.aktionen[konto.k].slice().sort((a, b) => b.punkte - a.punkte).map(a => `
             <div style="display:flex;gap:8px;font-size:11px;color:var(--dim)">
-              <span style="flex:1">${esc(punkteAktionName(a.aktion))}</span>
+              <span style="flex:1">${esc(punkteAktionName(a.aktion, konto.k))}</span>
               <span style="font-variant-numeric:tabular-nums">${nz(a.punkte)}</span></div>`).join("")}
           ${darfBuch(p.spieler) ? `<button class="btn" data-buch="${esc(p.spieler)}"
              style="font-size:10.5px;margin-top:5px">Ledger</button>` : ""}
@@ -6039,9 +6084,9 @@ function punkteZeichnen(zeilen){
       </tbody></table></div>`;
   };
   feld.innerHTML = `
-    <div class="row" style="align-items:center;gap:8px">
+    <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
       <b style="font-family:var(--schmal);text-transform:uppercase;letter-spacing:.08em;color:var(--accent)"
-        >You: R ${nz(mein("recon"))} / L ${nz(mein("logistic"))} / O ${nz(mein("order"))}</b>
+        >You: ${PUNKTE_KONTEN.map(k => `${esc(k.kurz)} ${nz(mein(k.k))}`).join(" / ")}</b>
       <span style="flex:1"></span>
       <span style="font-size:11px;color:var(--dim2)">${leute.size} ${
         leute.size === 1 ? "player has" : "players have"} points on record</span>
@@ -6051,8 +6096,9 @@ function punkteZeichnen(zeilen){
     </div>
     <div class="note">One point for every hand that helps the clan: <b>Recon</b> for first finds,
       battles marked and the map kept, <b>Logistic</b> for the depot kept, <b>Orders</b> for orders
-      carried out, <b>Leader</b> for orders given. The server books them from what you write on the
-      map; this page adds nothing up. Click a row to see what the points were for.</div>`;
+      carried out, <b>Leader</b> for an order you gave, once it is marked done. The server books
+      them from what you write on the map; this page adds nothing up. Click a row to see what the
+      points were for.</div>`;
   feld.querySelectorAll("tr[data-pk]").forEach(tr => tr.addEventListener("click", () => {
     const d = tr.nextElementSibling;
     if (!d || d.dataset.pd === undefined) return;
@@ -6071,10 +6117,10 @@ function punkteZeichnen(zeilen){
 async function punkteBuch(spieler, name){
   if (!CFG){ toast("Points are counted on the server; sign in to see them."); return; }
   openDlg(`<div class="dlg-h"><h2>Ledger: ${esc(name || spieler)}</h2>
-      <p>The last 30 days. Every point and what it was for.</p></div>
+      <p>The last 30 days, at most 2000 bookings.</p></div>
     <div class="dlg-b"><div class="empty">Loading points ...</div></div>
     <div class="dlg-f"><button class="btn primary" id="pb-zu">Back</button></div>`, "wide");
-  document.getElementById("pb-zu").addEventListener("click", () => { closeDlg(); intelDialog("punkte"); });
+  document.getElementById("pb-zu").addEventListener("click", () => { closeDlg(); clanDialog("punkte"); });
   let zeilen = [];
   try {
     zeilen = await rpc("warmap_punkte_buch", {p_room: CFG.room, p_spieler: spieler, p_tage: 30});
@@ -6093,7 +6139,7 @@ async function punkteBuch(spieler, name){
       <tbody>${zeilen.map(z => `<tr>
         <td>${esc(z.wann ? new Date(z.wann).toLocaleString() : "")}</td>
         <td style="text-align:left">${esc(punkteKontoName(z.konto))}</td>
-        <td style="text-align:left">${esc(punkteAktionName(z.aktion))}</td>
+        <td style="text-align:left">${esc(punkteAktionName(z.aktion, z.konto))}</td>
         <td style="text-align:left;color:var(--dim)">${esc(z.sache || "")}</td>
         <td>${esc(z.betrag == null ? 1 : z.betrag)}</td>
         <td style="text-align:left;color:var(--dim2)">${esc(z.quelle || "")}</td>
@@ -6203,19 +6249,73 @@ const rolleWarum = k => (kampfRolle(k) || {}).warum || "your soldiers cannot fil
    im title. Der Umschlag traegt den title ein zweites Mal, weil ein
    abgeschalteter Knopf keine Mauszeiger-Ereignisse bekommt und seinen
    eigenen title deshalb nicht zeigt. */
-function rolleNehmKnopf(r, ich, kann, klein){
+function rolleNehmKnopf(r, ich, kann, klein, voll){
   if (ich)  return `<button class="btn" data-rolle-frei="${esc(r.id)}" ${klein}>Release</button>`;
   /* EINE STELLE ENTSCHEIDET, OB "TAKE IT" GEHT. Zwei Gruende sperren:
      die eigene Anforderung (der Auftraggeber: "Eigene Befehle koennen
      natuerlich nicht angenommen werden") und die Rolle, die die eigene
      Ausruestung nicht hergibt. Beide standen erst an je eigener Stelle und
      haben sich gegenseitig ueberschrieben. */
+  /* der dritte Grund, seit der Deckel dem Gefecht gehoert: die Rolle ist an
+     diesem Ort schon vergeben. Er steht VOR den eigenen Anforderungen, und
+     das ist Absicht: sonst erfaehrt ausgerechnet der Officer, der die Rolle
+     ausgeschrieben hat, als einziger nie, dass sie inzwischen jemand ueber
+     eine andere Anforderung desselben Ortes haelt - er sieht weiter "0/1"
+     und wartet auf eine Antwort, die niemand mehr geben kann. Wer sie selbst
+     haelt, faellt hier nicht hinein: die Zaehlung laesst ihn heraus. */
+  if (voll) return `<button class="btn" ${klein} disabled title="${esc(voll)}">Take it</button>`;
   if (r.mine) return `<button class="btn" ${klein} disabled title="${esc(EIGEN_ROLLE_WORT)}">Take it</button>`;
   if (kann) return `<button class="btn" data-rolle-nimm="${esc(r.id)}" ${klein}>Take it</button>`;
   const g = esc(rolleWarum(r.rolle));
   return `<span title="${g}" style="position:relative;display:inline-block"
     ><button class="btn" ${klein} disabled title="${g}">Take it</button
     ><span style="position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;color:var(--su);font-size:15px;font-weight:700;pointer-events:none">\u2715</span></span>`;
+}
+
+/* DER DECKEL GEHOERT DEM GEFECHT, NICHT DER ANFORDERUNG. Zwei Officer
+   koennen dieselbe Rolle am selben Ort ausschreiben; gezaehlt wurde bisher
+   je Anforderungskennung, also stand der Deckel zweimal offen und zwei
+   Spieler schrieben dasselbe Gefecht mit. Der Schluessel ist Stadt+Rolle,
+   gezaehlt werden Spieler und nicht Zeilen: zwei Zeilen eines Mannes aus
+   einem Wettlauf sind ein Mann, wie in rolleDrinZahl.
+   "stadt|rolle" -> Map(spieler -> Name). */
+function rolleHalterKarte(){
+  const m = new Map();
+  for (const z of rolleZuAlle()){
+    const r = rolleZeile(z.rolle);
+    if (!r) continue;                        /* Anforderung weg, Gefecht aus */
+    const s = r.stadt + "|" + r.rolle;
+    if (!m.has(s)) m.set(s, new Map());
+    m.get(s).set(z.wer, z.name);
+  }
+  return m;
+}
+/* EINE STELLE ENTSCHEIDET, OB DIE ROLLE HIER NOCH FREI IST. Knopf, Annahme,
+   Anlegen, Kartenschild, Postfachzahl und die Auswahlliste fragen alle hier,
+   sonst bietet der Knopf an, was die Annahme danach abweist.
+   Gesperrt wird nur, was ueberhaupt gedeckelt ist: der Runner steht auf
+   RUNNER_MAX, jede andere Rolle auf ROLLE_MAX und bleibt offen wie bisher.
+   ohneMich fuer die Frage "passe ich noch hinein" - die eigene Zeile darf
+   mich nicht aussperren, sonst kaeme ich von der einen Anforderung nicht auf
+   die andere desselben Gefechts. Fuer Karte und Postfachzahl zaehlt jeder
+   mit: der Platz ist weg, gleich wer ihn hat. */
+function rolleOrtVoll(stadt, rolle, ohneMich, karte){
+  const g = rolleGrenze(rolle);
+  if (g >= ROLLE_MAX) return false;
+  const w = (karte || rolleHalterKarte()).get(+stadt + "|" + rolle);
+  if (!w) return false;
+  return w.size - (ohneMich && w.has(S.me) ? 1 : 0) >= g;
+}
+/* der Satz dazu: wer haelt die Rolle hier schon. Leer, solange Platz ist -
+   die Sperre selbst haengt daran, damit Wort und Sperre nie auseinandergehen */
+function rolleVollWort(stadt, rolle, ohneMich, karte){
+  const k = karte || rolleHalterKarte();
+  if (!rolleOrtVoll(stadt, rolle, ohneMich, k)) return "";
+  const w = k.get(+stadt + "|" + rolle) || new Map();
+  const ort = (MAP.n[+stadt] || ["?"])[0], was = kampfRolleName(rolle);
+  const wer = [...w].filter(p => p[0] !== S.me).map(p => p[1]);
+  if (!wer.length) return `You hold ${was} at ${ort}.`;
+  return `${wer.join(", ")} ${wer.length === 1 ? "has" : "have"} ${was} at ${ort}.`;
 }
 
 /* the map plate is counted for the whole map at most twice a second */
@@ -6229,6 +6329,7 @@ function rolleOrteZahl(){
     const z = rolleZuZeile(k);
     if (z) an.set(z.rolle, (an.get(z.rolle) || 0) + 1);
   }
+  const halter = rolleHalterKarte();
   const m = new Map();
   for (const id of Object.keys(S.rolle)){
     const e = S.rolle[id];
@@ -6236,6 +6337,9 @@ function rolleOrteZahl(){
     const i = +e.v.stadt;
     if (!MAP.n[i] || !fightAt(i)) continue;
     if ((an.get(id) || 0) >= Math.max(1, Math.min(rolleGrenze(e.v.rolle), +e.v.n || 1))) continue;
+    /* und der Deckel des Gefechts: eine Rolle, die hier schon jemand haelt,
+       ruft niemanden mehr, an welcher Anforderung sie auch haengt */
+    if (rolleOrtVoll(i, e.v.rolle, 0, halter)) continue;
     m.set(i, (m.get(i) || 0) + 1);
   }
   rolleOrteKarte = m; rolleOrteStand = t; rolleOrteZeit = zeitReise;
@@ -6258,6 +6362,15 @@ function rolleAnlegen(stadt, rolle, n, text){
   if (meine.some(r => r.stadt === +stadt && r.rolle === rolle)){
     toast("You asked for that role there already."); return false;
   }
+  /* Der Deckel gehoert dem Gefecht: haelt die Rolle an diesem Ort schon
+     jemand bis zum Deckel, koennte die neue Anforderung niemand mehr
+     annehmen. Gesperrt wird an ANGENOMMENEN Zeilen, nicht an fremden
+     Anforderungen - eine liegengebliebene Anforderung eines anderen Officers
+     wuerde den Ort sonst bis zum Ende des Gefechts dichtmachen, und
+     rollePruefen raeumt nur eigene weg. Eine Annahme dagegen hat einen Namen,
+     faellt mit dem Gefecht und laesst sich mit Release aufloesen. */
+  const belegt = rolleVollWort(stadt, rolle, 0);
+  if (belegt){ toast(belegt); return false; }
   const v = {stadt: +stadt, rolle, n: Math.max(1, Math.min(rolleGrenze(rolle), +n || 1)),
              text: String(text || "").trim().slice(0, ROLLE_TEXT_MAX),
              f: clanFaktion(), by: S.me, t: jetzt()};
@@ -6296,32 +6409,61 @@ function rolleNehmen(id){
   }
   /* the asker is not one of the answers */
   if (r.mine){ toast(EIGEN_ROLLE_WORT); return false; }
-  /* the runner cap, before a single row is written: the player log runs
-     beside a role the battle does not hang on, and nobody logs twice */
-  if (r.rolle === "runner"){
-    const schon = rolleZuAlle().filter(z => z.rolle === id && !z.mine);
-    if (schon.length >= RUNNER_MAX){
-      toast(`${schon.map(z => z.name).join(", ")} already run${schon.length === 1 ? "s" : ""} at ${MAP.n[r.stadt][0]}.`);
-      return false;
-    }
-  }
-  let vorher = "", warDrin = 0;
+  /* the cap, before a single row is written: it belongs to the BATTLE, not
+     to the request - the same question the button asks, so "Take it" never
+     offers what is refused here. Was counted per request id until 08.09. */
+  const belegt = rolleVollWort(r.stadt, r.rolle, 1);
+  if (belegt){ toast(belegt); return false; }
+  /* GLEICHES GEFECHT, ANDERE ROLLE: was der Spieler mitnimmt, entscheidet
+     der ORT, nicht das blosse Vorhandensein eines "drin". Nur wer am selben
+     Gefecht bleibt, nimmt seinen Eintritt mit - und mit ihm den alten
+     Zeitpunkt der Annahme, sonst faengt die Frage "are you in" bei null an,
+     obwohl sie fuer dieses Gefecht laengst gestellt war. Ein Ortswechsel
+     bleibt ein Austritt und laesst beides fallen.
+     DIESELBE ANFORDERUNG NOCH EINMAL genommen (veraltetes Postfach, zweites
+     Geraet - der Kommentar oben nennt genau diesen Grund) ist erst recht
+     dasselbe Gefecht: auch dort geht der Eintritt mit, und die eigene Zeile
+     wird nicht erst geloescht, sondern gleich ueberschrieben.
+     NAME UND UHR KOMMEN AUS DERSELBEN ZEILE. Wer zwei Zeilen aus einem
+     Wettlauf hat - eine hier, eine anderswo -, bekam sonst den Namen aus der
+     einen und die Standzeit aus der anderen: "du gehst aus Krasnodar
+     heraus", waehrend er dort drin gehalten wird. */
+  let vorher = "", vorherDrin = "", altRolle = "", weiter = 0, altT = 0, warDrin = 0;
   for (const z of rolleZuAlle()){
-    if (!z.mine || z.rolle === id) continue;
+    if (!z.mine) continue;
+    const selbe = z.rolle === id;
     const alt = rolleZeile(z.rolle);
-    if (alt) vorher = kampfRolleName(alt.rolle) + " at " + MAP.n[alt.stadt][0];
-    if (alt && z.drin) warDrin = z.drin;   /* only a battle we can still name */
-    stamp("rollezu", z.key, null, {n: S.name || ""});
+    if (alt && (selbe || alt.stadt === r.stadt)){
+      /* "instead of Runner" waere kein Satz: nur eine ANDERE Rolle nennen */
+      if (!selbe && alt.rolle !== r.rolle) altRolle = kampfRolleName(alt.rolle);
+      /* der frueheste Eintritt gilt: seitdem steht er in dem Gefecht */
+      if (z.drin && (!weiter || z.drin < weiter)) weiter = z.drin;
+      if (z.t && (!altT || z.t < altT)) altT = z.t;
+    } else if (alt){
+      vorher = kampfRolleName(alt.rolle) + " at " + MAP.n[alt.stadt][0];
+      if (z.drin){ warDrin = z.drin; vorherDrin = vorher; }   /* Name und Uhr aus einer Zeile */
+    }
+    if (!selbe) stamp("rollezu", z.key, null, {n: S.name || ""});
   }
   /* ok bleibt im Wert stehen: aeltere Staende und andere Rechner lesen es */
-  if (!stamp("rollezu", id + ":" + S.me, {t: jetzt(), st: 1, ok: 1},
-             {n: S.name || ""})) return false;
-  save();
+  const neu = {t: altT || jetzt(), st: 1, ok: 1};
+  if (weiter) neu.drin = weiter;           /* geschrieben wie in rolleDrinSetzen */
+  if (!stamp("rollezu", id + ":" + S.me, neu, {n: S.name || ""})) return false;
+  save(); rolleFrisch();
+  /* DER SATZ WIRD ZUSAMMENGESETZT, NICHT GEWAEHLT. Wer zwei Zeilen hat -
+     eine hier, eine an einem anderen Ort - bleibt HIER drin UND geht dort
+     heraus; beides ist wahr, und ein einzelner Zweig haette das eine gesagt
+     und das andere getan. Vorgefuehrt: Pilot hier seit 7 Minuten, Medic
+     anderswo seit 5, dann Runner hier genommen - der frueheste Zweig meldete
+     nur den Austritt, waehrend derselbe Aufruf den Eintritt hier mitnahm. */
   const wo = `${kampfRolleName(r.rolle)} at ${MAP.n[r.stadt][0]}`;
-  /* walking out of a battle you said you were in is worth a clear word */
-  toast(warDrin ? `Took ${wo}. You walk out of a running battle: ${vorher}, in for ${otMmSs(jetzt() - warDrin)}.`
-      : vorher ? `Took ${wo}. You left ${vorher}.`
-               : `Took ${wo}.`);
+  const statt = altRolle ? ` instead of ${altRolle}` : "";
+  const hier = weiter ? ` Still in the battle, in for ${otMmSs(jetzt() - weiter)}.` : "";
+  /* walking out of a battle you said you were in is worth a clear word - and
+     changing the role inside it is not walking out */
+  const fort = warDrin ? ` You walk out of a running battle: ${vorherDrin}, in for ${otMmSs(jetzt() - warDrin)}.`
+             : vorher ? ` You left ${vorher}.` : "";
+  toast(`Took ${wo}${statt}.${hier}${fort}`);
   return true;
 }
 function rolleFrei(id){
@@ -6342,10 +6484,13 @@ function rolleOffenFuerMich(){
     zahl.set(z.rolle, (zahl.get(z.rolle) || 0) + 1);
     if (z.mine) meins.add(z.rolle);
   }
+  const halter = rolleHalterKarte();
   let n = 0;
-  /* my own asks are not news to me, and a role I cannot fill is not either */
+  /* my own asks are not news to me, a role I cannot fill is not either, and
+     neither is one that is already held at that town - see rolleOrtVoll */
   for (const r of off)
-    if (!r.mine && !meins.has(r.id) && (zahl.get(r.id) || 0) < r.n && rolleKannIch(r.rolle)) n++;
+    if (!r.mine && !meins.has(r.id) && (zahl.get(r.id) || 0) < r.n && rolleKannIch(r.rolle)
+        && !rolleOrtVoll(r.stadt, r.rolle, 0, halter)) n++;
   return n;
 }
 /* once a minute, like overtimePruefen: a request whose battle mark is gone
@@ -6402,11 +6547,13 @@ function rolleAbschnitt(i){
   const darfAnf = darf("anfordern");
   if (!liste.length && !darfAnf) return "";
   const zu = rolleZuAlle();
+  const halter = rolleHalterKarte();
   const klein = `style="font-size:11px;padding:3px 8px"`;
   const zeilen = liste.map(r => {
     const an = zu.filter(z => z.rolle === r.id);
     const meinZ = an.find(z => z.mine) || null, ich = !!meinZ;
     const kann = rolleKannIch(r.rolle);
+    const voll = rolleVollWort(r.stadt, r.rolle, 1, halter);
     const rr = kampfRolle(r.rolle);
     return `<div>
       <div style="font-size:11.5px">${kann ? "" :
@@ -6416,7 +6563,7 @@ function rolleAbschnitt(i){
         r.text ? ` \u00b7 ${esc(r.text)}` : ""}</div>
       <div class="hint">by ${esc(r.name)} \u00b7 ${esc(alterText(r.t))} \u00b7 ${rolleNehmerText(an)}</div>
       <div class="row" style="margin-top:4px">
-        ${rolleNehmKnopf(r, ich, kann, klein)}
+        ${rolleNehmKnopf(r, ich, kann, klein, voll)}
         ${r.weg && darfAnf ? `<button class="btn" data-rolle-weg="${esc(r.id)}" ${klein}>Remove</button>` : ""}
       </div>${rolleFrageZeile(r.id, meinZ)}${rolleRausZeile(r.id, meinZ)}</div>`;
   }).join("");
@@ -6436,13 +6583,18 @@ function rolleDialog(i){
   if (!darf("anfordern")) return darfNicht("anfordern");
   if (!MAP.n[i] || !fightAt(i)){ toast("No battle at that town."); return false; }
   const kann = new Set(KAMPFROLLEN.filter(r => rolleKannIch(r.k)).map(r => r.k));
+  /* was an diesem Ort bis zum Deckel gehalten wird, steht im Namen der Rolle:
+     sonst waehlt jemand sie und rolleAnlegen weist sie danach ab */
+  const hk = rolleHalterKarte();
+  const belegt = new Set(KAMPFROLLEN.filter(r => rolleOrtVoll(i, r.k, 0, hk)).map(r => r.k));
   openDlg(`
     <div class="dlg-h"><h2>Ask for roles</h2>
       <p>${esc(MAP.n[i][0])} \u00b7 it stands until you remove it or the battle ends.</p></div>
     <div class="dlg-b">
       <div class="row" style="flex-wrap:wrap;align-items:center">
         <select id="rr-rolle" style="width:150px">${KAMPFROLLEN.map(r =>
-          `<option value="${esc(r.k)}">${esc(r.name)}${kann.has(r.k) ? "" : " \u2715"}</option>`).join("")}</select>
+          `<option value="${esc(r.k)}">${esc(r.name)}${kann.has(r.k) ? "" : " \u2715"}${
+            belegt.has(r.k) ? " \u00b7 taken" : ""}</option>`).join("")}</select>
         <select id="rr-n" style="width:110px"></select>
         <input type="text" id="rr-text" maxlength="${ROLLE_TEXT_MAX}"
           placeholder="e.g. Panther, HE ammo" style="flex:1;min-width:150px">
@@ -6474,13 +6626,14 @@ function rolleDialog(i){
 }
 /* the Players tab of the orders inbox */
 function rollePostfachInhalt(){
-  const off = rolleOffen(), zu = rolleZuAlle();
+  const off = rolleOffen(), zu = rolleZuAlle(), halter = rolleHalterKarte();
   const klein = `style="font-size:11px;padding:3px 8px"`;
   const darfAnf = darf("anfordern");
   const zeilen = off.map(r => {
     const an = zu.filter(z => z.rolle === r.id);
     const ich = an.some(z => z.mine);
     const kann = rolleKannIch(r.rolle);
+    const voll = rolleVollWort(r.stadt, r.rolle, 1, halter);
     const rr = kampfRolle(r.rolle);
     return `<tr data-go="${r.stadt}" style="cursor:pointer"${ich ? ` class="me"` : ""}>
       <td class="sy">${kann ? "" :
@@ -6492,7 +6645,7 @@ function rollePostfachInhalt(){
       <td style="text-align:left;color:var(--dim2)">${rolleNehmerText(an)}</td>
       <td style="text-align:left;color:var(--dim2)">${esc(r.name)} \u00b7 ${esc(alterText(r.t))}</td>
       <td style="white-space:nowrap">
-        ${rolleNehmKnopf(r, ich, kann, klein)}${
+        ${rolleNehmKnopf(r, ich, kann, klein, voll)}${
         r.weg && darfAnf ? ` <button class="btn" data-rolle-weg="${esc(r.id)}" ${klein}>Remove</button>` : ""}</td>
     </tr>`;
   }).join("");
@@ -31459,7 +31612,6 @@ function intelDialog(tab, seite){
       <button data-tab="supply"  aria-pressed="false">Supply</button>
       <button data-tab="gaps"    aria-pressed="false">Gaps</button>
       <button data-tab="spots"   aria-pressed="false">Sightings</button>
-      <button data-tab="punkte"  aria-pressed="false">Points</button>
     </div>
     <div class="dlg-b">
       <div class="tabp schmal" data-tab="supply">
@@ -31673,16 +31825,9 @@ function intelDialog(tab, seite){
         <div class="note">Reports fade on the map after ${Math.round(FRISCH/3600e3)} hours and go pale
           after a day. Click a row to fly there.</div>
       </div>
-
-      <div class="tabp" data-tab="punkte"><div id="in-punkte">
-        <div class="empty">Loading points ...</div></div></div>
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
   tabsAktiv(document.getElementById("dlg"), tab);
-  /* the points come from the server, see THE POINTS ACCOUNT: asked for only
-     when the tab is open or opened, the cache holds a minute */
-  if (tab === "punkte") punkteFuellen();
-  document.querySelector('#dlg button[data-tab="punkte"]')?.addEventListener("click", () => { punkteFuellen(); });
   document.getElementById("d-close").addEventListener("click", closeDlg);
   document.getElementById("en-add").addEventListener("click", ()=>{
     const nm = document.getElementById("en-name").value.trim();
@@ -36290,7 +36435,7 @@ const MENUES = [
   /* "Personal": what is yours alone - your soldiers, your depot, your
      notebook. The clan group keeps what is really clan-wide. */
   {id:"pers",  titel:"Personal",  knoepfe:["b-arms","b-mydepot","b-note"]},
-  {id:"clan",  titel:"Clan",      knoepfe:["b-cl-card","b-cl-depot","b-cl-growth","b-cl-over","b-cl-deploy","b-cl-req","b-cl-people","b-cl-arsenal"]},
+  {id:"clan",  titel:"Clan",      knoepfe:["b-cl-card","b-cl-depot","b-cl-growth","b-cl-over","b-cl-deploy","b-cl-people","b-cl-punkte","b-cl-arsenal"]},
   /* "Situation" musste erklaert werden - dann ist der Name falsch. Was hier
      steckt, meldet man oder sieht man nach: Gegner, Schlacht, Brett. */
   /* The board stays in the top bar itself - its "new" badge must be seen
@@ -40161,7 +40306,7 @@ function clanDialog(tab){
   const {typen, teams, drin} = clanKraft();
 
   /* One pass over every depot: totals, per player, per type and per type per
-     player — everything the five tabs need. */
+     player — everything the tabs need. */
   let men = 0, veh = 0, cp = 0, wf = 0;
   const leute = [], proTypSpieler = new Map();
   for (const [who, d] of depotIdx){
@@ -40200,10 +40345,6 @@ function clanDialog(tab){
       }
 
   const {reihen} = clanVerlauf();
-  const anfragen = livePosts().filter(([,e]) => e.v.req);
-  /* Which right a request would fail on, in the order addPost checks them.
-     null means the request may be posted. */
-  const rqFehlt = !darf("brett") ? "brett" : !darf("hilfe") ? "hilfe" : null;
   const zeigeZweige = ZWEIGE.map(z=>z.k).filter(z => reihen.some(r => r.per[z]));
 
   const shareBar = (k) => {
@@ -40226,8 +40367,8 @@ function clanDialog(tab){
       <button data-tab="growth" aria-pressed="false">Growth</button>
       <button data-tab="who"    aria-pressed="false">Team owners</button>
       <button data-tab="deploy" aria-pressed="false">In the field</button>
-
       <button data-tab="people" aria-pressed="false">Roles</button>
+      <button data-tab="punkte" aria-pressed="false">Points</button>
     </div>
     <div class="dlg-b">
 
@@ -40436,6 +40577,9 @@ function clanDialog(tab){
       <div class="tabp" data-tab="people"><div id="cl-people">
         <div class="empty">Loading …</div></div></div>
 
+      <div class="tabp" data-tab="punkte"><div id="cl-punkte">
+        <div class="empty">Loading points ...</div></div></div>
+
     </div>
     <div class="dlg-f">
       ${leute.length ? `<button class="btn" id="cl-copy">Copy as table</button>` : ""}
@@ -40444,6 +40588,29 @@ function clanDialog(tab){
   tabsAktiv(document.getElementById("dlg"), tab);
   /* the faction pool tab is gone - it was a screenshot reading by hand,
      and nobody kept it up */
+  /* DREI FAECHER FRAGEN DEN SERVER, und sie fragen ihn erst, wenn sie offen
+     sind. Bis zum 08.09.2026 riefen leuteFuellen (warmap_members) und
+     clansFuellen (warmap_verzeichnis) bei JEDEM Oeffnen des Clanfensters,
+     auch wenn ihr Reiter zublieb. Solange die Punkte in Intel lagen, fiel das
+     nicht auf; jetzt fuehrt der Weg aus jedem Punktebuch hier hindurch, und
+     ein Leader, der zwanzig Buecher durchsieht, haette vierzig Fragen mehr
+     bezahlt als vorher. Welches Fach offen ist, wird beim DOM erfragt und
+     nicht aus tab geraten - tabsAktiv faellt bei einem Namen, den es nicht
+     gibt, still auf den ersten zurueck.
+     Je Oeffnung einmal: ein zweites Mal auf denselben Reiter zu klicken
+     fragt nicht noch einmal. Die Punkte sind ausgenommen, die halten sich
+     selbst eine Minute (punkteLaden) und duerfen danach nachladen. */
+  const clSchon = new Set();
+  const clFuellen = w => {
+    if (w === "punkte"){ punkteFuellen(); return; }
+    if (clSchon.has(w)) return;
+    if (w === "people"){ clSchon.add(w); leuteFuellen(); }
+    else if (w === "clan"){ clSchon.add(w); clansFuellen(); }
+  };
+  const clOffen = document.querySelector("#dlg .tabp.on");
+  clFuellen(clOffen ? clOffen.dataset.tab : "clan");
+  document.querySelectorAll("#dlg .tabs button[data-tab]").forEach(b =>
+    b.addEventListener("click", () => clFuellen(b.dataset.tab)));
   document.getElementById("d-close").addEventListener("click", closeDlg);
   /* Clan-Reiter: Name, Seite, Krieg, Befehle. */
   document.getElementById("cl-save")?.addEventListener("click", ()=>{
@@ -40494,19 +40661,9 @@ The depot of that side becomes the active one.`)) return;
     rebuildUnits(); depotZeichnen(); kraftLeiste(); side();
     clanDialog("over");
   }));
-  document.querySelectorAll("#dlg [data-del]").forEach(a => a.addEventListener("click", ev=>{
-    ev.preventDefault();
-    /* Die Pruefung sitzt seit dem 01.09.2026 in dropEntry selbst - eine
-       Stelle statt zweier ungleich strenger. */
-    if (!dropEntry("post", a.dataset.del)) return;
-    closeDlg(); boardZahl();
-    clanDialog("req");
-  }));
   document.querySelectorAll("#dlg [data-go]").forEach(a => a.addEventListener("click", ev=>{
     ev.preventDefault(); sel = +a.dataset.go; closeDlg(); flyTo(sel); side(); draw();
   }));
-  leuteFuellen();
-  clansFuellen();
   document.getElementById("cl-copy")?.addEventListener("click", async ()=>{
     const zeilen = [["Player","Owned","Committed","Available","Men","Vehicles","CP","Warfunds"].join("\t")]
       .concat(leute.map(p=>[p.name, p.gesamt, p.drin, p.frei, p.men, p.veh, p.cp, p.wf].join("\t")))
@@ -40647,14 +40804,14 @@ function poolDialog(){
     document.querySelectorAll("#dlg [data-pf]").forEach(x =>
       x.setAttribute("aria-pressed", String(+x.dataset.pf === gewaehlt)));
   }));
-  document.getElementById("d-close").addEventListener("click", () => { closeDlg(); clanDialog("pool"); });
+  document.getElementById("d-close").addEventListener("click", () => { closeDlg(); clanDialog("clan"); });
   document.getElementById("pool-save").addEventListener("click", () => {
     const werte = {};
     document.querySelectorAll("#dlg [data-res]").forEach(f => {
       werte[f.dataset.res] = Math.max(0, parseInt(f.value, 10) || 0);
     });
     setPool(werte, gewaehlt);
-    closeDlg(); clanDialog("pool"); toast("Faction pool saved");
+    closeDlg(); clanDialog("clan"); toast("Faction pool saved");
   });
 }
 
@@ -41633,7 +41790,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>How this works</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build e2d87b9e63</span></p></div>
+         installation. <span style="color:var(--dim2)">· build de3ba26764</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -41681,7 +41838,7 @@ function hilfeDialog(){
         <div class="note"><b>Intel</b> (<kbd>I</kbd>): clans, players, their teams, sightings.
           Names match loosely.</div>
         <div class="note"><b>Clan</b> (<kbd>C</kbd>) is what we own: the depot, how it grew, who
-          carries which share, what is in the field, reinforcement requests, and the ranks.</div>
+          carries which share, what is in the field, the ranks, and who has earned which points.</div>
         <div class="note"><b>Your depot</b> survives a new war. You set it up once and afterwards
           only drag teams onto the map.</div>
         <div class="note"><b>Every entry carries its author.</b> You can see who set a town, drew a
@@ -41805,7 +41962,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "e2d87b9e63";
+const BAU = "de3ba26764";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
