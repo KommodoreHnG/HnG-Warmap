@@ -1554,6 +1554,17 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   font-size:11.5px;text-align:right;font-variant-numeric:tabular-nums}
 .tw input.zat:focus{border-color:var(--accent)}
 .tw tr.leer td.sy,.tw tr.leer td.zat-name,.tw tr.leer td.zat-hab{opacity:.5}
+/* DIE ANFORDERUNG STEHT LINKS VOM MITBRINGEN. Die Klassenzeile traegt die
+   Typenzeilen darunter und hebt sich deshalb ab - ohne sie liest sich
+   "Infantry" wie ein neunzehnter Typ.
+   .anf-aus: gefiltert wird durch Verstecken, nicht durch Neuzeichnen. In
+   den Feldern stehen getippte Zahlen, und ein Neuaufbau waehrend des
+   Tippens verloere sie. Die Zeile bleibt im DOM und wird beim Speichern
+   mitgelesen. */
+.tw tr.anf-kl > td{background:var(--panel2)}
+.tw tr.anf-kl td.zat-name{font-weight:600}
+.tw tr.anf-aus{display:none}
+.tw input.zan{width:48px}
 .bar{height:5px;background:var(--panel2);border-radius:3px;overflow:hidden;min-width:52px}
 .bar i{display:block;height:100%;background:var(--accent)}
 /* Ueber dem Radarraum (120), unter dem Tor (200): der Radarraum deckt den
@@ -2569,6 +2580,103 @@ const ZWEIGE = [
 ];
 const zweigVon = k => (AT[k] && AT[k].branch) || "other";
 const zweigName = z => (ZWEIGE.find(x=>x.k===z) || {name:z}).name;
+/* ---- DIE ANFORDERUNG AN EINEM BEFEHL (08.09.2026) --------------------
+   Sein Wortlaut: "Es geht um eine Anforderung fuer diesen Befehl, dem man
+   dann im zweiten Schritt die Einheiten zuweist", und "Wichtig ist auch
+   noch, dass man als Anforderer auch einfach die Klasse der Typen waehlen
+   kann, ohne die genaue Einheit anzugeben."
+
+   Die Anforderung haengt am PFEIL (a.req), nicht an einer Zeile in S.join:
+   S.join fuehrt eine Zeile je Pfeil UND Spieler und beantwortet "was bringt
+   wer mit". Was ein Befehl verlangt, ist eine Aussage des Befehls und gilt
+   fuer jeden, der ihn liest.
+
+   DIE KLASSEN KOMMEN AUS DEN SPIELDATEN. Jeder Typ traegt das Feld branch
+   (commandnodetemplate, Feld 16); ZWEIGE gibt dem Zweig nur seinen Namen,
+   und zweigVon liest ihn. Keine Namensliste, kein Muster auf dem
+   Schluessel. Ein Typ mit einem Zweig, den ZWEIGE nicht kennt, faellt unter
+   "Other" - genau wie in drawKey; so faellt keiner der achtzehn heraus. */
+const ANF_KLASSEN = (() => {
+  const drin = new Set(MAP.at.map(a => ZWEIGE.some(x => x.k === a.branch) ? a.branch : "other"));
+  return ZWEIGE.filter(z => drin.has(z.k));
+})();
+const anfKlasseVon = k => { const z = zweigVon(k); return ZWEIGE.some(x => x.k === z) ? z : "other"; };
+/* Das Zeichen der Klasse ist das ihres ersten Typs. MAP.at kommt in der
+   Ordnung des Spiels, und die beginnt jede Klasse an ihrer Wurzel. */
+const anfKlasseSym = z => { const t = MAP.at.find(x => anfKlasseVon(x.k) === z); return t ? t.k : ""; };
+/* Welche Klasse gerade allein dasteht; "all" heisst alle. Bleibt zwischen
+   zwei Pfeilfenstern stehen, wie depotFilter zwischen zwei Zeichnungen. */
+let anfFilter = "all";
+/* Was am Pfeil steht, geputzt: at sind genaue Typen, cls sind Klassen ohne
+   genauen Typ, beides 1..99 wie das Zusagefeld. Was hier herausfaellt, hat
+   eine fremde Seite oder ein Fehlgriff geschrieben. */
+function anfLesen(a){
+  const r = (a && a.req && typeof a.req === "object" && !Array.isArray(a.req)) ? a.req : {};
+  const rat = (r.at && typeof r.at === "object") ? r.at : {};
+  const rcl = (r.cls && typeof r.cls === "object") ? r.cls : {};
+  const zahl = x => Math.max(0, Math.min(99, Math.round(+x || 0)));
+  const at = {}, cls = {};
+  for (const t of MAP.at){ const n = zahl(rat[t.k]); if (n) at[t.k] = n; }
+  for (const z of ANF_KLASSEN){ const n = zahl(rcl[z.k]); if (n) cls[z.k] = n; }
+  return {at, cls};
+}
+/* WAS DER BEFEHL VERLANGT, UND WAS DAVON SCHON ZUGESAGT IST.
+
+   DIE KLASSENZAHL IST KEINE ZUSATZZAHL. Sein Beispiel: "10 Infanterie ATs
+   jeden Typs, aber mindestens eine mit APCs" - das sind zehn Trupps, nicht
+   elf. Die Klassenzeile nennt die Gesamtzahl der Klasse, die Typenzeilen
+   darin sind ein Mindestanteil davon. Steht in den Typenzeilen zusammen
+   mehr, als die Klassenzeile sagt, gilt die groessere von beiden; sonst
+   stuende eine Anforderung da, die ihre eigenen Zeilen unterbietet.
+
+   EINE ZUSAGE OHNE TYPEN zaehlt in die Gesamtzahl, aber in keine Klasse:
+   eine Zeile von vor dem 08.09.2026 oder von einer aelteren Seite im Clan
+   traegt nur eine Summe. Das wird gesagt statt verschwiegen - sammelText
+   haelt es an derselben Stelle genauso.
+
+   KOSTET NICHTS JE BILD: laeuft beim Oeffnen eines Pfeilfensters, nicht in
+   draw(). 18 Typen, 5 Klassen, die Zusagezeilen dieses Pfeils. Dasselbe
+   Fenster laesst nebenan sammelzeit mit wegSuche durch 1438 Staedte gehen. */
+function anfStand(a){
+  const {at, cls} = anfLesen(a);
+  const proKl = new Map();
+  for (const z of ANF_KLASSEN) proKl.set(z.k, {k: z.k, name: z.name, cls: cls[z.k] || 0, genau: 0, ist: 0, soll: 0});
+  for (const t of MAP.at){ const n = at[t.k] || 0; if (n) proKl.get(anfKlasseVon(t.k)).genau += n; }
+  let ist = 0, grob = 0;
+  for (const m of zusageArten(a.id)){
+    if (!m.at){ grob += +m.n || 0; ist += +m.n || 0; continue; }
+    for (const k of Object.keys(m.at)){
+      const n = +m.at[k] || 0;
+      if (!n || !AT[k]) continue;
+      ist += n;
+      proKl.get(anfKlasseVon(k)).ist += n;
+    }
+  }
+  let soll = 0;
+  for (const z of proKl.values()){ z.soll = Math.max(z.cls, z.genau); soll += z.soll; }
+  return {at, cls, proKl, soll, ist, grob, fehlt: Math.max(0, soll - ist)};
+}
+/* Der Satz im Kopf des Pfeilfensters. Die Reihenfolge ist seine: "Vor den
+   Symbolen dann jeweils 'aktuelle Zahl'/'geplante Zahl'." Leer, solange
+   niemand etwas angefordert hat - ein Pfeil ohne Anforderung soll keine
+   Zeile darueber verlieren. */
+function anfText(a){
+  const st = anfStand(a);
+  if (!st.soll) return "";
+  /* AUCH DIE NICHT ANGEFORDERTEN KLASSEN, sobald jemand etwas darauf
+     zugesagt hat. Vorher zaehlte die Gesamtzahl sie mit und die
+     Aufschluesselung nicht: bei 4 angeforderten Infanteristen, 2 zugesagten
+     Infanteristen und 3 zugesagten Panzern stand woertlich "Requested: 5/4
+     teams - 2/4 infantry" - uebervoll und halb leer im selben Satz, und die
+     drei Panzer kamen in keinem von beidem vor. Von einem Gegenleser im
+     Browser gemessen. */
+  const teile = [];
+  for (const z of st.proKl.values())
+    if (z.soll || z.ist) teile.push(`${z.ist}/${z.soll} ${esc(z.name.toLowerCase())}`);
+  return `Requested: <b>${st.ist}/${st.soll}</b> teams — ${teile.join(", ")}.${
+    st.grob ? ` <span style="color:var(--dim2)">${st.grob} committed team${
+      st.grob === 1 ? "" : "s"} name no type and count in the total only.</span>` : ""}`;
+}
 /* Two different things, and mixing them up would mislead badly:
    - attack radius: how far an air unit can strike. Comes from the game data.
    - vision: how far you can SEE what sits and moves in nearby towns. That
@@ -4291,12 +4399,63 @@ const liveArrows= () => S.arrows.filter(a => a && MAP.n[a.from] && MAP.n[a.to]
    Befehlsrecht: wer jeden Befehl unserer Seite scharfstellen darf, plant den
    Krieg. Am Spielrang haengt sie ABSICHTLICH nicht - der steht nur fuer die,
    deren Rangkarte jemand gepflegt hat, und die Rollenliste schreibt der
-   Leiter ohnehin selbst um. */
+   Leiter ohnehin selbst um.
+
+   SEIT DEM 08.09.2026 SETZT SIE DER LEITER SELBST, und die Zahlen hier sind
+   nur noch die Vorgabe. Sein Wort: "Wer wie viele Pfeile machen darf
+   entscheidet letztlich der Clan-Leader, der sich die Grenze auch selber
+   setzen kann." Was er setzt, steht in meta:regeln; markenGrenzen legt es
+   darueber. Setzt er nichts, gilt genau das hier. */
 const MARKEN_GRENZE = {
   arrow: {grund: 10, fuehrung: 25, leiter: 40},
   line:  {grund: 15, fuehrung: 25, leiter: 40},
   area:  {grund: 10, fuehrung: 20, leiter: 30},
 };
+/* ---- WAS DER LEITER SELBST SETZT -------------------------------------
+   Zwei Zeilen unter meta, und die Trennung ist die zwischen Seite und
+   Server - sie beim Lesen zu verwechseln, waere teuer:
+
+     meta:regeln  Was DIESE SEITE durchsetzt: die Markengrenzen und die
+                  Sperre gegen den leeren Befehl. Der Server liest sie nie.
+     meta:punkte  Was der SERVER auszahlt. Die Seite schreibt die Zeile und
+                  rechnet nichts damit; gebucht wird im Ausloeser
+                  warmap_punkte_buchen.
+
+   BEIDE GEHOEREN DEM LEITER, OHNE EINE ZEILE SQL: warmap_may_write endet
+   auf "when k like 'meta:%' then warmap_fuehrt(r)", und in META_VERWALTER
+   steht keiner der beiden Namen. setMeta laesst also nur den Leiter daran,
+   und der Server prueft dasselbe noch einmal.
+
+   NICHT GESETZT HEISST: es bleibt bei dem, was ohne diese Zeilen galt.
+   Der Raum schreibt nur Felder fort, die wirklich ausgefuellt sind. */
+const clanRegeln = () => {
+  const v = S.meta.regeln && S.meta.regeln.v;
+  return (v && typeof v === "object" && !Array.isArray(v)) ? v : {};
+};
+const punkteRegeln = () => {
+  const v = S.meta.punkte && S.meta.punkte.v;
+  return (v && typeof v === "object" && !Array.isArray(v)) ? v : {};
+};
+/* Die drei Stufen einer Markenart, wie sie in DIESEM Clan gelten.
+   NULL HEISST WEITERHIN "KEINE GRENZE" - das ist keine neue Bedeutung,
+   sondern die, die darfIchNochMalen von jeher hat: "if (!g || markenZahl
+   (art) < g) return true". Der Raum sagt es auch so.
+   Alles, was fehlt, unlesbar ist oder ausserhalb von 0..999 liegt, faellt
+   auf die Vorgabe zurueck. */
+function markenGrenzen(art){
+  const std = MARKEN_GRENZE[art];
+  if (!std) return null;
+  const r = (clanRegeln().marken || {})[art];
+  if (!r || typeof r !== "object") return std;
+  const z = (w, vorgabe) => {
+    if (w === null || w === undefined || w === "") return vorgabe;
+    const n = Math.round(+w);
+    return Number.isFinite(n) && n >= 0 && n <= 999 ? n : vorgabe;
+  };
+  return {grund:    z(r.grund,    std.grund),
+          fuehrung: z(r.fuehrung, std.fuehrung),
+          leiter:   z(r.leiter,   std.leiter)};
+}
 /* Drafts: orders only their author sees. They live in this browser and
    never reach the server until published - a mere client-side filter would
    still send them to everyone. */
@@ -4461,7 +4620,7 @@ function markenZahl(art){
 /* Die Stufe, die fuer mich gilt. Der Leiter zuerst, weil er das Recht
    ohnehin hat und die hoehere Zahl bekommen soll. */
 function markenGrenzeFuerMich(art){
-  const g = MARKEN_GRENZE[art];
+  const g = markenGrenzen(art);
   if (!g) return 0;
   return istLeader() ? g.leiter : darf("bestaetigen") ? g.fuehrung : g.grund;
 }
@@ -4798,6 +4957,51 @@ function darfZustand(key, v, e){
   const by = e && e.by !== undefined ? e.by : (befehlVonSchluessel(key) || {}).by;
   return by === S.me && darf("befehl");
 }
+/* HAT DIESER BEFEHL EINE ANFORDERUNG?
+   Sein Wort vom 08.09.2026: "Wenn man keine Anforderung stellt, wieviele
+   Einheiten benoetigt werden dann ist der Befehl ja garnicht fertig, sollte
+   ergo auch garnicht auf aktiv gestellt werden koennen."
+
+   ZWEI FORMEN GELTEN, und beide stehen so in dieser Datei:
+     - v.soll ueber null, die Zielstaerke. Linie, Flaeche und Parablock
+       tragen sie heute (l-soll, ar-soll, pd-soll).
+     - eine Tafel je Typ: irgendein Feld des Befehls, das ein Objekt ist und
+       unter einem der achtzehn Schluessel aus MAP.at eine Zahl ueber null
+       traegt. Diese Form ist nicht erfunden - genau so schreibt setJoin
+       schon die ZUSAGE ({at: {Typ: Anzahl}}). Die Anforderung je Typ
+       entsteht gerade in einem anderen Auftrag; ihr Feldname ist hier nicht
+       bekannt und wird nicht geraten.
+
+   DER PFEIL HAT HEUTE KEINE VON BEIDEN. Ein paar Zeilen weiter unten in
+   dieser Datei steht warum: "'Planned strength' ist am 08.09.2026 aus
+   diesem Fenster gefallen ... a.soll wird bei einem Pfeil nur nirgends mehr
+   gelesen." Solange das so ist, gilt jeder Pfeil hier als ohne Anforderung.
+   Deshalb ist die Sperre darunter AUS, bis der Leiter sie einschaltet, und
+   der Raum zeigt ihm vorher, wie viele Befehle sie gerade traefe. */
+function anforderungGestellt(v){
+  if (!v || typeof v !== "object") return false;
+  if (+v.soll > 0) return true;
+  /* ZWEI EBENEN TIEF, und das ist gemessen, nicht vorsorglich: die
+     Anforderung, die am selben Tag gebaut wurde, liegt als
+     a.req = {at:{typ:n}, cls:{klasse:n}} am Pfeil - also eine Ebene tiefer
+     als v.<feld>.<typ>. Ein Gegenleser hat vorgefuehrt, dass die flache
+     Suche sie nicht sieht: {req:{at:{infantry:4},cls:{}}} gab false. Mit
+     eingeschalteter Sperre waere danach GAR KEIN Pfeil mehr auf aktiv
+     gegangen, auch keiner mit voller Anforderung. */
+  const zahlDrin = o => {
+    if (!o || typeof o !== "object" || Array.isArray(o)) return false;
+    for (const t of MAP.at) if (+o[t.k] > 0) return true;
+    for (const w of Object.values(o)) if (+w > 0) return true;
+    return false;
+  };
+  for (const k of Object.keys(v)){
+    const o = v[k];
+    if (!o || typeof o !== "object" || Array.isArray(o)) continue;
+    if (zahlDrin(o)) return true;
+    for (const u of Object.values(o)) if (zahlDrin(u)) return true;
+  }
+  return false;
+}
 /* set the state: 0 planned, 1 active, 2 done. Writes every road this
    machine has - the ok bucket with the right to confirm, the own row as
    the author - so both say the same wherever possible. */
@@ -4813,14 +5017,39 @@ function zustandSetzen(key, v, st, leise){
     toast(`${MAP.n[w.from][0]} is not ours yet. Take the airfield first.`);
     return false;
   }
+  /* KEIN LEERER BEFEHL AUF AKTIV - wenn der Leiter es so gesetzt hat.
+     Sein Wort vom 08.09.2026 steht ueber anforderungGestellt. Wie die
+     Bedingung darueber ist das keine Rechtefrage, sondern eine Bedingung am
+     Befehl selbst: die Meldung nennt darum, was fehlt, nicht wer duerfte.
+     Was der Leiter nicht gesetzt hat, sperrt nicht. */
+  /* NICHT BEI DEN SELBSTTAETIGEN WEGEN. zustandSetzen ruft sich beim
+     Abschluss eines Luftpfeils selbst mit st=1 fuer den Parablock am Ziel -
+     und ein frischer Parablock hat naturgemaess keine Anforderung. Ein
+     Gegenleser hat vorgefuehrt, was dabei herauskam: der Parablock blieb auf
+     "plan" stehen, waehrend der Mensch "Marked done" las, und die Absage der
+     Sperre wurde vom spaeteren Toast ueberschrieben. leise steht genau fuer
+     diese Aufrufe. */
+  if (st === 1 && !leise && clanRegeln().leer === 1 && !anforderungGestellt(w)){
+    toast("It does not say how many units it needs. "
+        + "Your leader made that a condition for going active.");
+    return false;
+  }
   const chef = darf("bestaetigen"), autor = b.by === S.me && darf("befehl");
   if (!chef && !autor) return darfNicht(b.by === S.me ? "befehl" : "bestaetigen");
   /* an arrow going active remembers who held its target (zb), so that a
      move into our own town is not "taken" the moment it is active */
   const okExtra = {n: S.name || ""}, aend = {st: st || undefined};
   /* the row remembers when it went active, so that a later edit of the
-     order (which moves its t) does not count as newly active again */
-  aend.aktT = st === 1 ? jetzt() : undefined;
+     order (which moves its t) does not count as newly active again.
+     THE MARK SURVIVES THE CLOSE. Both rows are rewritten at every step, so
+     their own stamps say "just now" the moment an order is done - and the
+     server reads this mark to see what was scouted while the order ran.
+     Written on both roads because the rights decide which one is open;
+     going back to planned drops it, as before. */
+  const aktVor = (() => { const eo = okEintrag(key);
+    return (eo && +eo.aktT) || (+w.aktT) || 0; })();
+  aend.aktT = st === 1 ? jetzt() : (st === 2 ? (aktVor || undefined) : undefined);
+  okExtra.aktT = aend.aktT;
   if (b.art === "arrow"){
     if (st === 1){ okExtra.zb = ownerOf(w.to); aend.zb = okExtra.zb; }
     else aend.zb = st === 2 ? w.zb : undefined;
@@ -4918,8 +5147,9 @@ function okVerdrahten(wurzel){ zustandVerdrahten(wurzel); }
    otherwise the arrow window says it. Runs after every sync receipt, after
    a Control click and once a minute, never inside draw().
    Hook for later rules (tank hunt and the like): add a further test
-   beside zielGenommen here. Para blocks, lines, areas and recon stay
-   manual. */
+   beside zielGenommen here. Para blocks, lines and plain areas stay
+   manual; a recon request ON TOWNS closes itself once the capture has
+   written every one of them, see aufklStand. */
 const zielGenommen = a => {
   if (!(a && !a.entwurf && !a.luft && a.f === clanFaktion()
       && MAP.n[a.to] && ownerOf(a.to) === a.f && befehlZustand(a.id, a) === "aktiv")) return false;
@@ -4937,6 +5167,19 @@ function befehlAutoAbschluss(){
     if (zustandSetzen(a.id, a, 2, true)) getan++;
   }
   if (getan) toast(`${getan} attack${getan === 1 ? "" : "s"} done, target taken`);
+  /* a recon request on towns whose every town the capture has written since
+     it went active. Nothing is counted for it here: the state is all this
+     machine sets, the server books the points from it. */
+  let aufk = 0;
+  for (const [id, e] of liveAreas()){
+    const a = e.v;
+    if (!a || !a.aufkl || a.entwurf || fremdeSeite(a)) continue;
+    if (befehlZustand(id, a) !== "aktiv") continue;
+    if (!darfZustand(id, a, e)) continue;
+    if (!aufklStand(id, a).fertig) continue;
+    if (zustandSetzen(id, a, 2, true)) aufk++;
+  }
+  if (aufk) toast(`${aufk} recon request${aufk === 1 ? "" : "s"} done, every town scouted`);
   /* the assignments follow the chain, see zuordNachruecken below */
   let bewegt = false;
   try { bewegt = zuordNachruecken(); } catch (e){}
@@ -4948,8 +5191,8 @@ function befehlAutoAbschluss(){
   try { ot = overtimePruefen(); } catch (e){}
   let rr = false;
   try { rr = rollePruefen(); } catch (e){}          // requests without a battle, see ROLE REQUESTS
-  if (getan || bewegt) ordersZahl();
-  return getan > 0 || bewegt || drohung || ot || rr;
+  if (getan || aufk || bewegt) ordersZahl();
+  return getan > 0 || aufk > 0 || bewegt || drohung || ot || rr;
 }
 /* the badge is counted afresh every minute whatever happened */
 setInterval(() => { try { if (befehlAutoAbschluss()) draw(); ordersZahl(); } catch(e){} }, 60000);
@@ -5997,17 +6240,124 @@ function aufklTipp(){
   return e && e.v ? `Ctrl-click the next town to add it to <b>${esc(aufklZiele(e.v))}</b>; Escape ends.`
                   : "click a town to ask for eyes on it, Ctrl-click adds more; click open ground to draw an area.";
 }
+/* WHEN A RECON REQUEST IS DONE (08.09.2026). The Kommodore: "wenn alle
+   aufgeklaert wurden ueber den AT-Grabber dann ist der Befehl abgeschlossen
+   und die Order Punkte, bzw. die Leader Punkte werden an denjenigen
+   verteilt."
+   A request on towns is done once EVERY asked town carries something the
+   capture wrote after the request went active. Two pots hold that, the same
+   two aufmarschKarte reads: the enemy records (a unit with the town in o)
+   and the sightings. A request drawn on open ground has no town list to
+   tick off and stays manual.
+   SO DOES A TOWN WHERE THE SCOUT FOUND NOTHING: an empty sheet writes no
+   row, so from here that town looks exactly like one nobody visited. The
+   window names those towns; which towns hold units at all is the
+   Kommodore's third point and is not answered here.
+   The points are the server's business. This only sets the state, and
+   warmap_punkte_abschluss books from that - the page adds nothing up. */
+/* since when the request has been running: the mark either row carries,
+   else the confirmation's stamp, else the row itself. The mark is asked
+   first because it survives the close, the stamp does not - the
+   confirmation is rewritten with every step. */
+function aufklAktivSeit(id, a){
+  const e = okEintrag(id);
+  if (e && +e.aktT) return +e.aktT;
+  if (a && +a.aktT) return +a.aktT;
+  if (e) return e.t || 0;
+  const z = markeZeile("area", id);
+  return (z && z.t) || 0;
+}
+/* what the capture holds per town: when each enemy unit there was recorded,
+   and the sightings with their counts. Kept five seconds, as the para
+   threat map keeps its own. */
+let aufklSichtCache = null, aufklSichtStand = 0, aufklSichtZeit = null;
+function aufklSichtKarte(frisch){
+  if (!frisch && aufklSichtCache && aufklSichtZeit === zeitReise
+      && jetzt() - aufklSichtStand < 5000) return aufklSichtCache;
+  const karte = new Map();
+  const eintrag = i => { let d = karte.get(i);
+    if (!d){ d = {dep: []}; karte.set(i, d); } return d; };
+  /* NUR DER AT-GRABBER ZAEHLT, und das ist kein Geschmack, sondern eine
+     Messung. Hier stand zuerst zusaetzlich der Sichtungstopf spot mit der
+     Summe seiner n-Werte. Ein Gegenleser hat am gebauten Werkzeug
+     vorgefuehrt, dass das keine Zahl aufgeklaerter Einheiten ist: die
+     spot-Liste ist ein LAUFENDER GESAMTSTAND ueber den ganzen Krieg. Zehn
+     frueher Aufnahmen derselben drei Panzer, danach EINE Aufnahme waehrend
+     der Anfrage - und das Fenster meldete 33 statt 3. Drei Spieler mit
+     denselben drei Panzern: 9 statt 3.
+     Der Kommodore am 08.09.2026: "wenn alle aufgeklaert wurden ueber den
+     AT-Grabber dann ist der Befehl abgeschlossen". Also edep, eine Zeile je
+     Einheit mit eigenem Zeitpunkt - und sonst nichts. */
+  const eigen = clanFaktion();
+  try {
+    for (const [key, e] of Object.entries(S.edep || {})){
+      if (!e || !Array.isArray(e.v)) continue;
+      /* DIE SEITE STEHT IM VERZEICHNIS, nicht in der Einheit - genau wie
+         aufmarschKarte es liest. Ohne das zaehlte eine Zeile der EIGENEN
+         Fraktion als Aufklaerung, und die Datei warnt an dieser Stelle
+         ausdruecklich davor ("Ein Pruefer ist genau da hineingelaufen"). */
+      const r = (S.roster || {})[key];
+      const f = (r && r.v && (r.v.f === 0 || r.v.f === 1 || r.v.f === 2)) ? r.v.f : null;
+      if (f !== null && f === eigen) continue;
+      for (const u of e.v){
+        /* a slot assumed from the numbering was never seen - it proves
+           nobody was there */
+        if (!u || u.verm || u.o === undefined || u.o === null || !u.t || !MAP.n[u.o]) continue;
+        const t = u.t * 1000;                            /* edep t is in SECONDS */
+        /* Das Feinddepot ueberlebt den Kriegsschnitt mit Absicht - ein Fund
+           aus dem ALTEN Krieg darf eine heutige Anfrage nicht schliessen.
+           Dieselbe Zeile steht in aufmarschKarte. */
+        if (t < epoche() || (zeitReise && t > zeitReise)) continue;
+        eintrag(u.o).dep.push(t);
+      }
+    }
+  } catch (e){ karte.clear(); }
+  aufklSichtCache = karte; aufklSichtStand = jetzt(); aufklSichtZeit = zeitReise;
+  return karte;
+}
+/* the standing of a request on towns: how many enemy units the capture
+   recorded since it went active, and which towns hold nothing yet. Counted
+   out of the enemy depot alone - one row per unit, each with its own time.
+   The sighting pot is NOT counted: its numbers are a running total over the
+   whole war, so one fresh look would carry every earlier one with it. */
+function aufklStand(id, a){
+  const orte = (a && Array.isArray(a.orte)) ? a.orte.filter(i => MAP.n[i]) : [];
+  const seit = aufklAktivSeit(id, a), karte = aufklSichtKarte();
+  const offen = [];
+  let einheiten = 0;
+  for (const i of orte){
+    const d = karte.get(i);
+    let n = 0;
+    if (d) for (const t of d.dep) if (t >= seit) n++;
+    einheiten += n;
+    if (!n) offen.push(i);
+  }
+  return {orte, offen, einheiten, seit, fertig: orte.length > 0 && !offen.length};
+}
+/* the standing as the request window says it */
+function aufklStandZeile(a, id){
+  if (!a || !Array.isArray(a.orte) || !a.orte.length) return "";
+  const zs = befehlZustand(id, a);
+  if (zs === "plan") return `<p>Nothing counts before it is active.</p>`;
+  const st = aufklStand(id, a);
+  const zahl = `<b>${st.einheiten}</b> unit${st.einheiten === 1 ? "" : "s"} recorded since it went active`;
+  if (zs === "fertig") return `<p>${zahl}.</p>`;
+  if (st.offen.length)
+    return `<p>${zahl}; nothing yet from <b>${esc(st.offen.map(i => MAP.n[i][0]).join(", "))}</b></p>`;
+  return `<p>${zahl}. Every asked town is in.</p>`;
+}
 /* the request window's lines under the state line */
 function aufklFensterZeilen(a, id){
   const lage = aufklLage(aufklPunkte(a)), w = aufklWeitester();
-  if (lage.ort < 0) return `<p>No town of ours to scout from.</p>`;
+  if (lage.ort < 0) return `<p>No town of ours to scout from.</p>${aufklStandZeile(a, id)}`;
   const typen = aufklTypen();
   const kann = typen.filter(k => aufklWeite(k) >= lage.d), fehlt = typen.filter(k => aufklWeite(k) < lage.d);
   return `<p>Nearest own town: <b>${esc(MAP.n[lage.ort][0])}</b> (${Math.round(lage.d)} map units)</p>
       <p>Scouts that reach it: ${kann.length ? esc(kann.map(atName).join(", ")) : "none"}</p>${
       w.ausDepot ? "" : `<p>No scout in any depot yet.</p>`}${
       fehlt.length ? `<p>out of reach: ${esc(fehlt.map(atName).join(", "))}</p>` : ""}
-      <p>${paraTextSicher(() => paraErfuellbarText(kann, {art: "area", id}))}</p>`;
+      <p>${paraTextSicher(() => paraErfuellbarText(kann, {art: "area", id}))}</p>
+      ${aufklStandZeile(a, id)}`;
 }
 /* why a team may not take a recon request; "" when it may */
 function aufklSperre(b, d, lage){
@@ -9723,29 +10073,120 @@ function meineZusage(id){
   if (at) for (const t of MAP.at) if (+at[t.k] > 0) raus[t.k] = +at[t.k];
   return raus;
 }
-/* DIE ACHTZEHN ZEILEN. Je Zeile das Taktikzeichen, der Name, ein Zahlenfeld
-   und dahinter, was mein eigenes Depot davon haelt.
+/* DIE TAFEL AM PFEIL - ZWEI SPALTEN, ZWEI SCHRITTE.
+
+   Links steht, WAS DER BEFEHL VERLANGT: die Anforderung seines Erstellers,
+   sie haengt am Pfeil und gilt fuer jeden, der ihn liest. Rechts steht, WAS
+   ICH MITBRINGE - meine eigene Zeile, unveraendert das, was setJoin seit
+   dem 08.09.2026 schreibt. Bis heute stand nur die rechte Spalte da, und
+   zwar als "What you bring": eine Zusage des Lesenden, wo eine Anforderung
+   des Erstellers hingehoert.
+
+   Ueber den achtzehn Typen stehen die Klassen. "10 Infanterie ATs jeden
+   Typs, aber mindestens eine mit APCs" ist die Klassenzeile Infantry auf 10
+   und die Typenzeile Mechanized Infantry auf 1. Gerechnet werden daraus
+   ZEHN Trupps, nicht elf - je Klasse das GROESSERE aus Klassenzahl und
+   Summe der Typenzeilen. ACHTUNG, WOHER DAS KOMMT: das ist meine Auslegung
+   seines Satzes, nicht seine Vorgabe; er hat sich dazu nicht geaeussert und
+   die Frage steht bei ihm. Wenn er elf gemeint hat, ist es eine Zeile in
+   anfStand.
+
    Aufgebaut wird das einmal beim Oeffnen. Zum Vergleich, was dasselbe
    Fenster ohnehin zahlt: sammelText ruft sammelzeit, und die sucht mit
    wegSuche einen Weg durch die 1438 Staedte, im Zweifel zweimal. */
-function zusageTabelle(a){
+function anfTabelle(a){
   const c = light() ? "#1a2029" : "#e9e2d5";
-  const hab = zusageVorrat(), meins = meineZusage(a.id);
+  const hab = zusageVorrat(), meins = meineZusage(a.id), st = anfStand(a);
   const alt = S.join[`${a.id}:${S.me}`];
-  const grob = !!(alt && imKrieg(alt) && alt.v && !(alt.at && typeof alt.at === "object"));
-  return `<div style="font-size:12px;color:var(--dim)">What you bring</div>
+  const habeZeile = !!(alt && imKrieg(alt) && alt.v);
+  /* DIE ZWEITE SPALTE IST DER ZWEITE SCHRITT und gehoert nicht dem
+     Ersteller: setJoin weist eine Zusage auf den eigenen Befehl ab
+     (EIGEN_BEFEHL_WORT), die Felder standen bisher trotzdem da und ein
+     Klick auf Save endete in einer Meldung. Wer aus frueherer Zeit schon
+     eine Zeile auf dem eigenen Pfeil hat, sieht die Spalte weiter - sonst
+     stuende sie da und waere nicht mehr erreichbar. Ein Entwurf traegt sie
+     gar nicht: auf einen Entwurf, den nur ich sehe, sagt niemand zu, und
+     a-join schreibt dort ohnehin nichts. */
+  const zeigeBring = !a.entwurf && (!eigenerBefehl({art: "arrow", id: a.id}) || habeZeile);
+  /* Der Satz zur typenlosen Altzusage haengt an der Spalte, in die er
+     verweist: steht die Spalte nicht da, darf er auch nicht dastehen. */
+  const grob = zeigeBring && habeZeile && !(alt.at && typeof alt.at === "object");
+  /* Wer die Anforderung schreiben darf, ist dieselbe Frage, die darfZustand
+     fuer diesen Befehl schon beantwortet: der Urheber mit dem Recht
+     "befehl", oder wer bestaetigen darf. Ein eigenes Recht dafuer gaebe es
+     nicht - RECHTE ist die ganze Liste, und ein Eintrag mehr hiesse, dass
+     keine bestehende Rolle ihn hat. Wer nicht darf, sieht Zahlen.
+     EIN ENTWURF IST DAVON AUSGENOMMEN. Er steht in ENTWUERFE, also nur in
+     diesem Browser, und niemand sonst sieht ihn je; ihn seinem eigenen
+     Verfasser zu sperren, weil ihm das Recht "befehl" fehlt, waere eine
+     Sackgasse ohne Gegenueber. Beim Freigeben greift die Sperre wieder. */
+  const schreibt = !!a.entwurf || darfZustand(a.id, a, a);
+  const feld = (art, k, n) => schreibt
+    ? `<input class="zat zan" type="number" data-${art}="${esc(k)}" min="0" max="99" value="${n || ""}" placeholder="0">`
+    : `<span style="color:${n ? "var(--text)" : "var(--dim2)"}">${n || "—"}</span>`;
+  /* Meine Zusage je Klasse - die Zahl neben der Klassenzeile. EIN Gang ueber
+     die achtzehn Typen, nicht einer je Klasse. */
+  const meinsKl = new Map();
+  for (const t of MAP.at){
+    const n = +meins[t.k] || 0;
+    if (n){ const z = anfKlasseVon(t.k); meinsKl.set(z, (meinsKl.get(z) || 0) + n); }
+  }
+  const klZeile = z => {
+    const w = st.proKl.get(z.k);
+    return `<tr class="anf-kl" data-kl="${esc(z.k)}"><td class="sy">${symbolSVG(anfKlasseSym(z.k), c, 24, 17)}</td>
+      <td class="zat-name">${esc(z.name)} <small style="color:var(--dim2)">any type</small></td>
+      <td>${feld("anfk", z.k, st.cls[z.k] || 0)}</td>
+      ${zeigeBring ? `<td style="color:var(--dim)">${meinsKl.get(z.k) || 0}</td>` : ""}
+      <td class="zat-hab" style="text-align:left;color:var(--dim)">${
+        w.soll || w.ist ? `${w.ist}/${w.soll} from the clan` : ""}</td></tr>`;
+  };
+  const typZeile = t => {
+    const v = hab[t.k], n = +meins[t.k] || 0, q = st.at[t.k] || 0;
+    return `<tr data-kl="${esc(anfKlasseVon(t.k))}"${!v.hat && !n && !q ? ` class="leer"` : ""}>
+      <td class="sy">${symbolSVG(t.k, c, 24, 17)}</td>
+      <td class="zat-name">${esc(atName(t.k))}</td>
+      <td>${feld("anft", t.k, q)}</td>
+      ${zeigeBring ? `<td><input class="zat" type="number" data-zat="${esc(t.k)}" min="0" max="99" value="${n || ""}" placeholder="0"></td>` : ""}
+      <td class="zat-hab" style="text-align:left;color:var(--dim)">(${v.hat} in depot, ${v.frei} free)</td></tr>`;
+  };
+  /* Die Filterreihe wie im Depot - und ein Unterschied, der genannt gehoert:
+     das Depot teilt in vier Gruppen nach Namensmustern (FILTER,
+     /infantry|guard|recon|para|path/), hier steht die Einteilung der
+     Spieldaten selbst, dieselbe, nach der drawKey und die Kraftleiste
+     ordnen. Der Griff .sp-filter ist der der Gruppenknoepfe im
+     Zuordnungsfenster. */
+  const reihe = [{k: "all", name: "All"}].concat(ANF_KLASSEN);
+  return `<div style="font-size:12px;color:var(--dim)">What this order needs${
+      zeigeBring ? ", and what you bring" : ""}</div>
+    <div class="sp-filter" style="margin:4px 0 6px">${reihe.map(x =>
+      `<button data-anffl="${esc(x.k)}" aria-pressed="${x.k === anfFilter}">${esc(x.name)}</button>`).join("")}</div>
     ${grob ? `<div class="note">Your commitment of <b>${+alt.v}</b> team${+alt.v === 1 ? "" : "s"}
-      names no types. Fill the rows in and save, and they take its place.</div>` : ""}
-    <div class="tw" style="max-height:238px;overflow-y:auto">
-      <table><thead><tr><th colspan="2">Type</th><th>Bring</th><th style="text-align:left">Yours</th></tr></thead>
-      <tbody>${MAP.at.map(t => {
-        const v = hab[t.k], n = +meins[t.k] || 0;
-        return `<tr${!v.hat && !n ? ` class="leer"` : ""}><td class="sy">${symbolSVG(t.k, c, 24, 17)}</td>
-          <td class="zat-name">${esc(atName(t.k))}</td>
-          <td><input class="zat" type="number" data-zat="${esc(t.k)}" min="0" max="99" value="${n || ""}" placeholder="0"></td>
-          <td class="zat-hab" style="text-align:left;color:var(--dim)">(${v.hat} in depot, ${v.frei} free)</td></tr>`;
-      }).join("")}</tbody></table>
+      names no types. Fill the Bring column in and save, and they take its place.</div>` : ""}
+    <div class="tw" style="max-height:266px;overflow-y:auto">
+      <table><thead><tr><th colspan="2">Type</th><th>Need</th>${
+        zeigeBring ? `<th>Bring</th>` : ""}<th style="text-align:left">Yours</th></tr></thead>
+      <tbody>${ANF_KLASSEN.map(z => klZeile(z)
+        + MAP.at.filter(t => anfKlasseVon(t.k) === z.k).map(typZeile).join("")).join("")}</tbody></table>
     </div>`;
+}
+/* Die Filterreihe verdrahten. NICHT NEU ZEICHNEN: in den Feldern koennen
+   getippte Zahlen stehen, und ein Neuaufbau verloere sie. Versteckte Zeilen
+   behalten ihr Feld im DOM, und a-join liest sie beim Speichern mit.
+   Zweimal derselbe Knopf hebt die Wahl wieder auf, wie die feine Reihe im
+   Depot. */
+function anfVerdrahten(){
+  const knoepfe = [...document.querySelectorAll("#dlg [data-anffl]")];
+  if (!knoepfe.length) return;
+  const zeigen = () => {
+    for (const b of knoepfe) b.setAttribute("aria-pressed", String(b.dataset.anffl === anfFilter));
+    document.querySelectorAll("#dlg tr[data-kl]").forEach(tr =>
+      tr.classList.toggle("anf-aus", anfFilter !== "all" && tr.dataset.kl !== anfFilter));
+  };
+  for (const b of knoepfe) b.addEventListener("click", ()=>{
+    anfFilter = (anfFilter === b.dataset.anffl) ? "all" : b.dataset.anffl;
+    zeigen();
+  });
+  zeigen();
 }
 
 /* ---------------- gathering time ----------------
@@ -14240,13 +14681,15 @@ function arrowDialog(a, frisch){
   /* another side's arrow is a sighting: label, sign and colour, nothing
      of commitment, strength, chain or state */
   const fremd = fremdeSeite(a);
+  /* Der Satz zur Anforderung. Einmal gerechnet, nicht zweimal im Rumpf. */
+  const anfW = fremd ? "" : anfText(a);
   openDlg(`
     <div class="dlg-h"><h2>${esc(MAP.n[a.from][0])} → ${esc(MAP.n[a.to][0])}</h2>
       <p>${frisch ? `Give it a short label — that is what everyone reads on the map.`
                   : zustandText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>
       ${!fremd && a.luft ? `<p>${paraTextSicher(paraVorratText)}</p>` : ""}
       ${!fremd && (a.sym || a.luft) ? `<p>${paraTextSicher(() => paraErfuellbarText(paraBefehlTypen(a), {art: "arrow", id: a.id}))}</p>` : ""}
-      ${fremd ? "" : `<p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
+      ${fremd ? "" : `${anfW ? `<p>${anfW}</p>` : ""}<p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
           <b>${gesamt}</b> assault teams.` : "Nobody has committed to this arrow yet."}</p>
       <p>${sammelText(a)}</p>`}</div>
     <div class="dlg-b">
@@ -14269,7 +14712,7 @@ function arrowDialog(a, frisch){
         <span style="font-size:12px;color:var(--dim);flex:1">Operation name</span>
         <input type="text" id="a-lbl" value="${esc(a.label||"")}" placeholder="e.g. Push to Berlin" maxlength="40" style="width:150px">
       </div>
-      ${fremd || a.entwurf ? "" : zusageTabelle(a)}
+      ${fremd ? "" : anfTabelle(a)}
       <div class="row" style="align-items:center">
         <span style="flex:1"></span>
         <button class="btn primary" id="a-join">Save</button>
@@ -14337,6 +14780,7 @@ function arrowDialog(a, frisch){
           name: a.label || (MAP.n[a.from][0] + " \u2192 " + MAP.n[a.to][0]), zs: befehlZustand(a.id, a)};
     zuordWahl(b, ()=>arrowDialog(a));
   });
+  anfVerdrahten();
   document.querySelectorAll("#dlg .pf-farben button").forEach(b => b.addEventListener("click", ()=>{
     const farbeFeld = document.getElementById("a-farbe");
     if (farbeFeld) farbeFeld.value = b.dataset.farbe;
@@ -14373,6 +14817,23 @@ function arrowDialog(a, frisch){
     const farbeEl = document.getElementById("a-farbe");
     const farbe = farbeEl ? farbeEl.value : (a.farbe||"");
     let neu = false;
+    /* DIE ANFORDERUNG STEHT AM PFEIL, nicht an meiner Zeile: sie sagt, was
+       der Befehl verlangt, und gilt fuer jeden, der ihn liest. Geschrieben
+       wird nur, wenn die Felder ueberhaupt dastehen - wer nicht schreiben
+       darf, sieht Zahlen statt Feldern, und dann bleibt stehen, was steht.
+       Auch eine versteckte Zeile wird gelesen: der Filter versteckt, er
+       loescht nicht. Alles leer raeumt die Anforderung ganz weg. */
+    const anfFelder = [...document.querySelectorAll("#dlg input[data-anft], #dlg input[data-anfk]")];
+    if (anfFelder.length){
+      const req = {at: {}, cls: {}};
+      for (const el of anfFelder){
+        const z = Math.max(0, Math.min(99, Math.round(+el.value || 0)));
+        if (!z) continue;
+        if (el.dataset.anft) req.at[el.dataset.anft] = z; else req.cls[el.dataset.anfk] = z;
+      }
+      const nun = (Object.keys(req.at).length || Object.keys(req.cls).length) ? req : undefined;
+      if (JSON.stringify(nun || null) !== JSON.stringify(a.req || null)){ a.req = nun; neu = true; }
+    }
     if (lbl !== (a.label||"")){ a.label = lbl; neu = true; }
     /* "Planned strength" ist am 08.09.2026 aus diesem Fenster gefallen: die
        Typenliste darueber sagt, was kommt, und eine von Hand getippte
@@ -32795,7 +33256,7 @@ function areaDialog(id, e, neuGezogen){
       </div>` : ""}
       ${a.entwurf ? ENTWURF_WARNUNG : ""}
       ${a.folge ? `<div class="note">Step <b>${a.folge}</b> of its operation${a.entwurf ? " — still a draft" : ""}.</div>` : ""}
-      ${a.aufkl ? `<div class="note">Eyes are asked from our nearest town; a scout that sees that far can take it. Mark it done by hand.</div>`
+      ${a.aufkl ? `<div class="note">Eyes are asked from our nearest town; a scout that sees that far can take it. On towns it closes itself once the capture has written every one of them. A town found empty writes no record, so mark that one done by hand.</div>`
                 : `<div class="note">The colour of the area follows the faction selected on the left — pick the enemy
         before drawing and the area reads as theirs; the outline colour is your own accent.</div>`}
     </div>
@@ -38977,6 +39438,12 @@ function zahnradZeichnen(){
     <button class="btn" id="zr-meld">Report or suggest …</button>
     <button class="btn" id="zr-zeig">Report by pointing at it</button>
 
+    ${istLeader() && CFG ? `
+      <h3>Clan rules</h3>
+      <div class="note" style="margin-top:0">Yours to set — they hold for everyone
+        in the clan.</div>
+      <button class="btn" id="zr-regeln">Rules and points …</button>` : ""}
+
     ${(istLeader() || istAdmin()) && CFG ? `
       <h3>Oversight</h3>
       <div class="note" style="margin-top:0">Who has been changing what, and how to
@@ -38993,6 +39460,7 @@ function zahnradZeichnen(){
   el.querySelector("#zr-hilfe").addEventListener("click", ()=>{ zahnradZu(); hilfeDialog(); });
   el.querySelectorAll("[data-zw]").forEach(b =>
     b.addEventListener("click", ()=>zwZeigen(b.dataset.zw)));
+  el.querySelector("#zr-regeln")?.addEventListener("click", ()=>{ zahnradZu(); regelnDialog(); });
   el.querySelector("#zr-aufsicht")?.addEventListener("click", ()=>{ zahnradZu(); aufsichtFenster(); });
   el.querySelector("#zr-meld").addEventListener("click", ()=>meldeFenster(""));
   el.querySelector("#zr-zeig").addEventListener("click", ()=>meldeModusSetzen(true));
@@ -39531,6 +39999,215 @@ function meldungSenden(art, text, wo){
   dirty.add(`todo:${id}`); save();
   toast("Sent — it is on the admin's list now");
 }
+/* ---- DER RAUM DES LEITERS --------------------------------------------
+   Sein Wort vom 08.09.2026: "Fuer diese ganze 'Wieviele Punkte wofuer
+   Geschichte' kannst du mir ja in die Admintools einen eigenen Raum bauen,
+   wo ich das konfigurieren kann, also mit allen Bonuspunktebedingungen
+   etc."
+
+   DREI FAECHER, UND SIE REICHEN NICHT GLEICH WEIT:
+     Marks   wirkt sofort. Die Seite haelt die Grenze selbst
+             (darfIchNochMalen), der Server hat seine eigenen, weiteren
+             Deckel und bleibt unberuehrt.
+     Orders  wirkt sofort. Die Seite haelt die Sperre selbst
+             (zustandSetzen).
+     Points  schreibt nur die Zeile meta:punkte. AUSGEZAHLT WIRD AM SERVER.
+             Ohne die Wanderung warmap/sql/2026-09-08_punktesaetze.sql
+             steht hier eine Zahl, an die sich niemand haelt - und genau das
+             sagt das Fach auch, an Ort und Stelle.
+
+   KEIN FELD IST VORAUSGEFUELLT. Die Vorgabe steht blass als Platzhalter
+   daneben; leer bedeutet "nicht gesetzt". Save schreibt nur, was wirklich
+   dasteht. Damit kann ein Klick auf Save keine Zahl in seine Vorgabe
+   verwandeln, die er nie gewaehlt hat. */
+const MARKEN_STUFEN = [
+  {k:"grund",    n:"Base",           d:"Everyone in the clan."},
+  {k:"fuehrung", n:"Confirm orders", d:"Whoever may set orders active — see Roles."},
+  {k:"leiter",   n:"Leader",         d:"You."},
+];
+/* Die Datei, in der die Saetze unten am Server ankommen. Steht hier, weil
+   das Fach Points sie nennen muss - eine Zahl ohne die Wanderung wirkt
+   nicht, und wer sie sucht, soll den Namen lesen koennen. */
+const REGEL_PUNKTE_DATEI = "warmap/sql/2026-09-08_punktesaetze.sql";
+/* WAS DER SERVER AUSZAHLT, Feld fuer Feld.
+   std ist NICHT mein Vorschlag, sondern der Betrag, den der Server HEUTE
+   bucht: warmap_punkte.betrag steht auf "not null default 1", und
+   warmap_punkte_abschluss nennt die Spalte bei order/done und leader/done
+   nicht. Wer hier nichts eintraegt, aendert nichts.
+   Mehr steht bewusst nicht hier: Erstfund, Kampfmarke, Besitzwechsel und
+   Depot werden im grossen Ausloeser gebucht, das Ortsgewicht 3/2/1 in
+   warmap_ort_gewicht. Die in den Raum zu holen heisst,
+   warmap_punkte_buchen zu ersetzen - eine eigene Wanderung, siehe Kopf der
+   Datei oben. */
+const PUNKTE_REGEL_FELDER = [
+  {k:"leader_done",  n:"Issuing an order that gets done", std:1,
+   d:"To whoever wrote the order."},
+  {k:"order_done",   n:"Fulfilling somebody's order",     std:1,
+   d:"To every player whose teams were assigned to it."},
+  {k:"leader_fremd", n:"Extra when others fulfilled it",  std:0,
+   d:"On top of the first line, once, when somebody other than the issuer had teams on it."},
+];
+function regelnDialog(tab){
+  if (!istLeader()){ toast("Only the clan leader sets these."); return; }
+  const r = clanRegeln(), p = punkteRegeln();
+  /* Was die Sperre GERADE JETZT traefe. Diese Zahl wird gezaehlt und nicht
+     behauptet - sie bleibt richtig, auch wenn die Anforderung je Typ in
+     einer Form kommt, die hier niemand kennt. alleBefehle() laesst fremde
+     Seiten und Fertiges schon weg. */
+  const bef = alleBefehle().filter(b => !b.entwurf);
+  const ohne = bef.filter(b => !anforderungGestellt(b.v));
+  /* hoch ist der Deckel des Feldes. 999 bei den Marken wie bei l-soll und
+     ar-soll, 99 bei den Punkten - dieselbe Grenze, die warmap_punkte_satz am
+     Server zieht. Zwei verschiedene Deckel waeren zwei verschiedene
+     Meinungen darueber, was noch eine Zahl ist. */
+  /* class="zat": ohne sie greift keine Stilregel des Hauses, und ein
+     Gegenleser hat am geflickten Blatt gemessen, was dabei herauskommt -
+     Grund weiss, Schrift rgb(233,226,213), Kontrast 1,1 zu 1. Die vom Leiter
+     GESETZTE Zahl waere damit fast unsichtbar gewesen, waehrend die Vorgabe
+     als Platzhalter gut lesbar bleibt: genau umgekehrt zu dem, worum es hier
+     geht. .tw input.zat macht das Feld dunkel und die Zahl hell. */
+  const feld = (id, wert, vorgabe, hoch) =>
+    `<input class="zat" type="number" id="${id}" min="0" max="${hoch}" value="${
+      wert === null || wert === undefined || wert === "" ? "" : esc(String(wert))
+    }" placeholder="${esc(String(vorgabe))}" style="width:66px">`;
+  const mSetzt = (art, stufe) => {
+    const o = (r.marken || {})[art];
+    const w = o && typeof o === "object" ? o[stufe] : undefined;
+    return (w === null || w === undefined) ? "" : w;
+  };
+  openDlg(`
+    <div class="dlg-h"><h2>Clan rules</h2>
+      <p>What you set here holds for everyone in the clan. Nobody else can change it.</p></div>
+    <div class="tabs">
+      <button data-tab="marken" aria-pressed="true">Marks</button>
+      <button data-tab="befehl" aria-pressed="false">Orders</button>
+      <button data-tab="punkte" aria-pressed="false">Points</button>
+    </div>
+    <div class="dlg-b">
+
+      <div class="tabp on" data-tab="marken">
+        <div class="tw"><table>
+          <thead><tr><th style="text-align:left">At most, per player</th>
+            ${MARKEN_STUFEN.map(t => `<th title="${esc(t.d)}">${esc(t.n)}</th>`).join("")}</tr></thead>
+          <tbody>${["arrow", "line", "area"].map(art => `<tr>
+            <td style="text-align:left">${esc(MARKEN_WORT[art])}</td>
+            ${MARKEN_STUFEN.map(t => `<td>${
+              feld(`rg-m-${art}-${t.k}`, mSetzt(art, t.k), MARKEN_GRENZE[art][t.k], 999)
+            }</td>`).join("")}</tr>`).join("")}</tbody>
+        </table></div>
+        <div class="note">Leave a box empty and the grey number holds. Those came with the
+          tool, except the 10 attack arrows — that number is the Kommodore's, from 08.09.2026.
+          <b>0</b> means no limit.</div>
+        <div class="note">Counted per player and only what is alive on the map: delete one
+          and there is room for another. The middle column is whoever may confirm orders.</div>
+      </div>
+
+      <div class="tabp" data-tab="befehl">
+        <div class="row" style="align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--dim);flex:1">An order must say how many
+            units it needs before it can go active</span>
+          <label class="toggle"><input type="checkbox" id="rg-leer"${
+            r.leer === 1 ? " checked" : ""}><span></span></label>
+        </div>
+        <div class="note">${bef.length
+          ? `<b>${ohne.length}</b> of <b>${bef.length}</b> orders on the map say nothing about
+             strength right now. With this on, none of them goes active until it does.`
+          : `Nothing on the map to measure this against right now.`}</div>
+      </div>
+
+      <div class="tabp" data-tab="punkte">
+        <div class="tw"><table>
+          <thead><tr><th style="text-align:left">Points for</th><th>Amount</th></tr></thead>
+          <tbody>${PUNKTE_REGEL_FELDER.map(f => `<tr>
+            <td style="text-align:left">${esc(f.n)}
+              <div style="font-size:11px;color:var(--dim2)">${esc(f.d)}</div></td>
+            <td>${feld(`rg-p-${f.k}`, p[f.k] === undefined || p[f.k] === null ? "" : p[f.k], f.std, 99)}</td>
+          </tr>`).join("")}</tbody>
+        </table></div>
+        <div class="row" style="align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--dim);flex:1">An order only pays out if a
+            battle was played on one of its towns</span>
+          <label class="toggle"><input type="checkbox" id="rg-p-gefecht"${
+            +p.gefecht_pflicht === 1 ? " checked" : ""}><span></span></label>
+        </div>
+        <div class="note">Leave a box empty and the grey number holds — that is what the
+          server pays today. Nobody chose those amounts either. <b>0</b> means nothing is
+          booked at all, and raising it later still books.</div>
+        <div class="note">The server pays these out, not this page. Until
+          <b>${esc(REGEL_PUNKTE_DATEI)}</b> has been run there, what you set here is only
+          written down.</div>
+      </div>
+
+    </div>
+    <div class="dlg-f">
+      <button class="btn" id="rg-zurueck" title="Clears both rows — everything falls back to the grey numbers">Clear all</button>
+      <span style="flex:1"></span>
+      <button class="btn" id="d-close">Close</button>
+      <button class="btn primary" id="rg-save">Save</button>
+    </div>`, "wide");
+  tabsAktiv(document.getElementById("dlg"), tab);
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  document.getElementById("rg-save").addEventListener("click", ()=>{
+    if (regelnSpeichern()){ closeDlg(); toast("Saved for the whole clan"); }
+  });
+  document.getElementById("rg-zurueck").addEventListener("click", ()=>{
+    if (!confirm("Clear both rules rows?\n\nEvery limit and every amount falls back to the "
+               + "numbers the tool came with.")) return;
+    if (setMeta("regeln", null) && setMeta("punkte", null)){
+      closeDlg(); draw(); toast("Cleared");
+    }
+  });
+}
+/* LESEN, WAS DASTEHT - UND NUR DAS. Ein leeres Feld wird nicht zu einer
+   Null: es faellt aus der Zeile heraus, und dann gilt wieder die Vorgabe.
+   Genau das haelt meine Zahlen davon ab, sich in seine zu verwandeln. */
+function regelnSpeichern(){
+  /* Eine Zahl, die nicht durchgeht, verschwindet nicht still: sie haelt das
+     Speichern an und sagt, was gilt. Still weggeworfen zu werden ist die
+     schlimmste Antwort auf einen Tippfehler - man sieht sein Fenster
+     zugehen und glaubt, es stehe jetzt so. */
+  let schlecht = "";
+  const lies = (id, hoch) => {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const roh = String(el.value || "").trim();
+    if (!roh) return null;
+    const n = Math.round(+roh);
+    if (!Number.isFinite(n) || n < 0 || n > hoch){
+      if (!schlecht) schlecht = `${roh} — that box takes 0 to ${hoch}.`;
+      return null;
+    }
+    return n;
+  };
+  const marken = {};
+  for (const art of ["arrow", "line", "area"]){
+    const o = {};
+    for (const t of MARKEN_STUFEN){
+      const w = lies(`rg-m-${art}-${t.k}`, 999);
+      if (w !== null) o[t.k] = w;
+    }
+    if (Object.keys(o).length) marken[art] = o;
+  }
+  const regeln = {};
+  if (Object.keys(marken).length) regeln.marken = marken;
+  if (document.getElementById("rg-leer")?.checked) regeln.leer = 1;
+
+  const punkte = {};
+  for (const f of PUNKTE_REGEL_FELDER){
+    const w = lies(`rg-p-${f.k}`, 99);
+    if (w !== null) punkte[f.k] = w;
+  }
+  if (document.getElementById("rg-p-gefecht")?.checked) punkte.gefecht_pflicht = 1;
+  if (schlecht){ toast(schlecht); return false; }
+
+  /* Zwei Zeilen, zwei Stempel. Leer heisst leer: ein Grabstein, und
+     clanRegeln liefert danach wieder {}. */
+  if (!setMeta("regeln", Object.keys(regeln).length ? regeln : null)) return false;
+  if (!setMeta("punkte", Object.keys(punkte).length ? punkte : null)) return false;
+  draw();
+  return true;
+}
+
 /* AUFSICHT. Zwei Dinge in einem Fenster, getrennt gesperrt:
    die Uebersicht sieht der Leiter, das Zuruecknehmen nur der Verwalter.
 
@@ -43620,7 +44297,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 747cd01483</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 7b47f5046f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -43848,7 +44525,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "747cd01483";
+const BAU = "7b47f5046f";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
