@@ -853,6 +853,30 @@ body.meld-modus{cursor:help}
    #spieler above) - without this line the spacer is 0 tall here and the
    switch sits against the note under it */
 #gefstand .rd-pult .kb-abstand{height:14px}
+/* DIE BESTAETIGUNG HAENGT AM RAUM, NICHT IM KOPF. gefZeichnen schreibt Kopf,
+   Blatt und Pult bei jedem Takt neu (GEF_TAKT, 1000 ms) - eine Animation dort
+   finge jede Sekunde von vorn an und liefe nie durch. #gefstand steht still,
+   hier laeuft sie. Zwei Pulse beim Befund, danach bleibt der Ring stehen,
+   solange die Bestaetigung frisch ist.
+   ALS PSEUDOELEMENT, NICHT ALS inset-box-shadow: die vier Kinder des Rasters
+   decken den Raum vollstaendig mit eigenem Grund, ein Innenschatten laege
+   dahinter. Das ::after liegt absolut und ist damit kein Rasterfeld, also
+   verschiebt es die Aufteilung nicht; pointer-events:none, damit der
+   Schliessknopf darunter erreichbar bleibt.
+   EINE FARBE, EIN FALL. Der Ring sagt nicht, wie der Kampf ausging - das
+   sagt das Spiel selbst. Er sagt: gelesen, das Fenster kann zu. #8fe6a2 ist
+   die Bestaetigungsfarbe, die das Werkzeug schon fuehrt (.rd-kf.gut,
+   .rd-kf.scannt) - kein zweiter Ton, kein dritter Gruenton.
+   ENNO 08.09.2026 / OPUS 08.09.2026 (Bau) / FABLE 08.09.2026 (Zusammenzug) */
+#gefstand.gf-ende::after{content:"";position:absolute;inset:0;pointer-events:none;
+  z-index:5;border:3px solid #8fe6a2}
+#gefstand.gf-ende.gf-puls::after{animation:gfEndePuls 1.1s ease-out 2}
+@keyframes gfEndePuls{
+  0%,100%{box-shadow:inset 0 0 0 0 rgba(0,0,0,0)}
+  50%{box-shadow:inset 0 0 26px 0 #8fe6a2}}
+@media (prefers-reduced-motion:reduce){#gefstand.gf-ende.gf-puls::after{animation:none}}
+/* der Kopfkasten der Bestaetigung: stehend, ohne Animation, eine Farbe */
+#gefstand .rd-kf.gf-ende-kf .v{font-weight:700;letter-spacing:.10em;color:#8fe6a2}
 /* the two score bars, drawn as they stand in the game's head strip */
 .gf-balken{display:grid;grid-template-columns:64px 1fr 56px;gap:8px;align-items:center;
   margin:6px 0;font-size:13px}
@@ -24628,17 +24652,28 @@ let gefOffen = false, GEF = null;
    Clanmitglieder aus ihren Kaempfen deren Zustand extrahieren koennen, ohne
    aus dem Spiel gehen zu muessen."
 
-   THE END OF THE BATTLE IS NOT READ HERE, and that is on purpose. A reader
-   for the end screen was built and taken out again: over the Erfurt recording
-   at a tenth of a second it called eight end screens before the real one,
-   five of them "won", on the capture badges under the K.O. line and on the
-   scoreboard, which carries the same three-line head block as the end screen;
-   and when the shared window arrives at 1920 instead of 3840 it calls
-   twenty-one and misses the real one entirely. A wrong WON goes to the whole
-   clan. Whoever picks it up again: the line-count proof does not separate the
-   badges from the end screen, and a tenth-of-a-second run is the only one
-   that shows the false alarms at all - at one look a second there are none to
-   see.
+   THE END OF THE BATTLE IS READ HERE NOW, at the word - gefEndbildLesen
+   below. The reader that was thrown out counted LETTERS, and it earned being
+   thrown out: over the Erfurt recording at a tenth of a second it called
+   eight end screens before the real one, five of them "won", on the capture
+   badges under the K.O. line and on the scoreboard, which carries the same
+   three-line head block as the end screen; and when the shared window
+   arrived at 1920 instead of 3840 it called twenty-one and missed the real
+   one entirely. Replayed over 240 cases it got 57 outcomes wrong, and it only
+   ever carried German. A wrong reading goes to the whole clan.
+   What stands here instead does not count letters at all. It holds the band
+   it found against twenty-four words - twelve languages, won and lost - and
+   names an outcome only when one of them fits and the other outcome is a
+   clear distance behind.
+   AND WHAT IS READ IS NOT SHOWN. The desk confirms that the end screen was
+   read and that the game window may be closed - one chime, one frame, one
+   box, the same for either outcome. ENNO on 08.09.2026: "Wir brauchen keine
+   unterschiedlichen Toene fuer Sieg und Niederlage, das Spiel hat ja auch
+   Ton. Es geht nur um die Bestaetigung, dass man das Fenster schliessen
+   kann." The outcome itself is held in the state for the clan side of this,
+   which is not built yet.
+   NOTHING OF IT GOES TO THE CLAN. The reading hangs on the state and nowhere
+   else; gefMelden is untouched and still writes the score alone.
 
    THE GAME'S DISPLAY DOES NOT SCALE WITH THE RESOLUTION. Measured over two
    recordings of the same game: one played at 1920x1080 and upscaled to 3840,
@@ -25072,6 +25107,421 @@ function gefUhrPruefen(px, bw, bh, z){
   z.uhrVorschlag = {t: Math.round((vorT + nun)/2), spanne: nun - vorT,
                     ort: (typeof GEF !== "undefined" && GEF) ? GEF.ort : null};
 }
+/* ==== THE END OF THE BATTLE, READ AT THE WORD ===========================
+   ENNO on 08.09.2026: "Der Wortleser sollte eigentlich reichen. Das Problem
+   ist, dass die Sterne etwas spaeter auftauchen." So the five rating stars
+   are not the gate here, and nothing waits for them: measured over the two
+   recordings that carry them they come 14,15 s and 14,22 s AFTER the writing,
+   and the game's own close button comes with them - before that moment the
+   end screen carries no way to close it at all. The writing itself stood at
+   least 17,9 / 18,9 / 26,9 s in the three recordings; the upper bound is NOT
+   measured, every recording ends before it.
+
+   WHAT IS READ, in the order it happens. Every number below is measured,
+   Messungen\messung_sprachen_endbild_10_wortleser_probe.py:
+   1. The text is looked for by its COLOUR - cream, saturation under 40 and
+      value over 200 on the 0..255 scale - not by brightness. Measured: a
+      brightness threshold takes half the war map behind the overlay with it.
+   2. The three-line head block is demanded: game mode small, place smaller,
+      the writing large, all three on the same centre. NOT "the writing is the
+      third band": that was the mistake of the reader thrown out before it. At
+      half the delivered size the thin lines above fall under the point
+      threshold, the writing becomes band one, and the old rule threw it away
+      (Messungen\messung_schriftzug_warum_halb.py). What is demanded here is
+      ONE line above the big one on the same centre, not a count of bands.
+   3. Not the middle of the picture. Measured on the recording "Full HD,
+      1600p 2k": between 600 s and 624 s the centre of the head block walks
+      from x 2001 to x 1121. Whoever searches in the middle does not find it.
+   4. The band is held against all 24 words, and an outcome is named only when
+      the best value is over the threshold AND at least the distance ahead of
+      the best value of the OTHER outcome. Both numbers come out of the
+      measurement's own file, they are not set here.
+
+   WHAT THIS PAIRING - 24 templates at 60x12 - IS MEASURED AT: eleven real end
+   screens at five sizes, 51 read right, 0 wrong, 4 silent, and 0 false alarms
+   over five black pictures (Messungen\messung_endbild_vorlagengroesse.py);
+   the Kommodore's own "Sieg Bildschirm.png" right at 3840, 2560, 1920, 1600
+   and 1280, the word that fits at 0,77 to 0,93 against 0,019 to 0,052 for the
+   other one. THAT is the number this file may quote, and the only one the
+   sheet quotes.
+   THE OTHER NUMBER, AND WHOSE IT IS: 70830 looks a tenth of a second apart
+   over three recordings without one false alarm, 18 of 18 read right without
+   being told the language. That run used 22 templates at 240x48
+   (Messungen\messung_gegenlesen_endbild_dicht.py says so in its own head:
+   "NACHGEZAEHLT: es sind 22 Vorlagen, nicht 24"), not the 24 at 60x12 that
+   stand below. The gate that carries the number - the band finder - is taken
+   over from it line for line, so it is worth writing down; it is NOT worth
+   telling the user, and it is not told. (FABLE 08.09.2026, a proposal.)
+
+   THE 24 TEMPLATES ARE NOT CUT OUT OF RECORDINGS. ENNO on 08.09.2026:
+   "Eigentlich brauchst du sogar nur einen einzigen Bildschirm, da ja eh alles
+   variabel ist durch die Fremdsprachen." They are set from the game's own
+   font D:\Programme\HnG\AnimationBin\FetteEngDOT.otf at 200 px, trimmed to
+   the ink and area-averaged down to 60 by 12 points, 8 bit, base64: 24 times
+   960 characters, 23040 in all, about one percent of this file.
+   Why 60 by 12, measured against 240x48, 120x24, 80x16, 40x8, 30x6 and four
+   column profiles (Messungen\messung_endbild_vorlagengroesse.py): the closest
+   pair with DIFFERENT outcomes keeps 0,288 here against 0,245 at the full
+   240x48 - a sixty-fourth of the data costs 0,043 of that distance, the next
+   step down costs another 0,031. The column profiles look as good as any
+   matrix on German material, 51 right and 0 wrong, and make 25 wrong outcomes
+   over all 24 words as a disturbed mask. They were dropped for that.
+
+   THREE GAPS, SAID OUT LOUD. No end screen in any language but German exists
+   as a recording. For the other eleven there is only the shape test - 3 wrong
+   outcomes in 840 disturbed looks, all three the same pair (Czech against
+   French) and only where the band was found cut off at both ends; the same
+   swap stands with the full 240x48 template, so it comes from finding the
+   band, not from shrinking it. Korean is set from a Windows font, because the
+   game font carries no Hangul: that one is a guess and is marked as one in
+   the measurement's file. And the Spanish and the Portuguese template for the
+   lost outcome are byte for byte the same picture - the game prints the same
+   word - so the LANGUAGE this reader names can be the wrong one of that pair.
+   The outcome is right either way, and the language is therefore held in the
+   state and shown nowhere.
+
+   WHAT IT COSTS, COUNTED - and there is no millisecond here, because none was
+   measured in this build. The strip is scaled to a fixed 1920 points wide
+   first, so the work does not grow with the shared resolution: at 3840x2160
+   that is 1920x216 = 414720 points in ONE pass per look, against 692x140 =
+   96880 for the bar band next door. Below 1920 the picture is taken as it
+   comes - the measurement holds 11 of 11 end screens at 1920, 2560 and 3840,
+   while at 1600 and 1280 two of them go silent, silent and never wrong.
+   Everything after that one pass runs only on bands that already qualified,
+   and the 24 templates are unpacked at the first look that gets that far, not
+   at load. From the writing appearing to the confirmation: under 1,2 s
+   (GEF_TAKT 1000 ms plus BILD_TAKT 125 ms plus the reading itself).
+
+   THIS CODE WAS PUT AGAINST THE MEASUREMENT, not only read over. The same
+   strips through this code in a browser and through the measurement's own
+   code in Python: the same band, the same outcome, the same language and the
+   same value to three digits on all six pictures - four end screens, the war
+   map at the start of a battle and the scoreboard, and the last two silent.
+   And the browser's own shrinking was put against INTER_AREA over the
+   Kommodore's two screens at 3840x2160: same outcome, same language, 0,949
+   against 0,956 and 0,960 against 0,961 - at most 0,007 lower, against a
+   distance of 0,10 that has to be cleared, and the war map stayed silent
+   through that path too.
+   (OPUS 08.09.2026, Flicks\probe_endbild_wortleser_1_referenz.py.)
+
+   WHAT IS DELIBERATELY NOT HERE: the layout reader (blue field, red field,
+   dark table head). Measured, it carries one false alarm per battle, the
+   scoreboard. It may only ever speak AND-linked with the word, never on its
+   own, and the numbers above do not need it. Nothing else calls into
+   gefEndbildMelden, and nothing else may: the confirmation rings on the first
+   finding, so a second reader with a false alarm per battle would ring on
+   it. */
+const GEF_ENDBILD_BREIT = 1920;
+const GEF_ENDBILD_SCHWELLE = 0.35, GEF_ENDBILD_ABSTAND = 0.1;
+/* HOW LONG A STANDING FINDING LIVES WITHOUT BEING SEEN AGAIN. This is the
+   one number that makes the second battle work at all, so it is written down
+   with its ground: the writing stood 17,9 / 18,9 / 26,9 s at the least, and
+   the longest measured GAP inside a writing that was still standing is 13,5 s
+   - and that gap came from the Kommodore changing the resolution mid-recording,
+   not from the game. A single missed look must therefore not throw the verdict
+   away. A whole minute of silence, though, means the screen is gone: the next
+   finding after that is a new battle and gets its own number, its own chime
+   and its own box. The 60 s themselves are CHOSEN, not measured. (FABLE
+   08.09.2026, a proposal.) */
+const GEF_ENDBILD_LUECKE = 60000;
+/* the 24 words as pictures, 60x12 points, 8 bit, base64. Built by
+   Messungen\messung_endbild_vorlagengroesse.py out of the game font; the
+   file it came from is Messungen\endbild_vorlagen.json, and it carries the
+   whole recipe in its head. Key: language_outcome. */
+const GEF_ENDBILD_VORL = {
+  cs_defeat:"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa6+otAAAQxeNk8ogBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABoqi4AAAAADJmragAAAAAAAAAAAAAAAAAAAAAAAAAAi5KSkXgqAAAAJYewrXoVAAAzkpKSkHEfAAAAAAqQjQUAAABzkpKSkpIxAIKSIwAAbJI0AAAANpJlAAAA9P/Atej9bgBC9/q2v//nHwBZ/+6zufH4UgAAAFX//0kAAACNs7O+//9FAOP/PQBS/70DAAAApv/uCAAA9P8sABn98AKr/3wAAK//dwBZ/8cAADr/0AAAAK7//6IAAAAAAACF/8UCAOP/PSDu5BcAAAAN8///UQAA9P8sAAr69QOz/20AAKH/fwBZ/8cAACf/1wAAEffg6/ELAAAAACD2/TcAAOP/Qsb6OwAAAABa/8z/qwAA9P88FVz+2QCz/20AAKH/fwBZ/9pXXLP/jwAAY/+Upf9XAAAAAKr/owAAAOP/wv/ZBAAAAAC0/0nw9g8A9P/////OMACz/20AAKH/fwBZ//fb+v95AgAAvP9JW/+wAAAAPf70HQAAAOP//+3/bgAAABX58Aes/18A9P9aNR0AAACz/20AAKH/fwBZ/8cAlP+WAAAb/P1lb//4EgACzP+AAAAAAOP/uSf48BgAAGj/01uj/7kA9P8sAAAAAACx/3AAAKT/fQBZ/8cAHvj6IgBx//bp6ff/ZQBh/+MLAAAAAOP/PgCL/6IAAML/7+nq/vsY9P8sAAAAAABu/91refH9PQBZ/8cAAJn/owDL/2YAAHf/vgfm/7RtbW0lAOP/PQAQ6v49H/38GAAAyP9t4u0pAAAAAAABZtH59sNJAABT7bkAACHq6kbs6xsAACrt6int7e3t7e1QANPtOQAAZ+2/be27AAAAdu22",
+  cs_victory:"AAAAAAAAAAABufY8AAAAAAAAAACB92rtegAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXP+RAAAAAAAAAAAsq0wAAAAAAAAAAAAAeatuAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADlokCg5ITAAB4kiBWkjIkkpKSkpKSLDaSkpKSkkEAfZKSkpJoAAFYpbGEGgBQkpKSkpKOUZJIAABDklYhkmgAqv9QAAr58gmX/1gss7P7/LSzNl7/3rOzs1AAmbOz3f+mAJr/z7D46h9js8f/5rOuUf+uAACm/1o5/7YAYP+NAEP/rwCX/1gAAALz9wMAAF7/kQAAAAAAAAAF3f41Cv3rBACC/3UAAET/rAAAC/bpAgHj+xI5/7YAGP3KAIH/YwCX/1gAAALz9wMAAF7/kQAAAAAAAABo/68ACfrvFAAMGg0AAET/rAAAALf/KST/wQA5/7YAAMr5DcD9GQCX/1gAAALz9wMAAF7/yICAfQAAAAnk/S0AAHf99bRmCwAAAET/rAAAAGz/ZWL/dQA5/7YAAH//TfbKAACX/1gAAALz9wMAAF7/5sXFwQAAAHP/pgAAAAAnfMb+3RoAAET/rAAAACL/oqD/KQA5/7YAADX/v/9+AACX/1gAAALz9wMAAF7/kQAAAAAADur7JgAAAAAAAACK/3MAAET/rAAAAADW39/bAAA5/7YAAAPn//8xAACX/1gAAALz9wMAAF7/kQAAAAAAff+dAAAAKM2cAAB1/3wAAET/rAAAAACM//+PAAA5/7YAAACf/+MBAACX/1gAAALz9wMAAF7/wG1tbTEN7/+MbW1OCuf4fmnb/kYAAET/rAAAAABB//9DAAA5/7YAAABR7ZAAAACM7VIAAALh5QMAAFft7e3t7Wod7e3t7e2pACmz8vrOVAAAAD/tnwAAAAAG4eAHAAA17akA",
+  de_defeat:"y4cACNJvAKWkAGbS0tLSLj7S0slvAQCA0tLS0hNZ0tLMfQMAicAAAAAAADfSOwAAAHvu734BAJ7S0tLH9+4HCv+HAMnHAHz/xL+/Kkz/0Nv/aACc/L+/vxJr/8jO/3oAp+kAAAAAAHT/eAAATf/V1P9XAMDzv7+19/9OCv+HAMnHAHz/FQAAAEz/RQbfvgCc8wEAAABr/yUAtdMAp+kAAAAAAKn/rQAAmPgOCfOiAMDPAAAA9/+mCv+HAMnHAHz/FQAAAEz/RQDHyQCc8wEAAABr/yUAl+AAp+kAAAAAAN/34wAAo+0AAHJTAMDPAAAA9/3zFf+HAMnHAHz/FQAAAEz/RQDHyQCc8wEAAABr/yUAptYAp+kAAAAAFv+s/hoAo+0AAAAAAMDPAAAA98H/Yf+HAMnHAHz/z8uqAEz/RQDHyQCc/cvLkABr/6im/IkAp+kAAAAAS/9U/08Ao+0cnp5oAMD1y8t095nOuv+HAMnHAHz/y8amAEz/RQDHyQCc/MbGjQBr/+X7xwYAp+kAAAAAgPgL94QAo+0m2PuoAMD0xsZx95l2+/+HAMnHAHz/FQAAAEz/RQDHyQCc8wEAAABr/yWy4gEAp+kAAAAAttom2roAo+0AAOeoAMDPAAAA95kg/f+HAMnHAHz/FQAAAEz/RQDHyQCc8wEAAABr/yVo/zQAp+kAAAAB6v///+0Co+0AAOeoAMDPAAAA95kAxf+HAMnHAHz/FQAAAEz/RQHbvQCc8wEAAABr/yUe/oQAp+kAAAAi/6tsq/8mmvYMC/WgAMDPAAAA95kAbf+HAMnHAHz/yMPDKkz/wMP/cQCc/MPDwxJr/yUA0tQAp/rDw8Nh/0gASP9bUv/Z1/9XAMD0w8O54YwAGed7ALe1AHHp6enpM0Xp6d+IBACO6enp6RZi6SIAf+gfmOnp6emJ6BoAGumBAHXq734BAK/p6end",
+  de_victory:"AAAhdbLa8/366sqZTwcAAAAAE8vS0tJBAAAAALXS0tLS0tLS0tLS0tIyAAAAAARIlcfn+f7348CLPAEACpv7///4x7C34v///99EAAAAF/f///9OAAAAANz////fv7+/v7+/v78uAAAALdP////tva/D9P///8Ymgv///+EdAAAAAn3////vEQAAF/f///9OAAAAANz///+AAAAAAAAAAAAAAAAA0v///6oJAAAADbn///+8n////8EAAAAAAB57e3t5EQAAF/f///9OAAAAANz///+AAAAAAAAAAAAAAAAB8f///2wAAAAAAEZ+fn5nSvf///ufWy8MAAAAAAAAAAAAF/f///9OAAAAANz///+AAAAAAAAAAAAAAAAB8f///2wAAAAAAAAAAAAAACiZ6P/////84LN9OAEAAAAAF/f///9OAAAAANz////ly8rLy8rKyiUAAAAB8f///2wADp6enp6enp6AAAAAASRTe6HL9v///9ZAAAAAF/f///9OAAAAANz////jxsbGxsbGxiQAAAAB8f///2wAFNjY2O7////PAAAAAAAAAAAACob////uDwAAF/f///9OAAAAANz///+AAAAAAAAAAAAAAAAB8f///2wAAAAAAI3////PcXZ2djYAAAAAAD7////8IwAAF/f///9OAAAAANz///+AAAAAAAAAAAAAAAAA8f///2wAAAAAAI3////P0f///6gJAAAAA3f////1FAAAF/f///9OAAAAANz///+AAAAAAAAAAAAAAAAA2v///54JAAAAEcH///+5Ks7////wwa+75v///+ZVAAAAF/f///9OAAAAANz////hw8PDw8PDw8MuAAAAN9f////wwrPH9v///8clAAJEj8Lj9/766cubVAkAAAAAFeHo6OhIAAAAAMnp6Onp6ejp6ejo6Og3AAAAAARFjcDi9v7348CLPAIA",
+  en_defeat:"8f////vcjhcAAADf////////6QAAn/////////8jAIL/////////RwAAAADA/9kBAAAA2//////////q8f/cm6vz/+IXAADf/+Obm5ubjgAAn//6nZubm5sVAIL//6Obm5ubKwAAABr8//8yAAAAhZub6//rm5uO8f+mAAA+//9tAADf/7gAAAAAAAAAn//yBQAAAAAAAIL//xYAAAAAAAAAAG7///+IAAAAAAAAy//MAAAA8f+mAAAg//94AADf/7gAAAAAAAAAn//yBQAAAAAAAIL//xYAAAAAAAAAAMX/6v/dAgAAAAAAy//MAAAA8f+mAAAg//94AADf/7gAAAAAAAAAn//yBQAAAAAAAIL//xYAAAAAAAAAH/z/a///NwAAAAAAy//MAAAA8f+mAAAg//94AADf//Xb29vbPwAAn//8xcTExGQAAIL//97b29uOAAAAc//wCeH/jQAAAAAAy//MAAAA8f+mAAAg//94AADf/+2/v7+/NwAAn//919bW1m0AAIL//8W/v798AAAAyf+vAJz/4AMAAAAAy//MAAAA8f+mAAAg//94AADf/7gAAAAAAAAAn//yBQAAAAAAAIL//xYAAAAAAAAj/f+DJnL//zsAAAAAy//MAAAA8f+mAAAg//94AADf/7gAAAAAAAAAn//yBQAAAAAAAIL//xYAAAAAAAB3/////////5IAAAAAy//MAAAA8f+mAAA9//9oAADf/7gAAAAAAAAAn//yBQAAAAAAAIL//xYAAAAAAADO/950dHTU/+UDAAAAy//MAAAA8f/cmqft/98TAADf/+u2tra2pgAAn//yBQAAAAAAAIL//7y2tra2Myb//4oAAAB2//9AAAAAy//MAAAA8f////vdkRcAAADf////////6QAAn//yBQAAAAAAAIL/////////R3z//0AAAAAs//+WAAAAy//MAAAA",
+  en_victory:"tdJzAAAAtNJ5BcvSQgAAFZfm/OGKDACK0tLS0tLS0h0AG57o/OSVFAAAQ9LS0tLAfA4Ab9K2AgAAk9KZmv/BAAAV/P9QBvf/UAAH0f/ot+3/vAF9v7/7/9e/vxsS4P/ns+r/0ggAUv/9wMDm/9QOH/r/PwAZ+f9KUv/0BwBO//gOBvf/UABC//8dADX//ycAAAHu/18AAABj/+0QABn7/0kAUv/2BgAI0/9nAKL/pgB8/80BEPn/NwCK/7wABvf/UABO//8BAA17exkAAAHu/18AAABz/9oAAAD1/1gAUv/2BgAArv96ACz9+Brh/1QAAML/cQDG/3MABvf/UABO//8BAAAAAAAAAAHu/18AAABz/9oAAAD1/1gAUv/2BgABxP9rAACy/8H/1gMAAHr/rAr4/yoABvf/UABO//8BAAAAAAAAAAHu/18AAABz/9oAAAD1/1gAUv/7m5rE/+MXAAA7/v//XwAAADL/5kD/3gIABvf/UABO//8BAAAAAAAAAAHu/18AAABz/9oAAAD1/1gAUv/+4vL/zhYAAAAAwv/fBQAAAAPm/53/lgAABvf/UABO//8BAAAAAAAAAAHu/18AAABz/9oAAAD1/1gAUv/2BlD/8hMAAAAAlv+3AAAAAACi//n/TQAABvf/UABO//8BAAx2dhgAAAHu/18AAABz/9oAAAD1/1gAUv/2BgPf/3wAAAAAlv+3AAAAAABa///2DAAABvf/UABD//8WADL//ykAAAHu/18AAABj/+4PABz8/0kAUv/2BgB0/+gKAAAAlv+3AAAAAAAW+/+5AAAABvf/UAAJ1f/ouPD/wwIAAAHu/18AAAAS4f/ls+3/0wgAUv/2BgAS9P9oAAAAlv+3AAAAAAAAuuhpAAAABuHpSQAAFJLj/N+IDQAAAAHZ6VYAAAAAG57o/eSVFAAAS+ngBQAAj+jEAQAAiemnAAAA",
+  es_defeat:"ydLS0K5HAAAAxdLS0tLSVQB80tLSy5QdAABh0tLSzZ8qAAAAKrPz+MVDAAXP0tLS0tLSHQAAStKaAAAA9P/JyPz+ZAAA8P/Kv7+/TQCX/+C/0v/oHAB2/+m/zP3zMAAb7P/RwP76OQW8v+D/5b+/GgAAm//0CAAA9P8oAF//1wAA8P8tAAAAAACX/4YAAJX/fQB2/6YAAHX/nQBv/70CAJL/mQAAAIP/mQAAAAAB4v//RQAA9P8oADf/5QAA8P8tAAAAAACX/4YAAGz/jgB2/6YAAEz/rgB9/58AAHX/pwAAAIP/mQAAAAAs//T/jQAA9P8oADf/5QAA8P8tAAAAAACX/4YAAIH/gQB2/6YAAGH/oQB9/58AAHX/pwAAAIP/mQAAAAB0/5D/1QAA9P8oADf/5QAA8P/Uysq1AACX/86ZqvnxJwB2/9uZpPL6PwB9/58AAHX/pwAAAIP/mQAAAAC8/zrd/x8A9P8oADf/5QAA8P/QxsaxAACX//Hl//IoAAB2//Xi/v0+AAB9/58AAHX/pwAAAIP/mQAAAA349gei/2cA9P8oADf/5QAA8P8tAAAAAACX/4YF5f86AAB2/6YAyf9bAAB9/58AAHX/pwAAAIP/mQAAAE3/zyaB/68A9P8oADf/5QAA8P8tAAAAAACX/4YAhv+lAAB2/6YAZv/GAAB9/58AAHX/pwAAAIP/mQAAAJX///////EF9P8oAFL/1gAA8P8tAAAAAACX/4YAJP34GQB2/6YADvL+NABv/70BAJT/mQAAAIP/mQAAAd3/jmxs7P9A9P+2r/H/bwAA8P/Nw8PDTwCX/4YAALz/fgB2/6YAAJz/nwAb7P/Owv76OgAAAIP/mQAAJ//7DgAArf+I3ujo5sVfAAAA2ujo6OjoXgCJ6HoAAFTozQNs6JgAADbo3w8AKrTz+MVEAAAAAHjojAAAYui8AAAAaei7",
+  es_victory:"t9JFAABQ0rIAstI4AAA8w/jxqh0AiNLS0tLS0mYAEJXp/NhsAQAAydLS0r5rBAAAstI4AAAASNKbAAAAo/+FAACT/5sA2P9EACv3/sTU/9oIe7/J//y/v10Bwv/ktvX/dQAA9P/JwOn/owAA2P9EAAAAmP/1CAAAYf+6AADK/1gA2P9EAIP/pwAE4P9EAAAo//MAAAAq//IQAFD/2QAA9P8nAA3o/xwA2P9EAAAA4P//RwAAH//vAQj5/hYA2P9EAI7/jQAAYnsmAAAo//MAAAA5/+IAADP/6AAA9P8nAADM/y0A2P9EAAAp//T/jwAAAN3/Jzj/0AAA2P9EAI7/jQAAAAAAAAAo//MAAAA5/+IAADP/6AAA9P8nAAPe/yAA2P9EAABx/5D/1gAAAJv/XG//jQAA2P9EAI7/jQAAAAAAAAAo//MAAAA5/+IAADP/6AAA9P+pmsn/uAAA2P9EAAC5/zzc/yAAAFn/kqb/SgAA2P9EAI7/jQAAAAAAAAAo//MAAAA5/+IAADP/6AAA9P/m8P+yCAAA2P9EAAr3+Aig/2cAABj+x936DAAA2P9EAI7/jQAAAAAAAAAo//MAAAA5/+IAADP/6AAA9P8nSv/YAQAA2P9EAEr/0SZ//68AAADV+v/DAAAA2P9EAI7/jQAAXnYlAAAo//MAAAA5/+IAADP/6AAA9P8nA+L/RQAA2P9EAJL///////IGAACT//+AAAAA2P9EAIT/oQAE3f9GAAAo//MAAAAq//MPAFP/2gAA9P8nAIH/sQAA2P9EANr/kGxs6/9AAABS//89AAAA2P9EAC/4/sPY/98LAAAo//MAAAABwv/jtvb/dgAA9P8nAB/9/CAA2P9EI//8EAAArP+IAAAS6OAGAAAAxeg+AAA7vvfvpx4AAAAk6N4AAAAAEJbp/NltAQAA3ugkAACr6HgAxeg+Xui/AAAAaOi7",
+  fr_defeat:"AAAAAAAAAAAAAAAAAEX87DoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABZiqKQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAh46OjoVcEAAAAGOOjo6Ojo5JAB2Ojo6Ojo6KAgAAAEKOeQAAAAAfjo4bCo2Ojo6Ojo6OCSmOjo6Ojo6D8v/Yudj/70kAALL/6ri4uLhfADT//8e4uLizAwAAAMX//isAAAA3//8wDbe4yP//xbi4C0r//8C4uLiq8v90AAGo/84AALL/tAAAAAAAADT//zMAAAAAAAAALP7//44AAAA3//8wAAAAOv//LQAAAEr//x0AAAAA8v90AACO/9gAALL/tAAAAAAAADT//zMAAAAAAAAAkP/K/+oJAAA3//8wAAAAOv//LQAAAEr//x0AAAAA8v90AACO/9gAALL/13Z2dm4AADT//4NjY2MoAAAI7P9E4v9YAAA3//8wAAAAOv//LQAAAEr//4V2dnYo8v90AACO/9gAALL/8dHR0cMAADT//+nj4+NcAABa/+kFkf+9AAA3//8wAAAAOv//LQAAAEr//9bR0dFH8v90AACO/9gAALL/tAAAAAAAADT//zMAAAAAAAC+/8JOgv/9JQA3//8wAAAAOv//LQAAAEr//x0AAAAA8v90AACR/9YAALL/tAAAAAAAADT//zMAAAAAACX+//n4+P3/hwA3//8wAAAAOv//LQAAAEr//x0AAAAA8v+bSGHk/5MAALL/0F1dXV0wADT//zMAAAAAAIn/6gUAAJL/5gY3//8wAAAAOv//LQAAAEr//29dXV1W8v////bOcgUAALL///////+EADT//zMAAAAABuf/mAAAADz//1I3//8wAAAAOv//LQAAAEr////////r",
+  fr_victory:"t9JNAAA80skFkdJgAAAeqfD5yEcAPNLS0tLS0skDAEfF+PS3MAAAPtKzAACj0tLSx4oVAABr0tLS0tLDof+QAAB7/7sAsP90AArc/9i//fs9Nr+/7//Yv7YDRPv+w8z/8SIAS//ZAADG/9e/2f/dEQCC/+i/v7+yXv/GAACz/3cAsP90AEn/5AcAlv+bAAAAwP9lAAAAqP+NAAG4/3oAS//ZAADG/18AAbD/aQCC/6IAAAAAHf71CALp/zMAsP90AFT/0AAAPHtQAAAAwP9lAAAAt/9tAACc/4gAS//ZAADG/18AAIf/egCC/6IAAAAAANj/NCT/6wIAsP90AFT/0AAAAAAAAAAAwP9lAAAAt/9tAACc/4gAS//ZAADG/18AAJ3/bQCC/6IAAAAAAJX/a1z/qgAAsP90AFT/0AAAAAAAAAAAwP9lAAAAt/9tAACc/4gAS//ZAADG/7+Zsv3pGgCC/+zKyspTAFL/oZT/ZQAAsP90AFT/0AAAAAAAAAAAwP9lAAAAt/9tAACc/4gAS//ZAADG/+zp/+MeAACC/+rGxsZSABP72Mv+IgAAsP90AFT/0AAAAAAAAAAAwP9lAAAAt/9tAACc/4gAS//ZAADG/18U9/wkAACC/6IAAAAAAADM/fvcAAAAsP90AFT/0AAAOnZNAAAAwP9lAAAAt/9tAACc/4gAS//ZAADG/18Apf+PAACC/6IAAAAAAACJ//+XAAAAsP90AEr/4AUAk/+dAAAAwP9lAAAAqf+NAAG6/3oAS//ZAADG/18AP//vDQCC/6IAAAAAAABG//9TAAAAsP90AAzf/9fC/f1EAAAAwP9lAAAARPv+wM//8SIAS//ZAADG/18AAtf/agCC/+nDw8O1AAAM4+YTAAAAoOhqAAAdo+34xUgAAAAAr+hcAAAAAEfG+PS4MAAARejGAAC06FYAAG3ovwB26Ojo6OjY",
+  ja_defeat:"ABx3d3d3d3d3d3d3PAAAAA7d4FcAAAAAAAAAAAAAAAAAAAAAAAAAGLu7IwAAAAB2u38AAAAAAAAAAAAAADv/+F5eXl5eXsb/gAAAAIb/2wsAAAAAAAAAAAAAAAAAAAAAAAAAIf//MAAAAACi/64AAAAAAAAAAAAAADv/9AcHBwcHB6f/gAAAQvv/vY2NjY2NjY2NjUEAAAAAAAAAAAAAIf//MAAAAACi/64AAAAAAB11nS0AADv//Li4uLi4uOb/gAA57//EYWFhYWGf//dqYSwAAAexsbGxsbGxu///MAAAAACi/64AATF7yPzUijkAADv/9AAAAAAAAKT/gWP0+fnyHwAAAAPG/5sAAAAAAANEREREREREXP//MAAAAACi/9Sl5+KiYRwAAAAAADv/+5ycnJycnNz/6f/UNIH/uQQAAGX/7BkAAAAAAAAAAAAAAAAAIf//MAAAAACi/9hfIwEAAAAAAAAAADv/9iIiIiIiIrD/gSsHAAbB/5IBOvT9TwAAAAAAAAAAAAAAAAAAIf//MAAAAACi/64AAAAAAAAAAAAAADv/9jIyMjIyMrb/gAAAAAAUzv+r7/xnAAAAAAAAAAAAAAAAAAAAJ///MAAAAACi/64AAAAAAAAAAQAAACWfqbWin5+fsaqfUAAAAAAAG+r//3YAAAAAAAAAAAABEzpii7Tc8P//MAAAAACi/64AAAAAAAAAaNCHAAAUw/+UAgBE5ehoAgAAABZ25fij5fqbJwAAAAAAAX/q+deqfE4gIv//MAAAAACh/64AAAAAAAAAmP+nAVHg93ECAAAAEqH/rjBrtvnjgx0ADXTd/cJuKAEAAAUvCQAAAAAAIf//MAAAAACB/+BdUVBQUFFt8vk+UMuoJgAAAAAAAAEgNcvJhjsDAAAAAAACPYvNwjMAAAAAAAAAAAAAGsnJJgAAAAAGYZKhpKSkpKSghDEA",
+  ja_victory:"AARgYGBgYGBgYAMAN45bBwAAF/HmHwAAMp9yAwAAAAAAAAAAAAUXLUVffJy/238MAAAAAAAAAAAAb9GsAAr/+5GHh5X9/gkABFba41oAXv/SARiK+LUeAAAAAAAttsjR1dLD6f/WcVU4GAIAAAAhb28GAAAAiP/SAAr/9xYAAB78/gkAhYuVwJCL1P/Ii6zyyIyLaAAAAAAAFAsDAAAAr/+rAAAAAAAAAABM//8PAAAAiP/SAAr//JaMjJr9/gkAR0pKSkqp/8pLSkpKSkpKNwAAAAAJFxcXFxcXtv+yFxcXFxcXBQBM//8PAAAAiP/SAAr/+mFSUmb9/iaAgICAgJD7/pmAgICAgICAgIANAABV0dHR0dHd///w0dHR0dHRLQBM//8PAAAAiP/SAAv/9hQAAB78/hxVVVaR9v6fVVVVZdn/uWFVVVUJAAAAAAAAABnL///pfBwAAAAAAABM//8PAAAAiP/SABL//c7Ly9H+/gwueM/3qTYd8fIcAAVWve+nXh4AAAAAAAAAQOLh1P/IofOwSQMAAABM//8PAAAAiP/SACj/5hkYGDP8/pDWpeChkZGu//aUkZGRkaminpUcAAAAABKT/b0Yr/+rABuJ8d1RAABM//8PAAAAiP/SAFX/tgAAAB78/gkABUJERFf1/31ERERE6f9UAAAAAAAReezxbAMAr/+rAAAAElEEAAA3u7sLAAAAiP/SAKT/aQAAAB78/gkAAAAAM9L9hAAAAAAR/fwiAAAAAAOP9ZMYAAAAr/+rAAAAAAAAAAAAAAAAAAAAiP/SLffnDwIKCir8/QkDKWi8+rg8AAoGBAZ+/8kAAAAAAAAADAAAAAAAr/+rAAAAAAAAAAAAAhAQEBARmf/PfNpNAAe21tLAeQiA1KJlGwAAAH7FxsW/mSMAAAAAAAAAAAAAAAAApvGiAAAAAAAAAAAAApfk4+Hcz65G",
+  ko_defeat:"AAAAAAAAAAAAAAAAAAAAAACDvr6+KgHj////JAAAAAAAAAkMDAwCAAAAAgwMDAoAAFuurq5NABLr7+/eHfv7+/v7+/v7+/v7+/v70wCv////OAHj////JAAAAAAAAMP///8sAAAAJ////8gAAIb///9yABP7///tCElKa21taUlJT21tbWFJPQCv////OAHj////JAAAAAAAAMP///8sAAAAJ////8gAAIb///9yABP7///tAAAD6v//6AMAMv///5wAAACv////OAHj////JAAAAAAAAMP///9vUVFRbP///8gAAIb///9yABP7///tAAAA1v//8QYAP////4IAAACv////Wy3o////JAAAAAAAAMP//////////////8gAAIb///+cTVr8///tAAAAwP//+goAS////2kAAACv////////////JAAAAAAAAMP///8vBAQEK////8gAAIb////////////tAAAAqv///xEAWP///08AAACv////WCno////JAAAAAAAAMP///8sAAAAJ////8gAAIb///92CBr7///tiJKS1P///52Su////62cqTSv////OAHj////JAAAAAAAAMP///+yoqKisP///8gAAIb///9yABP7///tprKysrKysrKysrKysa6on0iv////OAHj////JAAAAAAAAIiysrKysrKysrKysowAAIb///9yABP7///tAAAAAAAAAAAAAAAAAAAAAACv////OAHj////JAAAAAAAAAAAAAAAAAAAAAAAAAAAAIb///9yABP7///tAAAAAAAAAAAAAAAAAAAAAACv////OAHj////JAAAAAAAAAAAAAAAAAAAAAAAAAAAAIb///9yABP7///tAAAAAAAAAAAAAAAAAAAAAABhjo6OHwHV7+/vIgAAAAAAAAAAAAAAAAAAAAAAAAAAAFOenp5GABP7///t",
+  ko_victory:"AAAAAAAAAAAAAAAAVe/v77EAAAAAAAAAAAAAAAAAAAAAAAAHDAwMDAwMDAwMDAwMDAwHAAAAAC3////eAAAAAAAAAAAAABBn5f////2dMgEAAAAAAAAAAAAAAAAAAACQ//////////////////+dAAAAAC3////eAAAAAAENLFSEwPn/+bdij+H//+Ggaj4aAwAAAAAAAAAAAAApSUlJSUlJSUlJSZj///+dAAAAAC3////eAC+33fH////nu4lODwAAAAEpZpzM9f//+ebUbQIAAAAAAAAAAAAAAAAAAAAAAG////+dAAAAAC3////eAAANZF1HLA0AAAAAAAAAAAAAAAAAARs6U2ZAAAAAAAAAAAB4vr6+vr6+vr6+vtr///+dAAAAAC3////emaqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo2AAAAAACg////wJaWlpaWlpaWlpZcAAAAAC3////emaqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo2AAAAAACg////ZgAAAAAAAAAAAAAAAAAAAC3////eAAAAAAAAASJLaX+OmZ+hoJyThnNYNQoAAAAAAAAAAAAAAACg////ZgAAAAAAAAACBgsRGyAAAC3////eAAAAACef6///8c64rKWio6iyxOH+//rCXAEAAAAAAAAAAACg//////79/Pz8/f////////QRAC3////eAAAAAOb///9sAwAAAAAAAAAAAAAf5f///1EAAAAAAAAAAAA1VVVVVVVUVFRTUlFQTUhBOC0JAC3////eAAAAAHHy///qoXdeUEhFRkxXa43K///+uRUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC3////eAAAAAAALS4Gpx9zs9vz+/fnx49C2k2MiAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC3////e",
+  pl_defeat:"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKz/bgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEVmLAAAAAAAAAAAAAAAAAAAAAAAAAAA093d28JvBgABZNL698VHAABN3d3d2rtfAQAAABnb2BEAAACt3d3d3d1KAMTdNQAEtds5AAAAXd2jAAAA9P+Kdbj/owBp/+N1f/P8OQBZ/+ByeMv/ggAAAGv//18AAABZcnKR//0xAOP/PQCC/44AAAAAvP/5FAAA9P8sAA379QOx/3AAAKX/fABZ/8cAACv/1gAAAML//7YAAAAAAACl/6YAAOP/PT38yQYAAAAZ+///ZQAA9P8sAAv79QOz/20AAKH/fwBZ/8cAACz/0wAAHfzR4PkUAAAAADb99yEAAOP/TuDvIQAAAABr/7L/vAAA9P9cPYT/yACz/20AAKH/fwBZ/+SBhtP/cQAAcf+Hmf9lAAAAAMH/iwAAAOP/2f/jCwAAAADC/znn+xgA9P////itHACz/20AAKH/fwBZ//C68/9hAAAAyf8/Uf+8AAAAUP/sEQAAAOP//9z/gwAAAB386gSi/2sA9P9BFwYAAACz/20AAKH/fwBZ/8cAh/+kAAAi/f18hP/7GAAF2f9xAAAAAOP/phrz9iEAAHL/2HWv/8IA9P8sAAAAAACw/3EAAKX/fABZ/8cAF/X8KgB4/+7Z2fH/awBs/9wHAAAAAOP/PQCA/60AAMn/4tnZ/P0c9P8sAAAAAABo/+R2hfX8OABZ/8cAAJP/qQDP/2IAAHT/wgjq/7d4eHgpAOP/PQAM5/9DIv37FQAAxf9x4uwpAAAAAAABYs/59cJFAABS7LkAAB/p6kjr6xoAACns6irs7Ozs7OxQANLsOQAAZezAbuy6AAAAdOy3",
+  pl_victory:"qNvb22+osgBWxQA923/bOACFzAVl6PSWBCLbSQfZ29vbXwB17PKNA5nb29vbbNtbAK5uAJTEADnT+8YmTGSR/2Cd7gGX/xpm/yvpjwPnliT8pHj/Yif/VQn9q2RkK0T/jXv+YUZk97hkKPyIB/azAMy+A+TLYd3CAACe8At0/hHO/1GI+ASO4UL/M0n/NAC5ayf/VQn9dQAAAHP+CwC2bgAA8YoAANqqNf/qAe6WFf9nAI3uABH1lABK/zz6/Ymq1AAu/8rPAEn/MwAAACf/VQn9dQAAAFj/bQkAAAAA8YoAALHLa/3/Nf5uFv9mAIzvAG7+LQAh/4//ssDMrAAAy/9sAEn/MwAAACf/VQn97NvbEAOa/PF/AgAA8YoAAIfsorv2jf9GFv9mAIzvAdXFAAAD9OTlX/PwgwAAef8YAEn/MwAAACf/VQn9q2RkBwAAHoP+YgAA8YoAAF7+5X/F5P8dFv9mAIzvP/9eAAAAzf+vKP//WwAAb/8NAEn/MwAyHSf/VQn9dQAAAB4yAADsjwAA8YoAADT//0mO//ICFv9mAIzvpu0JAAAApP95Au7/MwAAb/8NAEP/QQn2hSf/VQn9dQAAAIX3DAv0igAA8YoAAA39/hRY/8wADf58AKLl8/Xb228Aev9DALr9DQAAb/8NAAra8OX2Mif/VQn97NvbXyrz5+b0MAAA8YoAAADg3AAh/6QAAKb71f+DdXl5eT0AK3kNAEVwAAAANHkGAAAScX8pABN5KAR4eXvjSQAlfH0mAAAAckEAAABcVQAAdUAAAARfh1IBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE+5AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACXXegAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  pt_defeat:"ydLS0K5HAAAAxdLS0tLSVQB80tLSy5QdAABh0tLSzZ8qAAAAKrPz+MVDAAXP0tLS0tLSHQAAStKaAAAA9P/JyPz+ZAAA8P/Kv7+/TQCX/+C/0v/oHAB2/+m/zP3zMAAb7P/RwP76OQW8v+D/5b+/GgAAm//0CAAA9P8oAF//1wAA8P8tAAAAAACX/4YAAJX/fQB2/6YAAHX/nQBv/70CAJL/mQAAAIP/mQAAAAAB4v//RQAA9P8oADf/5QAA8P8tAAAAAACX/4YAAGz/jgB2/6YAAEz/rgB9/58AAHX/pwAAAIP/mQAAAAAs//T/jQAA9P8oADf/5QAA8P8tAAAAAACX/4YAAIH/gQB2/6YAAGH/oQB9/58AAHX/pwAAAIP/mQAAAAB0/5D/1QAA9P8oADf/5QAA8P/Uysq1AACX/86ZqvnxJwB2/9uZpPL6PwB9/58AAHX/pwAAAIP/mQAAAAC8/zrd/x8A9P8oADf/5QAA8P/QxsaxAACX//Hl//IoAAB2//Xi/v0+AAB9/58AAHX/pwAAAIP/mQAAAA349gei/2cA9P8oADf/5QAA8P8tAAAAAACX/4YF5f86AAB2/6YAyf9bAAB9/58AAHX/pwAAAIP/mQAAAE3/zyaB/68A9P8oADf/5QAA8P8tAAAAAACX/4YAhv+lAAB2/6YAZv/GAAB9/58AAHX/pwAAAIP/mQAAAJX///////EF9P8oAFL/1gAA8P8tAAAAAACX/4YAJP34GQB2/6YADvL+NABv/70BAJT/mQAAAIP/mQAAAd3/jmxs7P9A9P+2r/H/bwAA8P/Nw8PDTwCX/4YAALz/fgB2/6YAAJz/nwAb7P/Owv76OgAAAIP/mQAAJ//7DgAArf+I3ujo5sVfAAAA2ujo6OjoXgCJ6HoAAFTozQNs6JgAADbo3w8AKrTz+MVEAAAAAHjojAAAYui8AAAAaei7",
+  pt_victory:"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGf/4S0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE6OfGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAc4NbAAAAN4ODFyqDgxIKgoODg4ODg4MgAAA7haOgfSwAAAA6g4ODg3pRCwAAAGuDVQAAAAAag4MWAAAAmP/pAwAAqP/fBFL//yMPvr/K///Sv78vAaP/+b/E/P17AABx//7CwNb/6UIAAND/pQAAAACC//95AAAAOf//OwAI7/+CAFL//yMAAAAr//9LAAAANP//TQAAef/6CwBx//oKAACM/9MAAND/pQAAAAXl///eAwAAAdf/iABI//0jAFL//yMAAAAr//9LAAAAQP//NgAAZP//EgBx//oKAABv/94AAND/pQAAAFP/4On/SgAAAHr/1QGX/74AAFL//yMAAAAr//9LAAAAQP//NgAAZP//EgBx//xWUGTZ/5AAAND/pQAAALv/iJj/swAAAB77/yjk/10AAFL//yMAAAAr//9LAAAAQP//NgAAZP//EgBx//7i7f/5VwEAAND/pQAAJ/3/MkH/+yAAAAC6/6r/8AoAAFL//yMAAAAr//9LAAAAQP//NgAAZP//EgBx//oKIvb/ZwAAAND/pQAAjf/vWFr3/4QAAABb////mQAAAFL//yMAAAAr//9LAAAAPv//OQAAZ///EABx//oKAIf/7RYAAND/pQAK6//z7e30/+YHAAAL8P//OQAAAFL//yMAAAAr//9LAAAADuL/x2Vv3f/CAgBx//oKAA7m/6AAAND/pQBe//8qAAA5//9WAAAAlO3JAQAAAEzt7SEAAAAo7e1FAAAAABmS3Pv41YIMAABp7ekJAABh7es1AMHtmQC17cQAAAAB0O2t",
+  ru_defeat:"/////8YAC6r5yCIAaP//6V4AAAAAyP0PAAAp/28h/34V/IUA9////84AmP0Aaf8uTf9KQP95AMb////+/+G28sYAh//I+cAAaP/C4vskAAAE9f8/AAAA2L4h/35i/zUA9+K2tpMAmP0Aaf8uTf9Kg/95AMfwtra2/5cA0MYAw9gAovsAaP8rQ/9bAAAt//9xAAAAiPs0/36x4wIA95sAAAAAmP0Aaf8uTf9Kxv95AMfMAAAA/5cA0MYAx80Am/4AaP8rOf9eAABf//+jAAAAOP+A/4n2lQAA95sAAAAAmP0Aaf8uTf9Z+v95AMfMAAAA/5cA0MYAx8wAm/4AaP8rSf9YAACR/MLVAAAAAuXQ/9D/RQAA95sAAAAAmP0Aaf8uTf+Y//95AMfMAAAA/5cA0MYAx8sAm/4AaP/h9PQZAADD02/7DAAAAJf////vBQAA9/HaLwAAmP/a6f8uTf/c//95AMf42lkA/5cA0MYAx8sAmf4AaP/hxUEAAAPysUn/OgAAAJb////uBQAA9/HbLwAAmP/b6v8uTf//3/95AMf421kA/5cA0MYAx80Alv4AaP8vAAAAACj/////bAAAAuTQ/9D/RAAA95sAAAAAmP0Aaf8uTf//m/95AMfMAAAA/5cA0MYAx84Alf4AaP8vAAAAAFr/ppL2ngAAN/+A/4n2lAAA95sAAAAAmP0Aaf8uTf//V/95AMfMAAAA/5cA0MYAxNQAofsAaP8vAAAAAIz8DQDG0AAAh/s0/36x4gIA95sAAAAAmP0Aaf8uTf/vIv95AMfMAAAA/5cA0MYAi//H+r8AaP8vAAAAAL3YAACU+QkA174h/35i/zUA9+K2tpMAmP0Aaf8uTf+wHv95AMfwtra2/5cA0MYADa/5xyEAaP8vAAAAAu6mAABi/zUo/28h/34V/IUA9////84AmP0Aaf8uTf9sHv95AMf/////",
+  ru_victory:"/////////ygAAGLO+fS+RAAAI/////////4GAJf///////+QAAAAAEq45u3t7XwAAAAAAAAx//+ZAAAA//+vfZv//ygAbv/2j6D+/D4AI///nX19fX0DAJf/4X19fX1HAAAAWv/7o4/t/4UAAAAAAACH///qBQAA//9iADr//ygArf+0AAHs/3kAI///PwAAAAAAAJf/xQAAAAAAAAAAof/GAADX/4UAAAAAAALc////RgAA//9iADr//ygArv+wAAHs/3kAI///PwAAAAAAAJf/xQAAAAAAAAAAo//FAADX/4UAAAAAADT//+D/nAAA//9iADr//ygArv+uAAHs/3kAI///pIRpHgAAAJf/44aGGAAAAAAAo//FAADX/4UAAAAAAIr/2Er/7AcA//9iADr//ygArv+uAAHq/3kAI///+Pj/+WcAAJf//fb2LAAAAAAAov/FAADX/4UAAAAAAt7/hgrO/0kA//9iADr//ygArv+wAADm/3kAI///PwKA//UEAJf/xQAAAAAAAAAAo//FAADX/4UAAAAAN////////58A//9iADr//ygArv+xAADl/3kAI///PwBf//8GAJf/xQAAAAAAAAAAo//FAADX/4UAAAAAjf/cdHSj/+4H//9iADr//ygAnv/RHTL2/2gAI///SRGR//ADAJf/yA0NDQ0IAAENp//IDg7Z/4sMAAAC4f99AAAZ+/9M//9iADr//ygAItX/////rwkAI///////8VUAAJf///////+QAAz////////////oAAA6//4oAAAAv/+icHArABpwcBIAAARCamQuAAAAD3BwcG5TEAAAAEJwcHBwcHA/AAz//75wcHB+1v/oAAA1cGYAAAAAOXBiAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAz//4sAAAAArv/oAAAAAAAAAAAAAAAA",
+  tr_defeat:"AAAAAAAAAAAAAAAAAAAAkblz6RgAAAAAAAAAAAAAAAAAAAAAAAAAAFmeAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC3+bPAAAAAAAAAAAAAAAAAAAAAAAAAAAAGSwAgAAAAAAAAAAAAAAAAAAAAAAjVMAAABWjAAAAH9aAAAAKZuwbAMAVooAAAAAfWMAN5IXEpKSjk0AAFKNE5JGAB2SPWuSkpKAJJKSkpKK9+ADAATj9QAAFf3RAAAU7OG1/ocAl/EAAAAA260AYP8pH//SvfyAAJD2A9G+AHf8H7zws7OdLLPU/7uq9/9MAE3/9QAAU//9FABS/z4AuNYAl/EAAAAA260AYP8pH/9qAJ3bAJD2Am78GM22ALzMAAAAAABv/xsA9/+0ALL/9QAAlNz+UwBY/zEAFBkAl/EAAAAA260AYP8pH/9qAJzbAJD2AhP3kP9SALzMAAAAAABv/xsA99z8PPvb9QAA1JbalABY/zFVW04Al/EAAAAA260AYP8pH//KrfVnAJD2AgCo/ecFALzmgIBAAABv/xsA95bn5+OW9QAX/mCl1QBY/zHF8doAl/EAAAAA260AYP8pH/+9mPJ2AJD2AgBH/4gAALzzxcVkAABv/xsA95GM/4WT9QBX/32p/RhY/zEAr9oAl/EAAAAA260AYP8pH/9qAJbdAJD2AgAk/2UAALzMAAAAAABv/xsA95Es/SWT9QCY/Ons/1dX/zIAsdkAl/EAAAAA2q4AYv8pH/9qAJHgAJD2AgAk/2UAALzMAAAAAABv/xsA95EALQCT9QDYuwAI+Jgt/bFw8a0Al/dtbWwDs+xnxPENH/+qd+quAJD2AgAk/2UAALzibW1gAABv/xsA5YcAAACI5BfsfAAAvMcAX9/5tRgAjO3t7ewHHbr52EUAHe3t6KkWAIXlAgAi7V4AAK/t7e3QAABn7RkA",
+  tr_victory:"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAACq/zsAAAAAAAAAAABs/3kAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAgAAAAAAAAAAAAAAAAAAAAAAAABEZhgAAAAAAAAAAAArZjAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFaPw+9NXAAAAAJ3dNAAAAMDdCwAAAACY3TMAjt3d27dOAABi3WlJ3ZMAAHndZlzd3d3d3U173d3d3d3Pvf+abt3+RQAAC/X/hQAAAN//DQAAAACw/zsApP+Zd8v+VQBy/3kF3/cUBujxEmr/uXJycig/cpv/y3Jr/e8BAGXmcQAAT///0wAAAN//DQAAAACw/zsApP9IADX/mgBy/3kAbf9zWP+KAGr/gQAAAAAAAEr/oQAA/+sAAAAAAAAAnf66/iQAAN//DQAAAACw/zsApP9IAFX/iwBy/3kAC+rawvYYAGr/gQAAAAAAAEr/oQAA/+sCgYWFQgAD6dpc/3EAAN//DQAAAACw/zsApP/d1PrBFABy/3kAAH3//5QAAGr/1aurlwAAAEr/oQAA/+sCrtP/fgA7/5oc/sAAAN//DQAAAACw/zsApP+VcMb1QwBy/3kAABL3/x8AAGr/0qSkkQAAAEr/oQAA/+sAAG3/fgCK/6518voUAN//DQAAAACw/zsApP9IADX/mQBy/3kAAADr/wAAAGr/gQAAAAAAAEr/oQAA/ewAAHH/fADY/tnZ6/9eAN//DQAAAACw/zsApP9IADb/mQBy/3kAAADr/wAAAGr/gQAAAAAAAEr/oQAAwv+fdeH+Qij/0gAAU/+sAN//f3h4awCw/zsApP+efdD/VgBy/3kAAADr/wAAAGr/vHh4eCoAAEr/oQAAFJvq+9BVAGvshwAAE+rfBs7s7Ozs0wCj7DcAmOzs6sdaAABp7HAAAADa7AAAAGPs7Ozs7FMAAEXslQAA",
+  zh_defeat:"AAAAAAAbtqY6AAAAD/HxVgAAAAAAAAAAAAAAAAAAAAAOYGBgYGBgYGBgYFMBAAAAE9DDHwAAAAAAAAAAAAAAAAzF/7oHAAAAEP//WwAAAAAAAAAAAAAAAAAAAAAm/+eCgoKCgoKY/9wCAAAAkP+hAQAAAAAAAAAAAAAAEL3//7yvr6+vtP//zK+vr6+vr6+vr10AAAAAAAAm/84AAFyQOgAs/9wCAABI+/+/r6+vr6+vr69GAAA12f+nSkpKSkpKVf//i0pKSkpKSkpKSicAAAAAAAAm/84AAKP/ZgAs/9wCADTv7UgzMzMzNub+STMUCpD77GEBAAAAAAAAF///UgAAAAAAAAAAAAAAAAAAAAAm/84AAKP/ZgAs/9wCUfH/hAAAAAAAOv7HAQAAEShZNCIiIiIiIiIiVP//TCIiIiIiIiIiIiIiIgQAAAAm/84AAKP/ZgAs/9wt4r7U9jwAAAAAtf5QAAAAaNPT09PT09PT09PV/P///+XT09PT09PT09PT0xoAAAAm/84AAK3/WwAs/9wCCgIh3+45AABf/q4BAAAAAAAAAAAAAAAAAAOJ//B+9+I1AAAAAAAAAAAAAAAAAAAm/84AA+D8KgAs/9wCAAAAIdL0YEj20BIAAAAAAAAAAAAAAAABPsf/0i4AONj6kRkAAAAAAAAAAAAAAAAVjXEAaf+wARAWf20BAAAAAAyf/v3JFAAAAAAAAAAAAAABJnTO/9JiBQAAAAdv4PenTwwAAAAAAAAAAAAAAARx+sUTY/WxLAAAAAAAA1DS8c32kiIAAAAAARZAcKXg+8qEMwEAAAAAAAAABEqg5/fFjWE4GQQAAAARZNLteQYAACSy+pMQBDaE3umFFwFGsve8aCIBQM/NpHZDDwAAAAAAAAAAAAAAAAAAAihhj7fZyTkAACjBtGAMAAAAAAABUnIlhNKTRgUAAAAAABdmrdBK",
+  zh_victory:"AAJ+jY2NjY2NjXQAAAAmSzAAAG/ovwAAAAAAAAAAAAAAAAABBBUqQFlzkLDT74kOAAAAAAAAAAAAeei/AATl/4BTU1OP/9IAAAG8/4sAAHr/0gAAAAAAAAAAAAAgv9PV08Sx3P/ZXkMlCAAAAAAig4MLAAAAhf/SAATl/0IAAABZ/9IAAEb99D0lJY3/2SUlJSUlJRoAAAAABwEAAAAAnP+8AAAAAAAAAABD//8VAAAAhf/SAATl/599fX2q/9IAFt/+ycfHx+L/9cfHx8fHx4oAAAAMJiYmJiYmq//GJiYmJiYmCgBD//8VAAAAhf/SAATl/5BpaWmd/9Iazf58AAAAAHr/0gAAAAAAAAAAAAA8w8PDw8PQ///vw8PDw8PDMgBD//8VAAAAhf/SAAXm/0AAAABZ/9NTo2sBAAAAAHr/0gAAAAAAAAAAAAAAAAAAABbH///xjioAAAAAAABD//8VAAAAhf/SAAfv/4FhZGac/9IAAEpfX19fX6v/419fX19fXxAAAAAAAAAAO+DkyP/PkPDBWAcAAABD//8VAAAAhf/SABX++oV8fHyq/9IAAGiFhYWFhb//6oWFhYWFhRcAAAAAAA+P+8IcnP+8ABJ56ehbAABD//8VAAAAhf/SAEz/1gEAAABZ/9IAAAAAAAAAAHr/0gAAAAAAAAAAAAAOdOnzdQQAnP+8AAAADEsEAAAwtbUPAAAAhf/SAKf/fQAAAABZ/9IAAAAAAAAAAHr/0gAAAAAAAAAAAAF49JwcAAAAnP+8AAAAAAAAAAAAAAAAAAAAhf/SPvroEwASFBNr/9EMXFxcXFxcXKr/4lxcXFxcXFwkAAAACwAAAAAAnP+8AAAAAAAAAAAAAhIRERITmP/PgM5DAABh0dDJslASjY2NjY2NjY2NjY2NjY2NjY03AAAAAAAAAAAAlPGyAAAAAAAAAAAAAZDk4+Hcz65G"
+};
+/* the outcomes, taken from the keys and not written out here: the words for
+   them belong in the data and nowhere near the screen. */
+const GEF_ENDBILD_AUSGAENGE = Object.keys(GEF_ENDBILD_VORL)
+  .map(k => k.slice(k.indexOf("_") + 1))
+  .filter((a, i, v) => v.indexOf(a) === i);
+/* unpacked at the first look that needs them, not at load: 24 x 720 bytes */
+let gefEndbildFertig = null;
+/* a running number per finding. The bolt in gefEndbildMelden hangs on it, so
+   "already announced" is about ONE finding and not about a town or an outcome
+   - two battles won at the same town are two findings and two chimes. */
+let gefEndbildNr = 0;
+function gefEndbildNorm(v){
+  let m = 0; for (let i = 0; i < v.length; i++) m += v[i];
+  m /= v.length;
+  let s = 0; for (let i = 0; i < v.length; i++) s += (v[i]-m)*(v[i]-m);
+  s = Math.sqrt(s/v.length) + 1e-6;
+  const o = new Float32Array(v.length);
+  for (let i = 0; i < v.length; i++) o[i] = (v[i]-m)/s;
+  return o;
+}
+const gefEndbildNcc = (a, b) => {
+  let s = 0; for (let i = 0; i < a.length; i++) s += a[i]*b[i];
+  return s/a.length;
+};
+function gefEndbildVorlagen(){
+  if (gefEndbildFertig) return gefEndbildFertig;
+  const aus = [];
+  for (const k of Object.keys(GEF_ENDBILD_VORL)){
+    const roh = atob(GEF_ENDBILD_VORL[k]);
+    const v = new Float32Array(roh.length);
+    for (let i = 0; i < roh.length; i++) v[i] = roh.charCodeAt(i);
+    const p = k.indexOf("_");
+    aus.push({sprache: k.slice(0, p), ausgang: k.slice(p+1),
+              v: gefEndbildNorm(v)});
+  }
+  gefEndbildFertig = aus;
+  return aus;
+}
+/* AREA MEAN WITH PART PIXELS, and it has to be exactly that. Measured: a
+   plain box loop without part pixels picks the same winner but loses up to
+   0,16 of the value (0,792 instead of 0,950 at 1280); with part pixels the
+   largest difference to the measurement is 0,031 and mostly 0,0000. */
+function gefEndbildStauchen(maske, B, H, B2, H2){
+  const o = new Float32Array(B2*H2), sy = H/H2, sx = B/B2;
+  for (let y = 0; y < H2; y++){
+    const ya = y*sy, ye = (y+1)*sy;
+    for (let x = 0; x < B2; x++){
+      const xa = x*sx, xe = (x+1)*sx;
+      let su = 0, g = 0;
+      for (let j = Math.floor(ya); j < ye; j++){
+        const wy = Math.min(j+1, ye) - Math.max(j, ya);
+        for (let i = Math.floor(xa); i < xe; i++){
+          const w = wy*(Math.min(i+1, xe) - Math.max(i, xa));
+          su += maske[j*B+i]*w; g += w;
+        }
+      }
+      o[y*B2+x] = su/(g || 1);
+    }
+  }
+  return o;
+}
+/* the mask over the strip, kept between looks so that 400 kB are not thrown
+   away once a second. Every point is written on every pass, so it never
+   carries anything from the look before; gefLiveStop drops it. */
+let gefEndbildMaske = null;
+/* THE HEAD BLOCK. px is the strip, B wide and Hs tall; Hz is the height of
+   the WHOLE picture at this working width, because every threshold of the
+   measurement is relative to that and not to the strip. */
+function gefEndbildKopf(px, B, Hs, Hz){
+  /* the row threshold must not hang on the width of the picture: the place
+     line ("Nordby") is 40 points wide at 3840 however wide the picture is.
+     Measured - at 0,008 of the width it falls out from 2560 up. */
+  const reiz = Math.max(3, Math.floor(0.004*B));
+  const mind = Math.max(3, Math.floor(0.003*Hz));
+  const n = B*Hs;
+  if (!gefEndbildMaske || gefEndbildMaske.length < n) gefEndbildMaske = new Uint8Array(n);
+  const m = gefEndbildMaske;
+  const zl = new Int32Array(Hs);
+  /* ONE pass. Cream is saturation under 40 and value over 200 the way the
+     measurement takes it: value is the largest of the three channels,
+     saturation is (largest - smallest)/largest. Counted against the
+     measurement's own colour conversion over six pictures: between 0 and 37
+     points of 414720 come out different, and only from the rounding of the
+     saturation. */
+  for (let y = 0; y < Hs; y++){
+    const zo = y*B;
+    let c = 0;
+    for (let x = 0; x < B; x++){
+      const o = (zo + x) << 2;
+      const r = px[o], g = px[o+1], b = px[o+2];
+      const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+      let ist = 0;
+      if (mx > 200){
+        const mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+        if ((mx - mn)*255 < 40*mx){ ist = 1; c++; }
+      }
+      m[zo + x] = ist;
+    }
+    zl[y] = c;
+  }
+  const bs = [];
+  let st = -1;
+  for (let i = 0; i < Hs; i++){
+    if (zl[i] > reiz){ if (st < 0) st = i; }
+    else if (st >= 0){ if (i - st >= mind) bs.push([st, i]); st = -1; }
+  }
+  if (st >= 0 && Hs - st >= mind) bs.push([st, Hs]);
+  if (!bs.length) return null;                 // out before anything is built
+  /* A row band across the whole picture is not a line yet: in the 4K
+     recording the game-mode line (x 1925..1994) lies at the same height as
+     the kill list at the right edge (out to x 3816), and the two together
+     make a band whose centre is 2870 instead of 1960. So every band is cut
+     again at wide gaps. */
+  const luecke = Math.max(8, Math.floor(0.03*B));
+  const minbr = Math.max(6, Math.floor(0.004*B));
+  const zeilen = [];
+  for (const ae of bs){
+    const a = ae[0], e = ae[1];
+    const sp = new Uint8Array(B);
+    for (let y = a; y < e; y++){
+      const zo = y*B;
+      for (let x = 0; x < B; x++) if (m[zo+x]) sp[x] = 1;
+    }
+    let s2 = -1, leer = 0;
+    const gr = [];
+    for (let x = 0; x < B; x++){
+      if (sp[x]){ if (s2 < 0) s2 = x; leer = 0; }
+      else if (s2 >= 0){
+        leer++;
+        if (leer >= luecke){ gr.push([s2, x-leer]); s2 = -1; leer = 0; }
+      }
+    }
+    if (s2 >= 0) gr.push([s2, B-1]);
+    for (const g of gr){
+      if (g[1] - g[0] < minbr) continue;
+      zeilen.push({a: a, e: e, hoch: e-a, x0: g[0], x1: g[1],
+                   mitte: (g[0]+g[1]) >> 1});
+    }
+  }
+  /* THE BLOCK, measured on 3840x2160: game mode 26 to 35 tall, place 13,
+     the writing 67 to 69, and all three on the SAME centre (x 1959, not
+     1920). That is what is demanded - the build, not a place and not a size:
+     a line at least 2 percent of the picture tall, and above it, close, a
+     line on the same centre (to 2 percent of the width) that is at most 62
+     percent as tall. Nothing here says WHICH band the writing is, and that
+     is the whole repair: at half the delivered size the thin lines fall
+     under the threshold and the writing becomes the first band. */
+  const kand = zeilen.filter(z => z.hoch >= 0.02*Hz).sort((p, q) => q.hoch - p.hoch);
+  for (const gross of kand){
+    const oben = zeilen.some(z => z.e <= gross.a
+      && Math.abs(z.mitte - gross.mitte) <= 0.02*B
+      && z.hoch <= 0.62*gross.hoch
+      && gross.a - z.e <= 1.2*gross.hoch);
+    if (!oben) continue;
+    const bb = gross.x1 - gross.x0 + 1, bh2 = gross.e - gross.a;
+    const band = new Float32Array(bb*bh2);
+    for (let y = 0; y < bh2; y++){
+      const zo = (gross.a + y)*B, zi = y*bb;
+      for (let x = 0; x < bb; x++) band[zi+x] = m[zo + gross.x0 + x] ? 255 : 0;
+    }
+    return {band: band, b: bb, h: bh2};
+  }
+  return null;
+}
+/* the band against all 24. Two numbers decide, both out of the measurement's
+   own file: the best value must clear the threshold, and it must be the
+   distance ahead of the best value of the OTHER outcome. Otherwise: nothing
+   said. The best value per outcome is kept in a small map keyed by the
+   outcome itself, so that not one word for either of them stands in this
+   code. */
+function gefEndbildWort(k){
+  const kn = gefEndbildNorm(gefEndbildStauchen(k.band, k.b, k.h, 60, 12));
+  const V = gefEndbildVorlagen();
+  let best = null, bw = -2;
+  const hoch = Object.create(null);
+  for (let i = 0; i < V.length; i++){
+    const w = gefEndbildNcc(kn, V[i].v);
+    const a = V[i].ausgang;
+    if (!(a in hoch) || w > hoch[a]) hoch[a] = w;
+    if (w > bw){ bw = w; best = V[i]; }
+  }
+  if (!best) return null;
+  let zweit = -2;
+  for (const a in hoch) if (a !== best.ausgang && hoch[a] > zweit) zweit = hoch[a];
+  if (bw < GEF_ENDBILD_SCHWELLE || bw - zweit < GEF_ENDBILD_ABSTAND) return null;
+  return {ausgang: best.ausgang, sprache: best.sprache,
+          guete: Math.round(bw*1000)/1000, zweit: Math.round(zweit*1000)/1000};
+}
+/* ONE LOOK AT THE HEAD BLOCK. Its own working surface, and that is the
+   point: the bar band next door is 140 points tall and deliberately narrow
+   (measured - a wide window takes in terrain and the boxes are then found in
+   one frame of ten instead of three), and the writing does not lie in it.
+   gefFlaeche takes a free key and gefFlaechenWeg clears whatever was ever
+   put under one, so this costs no line of tidying up. */
+function gefEndbildLesen(bild, W, H){
+  if (W < 320 || H < 160) return null;
+  const Wz = Math.min(W, GEF_ENDBILD_BREIT);
+  const Hz = Math.round(H*Wz/W);
+  const Hs = Math.floor(Hz*0.20);
+  if (Hs < 12) return null;
+  const sh = Math.min(H, Math.round(Hs*W/Wz));
+  const f = gefFlaeche("endbild", Wz, Hs);
+  f.g.imageSmoothingEnabled = true;
+  try { f.g.imageSmoothingQuality = "high"; } catch(e){}
+  f.g.drawImage(bild, 0, 0, W, sh, 0, 0, Wz, Hs);
+  let px = null;
+  try { px = f.g.getImageData(0, 0, Wz, Hs).data; } catch(e){ px = null; }
+  if (!px) return null;
+  const k = gefEndbildKopf(px, Wz, Hs, Hz);
+  return k ? gefEndbildWort(k) : null;
+}
+/* THE STANDING FINDING GROWS OLD. Called at every look, and once more from
+   gefEndbildMelden, so a look that never reached the reader cannot leave a
+   dead verdict standing. See GEF_ENDBILD_LUECKE for the ground. */
+function gefEndbildVerfall(z){
+  if (z && z.endbild && jetzt() - z.endbild.zuletzt >= GEF_ENDBILD_LUECKE) z.endbild = null;
+}
+/* Built like gefUhrPruefen: handed the state, writes into it. TWO THINGS,
+   and they are not the same.
+   The return value is what THIS look saw, null when it saw nothing - that is
+   the one that goes into the reading next to the bars.
+   z.endbild is what the room HOLDS, with its own number. A look that finds
+   nothing does NOT take it away: the writing stands 17,9 to 26,9 s and the
+   longest measured gap inside a standing writing is 13,5 s - a single look
+   that missed must not make the room forget that the battle ended. What takes
+   it away is a whole minute of silence (gefEndbildVerfall), the reader
+   stopping (gefLiveStop), or the desk closing.
+   THE TOWN IS FROZEN AT BIRTH, the same lesson the overtime proposal learnt:
+   a change of town in the picker must not let a reading of one town be
+   credited to another later on. So the town is written once, when the finding
+   is made, and is NOT part of the test for "same finding" - otherwise picking
+   another town while the writing stands would date the finding anew, credit
+   it to the new town, and ring a second time for one and the same end screen.
+   (FABLE 08.09.2026, changed against the first build after a measurement.) */
+function gefEndbildPruefen(bild, W, H, z){
+  gefEndbildVerfall(z);
+  const E = gefEndbildLesen(bild, W, H);
+  if (!E) return null;
+  const nun = jetzt();
+  const alt = z.endbild;
+  /* A STANDING FINDING IS NEVER REPLACED BY ONE LOOK - only by decay.
+     The first build tested "same finding" on outcome AND language, and a
+     single look that read the other way made a new finding with a new
+     number: a second chime, a second floating line, for one and the same
+     end screen. Measured by three readers on 11.09.2026 (FABLE): Czech and
+     Polish defeat sit at 0.966 against each other in 60x12, and at the 1600
+     and 1280 sizes the best language flipped in 80 of 400 placements; a
+     scripted run cs>cs>pl>cs>pl>pl>cs on ONE writing rang five times. And
+     one stray look at the other outcome rang three times and left the wrong
+     outcome standing for a tick. So: same outcome - count the look, keep the
+     better quality and its language; other outcome - ignore the look, the
+     standing finding keeps its time and decays on its own if it is not
+     confirmed again (GEF_ENDBILD_LUECKE). A real second battle always comes
+     after more than a minute of silence and loses nothing. Measured on a copy:
+     the stray cases go 3 -> 1, all other cases unchanged (2/4/2/1/2/1/1/1). */
+  if (alt){
+    if (alt.ausgang === E.ausgang){
+      alt.blicke++; alt.zuletzt = nun;
+      if (E.guete > alt.guete){ alt.guete = E.guete; alt.zweit = E.zweit; alt.sprache = E.sprache; }
+    }
+    return E;
+  }
+  z.endbild = {ausgang: E.ausgang, sprache: E.sprache, guete: E.guete,
+               zweit: E.zweit, blicke: 1, seit: nun, zuletzt: nun,
+               ort: (typeof GEF !== "undefined" && GEF) ? GEF.ort : null,
+               nr: ++gefEndbildNr};
+  return E;
+}
 /* ONE LOOK. One window out of the shared picture, at its own size - no
    scaling, because everything measured here is measured in points. */
 function gefLesen(bild, z){
@@ -25092,7 +25542,13 @@ function gefLesen(bild, z){
   /* the same buffer once more, for the text line above the bars. gefBalken
      first: it may return early, and this must run at every look. */
   if (px) gefUhrPruefen(px, bw, bh, z);
-  return {w: W, h: H, balken: balken};
+  /* AND THE HEAD BLOCK, for the end of the battle - last, out of its own
+     window, and in its own catch. Nothing above is touched by it: not px,
+     not bw, not bh, not the band. If the word reader falls over, the score
+     and the clock still stand. */
+  let endbild = null;
+  try { endbild = gefEndbildPruefen(bild, W, H, z); } catch(e){ endbild = null; }
+  return {w: W, h: H, balken: balken, endbild: endbild};
 }
 /* ---- what the clan is told ---------------------------------------------
    HOW OFTEN. Not with every look. Over four minutes the bar moved about two
@@ -25191,6 +25647,150 @@ function gefSchreiben(i, neu){
   draw(); if (sel === i) side();
   return true;
 }
+/* ---- the end of the battle: heard and seen -----------------------------
+   ENNO on 08.09.2026, and the exclamation mark is his: the player must not
+   close the game window before "der audiovisuellen (!) Bestaetigung im
+   Battlereader". He is sitting in the game, not in this tool, so the desk
+   says it twice over: once out loud, once on the screen.
+
+   AND IT SAYS ONE THING ONLY. ENNO on 08.09.2026: "Wir brauchen keine
+   unterschiedlichen Toene fuer Sieg und Niederlage, das Spiel hat ja auch
+   Ton. Es geht nur um die Bestaetigung, dass man das Fenster schliessen
+   kann." And again, when a first build had unified the tone but left the
+   picture split: "Kein Ton fuer Sieg oder Niederlage ... sondern dem User den
+   erfolgreichen Uebertrag vermitteln." So there is ONE chime, ONE frame in
+   ONE colour, ONE box with ONE text, ONE floating line. Nothing here branches
+   on the outcome. The outcome IS read and IS kept - GEF.endbild.ausgang and
+   GEF.ende.ausgang - because the clan side of this (ENNO, PKT-F: the end of
+   the battle is to be recorded through the tool) will need it. It is simply
+   not put on show.
+
+   THE FINDING AND THE CONFIRMATION ARE TWO DIFFERENT THINGS.
+   GEF.endbild is the reader's claim about the picture, with its own number.
+   It goes with the tick: gefLiveStop clears it along with GEF.stand, for the
+   reason already written there - a stopped capture that still shows something
+   reads exactly like a running one. It also grows old by itself after a
+   minute of silence (GEF_ENDBILD_LUECKE), which is what makes a second battle
+   a second finding.
+   GEF.ende is the confirmation that was given. That is the record of an
+   event: "read at 21:04" stays true after the capture has stopped. So it
+   survives a stop and carries its own age - but NOT the next start: pressing
+   "Capture the game" again is a new battle, and gefLiveStart clears it.
+   EVERY reader of GEF.ende goes through gefEndeFrisch(); nothing reads the
+   raw field. (OPUS 08.09.2026 built this; the freshness gate on every reader,
+   the clearing at gefLiveStart and the ageing of the finding are FABLE
+   08.09.2026, after six readings measured the holes in the first build.) */
+/* How long the confirmation stands. NOT MEASURED, CHOSEN (OPUS 08.09.2026, a
+   proposal): the words themselves stood at least 17,9..26,9 s in all three
+   recordings, and the upper bound is unknown because all three recordings end
+   before them. Five minutes is longer than any measured standing time, so the
+   sign outlives the screen it belongs to, and shorter than any battle, so it
+   is gone again before the next one ends. */
+const GEF_ENDBILD_FRISCH = 5*60000;
+/* the confirmation, as long as it is fresh - otherwise nothing */
+function gefEndeFrisch(){
+  const E = GEF && GEF.ende;
+  return (E && jetzt() - E.zeit < GEF_ENDBILD_FRISCH) ? E : null;
+}
+/* ONE SIGNAL, AND IT SAYS ONE THING: the reading is in, the window may go. It
+   does not say how the battle ended - the game is playing its own sound for
+   that, and a second, quieter voice saying the same thing over it is noise.
+   No parameter, one sequence, every time the same.
+   THE GATE IS INSIDE THIS FUNCTION, not only at the place that calls it. The
+   comment in radarZweiklang says what happens otherwise: that one was left
+   entirely ungated and was silent only because its single caller turned back
+   first - a second caller would have made it ring with SOUND OFF. The battle
+   desk has no background watch (gefTick runs from the interval gefLiveStart
+   sets, and gefstandZu stops it), so the matching gate is: the switch is on,
+   the room is open, and a capture is running. A watch in the background is
+   always silent. */
+function gefKlang(){
+  if (!kbTon || !gefOffen || !GEF || !GEF.live) return;
+  if (!kbKlangAuf()) return;
+  try {
+    let t = kbKlang.currentTime + 0.02;
+    for (const hz of [523, 659, 880]){
+      const o = kbKlang.createOscillator(), g = kbKlang.createGain();
+      o.type = "sine"; o.frequency.value = hz;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.085, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+      o.connect(g); g.connect(kbKlang.destination);
+      o.start(t); o.stop(t + 0.36);
+      t += 0.16;
+    }
+  } catch(e){}
+}
+/* The frame around the room. ONE class, ONE colour - classList.add on a class
+   already set does not restart an animation, so this may run at every tick;
+   only a new finding forces the pulse to start over, and that needs the
+   reflow in between. */
+function gefEndeRahmen(neu){
+  const el = document.getElementById("gefstand");
+  if (!el) return;
+  if (!gefEndeFrisch()){ el.classList.remove("gf-ende", "gf-puls"); return; }
+  el.classList.add("gf-ende");
+  if (neu){ el.classList.remove("gf-puls"); void el.offsetWidth; el.classList.add("gf-puls"); }
+}
+/* THE STANDING BOX in the head strip, no blinking - the head strip is written
+   anew at every tick, so an animation in here would start over every second
+   and never run through; the pulse sits on the room itself. One text, one
+   colour, and its age beside it.
+   SHORT ON PURPOSE. .rd-kf .v is nowrap with an ellipsis, and the close button
+   lies over the right end of the strip: a sentence here is cut off mid-word.
+   Looked at it, then shortened - the sentence stands next to the button in the
+   desk, where there is room for it. (FABLE 08.09.2026.) */
+function gefEndeKasten(){
+  const E = gefEndeFrisch();
+  if (!E) return "";
+  return `<div class="rd-kf gf-ende-kf"><div class="t">End screen</div>
+      <div class="v">READ <small>${esc(alterText(E.zeit))}</small></div>
+      <div class="bar"><i style="width:100%"></i></div></div>`;
+}
+/* ONCE PER END SCREEN, not at every look, and AGAIN for the next one.
+   THE BOLT IS AN EVENT, NOT A STATE. It holds the running number of the
+   finding it announced. A finding keeps its number while the same writing
+   stands, so the chime comes once; a new finding - after a minute of silence,
+   or with the other outcome - carries a new number and rings again. And when
+   no finding stands at all the bolt is opened on the spot, so the flank is
+   there even if a number were ever to repeat.
+   The first build held town-plus-outcome instead. Measured what that did:
+   two wins at the same town gave 1 chime instead of 2; four battles with no
+   town picked gave 3 instead of 4; stopping and restarting the capture and
+   losing twice at the same town gave 1 instead of 2. (FABLE 08.09.2026.)
+   ITS OWN ROAD, BESIDE gefMelden AND NOT BEHIND IT. gefMelden leaves at
+   "if (!R.balken) return", and the end screen carries no bars - the battle is
+   over. A finding behind that gate would never be announced in exactly the
+   case it was built for.
+   NOTHING IS WRITTEN TO THE CLAN HERE. What is to become of gefecht:<town>
+   when a battle ends is a server question and is decided in no sheet. */
+function gefEndbildMelden(){
+  if (!GEF || !GEF.live) return;
+  gefEndbildVerfall(GEF);
+  const B = GEF.endbild;
+  if (!B || GEF_ENDBILD_AUSGAENGE.indexOf(B.ausgang) < 0){
+    GEF.endbildGemeldet = null;                 // the flank: nothing stands
+    return;
+  }
+  if (GEF.endbildGemeldet === B.nr) return;
+  GEF.endbildGemeldet = B.nr;
+  GEF.ende = {ausgang: B.ausgang, zeit: jetzt(), ort: B.ort,
+              sprache: B.sprache || "", guete: (typeof B.guete === "number") ? B.guete : null,
+              nr: B.nr};
+  gefKlang();
+  gefEndeRahmen(true);
+  /* The floating line sits at z-index 130 and the rooms at 120 - measured with
+     elementFromPoint, see the comment above #toast. It comes once and goes by
+     itself; there is nothing to click away. */
+  toast("End screen read - the game window can be closed.");
+  /* ONE ALARM CLOCK. The tick can stand still - the player stops the capture,
+     or the shared window dies with the game - and then nothing draws again,
+     and the frame would stay up for good. This wakes once at the end of the
+     fresh window. It only recomputes the age and moves classes, so a late
+     shot cannot do any harm: if a newer confirmation stands by then, it stays
+     standing. */
+  setTimeout(() => { if (GEF) gefZeichnen(); else gefEndeRahmen(); }, GEF_ENDBILD_FRISCH + 300);
+}
 function gefMelden(){
   if (!GEF || !GEF.stand) return;
   const i = GEF.ort;
@@ -25222,6 +25822,7 @@ function gefNeu(){
   return {live: null, laeuft: false, bildNr: 0, ort: null, stand: null,
           kastenY: null, anker: null, proben: [], marke: null,
           uhrZeile: null, uhrZeit: 0, uhrVorschlag: null,
+          endbild: null, ende: null, endbildGemeldet: null,
           geschrieben: null, gesendet: 0, orteSchluessel: null,
           status: "Waiting for the game window ..."};
 }
@@ -25234,6 +25835,13 @@ function gefLiveStart(){
   if (!GEF || GEF.live) return;
   if (!darf("aufklaerung")){ GEF.status = rechtSatz("aufklaerung"); gefZeichnen(); return; }
   if (!kannTeilen()){ GEF.status = "This browser cannot share a window here."; gefZeichnen(); return; }
+  /* A NEW CAPTURE IS A NEW BATTLE. The confirmation deliberately survives a
+     stop - it is a record, not a claim about the picture - but it must not
+     survive the next start: otherwise the player presses "Capture the game"
+     for battle two and the desk tells him from the first second that the end
+     screen has been read and the window may go. That is exactly the harm the
+     Kommodore's note is there to prevent. (FABLE 08.09.2026.) */
+  GEF.ende = null; GEF.endbild = null; GEF.endbildGemeldet = null;
   GEF.live = setInterval(gefTick, GEF_TAKT);
   GEF.status = "Live";
   gefZeichnen(); gefTick();
@@ -25245,12 +25853,22 @@ function gefLiveStart(){
    share out from under this room either.
    The last reading goes with the tick. A stopped capture that still shows the
    last score reads exactly like a running one, and that is a claim nobody
-   made. The working surfaces go too, three of them and about three megabytes
-   at 3840x2160, as the player room does it next door. */
+   made. The working surfaces go too - two of them now, the bar strip and the
+   head strip, together about two megabytes at 3840x2160 - as the player room
+   does it next door. */
 function gefLiveStop(auchFreigabe){
   if (!GEF) return;
   if (GEF.live){ clearInterval(GEF.live); GEF.live = null; }
   GEF.stand = null; GEF.anker = null; GEF.proben = []; GEF.kastenY = null; GEF.marke = null;
+  /* THE READER'S CLAIM GOES WITH THE TICK, the confirmation does not. Same
+     ground as two paragraphs up: a stopped capture that still shows a
+     standing verdict reads exactly like a running one. GEF.ende stays - it
+     records that the reading happened, and stopping the capture does not make
+     that untrue; it carries its own age and falls away by itself after
+     GEF_ENDBILD_FRISCH, or at the next start. The bolt goes with the finding,
+     so the next one announces itself. */
+  GEF.endbild = null; GEF.endbildGemeldet = null;
+  gefEndbildMaske = null;                 // the strip mask, 400 kB at 3840
   gefFlaechenWeg();
   if (GEF.status === "Live") GEF.status = "Capture stopped.";
   if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)
@@ -25270,6 +25888,7 @@ async function gefTick(){
     GEF.stand = R;
     GEF.status = R ? "Live" : "The picture came back empty.";
     gefMelden();
+    gefEndbildMelden();
     gefZeichnen();
   } catch(e){
     if (GEF){
@@ -25294,12 +25913,46 @@ function gefPult(){
   pult.innerHTML = `
     <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="gf-kraft">${ICO_CAPTURE}${
       live ? "Capture running" : "Capture the game"}</button>
+    ${(() => {
+      /* WAS STEHT GERADE AN - und nichts Dazuerfundenes. Gefragt wird die
+         gegebene Bestaetigung durch ihr Frischefenster, NICHT der Befund
+         dieses einen Blickes: der ist bei jedem Fehlblick null, und die Zeile
+         waere von gruen auf bernstein zurueckgesprungen, waehrend der
+         Schriftzug noch steht. Gemessen sind solche Luecken, bis 13,5 s.
+         Ein Fall, ein Satz. Der Ausgang kommt hier nicht vor. */
+      if (gefEndeFrisch()) return `<div style="margin-top:8px;padding:7px 9px;border:1px solid #4a6b3a;border-radius:3px;background:rgba(74,107,58,.18);color:#9ec98a;font-size:12px;line-height:1.45">End screen read - the game window can be closed.</div>`;
+      if (live) return `<div style="margin-top:8px;padding:7px 9px;border:1px solid #8a6820;border-radius:3px;background:rgba(226,172,72,.16);color:#e2ac48;font-size:12px;line-height:1.45">Waiting for the end screen.</div>`;
+      return "";
+    })()}
+    <div style="margin-top:8px;color:#cbb27a;font-size:11.5px;line-height:1.55;border-left:2px solid #8a6a2a;padding:0 2px 0 8px">Keep the
+      game window open and shared until the end screen has been read here: the box in the head
+      strip, and a chime while Sound is on. Once the window is gone, the end of the battle cannot
+      be read at all.</div>
+    <div class="kb-abstand"></div>
+    <button class="rd-schalter ${kbTon ? "an" : ""}" id="gf-klang">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
     <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run
       borderless or windowed. Only the town picked on the left is written to, and only the score
       goes into it.</div>`;
   document.getElementById("gf-kraft").addEventListener("click", () => {
     if (GEF && GEF.live) gefLiveStop(true); else gefLiveStart(); });
+  /* THE SAME SWITCH THE CABIN AND THE PLAYER ROOM CARRY, on the same kbTon.
+     Without it the confirmation would be the only sound in the tool that
+     cannot be turned off - this desk was the one of the three that had no
+     switch. ONE DIFFERENCE, and it is deliberate: over there switching the
+     sound back ON also brings the room hiss back (kbRauschenAn), because
+     kbLiveStart and pgLiveStart start it. The battle desk has no hiss and
+     never had one, so the switch here must not start a noise this room does
+     not own. Switching OFF still stops it: off means off.
+     AUF pointerdown, NICHT AUF click - aus demselben Grund, der neunzig
+     Zeilen weiter unten steht: das Pult wird bei jedem Takt neu geschrieben,
+     und ein Klick entsteht nur, wenn Druecken und Loslassen denselben Knoten
+     treffen.
+     (OPUS 08.09.2026, a proposal - nobody asked for this switch by name;
+     pointerdown FABLE 08.09.2026, after a reading measured the lost clicks.) */
+  document.getElementById("gf-klang").addEventListener("pointerdown", ev => {
+    ev.preventDefault();
+    kbTon = !kbTon; if (!kbTon) kbRauschenAus(); gefPult(); });
 }
 function gefZeichnen(){
   if (!GEF) return;
@@ -25316,7 +25969,9 @@ function gefZeichnen(){
       <div class="bar"><i style="width:${b ? b.li : 0}%"></i></div></div>
     <div class="rd-kf"><div class="t">Capture</div>
       <div class="v"><small>${GEF.live && R ? `${R.w}x${R.h}, every ${GEF_TAKT} ms` : esc(GEF.status)}</small></div>
-      <div class="bar"></div></div>`;
+      <div class="bar"></div></div>
+    ${gefEndeKasten()}`;
+  gefEndeRahmen();
   const orte = gefOrte();
   const schl = orte.join(",");
   if (links.dataset.gebaut !== "1" || GEF.orteSchluessel !== schl){
@@ -25332,7 +25987,9 @@ function gefZeichnen(){
     Share the game window and play. The head strip is read every ${GEF_TAKT} ms, and the two boxes are only measured once they have been found at the same place in three looks. A look that brought the same picture as the one before it does not count towards those three. The town's line goes to the clan every fifteen seconds while the score moves.
     Hold-and-take battles carry the two bars, assaults do not.
     <h3 style="margin-top:14px">What was measured</h3>
-    <div class="note">Over a recorded assault, which carries no bars at all, the reader said nothing in 2677 looks a second apart. Over the one recorded hold-and-take battle it read 69 times; at the ten points where a stored measurement of the same battle also holds, it stood between 1,2 points under and 1,2 points over it. That is the whole comparison there is. A display drawn at double size is not read at all - the pair of boxes is then wider than the strip cut out here, and half a box is not measured. The end of a battle is not read here.</div>`;
+    <div class="note">Over a recorded assault, which carries no bars at all, the reader said nothing in 2677 looks a second apart. Over the one recorded hold-and-take battle it read 69 times; at the ten points where a stored measurement of the same battle also holds, it stood between 1,2 points under and 1,2 points over it. That is the whole comparison there is. A display drawn at double size is not read at all - the pair of boxes is then wider than the strip cut out here, and half a box is not measured.</div>
+    <h3 style="margin-top:14px">The end of the battle</h3>
+    <div class="note">The end of a battle is read from the writing in the head strip, held against twenty-four words for won and lost in the game's twelve languages; no language has to be picked. Over eleven end screens at five sizes it read 51 right, none wrong, and stayed silent four times. The five rating stars are not waited for - they come about fourteen seconds after the writing, and the game's own close button comes with them. Nothing of it goes to the clan.</div>`;
     links.dataset.gebaut = "1";
     const of = links.querySelector("#gf-ort");
     if (of) of.addEventListener("change", ev => {
@@ -25356,6 +26013,25 @@ function gefZeichnen(){
         <div style="margin-top:4px">${b.liTon || b.reTon ? "Measured colours of the filled part. Which side is yours is not read." : "Neither bar carries a filled part yet."}</div></div>
       <div class="note">In none of the recordings was the left bar ever seen filled, so its filled colour has never been measured.</div>`
     : `<div class="gf-nichts">No score bars read.</div>`}
+    ${(() => {
+      /* WHAT WAS READ - AND NOT HOW IT WENT. A box that stands, no animation
+         and no flash: this sheet is rewritten at every tick (GEF_TAKT), so
+         anything animated here starts over every second and never runs
+         through - the same trap as the pointerdown note below.
+         The outcome is held in the state and is deliberately not printed:
+         ENNO on 08.09.2026 wants the confirmation of the transfer, not a
+         second announcement of something the game has already said out loud.
+         The language is not printed either - the Spanish and the Portuguese
+         template for the lost outcome are byte for byte the same picture, so
+         the language of that pair can be named wrong while the outcome is
+         right. */
+      const E = GEF.endbild;
+      if (!E) return "";
+      const wo = (E.ort !== null && E.ort !== undefined && MAP.n[E.ort]) ? MAP.n[E.ort][0] : null;
+      return `<div class="ot-zeile" style="margin-top:16px">
+        <span style="color:#8fe6a2">End screen read${wo ? ` at ${esc(wo)}` : ""}, ${esc(alterText(E.seit))}.</span>
+        <div class="note">The writing in the head block was held against twenty-four words for won and lost in twelve languages. It fits one of them at ${E.guete.toFixed(2).replace(".", ",")} against ${E.zweit.toFixed(2).replace(".", ",")} for the other outcome, over ${E.blicke} look${E.blicke === 1 ? "" : "s"}. Nothing is sent to the clan from it.</div></div>`;
+    })()}
     ${!darf("aufklaerung") ? `<div class="note" style="margin-top:16px">${esc(rechtSatz("aufklaerung"))} Nothing is sent.</div>`
       : GEF.ort === null || GEF.ort === undefined ? `<div class="note" style="margin-top:16px">Pick a town on the left, or nothing is sent to the clan.</div>`
       : GEF.gesendet ? `<div class="note" style="margin-top:16px">Last sent to the clan ${esc(alterText(GEF.gesendet))}.</div>`
@@ -25428,7 +26104,7 @@ function gefstandZu(){
   if (!gefOffen) return;
   gefOffen = false;
   gefLiveStop(true);
-  document.getElementById("gefstand").classList.remove("an");
+  document.getElementById("gefstand").classList.remove("an", "gf-ende", "gf-puls");
   GEF = null;
 }
 document.getElementById("b-gefstand").addEventListener("click", gefstandAuf);
@@ -44297,7 +44973,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 7b47f5046f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build ab676dc3f4</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -44525,7 +45201,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "7b47f5046f";
+const BAU = "ab676dc3f4";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
