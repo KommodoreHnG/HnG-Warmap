@@ -5257,8 +5257,9 @@ function okVerdrahten(wurzel){ zustandVerdrahten(wurzel); }
    a Control click and once a minute, never inside draw().
    Hook for later rules (tank hunt and the like): add a further test
    beside zielGenommen here. Para blocks, lines and plain areas stay
-   manual; a recon request ON TOWNS closes itself once the capture has
-   written every one of them, see aufklStand. */
+   manual; a recon request closes itself once the capture has written
+   every one of its towns - the asked ones, or those inside a drawn area
+   -, see aufklStand. */
 const zielGenommen = a => {
   if (!(a && !a.entwurf && !a.luft && a.f === clanFaktion()
       && MAP.n[a.to] && ownerOf(a.to) === a.f && befehlZustand(a.id, a) === "aktiv")) return false;
@@ -5276,9 +5277,10 @@ function befehlAutoAbschluss(){
     if (zustandSetzen(a.id, a, 2, true)) getan++;
   }
   if (getan) toast(`${getan} attack${getan === 1 ? "" : "s"} done, target taken`);
-  /* a recon request on towns whose every town the capture has written since
-     it went active. Nothing is counted for it here: the state is all this
-     machine sets, the server books the points from it. */
+  /* a recon request whose every town the capture has written since it went
+     active - the asked towns, or for a drawn area the towns inside it
+     (aufklZielliste, FABLE 12.09.2026). Nothing is counted for it here: the
+     state is all this machine sets, the server books the points from it. */
   let aufk = 0;
   for (const [id, e] of liveAreas()){
     const a = e.v;
@@ -6041,7 +6043,13 @@ function streckeStand(b){
   if (b.art === "arrow") liste = [b.v.to];
   else if (b.art === "para") liste = [+b.id];
   else if (b.art === "line") liste = Array.isArray(b.v.pts) ? b.v.pts : [];
-  else if (b.art === "area") liste = (b.v.aufkl && Array.isArray(b.v.orte)) ? b.v.orte : [befehlOrt(b)];
+  else if (b.art === "area"){
+    /* eine Aufklaerungsanfrage: ihre Staedte (benannt oder die im Polygon,
+       aufklZielliste); ohne Stadt darin und bei einer schlichten Flaeche
+       die Stadt, die der Mitte am naechsten liegt (FABLE 12.09.2026) */
+    const z = b.v.aufkl ? aufklZielliste(b.v) : [];
+    liste = z.length ? z : [befehlOrt(b)];
+  }
   const orte = liste.map(ortStand).filter(Boolean);
   return orte.length ? {orte} : null;
 }
@@ -7016,6 +7024,30 @@ function aufklPunkte(a){
   if (a && a.orte && a.orte.length) return a.orte.filter(i => MAP.n[i]).map(i => [MAP.n[i][1], MAP.n[i][2]]);
   return (a && a.pts) || [];
 }
+/* DIE ZIELSTAEDTE EINER ANFRAGE, als Ortsindizes. Benannt (aufklKlick):
+   a.orte. Gezeichnet (Recon-Werkzeug auf freiem Boden): alle Staedte,
+   deren Punkt im Polygon a.pts liegt - a.pts und MAP.n[i][1..2] liegen in
+   denselben Karteneinheiten.
+   ENNO 08.09.2026: "Der Code sieht ja, welche Staedte im
+   Aufklaerungsbereich liegen und wenn alle aufgeklaert wurden ueber den
+   AT-Grabber dann ist der Befehl abgeschlossen."
+   ZUR LAUFZEIT GERECHNET, NICHT IN a.orte GESCHRIEBEN: sobald a.orte
+   steht, behandeln aufklKlick (Ctrl-Klick ersetzt pts durch
+   aufklHuelle), aufklPunkte, aufklZiele und aufklRingeZeichnen die
+   Flaeche als Stadt-Anfrage. Kosten: Staedte mal Ecken je Aufruf; gerufen
+   aus aufklStand, aufklStandZeile und streckeStand, nie aus draw().
+   Eine Stadt ohne Kampfeinheiten schreibt keine edep-Zeile und wird hier
+   darum nie fertig - ob "leer gesehen" zaehlt, ist offen (ENNO
+   11.09.2026: "nicht pauschal durchgewunken"). FABLE 12.09.2026 */
+function aufklZielliste(a){
+  if (!a) return [];
+  if (Array.isArray(a.orte) && a.orte.length) return a.orte.filter(i => MAP.n[i]);
+  if (!a.aufkl || !Array.isArray(a.pts) || a.pts.length < 3) return [];
+  const raus = [];
+  for (let i = 0; i < MAP.n.length; i++)
+    if (MAP.n[i] && punktInFlaeche(MAP.n[i][1], MAP.n[i][2], a.pts)) raus.push(i);
+  return raus;
+}
 /* the worst target: the own town nearest to it, and that distance */
 function aufklLage(punkte){
   const eigene = aufklEigene();
@@ -7131,9 +7163,10 @@ function aufklTipp(){
    A request on towns is done once EVERY asked town carries something the
    capture wrote after the request went active. Two pots hold that, the same
    two aufmarschKarte reads: the enemy records (a unit with the town in o)
-   and the sightings. A request drawn on open ground has no town list to
-   tick off and stays manual.
-   SO DOES A TOWN WHERE THE SCOUT FOUND NOTHING: an empty sheet writes no
+   and the sightings. A request drawn on open ground takes the towns inside
+   its polygon as its list (aufklZielliste, 12.09.2026) and closes by the
+   same rule; one with no town inside never closes by itself.
+   A TOWN WHERE THE SCOUT FOUND NOTHING STAYS OPEN: an empty sheet writes no
    row, so from here that town looks exactly like one nobody visited. The
    window names those towns; which towns hold units at all is the
    Kommodore's third point and is not answered here.
@@ -7205,7 +7238,9 @@ function aufklSichtKarte(frisch){
    The sighting pot is NOT counted: its numbers are a running total over the
    whole war, so one fresh look would carry every earlier one with it. */
 function aufklStand(id, a){
-  const orte = (a && Array.isArray(a.orte)) ? a.orte.filter(i => MAP.n[i]) : [];
+  /* benannt: a.orte; gezeichnet: die Staedte im Polygon - dieselbe Regel
+     fuer beide, siehe aufklZielliste (FABLE 12.09.2026) */
+  const orte = aufklZielliste(a);
   const seit = aufklAktivSeit(id, a), karte = aufklSichtKarte();
   const offen = [];
   let einheiten = 0;
@@ -7220,7 +7255,14 @@ function aufklStand(id, a){
 }
 /* the standing as the request window says it */
 function aufklStandZeile(a, id){
-  if (!a || !Array.isArray(a.orte) || !a.orte.length) return "";
+  if (!a) return "";
+  /* gezeichnete Flaeche (kein a.orte): ihre Staedte sind die im Polygon;
+     ohne Stadt darin kann nichts sie abhaken, das sagt die Zeile statt der
+     Zahlen (FABLE 12.09.2026) */
+  if (!Array.isArray(a.orte) || !a.orte.length){
+    if (!a.aufkl) return "";
+    if (!aufklZielliste(a).length) return `<p>No town inside.</p>`;
+  }
   const zs = befehlZustand(id, a);
   if (zs === "plan") return `<p>Nothing counts before it is active.</p>`;
   const st = aufklStand(id, a);
@@ -11832,17 +11874,24 @@ function arrowNah(sx, sy, tol){
   }
   return best;
 }
+/* PUNKT IM POLYGON - der Strahltest, der bis zum 12.09.2026 fest in areaHit
+   sass. Jetzt eine Funktion fuer zwei Leser: areaHit (Mauspunkt) und
+   aufklZielliste (Stadtpunkte einer gezeichneten Aufklaerungsanfrage).
+   Beide Seiten in Karteneinheiten. FABLE 12.09.2026 */
+function punktInFlaeche(kx, ky, p){
+  if (!Array.isArray(p)) return false;
+  let drin = false;
+  for (let i=0,j=p.length-1;i<p.length;j=i++){
+    if ((p[i][1] > ky) !== (p[j][1] > ky) &&
+        kx < (p[j][0]-p[i][0])*(ky-p[i][1])/(p[j][1]-p[i][1]) + p[i][0]) drin = !drin;
+  }
+  return drin;
+}
 function areaHit(sx, sy){
   const [kx,ky] = toMap(sx,sy);
   for (const [id,e] of liveAreas()){
     if (befehlVersteckt(id, e.v)) continue;      // hidden done area: not drawn, not hit
-    const p = e.v.pts;
-    let drin = false;
-    for (let i=0,j=p.length-1;i<p.length;j=i++){
-      if ((p[i][1] > ky) !== (p[j][1] > ky) &&
-          kx < (p[j][0]-p[i][0])*(ky-p[i][1])/(p[j][1]-p[i][1]) + p[i][0]) drin = !drin;
-    }
-    if (drin) return {id, e};
+    if (punktInFlaeche(kx, ky, e.v.pts)) return {id, e};
   }
   return null;
 }
@@ -46042,7 +46091,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 6ff48e4b9b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 9a3262b6a3</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -46270,7 +46319,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "6ff48e4b9b";
+const BAU = "9a3262b6a3";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
