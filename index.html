@@ -398,6 +398,25 @@ body.zieht #mapwrap canvas{pointer-events:none}
 #para-menu .t{color:var(--dim);margin:0 2px 5px;white-space:nowrap}
 #para-menu .row .btn{flex:1;padding:4px 6px;font-size:11px}
 #para-menu .btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
+/* DAS KLEINE MENUE "MANUALLY SELECT ATS" an der Anforderungstafel (ENNO
+   08.09.2026: "bei Druecken oeffnet sich dann ein kleines Menue, aus dem man
+   haendisch die eigenen ATs auswaehlen kann, die typengleich sind"). Auf dem
+   body wie #para-menu, ueber dem Fenster (#veil hat 50) - das Pfeilfenster
+   bleibt stehen, getippte Zahlen bleiben. Eine Spalte. FABLE 11.09.2026. */
+#anf-menu{position:fixed;z-index:60;min-width:240px;max-width:340px;padding:6px;background:var(--panel);
+  border:1px solid var(--line);border-radius:3px;box-shadow:0 6px 24px rgba(0,0,0,.5);font-size:12px}
+#anf-menu .t{color:var(--dim);margin:0 2px 5px;white-space:nowrap}
+#anf-menu .zuord-liste{grid-template-columns:1fr;max-height:40vh}
+/* die Spalte "Assign" der Tafel: Minus, Zahl, Plus in einer Zelle, und das
+   Kaestchen dahinter */
+.tw td.anf-zu{text-align:center;padding:2px 6px}
+.tw td.anf-zu .btn{font-size:11px;padding:0 6px;line-height:1.5;vertical-align:baseline}
+.tw td.anf-zu b{display:inline-block;min-width:16px;text-align:center;margin:0 3px}
+.tw td.anf-man{text-align:center;padding:2px 6px}
+.tw td.anf-man .toggle{display:inline-flex;vertical-align:middle}
+/* der Kopf "Manually select ATs" bricht in zwei Zeilen - einzeilig rollte die
+   Tafel am fremden Pfeil seitwaerts (gemessen: 608 zu 560 Punkten) */
+.tw th.anf-man{white-space:normal;line-height:1.2;max-width:84px;vertical-align:bottom}
 #para-menu select{width:100%;margin-top:6px;padding:3px 4px;font-size:11.5px}
 /* the defence tool's menu over its button - built like #para-menu */
 #line-menu{position:fixed;z-index:60;min-width:186px;padding:6px;background:var(--panel);
@@ -5404,12 +5423,21 @@ const befehlArtName = b => b.art === "arrow" ? (b.v && b.v.luft ? "Drop" : "Atta
 /* who made the order: the arrow carries it in itself, the others in their row */
 const befehlWer = b => werWar(b.art === "arrow" ? b.v : (S[b.art] && S[b.art][b.id]));
 /* ---- YOUR OWN ORDER IS NOT YOURS TO ACCEPT (07.09.2026) ----
-   Whoever wrote an order does not answer it: he picks no teams onto it, he
-   confirms no row the chain moved onto it, he commits nothing to his own
-   arrow, and he does not take a role he asked for himself.
-   The bar sits in the writing functions - zuordZuweisen, zuordBestaetigen,
-   setJoin, rolleNehmen - so a second window or a page built a minute ago
-   cannot walk around it. The buttons stay where they are and say why.
+   Whoever wrote an order does not answer it: he confirms no row the chain
+   moved onto it, he commits nothing to his own arrow, and he does not take
+   a role he asked for himself.
+   The bar sits in the writing functions - zuordBestaetigen, setJoin,
+   rolleNehmen - so a second window or a page built a minute ago cannot
+   walk around it. The buttons stay where they are and say why.
+   PICKING TEAMS ONTO HIS OWN ORDER IS OPEN SINCE 11.09.2026 (zuordZuweisen
+   carries no bar any more): ENNO 08.09.2026, "Hinter die Zaehler fuer die
+   Anforderung koennte einfach in einer zweiten Spalte ein Zaehler sein,
+   der die Zuordnung der eigenen Kampfeinheiten ermoeglicht", and on the
+   points, "Wer Befehle nur selber befuellt und die Gefechte spielt, kriegt
+   natuerlich trotzdem Punkte, aber eben weniger" - how the server books
+   him is a server question: the migration that would give the leader's
+   extra for other people's teams only (sql/2026-09-08_punktesaetze.sql) is
+   NOT applied; today he is booked as leader and as filler both.
    The author is read from the row that carries him; b.by is taken when the
    caller already has it. */
 const EIGEN_BEFEHL_WORT = "You wrote that order yourself.";
@@ -5472,8 +5500,8 @@ function zusageVorrat(){
 function zuordZuweisen(b, ids){
   const neu = (ids || []).filter(Boolean);
   if (!neu.length) return false;
-  /* picking is accepting, and the author does not accept his own order */
-  if (eigenerBefehl(b)){ toast(EIGEN_BEFEHL_WORT); return false; }
+  /* picking is accepting - on anybody's order, my own included (ENNO
+     08.09.2026, see YOUR OWN ORDER IS NOT YOURS TO ACCEPT) */
   for (const z of meineZuord()){
     if (z.art === b.art && String(z.id) === String(b.id)) continue;
     const rest = z.ats.filter(id => !neu.includes(id));
@@ -5972,8 +6000,7 @@ function ordersDialog(tab){
       <td>${fest}${pend ? ` <small style="color:var(--su)">+${pend} pending</small>` : ""}</td>
       <td style="text-align:left">${esc(befehlWer(b))}</td>
       <td><button class="btn" data-zwahl="${esc(b.art)}" data-zid="${esc(String(b.id))}" ${klein}${
-        eigenerBefehl(b) ? ` disabled title="${esc(EIGEN_BEFEHL_WORT)}"`
-        : b.zs === "fertig" ? ' disabled title="Done"'
+        b.zs === "fertig" ? ' disabled title="Done"'
         : frei ? "" : ' disabled title="No free team"'}>Assign my team \u2026</button></td></tr>${
       details.length ? `<tr class="orders-detail"${go}><td colspan="8">${details.map(d => `<div>${d}</div>`).join("")}</td></tr>` : ""}`;
   }).join("");
@@ -10404,6 +10431,224 @@ function meineZusage(id){
   if (at) for (const t of MAP.at) if (+at[t.k] > 0) raus[t.k] = +at[t.k];
   return raus;
 }
+/* ---- DIE KLAMMER ZAEHLT DEN CLAN, DIE SPALTE "ASSIGN" ORDNET EIGENE TEAMS ZU
+   (FABLE 11.09.2026) ----
+   ENNO 07.09.2026: "hinter jeden Einheit in Klammer die Anzahl diesen Typs
+   im Clandepot insgesamt, und wie viele aktuell frei sind".
+   ENNO 08.09.2026: "Hinter die Zaehler fuer die Anforderung koennte einfach
+   in einer zweiten Spalte ein Zaehler sein, der die Zuordnung der eigenen
+   Kampfeinheiten ermoeglicht. Hier sind dann noch zwei Auswahlkaestchen
+   sinnvoll: 1. 'Auto-assign own ATs' und 'Manually select ATs'."
+   Alles hier geht ueber zuordZuweisen / zuordSchreiben - denselben Weg wie
+   "Assign my team ..." und Release im Postfach. Kein zweiter Schreibweg,
+   kein neuer Topf. */
+
+/* WIEVIEL DER CLAN VON EINEM TYP HAT, UND WIEVIEL DAVON FREI IST.
+   Ein Gang ueber die veroeffentlichten Depots aller bekannten Mitglieder
+   (paraMitglieder, paraDepotVon: Kriegsseite; jedes Depot in S.depot ist
+   veroeffentlicht, siehe anonAn). Wer keine Depotzeile hat, zaehlt nicht
+   mit - auch nicht als null, wie bei paraVorrat.
+   FREI heisst: in keiner Zuordnungszeile an einem lebenden Befehl (kein
+   Entwurf, nicht fremd, nicht fertig - die Regel von zuordBelegung), gleich
+   ob der Befehl geplant oder aktiv ist. Die Zeilen anderer Spieler an
+   fertigen Befehlen raeumt niemand, bevor der Betreffende sein Postfach
+   oeffnet; ohne diesen Blick auf den Befehl staenden fremde Teams an
+   erledigten Befehlen dauerhaft als belegt. Eingesetzte Teams zaehlen wie
+   bisher als frei. BELEGUNG JE SCHREIBER: eine Team-Kennung ist nur
+   innerhalb eines Depots eindeutig (paraVorrat: zwei Mitglieder halten
+   beide "para-0").
+   zusageVorrat bleibt daneben bestehen: die Orders-Detailzeile liest daraus
+   den Deckel des +1-Griffs, und der muss MEIN Depot bleiben.
+   Gerufen beim Oeffnen eines Pfeilfensters und nach jedem Griff der Tafel,
+   nie in draw(). */
+function anfClanVorrat(){
+  const raus = {};
+  for (const t of MAP.at) raus[t.k] = {hat: 0, frei: 0};
+  const lebt = new Set();
+  for (const b of alleBefehle(true)) if (!b.entwurf && !b.fremd && b.zs !== "fertig") lebt.add(b.key);
+  const belegt = new Map();
+  for (const z of zuordAlle()){
+    if (!lebt.has(befehlKey(z.art, z.id))) continue;
+    let m = belegt.get(z.who);
+    if (!m){ m = new Set(); belegt.set(z.who, m); }
+    for (const id of z.ats) m.add(id);
+  }
+  for (const who of paraMitglieder()){
+    const liste = paraDepotVon(who);
+    if (!liste) continue;
+    const m = belegt.get(who);
+    for (const d of liste){
+      const v = d && raus[d.k];
+      if (!v) continue;
+      v.hat++;
+      if (!m || !m.has(d.id)) v.frei++;
+    }
+  }
+  return raus;
+}
+/* "in clan", nicht "in clan depots": mit zweistelligen Zahlen (30 Mitglieder)
+   rollte die Tafel sonst seitwaerts - gemessen 561 px in 560 (Skeptiker
+   FABLE 11.09.2026). */
+const anfKlammer = v => `(${v.hat} in clan, ${v.frei} free)`;
+const anfZuordSatz = (fest, offen) => `Assigned: <b>${fest}</b> team${fest === 1 ? "" : "s"}${
+  offen ? ` (${offen} pending)` : ""}`;
+/* MEINE TEAMS AN DIESEM PFEIL, NACH TYP - und welche eigenen Teams je Typ
+   noch zu haben sind. zu: je Typ die Zahl meiner Teams in meiner Zeile an
+   b. frei: je Typ die Kennungen meiner Teams der Kriegsseite, die weder in
+   dieser Zeile stehen noch einem anderen lebenden Befehl folgen
+   (zuordBelegung - dieselbe Frage, die zuordSchreiben vor dem Schreiben
+   stellt). typVon: Kennung -> Typ, fuer "-" und das Menue. */
+function anfZuordStand(a){
+  const b = {art: "arrow", id: a.id};
+  const meine = aufSeite(myDepotAlle(), clanFaktion());
+  const da = zuordVon(b).find(z => z.mine) || null;
+  const drin = new Set(da ? da.ats : []);
+  const belegt = zuordBelegung(b, meine.map(d => d.id));
+  const zu = {}, frei = {}, typVon = new Map();
+  for (const t of MAP.at){ zu[t.k] = 0; frei[t.k] = []; }
+  for (const d of meine){
+    if (!(d.k in zu)) continue;
+    typVon.set(d.id, d.k);
+    if (drin.has(d.id)) zu[d.k]++;
+    else if (!belegt.has(d.id)) frei[d.k].push(d.id);
+  }
+  return {b, da, meine, drin, belegt, zu, frei, typVon};
+}
+/* die Zelle der Spalte "Assign": Minus, meine Zahl, Plus */
+const anfZuordZelle = (typ, st) => `<button class="btn" data-azminus="${esc(typ)}"${st.zu[typ] ? "" : " disabled"
+  }>\u2212</button><b>${st.zu[typ]}</b><button class="btn" data-azplus="${esc(typ)}"${st.frei[typ].length ? "" : " disabled"}>+</button>`;
+/* NACH EINEM GRIFF NUR DIE ZELLEN AUFFRISCHEN, nicht das Fenster neu bauen:
+   in den Need-Feldern koennen getippte, ungespeicherte Zahlen stehen (die
+   Regel von anfVerdrahten). Aufgefrischt werden die Assign-Zellen, die
+   Klassensummen, die Klammern und die Zeile "Assigned: N teams". */
+function anfZuordAuffrischen(a){
+  const st = anfZuordStand(a), hab = anfClanVorrat();
+  const zuKl = new Map();
+  for (const t of MAP.at) if (st.zu[t.k]){ const z = anfKlasseVon(t.k); zuKl.set(z, (zuKl.get(z) || 0) + st.zu[t.k]); }
+  document.querySelectorAll("#dlg td[data-anfzu]").forEach(z => { z.innerHTML = anfZuordZelle(z.dataset.anfzu, st); });
+  document.querySelectorAll("#dlg td[data-anfzukl]").forEach(z => { z.textContent = String(zuKl.get(z.dataset.anfzukl) || 0); });
+  document.querySelectorAll("#dlg td[data-anfhab]").forEach(z => { const v = hab[z.dataset.anfhab]; if (v) z.textContent = anfKlammer(v); });
+  const n = document.getElementById("a-zuord-zahl");
+  if (n){ const {fest, offen} = zuordZahlen(st.b); n.innerHTML = anfZuordSatz(fest, offen); }
+}
+/* DIE GRIFFE DER TAFEL. Die Zuhoerer haengen an der Tabelle selbst, nicht an
+   #dlg: das Fenster wird je Oeffnen neu gebaut, die Tabelle mit ihm - so
+   kommt kein Zuhoerer doppelt. "+" nimmt das erste freie eigene Team des
+   Typs (zuordZuweisen: es verlaesst eine alte Zeile, meine Zeile hier steht
+   angenommen). "-" nimmt das zuletzt zugeordnete Team des Typs aus meiner
+   Zeile, der Zustand der Zeile bleibt (wie Release im Postfach). Das
+   Kaestchen oeffnet das Menue und schliesst es wieder. */
+function anfZuordVerdrahten(a){
+  const tafel = document.querySelector("#dlg td[data-anfzu]")?.closest("table");
+  if (!tafel) return;
+  /* Das Menue haengt am Kasten-Rechteck: rollt die Tafel, stuende es sonst
+     an der alten Stelle weiter; geht das Fenster per Tastatur zu, bliebe es
+     ueber der Karte stehen und schriebe weiter (gemessen, Skeptiker FABLE
+     11.09.2026). */
+  tafel.closest(".tw")?.addEventListener("scroll", anfMenueZu);
+  document.getElementById("d-close")?.addEventListener("click", anfMenueZu);
+  tafel.addEventListener("click", ev => {
+    const k = ev.target.closest && ev.target.closest("[data-azplus],[data-azminus]");
+    if (!k || k.disabled) return;
+    const st = anfZuordStand(a);
+    let ok = false;
+    if (k.dataset.azplus){
+      const id = st.frei[k.dataset.azplus][0];
+      if (!id) return;
+      ok = zuordZuweisen(st.b, [id]);
+    } else {
+      const typ = k.dataset.azminus, rest = st.da ? st.da.ats.slice() : [];
+      let i = rest.length - 1;
+      while (i >= 0 && st.typVon.get(rest[i]) !== typ) i--;
+      if (i < 0) return;
+      rest.splice(i, 1);
+      ok = zuordSchreiben(st.b, rest, st.da.st);
+    }
+    if (!ok) return;
+    anfZuordAuffrischen(a); ordersZahl(); draw();
+  });
+  tafel.addEventListener("change", ev => {
+    const k = ev.target;
+    if (!k || k.dataset === undefined || !k.dataset.azman) return;
+    if (k.checked) anfMenueAuf(k, a, k.dataset.azman); else anfMenueZu();
+  });
+  /* Geht das Fenster ohne Zeiger zu (Save per Tastatur, ein anderes Fenster
+     darueber), bliebe das Menue allein auf dem body stehen und schriebe
+     weiter Zuordnungen. openDlg und closeDlg rufen diesen Haken. */
+  bildAbmelden = () => { anfMenueZu(); bildAbmelden = null; };
+}
+/* das Menue zu; jedes Kaestchen der Tafel steht dann wieder leer */
+function anfMenueZu(){
+  const m = document.getElementById("anf-menu");
+  if (m) m.remove();
+  document.querySelectorAll("#dlg [data-azman]").forEach(k => { k.checked = false; });
+}
+/* DAS KLEINE MENUE: meine Teams eines Typs, Haken = diesem Befehl
+   zugeordnet. Setzen ordnet zu, Wegnehmen nimmt zurueck - dieselben zwei
+   Wege wie die Griffe darueber. Ein Team an einem anderen lebenden Befehl
+   steht abgeblendet mit dessen Namen und ist nicht waehlbar. Liegt neben
+   dem Kasten, sonst links davon; nie ausserhalb des Fensters. */
+function anfMenueAuf(kasten, a, typ){
+  const alt = document.getElementById("anf-menu");
+  if (alt) alt.remove();
+  document.querySelectorAll("#dlg [data-azman]").forEach(k => { if (k !== kasten) k.checked = false; });
+  const st = anfZuordStand(a), c = light() ? "#1a2029" : "#e9e2d5";
+  const teams = st.meine.filter(d => d.k === typ);
+  const m = document.createElement("div"); m.id = "anf-menu";
+  m.innerHTML = `<div class="t">${esc(atName(typ))} \u00b7 ${teams.length} in your depot</div>
+    ${teams.length ? `<div class="zuord-liste">${teams.map(d => {
+      const x = st.belegt.get(d.id), town = townOfTeam(d.id);
+      const wo = [town !== null && MAP.n[town] ? "at " + esc(MAP.n[town][0]) : "", x ? "follows " + esc(x.name) : ""]
+        .filter(Boolean).join(" \u00b7 ");
+      return `<label${x ? ` style="opacity:.45;cursor:default"` : ""}><input type="checkbox" data-zteam="${esc(d.id)}"${
+          st.drin.has(d.id) ? " checked" : ""}${x ? " disabled" : ""}>
+        <span>${symbolSVG(d.k, c, 22, 15)}</span><span class="n"><span>${esc(d.name || atName(d.k))}${
+          d.tag ? ` <small>${esc(d.tag)}</small>` : ""}</span>${wo ? `<em>${wo}</em>` : ""}</span></label>`; }).join("")}</div>`
+      : `<div class="empty">None of this type in your depot.</div>`}`;
+  document.body.appendChild(m);
+  const r = kasten.getBoundingClientRect(), bb = m.getBoundingClientRect();
+  let links = r.right + 6;
+  if (links + bb.width > innerWidth - 4) links = r.left - bb.width - 6;
+  m.style.left = Math.max(4, Math.min(innerWidth - bb.width - 4, links)) + "px";
+  m.style.top  = Math.max(4, Math.min(innerHeight - bb.height - 4, r.top - 4)) + "px";
+  m.querySelectorAll("[data-zteam]").forEach(k => k.addEventListener("change", ()=>{
+    const id = k.dataset.zteam;
+    let ok = false;
+    if (k.checked) ok = zuordZuweisen(st.b, [id]);
+    else { const da = zuordVon(st.b).find(z => z.mine); ok = !!da && zuordSchreiben(st.b, da.ats.filter(x => x !== id), da.st); }
+    if (!ok){ k.checked = !k.checked; return; }
+    anfZuordAuffrischen(a); ordersZahl(); draw();
+  }));
+}
+/* zu beim Klick daneben, mit Escape, beim Groessenwechsel - wie #para-menu.
+   Das Kaestchen selbst ist ausgenommen: es schaltet ueber change. */
+document.addEventListener("pointerdown", ev => {
+  const m = document.getElementById("anf-menu");
+  if (!m || m.contains(ev.target)) return;
+  if (ev.target.closest && ev.target.closest(".anf-man label")) return;
+  anfMenueZu();
+});
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") anfMenueZu(); });
+window.addEventListener("resize", anfMenueZu);
+/* AUTO-ASSIGN OWN ATS, beim Save des Pfeilfensters, wenn der Haken an ist.
+   Der Haken ist ein Griff, kein Stand: er wird nicht gespeichert, beim
+   Oeffnen steht er leer (FABLE 11.09.2026, Wahl - siehe Kopf des Flicks).
+   Fuer jeden angeforderten Typ werden freie eigene Teams des Typs
+   zugeordnet, bis meine Zahl die angeforderte erreicht - nicht mehr, und
+   nichts, was schon einem anderen Befehl folgt. Klassenzahlen loesen
+   nichts aus. Liefert die Meldung. */
+function anfAutoZuweisen(a){
+  const st = anfZuordStand(a), neu = anfLesen(a).at, ids = [];
+  for (const t of MAP.at){
+    const n = neu[t.k] || 0;
+    if (!n) continue;
+    const fehlt = n - st.zu[t.k];
+    if (fehlt > 0) ids.push(...st.frei[t.k].slice(0, fehlt));
+  }
+  if (!ids.length || !zuordZuweisen(st.b, ids)) return "";
+  ordersZahl();
+  return `${ids.length} team${ids.length === 1 ? "" : "s"} auto-assigned`;
+}
 /* DIE TAFEL AM PFEIL - ZWEI SPALTEN, ZWEI SCHRITTE.
 
    Links steht, WAS DER BEFEHL VERLANGT: die Anforderung seines Erstellers,
@@ -10427,7 +10672,15 @@ function meineZusage(id){
    wegSuche einen Weg durch die 1438 Staedte, im Zweifel zweimal. */
 function anfTabelle(a){
   const c = light() ? "#1a2029" : "#e9e2d5";
-  const hab = zusageVorrat(), meins = meineZusage(a.id), st = anfStand(a);
+  /* hab: der ganze Clan (ANG-1), nicht mehr mein Depot. zst: meine
+     zugeordneten Teams an diesem Pfeil, je Typ (BEF-4). Die Spalte Assign
+     und das Kaestchen dahinter stehen an jedem veroeffentlichten Pfeil der
+     eigenen Seite, auch am eigenen - nicht am Entwurf, der traegt keine
+     Zuordnung. */
+  const hab = anfClanVorrat(), meins = meineZusage(a.id), st = anfStand(a);
+  const zeigeZuord = !a.entwurf && befehlZustand(a.id, a) !== "fertig", zst = zeigeZuord ? anfZuordStand(a) : null;
+  const zuKl = new Map();
+  if (zst) for (const t of MAP.at) if (zst.zu[t.k]){ const z = anfKlasseVon(t.k); zuKl.set(z, (zuKl.get(z) || 0) + zst.zu[t.k]); }
   const alt = S.join[`${a.id}:${S.me}`];
   const habeZeile = !!(alt && imKrieg(alt) && alt.v);
   /* DIE ZWEITE SPALTE IST DER ZWEITE SCHRITT und gehoert nicht dem
@@ -10468,9 +10721,14 @@ function anfTabelle(a){
       <td class="zat-name">${esc(z.name)} <small style="color:var(--dim2)">any type</small></td>
       <td>${feld("anfk", z.k, st.cls[z.k] || 0)}</td>
       ${zeigeBring ? `<td style="color:var(--dim)">${meinsKl.get(z.k) || 0}</td>` : ""}
+      ${zeigeZuord ? `<td class="anf-zu" data-anfzukl="${esc(z.k)}" style="color:var(--dim)">${zuKl.get(z.k) || 0}</td><td class="anf-man"></td>` : ""}
       <td class="zat-hab" style="text-align:left;color:var(--dim)">${
         w.soll || w.ist ? `${w.ist}/${w.soll} from the clan` : ""}</td></tr>`;
   };
+  /* tr.leer heisst seit ANG-1: niemand im Clan hat den Typ, nichts
+     zugesagt, nichts angefordert. Die Klammer und die Assign-Zelle tragen
+     ihren Typ als Datenfeld, damit anfZuordAuffrischen sie nach einem
+     Griff einzeln neu schreibt. */
   const typZeile = t => {
     const v = hab[t.k], n = +meins[t.k] || 0, q = st.at[t.k] || 0;
     return `<tr data-kl="${esc(anfKlasseVon(t.k))}"${!v.hat && !n && !q ? ` class="leer"` : ""}>
@@ -10478,7 +10736,9 @@ function anfTabelle(a){
       <td class="zat-name">${esc(atName(t.k))}</td>
       <td>${feld("anft", t.k, q)}</td>
       ${zeigeBring ? `<td><input class="zat" type="number" data-zat="${esc(t.k)}" min="0" max="99" value="${n || ""}" placeholder="0"></td>` : ""}
-      <td class="zat-hab" style="text-align:left;color:var(--dim)">(${v.hat} in depot, ${v.frei} free)</td></tr>`;
+      ${zeigeZuord ? `<td class="anf-zu" data-anfzu="${esc(t.k)}">${anfZuordZelle(t.k, zst)}</td>
+      <td class="anf-man"><label class="toggle"><input type="checkbox" data-azman="${esc(t.k)}"><span></span></label></td>` : ""}
+      <td class="zat-hab" data-anfhab="${esc(t.k)}" style="text-align:left;color:var(--dim)">${anfKlammer(v)}</td></tr>`;
   };
   /* Die Filterreihe wie im Depot - und ein Unterschied, der genannt gehoert:
      das Depot teilt in vier Gruppen nach Namensmustern (FILTER,
@@ -10487,15 +10747,22 @@ function anfTabelle(a){
      ordnen. Der Griff .sp-filter ist der der Gruppenknoepfe im
      Zuordnungsfenster. */
   const reihe = [{k: "all", name: "All"}].concat(ANF_KLASSEN);
-  return `<div style="font-size:12px;color:var(--dim)">What this order needs${
-      zeigeBring ? ", and what you bring" : ""}</div>
+  /* Der Haken "Auto-assign own ATs" steht ueber der Tafel: ein Dropdownmenue
+     fuer die geplanten ATs gibt es hier nicht, die Wahl der Typen IST die
+     Tafel (FABLE-Lesart, siehe Kopf des Flicks). Er ist ein Griff wie die
+     Bring-Felder: nicht gespeichert, beim Oeffnen leer, gelesen beim Save.
+     Wer die Anforderung nicht schreiben darf, sieht ihn abgeblendet. */
+  return `<div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim)"><span style="flex:1">What this order needs${
+      zeigeBring ? ", and what you bring" : ""}</span>${zeigeZuord
+      ? `<label class="toggle"><input type="checkbox" id="a-zauto"${schreibt ? "" : " disabled"}><span>Auto-assign own ATs</span></label>` : ""}</div>
     <div class="sp-filter" style="margin:4px 0 6px">${reihe.map(x =>
       `<button data-anffl="${esc(x.k)}" aria-pressed="${x.k === anfFilter}">${esc(x.name)}</button>`).join("")}</div>
     ${grob ? `<div class="note">Your commitment of <b>${+alt.v}</b> team${+alt.v === 1 ? "" : "s"}
       names no types. Fill the Bring column in and save, and they take its place.</div>` : ""}
     <div class="tw" style="max-height:266px;overflow-y:auto">
       <table><thead><tr><th colspan="2">Type</th><th>Need</th>${
-        zeigeBring ? `<th>Bring</th>` : ""}<th style="text-align:left">Yours</th></tr></thead>
+        zeigeBring ? `<th>Bring</th>` : ""}${
+        zeigeZuord ? `<th>Assign</th><th class="anf-man">Manually select ATs</th>` : ""}<th style="text-align:left">Clan</th></tr></thead>
       <tbody>${ANF_KLASSEN.map(z => klZeile(z)
         + MAP.at.filter(t => anfKlasseVon(t.k) === z.k).map(typZeile).join("")).join("")}</tbody></table>
     </div>`;
@@ -15035,10 +15302,8 @@ function arrowDialog(a, frisch){
            every player, the pending ones in brackets */
         const {fest, offen} = zuordZahlen({art: "arrow", id: a.id});
         return `<div class="row" style="align-items:center">
-        <span style="font-size:12px;color:var(--dim);flex:1">Assigned: <b>${fest}</b> team${fest === 1 ? "" : "s"}${
-          offen ? ` (${offen} pending)` : ""}</span>
-        <button class="btn" id="a-zuord" style="font-size:11px"${
-          eigenerBefehl({art: "arrow", id: a.id, by: a.by}) ? ` disabled title="${esc(EIGEN_BEFEHL_WORT)}"` : ""}>Assign my team \u2026</button>
+        <span id="a-zuord-zahl" style="font-size:12px;color:var(--dim);flex:1">${anfZuordSatz(fest, offen)}</span>
+        <button class="btn" id="a-zuord" style="font-size:11px"${befehlZustand(a.id, a) === "fertig" ? ' disabled title="Done"' : ""}>Assign my team \u2026</button>
       </div>`;
       })()}
       <div class="row" style="align-items:center">
@@ -15114,6 +15379,7 @@ function arrowDialog(a, frisch){
     zuordWahl(b, ()=>arrowDialog(a));
   });
   anfVerdrahten();
+  anfZuordVerdrahten(a);
   document.querySelectorAll("#dlg .pf-farben button").forEach(b => b.addEventListener("click", ()=>{
     const farbeFeld = document.getElementById("a-farbe");
     if (farbeFeld) farbeFeld.value = b.dataset.farbe;
@@ -15167,6 +15433,10 @@ function arrowDialog(a, frisch){
       const nun = (Object.keys(req.at).length || Object.keys(req.cls).length) ? req : undefined;
       if (JSON.stringify(nun || null) !== JSON.stringify(a.req || null)){ a.req = nun; neu = true; }
     }
+    /* "Auto-assign own ATs": ein Griff fuer diesen Save, nicht gespeichert.
+       Abgeblendet wird nichts gelesen. */
+    const zautoEl = document.getElementById("a-zauto");
+    const zautoAn = !!(zautoEl && !zautoEl.disabled && zautoEl.checked);
     if (lbl !== (a.label||"")){ a.label = lbl; neu = true; }
     /* "Planned strength" ist am 08.09.2026 aus diesem Fenster gefallen: die
        Typenliste darueber sagt, was kommt, und eine von Hand getippte
@@ -15207,8 +15477,12 @@ function arrowDialog(a, frisch){
         a.entwurf = 1; a.id = pfeilId(); ENTWUERFE.push(a); entwuerfeSpeichern();
       } else pfeilFreigeben(a);
     }
+    /* AUTO-ASSIGN, zuletzt: die Anforderung steht schon am Pfeil, der
+       Entwurfswechsel ist durch - auf einen Entwurf geht nichts. Die
+       Meldung nennt die Zahl statt "Saved". */
+    const zuWort = (zautoAn && !a.entwurf && befehlZustand(a.id, a) !== "fertig" && anfFelder.length) ? anfAutoZuweisen(a) : "";
     if (neu || entwEl) save();
-    closeDlg(); draw(); toast("Saved");
+    closeDlg(); draw(); toast(zuWort || "Saved");
   });
   document.getElementById("a-del")?.addEventListener("click", ()=>{
     if (a.by !== S.me && !confirm(`Delete ${(a.n || a.by) === S.me ? "this" : "somebody else's"} arrow?`
@@ -45284,7 +45558,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 8da4ce0138</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 921bc6d094</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -45512,7 +45786,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "8da4ce0138";
+const BAU = "921bc6d094";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
