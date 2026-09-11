@@ -1566,6 +1566,26 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 .tw td.sy+td{text-align:left}
 .tw tr.me{background:rgba(217,164,65,.09)}
 .tw tr.me em{font-style:normal;color:var(--accent);font-size:10.5px}
+/* ORDERS, DIE ZWEITE ZEILE JE BEFEHL (ENNO 07.09.2026: "Zeilen koennen
+   deutlich hoeher, da wir hier noch mehr Details brauchen"). .tw td steht
+   auf nowrap - diese Zelle darf umbrechen und haengt ohne Strich an ihrer
+   Befehlszeile. Der Streifen der Strecke: ein Punkt je Stadt des Wegs,
+   voll = genommen, hohl = noch zu nehmen, Schwert = dort wird gekaempft;
+   --f ist die Farbe der eigenen Seite. FABLE 11.09.2026. */
+.tw tr.orders-detail td{white-space:normal;border-top:0;padding:0 8px 7px 8px;text-align:left;
+  color:var(--dim);line-height:1.75}
+.tw tr.orders-detail b{color:var(--text)}
+.tw tr.orders-detail .btn{font-size:11px;padding:0 6px;line-height:1.5;vertical-align:baseline}
+.strecke{display:inline-flex;flex-wrap:wrap;align-items:center;gap:3px;margin-right:7px;vertical-align:middle}
+.strecke i{display:inline-block;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--dim);box-sizing:border-box}
+.strecke i.ja{background:var(--f,var(--accent));border-color:var(--f,var(--accent))}
+.strecke i.ziel{width:11px;height:11px}
+.strecke em{font-style:normal;color:var(--accent);font-size:12px;line-height:9px}
+/* die Filterreihen ueber der Befehlsliste (ENNO 07.09.2026: "Filterung fuer Auftraege") */
+.orders-filter{margin:5px 0 8px}
+.orders-filter .sp-filter{margin:0 0 3px;align-items:center}
+.orders-filter .of-l{font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--dim2);min-width:42px}
+.orders-filter select.mini{font-size:11px;max-width:200px}
 /* DIE ZUSAGELISTE IM PFEILFENSTER. Achtzehn Zeilen, je ein Zahlenfeld. Die
    Felder stehen in einer .tw-Tabelle und damit ausserhalb von .row, das
    sonst jedes Eingabefeld eines Fensters kleidet - ohne diese Regel saessen
@@ -5621,6 +5641,228 @@ function zuordWahl(b, zurueck){
     if (zurueck) zurueck(); else closeDlg();
   });
 }
+/* ---- ORDERS: FILTER, DETAIL ROW AND THE STATE ON THE ROAD (FABLE 11.09.2026) ----
+   ENNO 07.09.2026 zum Postfach: "Zeilen koennen deutlich hoeher, da wir hier
+   noch mehr Details brauchen. Jeder Angriffsbefehl bspw. Soll aufgelistet
+   haben, welche ATs genau gebraucht werden, damit man hier als User diese
+   committen kann. Idealerweise auch die Anzahl der Staedte, die
+   durchschritten werden muessen und ob der Befehl Teil einer Befehlskette
+   ist und an welcher Stelle dieser steht." - "Bitte Filterung fuer
+   Auftraege einbauen: Welcher Typ, welcher ersteller, welcher Status etc."
+   - "Moeglichkeit der User, eigene Filter zu setzen und als private Vorlage
+   zu speichern." - "Die Detailansicht des Befehls soll klar vermitteln, wie
+   der aktuelle Stand an dieser Stelle eigentlich ist."
+   Nichts Neues geht zum Server. Gespeichert werden nur die Filtervorlagen,
+   und die liegen im Browser - siehe ORDERS_FILTER. */
+
+/* DER FILTER lebt ausserhalb von ordersDialog, weil wieder() das Fenster
+   nach jedem Klick neu baut (wie anfFilter und depotFilter). Leer heisst
+   keine Einschraenkung. zs "" ist die Liste wie bisher, geplant und aktiv;
+   "fertig" holt die erledigten Befehle dazu, die das Postfach sonst nicht
+   zeigt. */
+let ordersFilter = {art: "", by: "", byN: "", zs: ""};   // byN: der Anzeigename zu by, nur fuer den Knopf
+let ordersVorlageName = "";
+/* die sieben Arten, mit den Namen, die befehlArtName vergibt */
+const ORDERS_ARTEN = ["Attack", "Drop", "Defence", "Line", "Recon", "Area", "Para-block"];
+/* DIE PRIVATEN VORLAGEN LIEGEN IM BROWSER, NICHT AM KONTO. Nachgesehen am
+   11.09.2026 (fable/Listen/ANSCHLUSS-ORDERS.md, Abschnitt 5): kein Topf
+   der TOPFTAFEL traegt persoenliche Einstellungen - depot, sold, priv,
+   wish, stat, grp haben je eine feste Bedeutung -, und ein neuer Topf
+   waere eine Serverwanderung. Also wie LAY_KEY und THEMA_KEY: je Browser,
+   mit der Kontokennung im Schluessel, damit zwei Konten im selben Browser
+   sich nichts ueberschreiben. Auf dem Telefon sind es darum andere
+   Vorlagen als am Rechner. */
+const ORDERS_FILTER = "hng-warmap-orders-filter";
+const ordersFilterKey = () => ORDERS_FILTER + ":" + (S.me || "");
+function ordersVorlagen(){
+  try {
+    const l = JSON.parse(lies(ordersFilterKey(), "[]") || "[]");
+    return Array.isArray(l) ? l.filter(v => v && typeof v.n === "string" && v.f && typeof v.f === "object") : [];
+  } catch (e){ return []; }
+}
+function ordersVorlagenSchreiben(liste){ schreib(ordersFilterKey(), JSON.stringify(liste)); }
+/* die drei Bedingungen, UND-verknuepft */
+function ordersFilterPasst(b){
+  const f = ordersFilter;
+  if (f.art && befehlArtName(b) !== f.art) return false;
+  if (f.by && String(befehlUrheber(b) || "") !== f.by) return false;
+  if (f.zs && b.zs !== f.zs) return false;
+  return true;
+}
+/* die Reihen ueber der Liste: Art, Ersteller (aus den vorhandenen
+   Befehlen), Zustand, und die gespeicherten Vorlagen. Ein Ersteller, der im
+   Filter steht, aber gerade keinen Befehl hat, bleibt als Knopf stehen -
+   sonst saehe man nicht, warum die Liste leer ist. */
+function ordersFilterBau(quelle){
+  const wer = new Map();
+  for (const b of quelle){ const id = befehlUrheber(b); if (id && !wer.has(String(id))) wer.set(String(id), befehlWer(b)); }
+  /* ein Ersteller ohne offenen Befehl steht mit seinem NAMEN auf dem Knopf,
+     nicht mit der Kennung - ENNO 08.09.2026: "Die Kennung ist ja fuer den
+     User voellig irrelevant." */
+  if (ordersFilter.by && !wer.has(ordersFilter.by)) wer.set(ordersFilter.by, ordersFilter.byN || ordersFilter.by);
+  const knopf = (feld, wert, text) =>
+    `<button data-${feld}="${esc(wert)}" aria-pressed="${ordersFilter[feld.slice(2)] === wert}">${esc(text)}</button>`;
+  const vorl = ordersVorlagen();
+  return `<div class="orders-filter">
+    <div class="sp-filter"><span class="of-l">Kind</span>${knopf("ofart", "", "All")}${
+      ORDERS_ARTEN.map(n => knopf("ofart", n, n)).join("")}</div>
+    <div class="sp-filter"><span class="of-l">By</span>${knopf("ofby", "", "All")}${
+      [...wer].map(([id, n]) => knopf("ofby", id, n)).join("")}</div>
+    <div class="sp-filter"><span class="of-l">State</span>${knopf("ofzs", "", "Open")}${
+      knopf("ofzs", "plan", "Planned")}${knopf("ofzs", "aktiv", "Active")}${knopf("ofzs", "fertig", "Done")}</div>
+    <div class="sp-filter"><span class="of-l">Saved</span>
+      <select id="of-vorlage" class="mini"><option value="">${vorl.length ? "\u2014" : "none yet"}</option>${
+        vorl.map((v, i) => `<option value="${i}"${v.n === ordersVorlageName ? " selected" : ""}>${esc(v.n)}</option>`).join("")}</select>
+      <button id="of-save">Save as filter</button>${
+      ordersVorlageName && vorl.some(v => v.n === ordersVorlageName) ? `<button id="of-del">Remove</button>` : ""}</div>
+  </div>`;
+}
+
+/* ---- DER STAND AUF DER STRECKE ----
+   Alles hier kommt aus Daten, die die Seite hat: Besitz (ownerOf),
+   Kampfmarke (fightAt), Verlaengerungsuhr (overtimeAn), Gefechtsstand des
+   Lesers (gefAn) und der Endbildbefund - der ist oertlich (GEF.ende, siehe
+   "NOTHING IS WRITTEN TO THE CLAN HERE") und steht darum nur auf dem
+   Rechner, auf dem der Leser gerade laeuft. Geschaetzt wird nichts. */
+/* was an EINER Stadt los ist */
+function ortStand(i){
+  if (i === null || i === undefined || !MAP.n[i]) return null;
+  const kampf = fightAt(i);
+  return {i, kampf, ot: kampf ? overtimeAn(i) : null, gef: kampf ? gefAn(i) : null};
+}
+/* DER WEG EINES PFEILS fuer Postfach und Fenster. angriffsWeg(a) taugt hier
+   nicht: es gibt nur aktiven Pfeilen einen Weg und hoechstens eine frische
+   Suche je Bild, und ausserhalb von draw() steht dieser Zaehler auf 0.
+   Also der Speicher des Zeichners, solange er noch stimmt - dieselbe
+   Pruefung wie dort -, sonst angriffsWegNeu: eine Suche ueber MAP.e, bis
+   ~1 M Vergleiche, wie sie das Pfeilfenster fuer sammelzeit schon zahlt. */
+function befehlStrecke(a){
+  if (!a || a.luft || a.from === a.to || !MAP.n[a.from] || !MAP.n[a.to]) return null;
+  if (fremdeSeite(a)) return null;
+  const alt = angriffsWegSpeicher.get(a.id);
+  const schl = a.from + "|" + a.to + "|" + a.f + "|" + pfeilBauch(a);
+  if (alt && alt.schl === schl && alt.zreise === zeitReise){
+    if (alt.leer) return null;
+    if (alt.marke === angriffsWegMarke(alt.weg, a.f)) return alt;
+  }
+  return angriffsWegNeu(a);
+}
+/* der Stand eines Befehls: bei einem Bodenpfeil je Stadt des Wegs (ohne
+   den Start - dort steht die Kolonne schon; das Ziel zaehlt mit, wie in
+   angriffsWegNeu), sonst die Staedte, an denen der Befehl haengt: das Ziel
+   des Absprungs, die Staedte der Linie, die angefragten Staedte der
+   Aufklaerung, die naechste Stadt der Flaeche, die Stadt des Blocks */
+function streckeStand(b){
+  if (!b || !b.v) return null;
+  if (b.art === "arrow" && !b.v.luft){
+    const z = befehlStrecke(b.v);
+    if (z && z.weg && z.weg.length > 1){
+      const orte = z.weg.slice(1).map(i => Object.assign(ortStand(i), {unser: ownerOf(i) === b.v.f}));
+      return {weg: true, f: b.v.f, orte, n: orte.length, genommen: orte.filter(o => o.unser).length};
+    }
+  }
+  let liste = [];
+  if (b.art === "arrow") liste = [b.v.to];
+  else if (b.art === "para") liste = [+b.id];
+  else if (b.art === "line") liste = Array.isArray(b.v.pts) ? b.v.pts : [];
+  else if (b.art === "area") liste = (b.v.aufkl && Array.isArray(b.v.orte)) ? b.v.orte : [befehlOrt(b)];
+  const orte = liste.map(ortStand).filter(Boolean);
+  return orte.length ? {orte} : null;
+}
+/* der Streifen und der Satz dazu, fuer beide Stellen; leer, wenn es dort
+   nichts zu sagen gibt */
+function streckeText(b){
+  const st = streckeStand(b);
+  if (!st) return "";
+  const marken = o => {
+    const t = [];
+    if (o.ot) t.push(overtimeKurz(o.ot));
+    if (o.gef) t.push(gefKurz(o.gef));
+    return t;
+  };
+  const kaempfe = st.orte.filter(o => o.kampf).map(o => {
+    const m = marken(o);
+    return `\u2694 <b>${esc(MAP.n[o.i][0])}</b>${m.length ? ` <span style="color:var(--accent)">${esc(m.join(" \u00b7 "))}</span>` : ""}`;
+  });
+  if (!st.weg) return kaempfe.join(" \u00b7 ");
+  const f = FACTIONS[st.f];
+  const punkte = st.orte.map((o, k) => {
+    const titel = `${MAP.n[o.i][0]}: ${o.unser ? "taken" : "to take"}${o.kampf ? ", contested" : ""}`;
+    if (o.kampf) return `<em title="${esc(titel)}">\u2694</em>`;
+    return `<i class="${o.unser ? "ja" : ""}${k === st.orte.length - 1 ? " ziel" : ""}" title="${esc(titel)}"></i>`;
+  }).join("");
+  return `<span class="strecke"${f ? ` style="--f:${light() ? f.light : f.color}"` : ""}>${punkte}</span><b>${
+    st.genommen}</b> of <b>${st.n}</b> taken${kaempfe.length ? " \u00b7 " + kaempfe.join(" \u00b7 ") : ""}`;
+}
+/* dasselbe als Absatz im Kopf eines Befehlsfensters */
+function streckeAbsatz(b){ const t = streckeText(b); return t ? `<p>${t}</p>` : ""; }
+/* Kette: Stelle und Laenge. Die Laenge zaehlt alle Glieder derselben
+   Operation auf unserer Seite, fertige eingeschlossen. Eigene Entwuerfe
+   sieht kein anderer Rechner - dort fehlen sie in der Zahl. */
+function ketteStelle(b, alle){
+  if (!b || !b.v || !b.v.op) return "";
+  /* n ist die groesste Nummer in der Kette, mindestens die Zahl der
+     Glieder: eine geloeschte Mitte wird nicht nachnummeriert (folge wird nur
+     in ketteSetzen vergeben, nie neu gezaehlt), und "step 3 of 2" waere die
+     Folge. Zwei Skeptiker haben es am 11.09.2026 auf Kopien gemessen. */
+  const glieder = (alle || alleBefehle(true)).filter(x => x.v && x.v.op === b.v.op && !x.fremd);
+  const n = Math.max(glieder.length, ...glieder.map(x => +x.v.folge || 0));
+  return n ? `step <b>${+b.v.folge || "?"}</b> of <b>${n}</b>` : "";
+}
+/* DIE ZWEITE ZEILE JE BEFEHL im Postfach. Bei einem Pfeil: die Anforderung
+   nach Klassen und Typen mit dem Stand der Zusagen (anfStand - dieselben
+   Zahlen wie der Satz im Pfeilfenster), und je Typ, von dem ich freie
+   Teams habe, ein Griff, der meine Zusage um eins hebt oder senkt - ueber
+   setJoin, DENSELBEN Weg, den die Bring-Spalte des Pfeilfensters nimmt.
+   Die Regeln von dort gelten mit: kein Griff auf den eigenen Befehl,
+   keiner auf einen fertigen, und eine alte Zusage ohne Typen wird nicht
+   still ersetzt (siehe a-join). Der Griff steht nur, solange ich mehr
+   Teams des Typs habe, als ich schon zugesagt habe.
+   Danach der Stand auf der Strecke und die Stelle in der Kette.
+   Liefert die Teile als Liste; leer heisst keine zweite Zeile. */
+function ordersDetail(b, st, hab, alle){
+  const teile = [];
+  if (b.art === "arrow" && st){
+    const a = b.v;
+    const darf = b.zs !== "fertig" && !eigenerBefehl(b);
+    const altZ = S.join[`${a.id}:${S.me}`];
+    const ohneTyp = !!(altZ && imKrieg(altZ) && altZ.v && !(altZ.at && typeof altZ.at === "object"));
+    const meins = meineZusage(a.id);
+    const proTyp = {};
+    for (const m of zusageArten(a.id)) if (m.at) for (const k of Object.keys(m.at)) proTyp[k] = (proTyp[k] || 0) + (+m.at[k] || 0);
+    const griff = (k, n, titel) => `<button class="btn" data-zjoin="${esc(String(a.id))}" data-ztyp="${esc(k)}" data-zn="${n}" title="${esc(titel)}">${n > 0 ? "+1" : "\u22121"}</button>`;
+    const typTeil = t => {
+      const v = hab[t.k] || {hat: 0, frei: 0}, m = +meins[t.k] || 0, q = st.at[t.k] || 0;
+      let x = `${esc(atName(t.k))}${q ? ` <b>${proTyp[t.k] || 0}/${q}</b>` : proTyp[t.k] ? ` <b>${proTyp[t.k]}</b>` : ""}`;
+      if (m) x += ` <span style="color:var(--accent)">you ${m}</span>`;
+      if (darf && !ohneTyp){
+        if (m < v.hat) x += " " + griff(t.k, 1, `Commit one more ${atName(t.k)} (${v.hat} in your depot)`);
+        if (m > 0) x += " " + griff(t.k, -1, `Take one ${atName(t.k)} back`);
+      }
+      return x;
+    };
+    if (st.soll){
+      const kl = [];
+      for (const z of st.proKl.values()){
+        if (!z.soll && !z.ist) continue;
+        const typen = MAP.at.filter(t => anfKlasseVon(t.k) === z.k && (st.at[t.k] || proTyp[t.k] || (+meins[t.k] || 0)
+          || (z.cls > 0 && darf && !ohneTyp && (hab[t.k] || {}).hat > 0)));
+        kl.push(`<b>${z.ist}/${z.soll}</b> ${esc(z.name)}${typen.length ? `: ${typen.map(typTeil).join(" \u00b7 ")}` : ""}`);
+      }
+      teile.push(`Requested <b>${st.ist}/${st.soll}</b> \u2014 ${kl.join(" \u2003 ")}${
+        st.grob ? ` <span style="color:var(--dim2)">(${st.grob} without type)</span>` : ""}`);
+    } else {
+      const mit = joinOf(a.id), n = mit.reduce((q, j) => q + j.n, 0);
+      teile.push(n ? `No requirement \u00b7 <b>${n}</b> team${n === 1 ? "" : "s"} committed by ${mit.length} player${mit.length === 1 ? "" : "s"}` : "No requirement");
+    }
+    if (ohneTyp) teile[teile.length - 1] += ` <span style="color:var(--dim2)">\u00b7 your ${+altZ.v} carry no type</span>`;
+  }
+  const strecke = streckeText(b);
+  if (strecke) teile.push(strecke);
+  const kette = ketteStelle(b, alle);
+  if (kette) teile.push(kette);
+  return teile;
+}
 /* THE INBOX. Units: my teams with their assignment, then every open order
    of our side, active first. Players: the open role requests of our side,
    who took them, and the one role I hold, see ROLE REQUESTS. */
@@ -5630,9 +5872,13 @@ function ordersDialog(tab){
   ordersZahl();
   const c = light() ? "#1a2029" : "#e9e2d5";
   const alle = alleBefehle(true);
-  const offen = alle.filter(x => !x.fremd && !x.entwurf && x.zs !== "fertig");
+  const quelle = alle.filter(x => !x.fremd && !x.entwurf);
+  const offen = quelle.filter(x => x.zs !== "fertig");
+  /* die Liste, die gezeigt wird: nach dem Filter (ordersFilter); mit
+     "Done" auch die fertigen. offen bleibt die Zahl im Kopf. */
+  const liste = (ordersFilter.zs === "fertig" ? quelle : offen).filter(ordersFilterPasst);
   const rang = {aktiv: 0, plan: 1};
-  offen.sort((a, b) => (rang[a.zs] ?? 2) - (rang[b.zs] ?? 2)
+  liste.sort((a, b) => (rang[a.zs] ?? 2) - (rang[b.zs] ?? 2)
     || String(a.v.op || "").localeCompare(String(b.v.op || ""))
     || (+a.v.folge || 0) - (+b.v.folge || 0)
     || String(a.name || "").localeCompare(String(b.name || "")));
@@ -5705,20 +5951,31 @@ function ordersDialog(tab){
       + mit.map(zeileFuer).join("");
   }).join("") + teams.filter(d => !inGrp.has(d.id)).map(zeileFuer).join("");
 
-  const befehlZeilen = offen.map(b => {
+  /* ZWEI ZEILEN JE BEFEHL: die bisherige, darunter die Details (ordersDetail).
+     Beide springen beim Klick zur Stadt, Knoepfe ausgenommen (s. u.).
+     "Planned" traegt bei einem Pfeil die verlangte Gesamtzahl - a.soll wird
+     seit dem 08.09.2026 nicht mehr gelesen, die Anforderung schon. Der
+     Vorrat je Typ wird EINMAL gerechnet, nicht je Zeile. */
+  const hab = liste.some(b => b.art === "arrow") ? zusageVorrat() : {};
+  const befehlZeilen = liste.map(b => {
     const {fest, offen: pend} = zuordZahlen(b);
     const ort = befehlOrt(b);
-    return `<tr${ort !== null ? ` data-go="${ort}" style="cursor:pointer"` : ""}>
+    const st = b.art === "arrow" ? anfStand(b.v) : null;
+    const go = ort !== null ? ` data-go="${ort}" style="cursor:pointer"` : "";
+    const details = ordersDetail(b, st, hab, alle);
+    return `<tr${go}>
       <td>${esc(befehlArtName(b))}</td>
       <td style="text-align:left">${b.v.folge ? `<small style="color:var(--dim)">#${+b.v.folge}</small> ` : ""}${esc(b.name)}</td>
       <td style="text-align:left">${esc(befehlOrtName(b))}</td>
       <td style="text-align:left">${zsSpan(b.zs)}</td>
-      <td>${(b.art === "arrow" ? 0 : +b.v.soll) || "\u2014"}</td>
+      <td>${(st ? st.soll : +b.v.soll) || "\u2014"}</td>
       <td>${fest}${pend ? ` <small style="color:var(--su)">+${pend} pending</small>` : ""}</td>
       <td style="text-align:left">${esc(befehlWer(b))}</td>
       <td><button class="btn" data-zwahl="${esc(b.art)}" data-zid="${esc(String(b.id))}" ${klein}${
         eigenerBefehl(b) ? ` disabled title="${esc(EIGEN_BEFEHL_WORT)}"`
-        : frei ? "" : ' disabled title="No free team"'}>Assign my team \u2026</button></td></tr>`;
+        : b.zs === "fertig" ? ' disabled title="Done"'
+        : frei ? "" : ' disabled title="No free team"'}>Assign my team \u2026</button></td></tr>${
+      details.length ? `<tr class="orders-detail"${go}><td colspan="8">${details.map(d => `<div>${d}</div>`).join("")}</td></tr>` : ""}`;
   }).join("");
 
   openDlg(`
@@ -5736,9 +5993,12 @@ function ordersDialog(tab){
         ${teams.length ? `<div class="tw"><table><thead><tr><th></th><th>Team</th><th>Type</th><th>Order</th><th>State</th><th></th></tr></thead>
           <tbody>${teamZeilen}</tbody></table></div>`
           : `<div class="empty">No teams on this side yet. Add them in the depot on the right.</div>`}
-        <h3 class="zuord-h">Orders of our side</h3>
-        ${offen.length ? `<div class="tw"><table><thead><tr><th>Kind</th><th>Order</th><th>Target</th><th>State</th><th>Planned</th><th>Assigned</th><th>By</th><th></th></tr></thead>
+        <h3 class="zuord-h">Orders of our side${liste.length !== offen.length || ordersFilter.zs === "fertig"
+          ? ` <small style="letter-spacing:0;text-transform:none">${liste.length} shown</small>` : ""}</h3>
+        ${quelle.length ? ordersFilterBau(quelle) : ""}
+        ${liste.length ? `<div class="tw"><table><thead><tr><th>Kind</th><th>Order</th><th>Target</th><th>State</th><th>Planned</th><th>Assigned</th><th>By</th><th></th></tr></thead>
           <tbody>${befehlZeilen}</tbody></table></div>`
+          : quelle.length ? `<div class="empty">No order matches the filter.</div>`
           : `<div class="empty">No open orders on our side.</div>`}
         <div class="note">Click an order to jump to it on the map. Assigned teams count on the shield before commitments.</div>
       </div>
@@ -5815,6 +6075,53 @@ function ordersDialog(tab){
     toast("Not yet. You are asked again.");
     side(); wieder();
   }));
+  /* der Griff in der Detailzeile: meine Zusage auf diesem Pfeil, ein Typ
+     um eins hoch oder runter, geschrieben von setJoin wie die Bring-Spalte */
+  document.querySelectorAll("#dlg [data-zjoin]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    const a = liveArrows().find(x => String(x.id) === k.dataset.zjoin);
+    if (!a){ toast("That order is gone."); wieder(); return; }
+    const arten = meineZusage(a.id), typ = k.dataset.ztyp, schritt = +k.dataset.zn || 0;
+    const n = Math.max(0, (+arten[typ] || 0) + schritt);
+    if (n) arten[typ] = n; else delete arten[typ];
+    if (setJoin(a.id, arten)) toast(schritt > 0 ? `${atName(typ)} committed` : `${atName(typ)} taken back`);
+    wieder();
+  }));
+  /* die Filterreihen: der Zustand liegt draussen, das Fenster wird neu gebaut */
+  const nochmal = () => ordersDialog("units");
+  for (const feld of ["ofart", "ofby", "ofzs"])
+    document.querySelectorAll(`#dlg [data-${feld}]`).forEach(k => k.addEventListener("click", ()=>{
+      ordersFilter[feld.slice(2)] = k.dataset[feld];
+      if (feld === "ofby") ordersFilter.byN = k.dataset[feld] ? k.textContent : "";
+      ordersVorlageName = ""; nochmal();
+    }));
+  document.getElementById("of-vorlage")?.addEventListener("change", ev => {
+    const w = ev.target.value;
+    if (w === ""){ ordersVorlageName = ""; nochmal(); return; }
+    const v = ordersVorlagen()[+w];
+    if (!v) return;
+    ordersFilter = {art: String(v.f.art || ""), by: String(v.f.by || ""), byN: String(v.f.byN || ""), zs: String(v.f.zs || "")};
+    ordersVorlageName = v.n; nochmal();
+  });
+  document.getElementById("of-save")?.addEventListener("click", ()=>{
+    if (!ordersFilter.art && !ordersFilter.by && !ordersFilter.zs){ toast("Set a filter first."); return; }
+    const name = (prompt("Name for this filter:", ordersVorlageName || "") || "").trim().slice(0, 40);
+    if (!name) return;
+    const liste = ordersVorlagen(), i = liste.findIndex(v => v.n === name);
+    /* nie still ueber eine gespeicherte Vorlage */
+    if (i >= 0 && !confirm(`Replace the saved filter "${name}"?`)) return;
+    const eintrag = {n: name, f: {art: ordersFilter.art, by: ordersFilter.by, byN: ordersFilter.byN || "", zs: ordersFilter.zs}};
+    if (i >= 0) liste[i] = eintrag; else liste.push(eintrag);
+    ordersVorlagenSchreiben(liste); ordersVorlageName = name;
+    toast("Filter saved"); nochmal();
+  });
+  document.getElementById("of-del")?.addEventListener("click", ()=>{
+    const liste = ordersVorlagen(), i = liste.findIndex(v => v.n === ordersVorlageName);
+    if (i < 0) return;
+    if (!confirm(`Remove the saved filter "${ordersVorlageName}"?`)) return;
+    liste.splice(i, 1); ordersVorlagenSchreiben(liste); ordersVorlageName = "";
+    toast("Filter removed"); nochmal();
+  });
   document.querySelectorAll("#dlg tr[data-go]").forEach(r => r.addEventListener("click", ev => {
     if (ev.target.closest("button")) return;
     sel = +r.dataset.go; closeDlg(); flyTo(sel); side(); draw();
@@ -11368,6 +11675,7 @@ function paraDialog(i){
   openDlg(`
     <div class="dlg-h"><h2>Para-block \u00b7 ${esc(MAP.n[i][0])}</h2>
       <p>${pb ? zustandText(key, pb, e && (e.n || e.by)) : "No block here yet."}</p>
+      ${pb && !fremd ? streckeAbsatz(b) : ""}
       ${fremd ? "" : `<p>${paraTextSicher(() => paraErfuellbarText(luftTypen().map(t => t.k), {art: "para", id: i}))}</p>`}</div>
     <div class="dlg-b">
       <div class="own4" style="grid-template-columns:repeat(4,1fr)">
@@ -14711,6 +15019,7 @@ function arrowDialog(a, frisch){
     <div class="dlg-h"><h2>${esc(MAP.n[a.from][0])} → ${esc(MAP.n[a.to][0])}</h2>
       <p>${frisch ? `Give it a short label — that is what everyone reads on the map.`
                   : zustandText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>
+      ${fremd || frisch ? "" : streckeAbsatz({art: "arrow", id: a.id, v: a})}
       ${!fremd && a.luft ? `<p>${paraTextSicher(paraVorratText)}</p>` : ""}
       ${!fremd && (a.sym || a.luft) ? `<p>${paraTextSicher(() => paraErfuellbarText(paraBefehlTypen(a), {art: "arrow", id: a.id}))}</p>` : ""}
       ${fremd ? "" : `${anfW ? `<p>${anfW}</p>` : ""}<p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
@@ -33903,6 +34212,7 @@ function areaDialog(id, e, neuGezogen){
     <div class="dlg-h"><h2>${a.aufkl ? "Reconnaissance \u00b7 " + esc(aufklZiele(a)) : (neuGezogen ? "What is in there?" : "Marked area")}</h2>
       <p>${neuGezogen && !a.aufkl ? "Give it a short label — that is what everyone reads on the map."
                       : zustandText(id, a, e.n || e.by) + " · " + alterText(e.t)}</p>${
+      fremd || neuGezogen ? "" : streckeAbsatz({art: "area", id, v: a})}${
       a.aufkl && !fremd ? aufklFensterZeilen(a, id) : ""}</div>
     <div class="dlg-b">
       <div class="row">
@@ -34011,6 +34321,7 @@ function lineDialog(id, e){
   openDlg(`
     <div class="dlg-h"><h2>${istEinzelLinie(l) ? "Defence" : "Defence line"}</h2>
       <p>${zustandText(id, l, e.n || e.by)}</p>
+      ${fremd ? "" : streckeAbsatz({art: "line", id, v: l})}
       <p>${istEinzelLinie(l) ? "Single city" : l.pts.length + " towns"} · ${alterText(e.t)}</p></div>
     <div class="dlg-b">
       <div style="font-size:12px;color:var(--dim)">${l.pts.map(i=>esc(MAP.n[i]?MAP.n[i][0]:"?")).join(" → ")}</div>
@@ -44973,7 +45284,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build ab676dc3f4</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 8da4ce0138</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -45201,7 +45512,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "ab676dc3f4";
+const BAU = "8da4ce0138";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
