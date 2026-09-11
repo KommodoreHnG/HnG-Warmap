@@ -1600,6 +1600,44 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 .strecke i.ja{background:var(--f,var(--accent));border-color:var(--f,var(--accent))}
 .strecke i.ziel{width:11px;height:11px}
 .strecke em{font-style:normal;color:var(--accent);font-size:12px;line-height:9px}
+/* DER OPERATIONSPLANER (ENNO 07.09.2026 / 11.09.2026, gebaut FABLE 11.09.2026):
+   das Feld, die Welt darin (verschoben per transform), die Kanten als SVG,
+   die Kaesten als HTML. Masse aus dem Entwurf: Kasten 170 x 60; Feld 62vh,
+   geteilt durch --dlg-zoom, weil vh im gezoomten Fenster sonst 1,2-fach
+   wirkt (dieselbe Rechnung wie .dlg). */
+#op-feld{position:relative;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
+  height:min(calc(62vh / var(--dlg-zoom,1)),640px);border:1px solid var(--line);border-radius:3px;background:var(--panel);cursor:grab}
+#op-welt{position:absolute;left:0;top:0;width:1px;height:1px}
+#op-kanten{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none}
+#op-kanten path.op-kante{fill:none;stroke:var(--dim);stroke-width:1.5px}
+#op-kanten path.op-kante.op-fremd{stroke-dasharray:4 3}
+#op-kanten path.op-kante.op-wahl{stroke:var(--accent);stroke-width:2.5px}
+#op-kanten path.op-treff{fill:none;stroke:transparent;stroke-width:14px;pointer-events:stroke;cursor:pointer}
+#op-kanten path#op-gummi{fill:none;stroke:var(--accent);stroke-width:2px;stroke-dasharray:5 4}
+.op-etikett{position:absolute;font-size:12px;color:var(--dim);white-space:nowrap;pointer-events:none}
+.op-etikett b{color:var(--text)}
+.op-k{position:absolute;width:170px;height:60px;box-sizing:border-box;padding:5px 8px 4px 8px;
+  border:1px solid var(--line);border-left:4px solid var(--fk,var(--dim));border-radius:3px;
+  background:var(--panel2);cursor:move;font-size:12px;line-height:1.3;color:var(--text)}
+.op-k > div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.op-k .op-z1{display:flex;align-items:center;gap:5px}
+.op-k .op-z1 b{overflow:hidden;text-overflow:ellipsis}
+.op-k svg{width:14px;height:14px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.op-k .op-z2{font-size:11px;color:var(--dim)}
+.op-k .op-z3{min-height:13px}
+.op-k .op-z3 .strecke{margin:0}
+.op-k.op-fertig{opacity:.55}
+.op-k.op-entwurf{border-style:dashed}
+.op-k.op-kampf{box-shadow:0 0 10px 2px rgba(230,150,50,.55)}
+.op-k.op-hervor{box-shadow:0 0 0 2px var(--accent)}
+.op-k.op-kampf.op-hervor{box-shadow:0 0 0 2px var(--accent),0 0 10px 4px rgba(230,150,50,.55)}
+.op-k.op-ziel{outline:2px solid var(--accent);outline-offset:1px}
+.op-k.op-zu{cursor:default}
+.op-griff{position:absolute;right:-12px;top:18px;width:24px;height:24px;border-radius:50%;background:var(--accent);
+  color:#1a1207;font-weight:bold;font-size:17px;line-height:23px;text-align:center;cursor:crosshair}
+@media (max-width:760px){.op-griff::before{content:"";position:absolute;inset:-6px;border-radius:50%}}
+.op-x{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:var(--su);
+  color:#fff;font-size:15px;line-height:22px;text-align:center;cursor:pointer}
 /* die Filterreihen ueber der Befehlsliste (ENNO 07.09.2026: "Filterung fuer Auftraege") */
 .orders-filter{margin:5px 0 8px}
 .orders-filter .sp-filter{margin:0 0 3px;align-items:center}
@@ -2123,6 +2161,12 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
           <circle cx="7.2" cy="18.4" r="3.1"/><circle cx="16.8" cy="18.4" r="3.1"/>
           <path d="M10.3 17.5h3.4M7.2 15.3v-3.1h1.9M16.8 15.3v-3.1h-1.9"/></svg>
         <span class="lbl" data-txt="tool.aufkl">Recon</span></button>
+      <!-- OPERATION: keine Zeichenkachel, sondern der Absprung in den
+           Operationsplaner (ENNO 07.09.2026: "'Operation' als neue Kachel
+           (=Befehlskette)"). Ein Kasten, der sich in zwei verzweigt. -->
+      <button class="tool" data-t="op" aria-pressed="false" data-tip="Operation planner" title="Operation planner">
+        <svg viewBox="0 0 24 24"><rect x="2.5" y="9" width="6" height="6"/><rect x="15.5" y="3.5" width="6" height="6"/><rect x="15.5" y="14.5" width="6" height="6"/><path d="M8.5 12h3.5l3.5-5.5M12 12l3.5 5.5"/></svg>
+        <span class="lbl" data-txt="tool.op">Operation</span><span class="kb">3</span></button>
 
       <div class="bar-h" data-txt="bar.faction">Faction</div>
       <div id="factions"></div>
@@ -4879,6 +4923,8 @@ const RECHTE = [
    d:"Post a request that shows up clan-wide as a call for help."},
   {k:"anfordern",   n:"Request roles",
    d:"Ask the clan for roles or equipment in a running battle."},
+  {k:"operationen", n:"Plan operations",
+   d:"Link orders into operations, other people's orders included."},
   {k:"brett",       n:"Write on the board",
    d:"Leave written orders and notes for everyone."},
   {k:"aufklaerung", n:"File intel",
@@ -4906,7 +4952,7 @@ const RECHTE = [
 const RECHT_NAME = Object.fromEntries(RECHTE.map(r => [r.k, r.n]));
 /* Nur ein Anfang, damit die Liste nicht leer dasteht. Der Leiter schreibt sie um. */
 const ROLLEN_VORGABE = [
-  {id:"off", name:"Officer", rechte:{befehl:1,bestaetigen:1,loeschen:1,hilfe:1,anfordern:1,brett:1,aufklaerung:1}},
+  {id:"off", name:"Officer", rechte:{befehl:1,bestaetigen:1,loeschen:1,hilfe:1,anfordern:1,operationen:1,brett:1,aufklaerung:1}},
   {id:"sqd", name:"Squad lead", rechte:{hilfe:1,brett:1,aufklaerung:1}},
   {id:"mem", name:"Member", rechte:{brett:1,aufklaerung:1}},
 ];
@@ -5382,18 +5428,214 @@ function zuordLoeschen(b){
 function zuordBefehl(z, alle){
   return (alle || alleBefehle(true)).find(x => x.art === z.art && String(x.id) === String(z.id)) || null;
 }
-/* the next open step of an operation after a given order: steps done
-   already are stepped over, so that two steps finishing in one pass still
-   hand their teams on to the first one that is open */
-function befehlNachfolger(b, alle){
-  if (!b || !b.v || !b.v.op) return null;
-  const eigene = (alle || alleBefehle(true)).filter(x => x.key !== b.key && x.v && x.v.op === b.v.op
-    && !x.fremd && !x.entwurf);
-  /* the first open order with a higher number: gaps from removed links
-     are skipped, finished steps too, and there is no loop to run away */
-  const folge = +b.v.folge || 0;
-  const weiter = eigene.filter(x => +x.v.folge > folge).sort((p, q) => +p.v.folge - +q.v.folge);
-  return weiter.find(x => x.zs !== "fertig") || null;
+/* ---- OPERATIONS: THE CHAIN AS A GRAPH (ENNO 07.09.2026, gebaut FABLE 11.09.2026) ----
+   ENNO 07.09.2026: "Planungsoberflaeche, in der einzelnen Befehle verkettet
+   werden, diese koennen ... sowohl in Reihe, als auch parallel geschaltet
+   werden." Die Kette lebt weiter am Befehl und geht denselben Weg zum
+   Server wie bisher: v.op (Kennung, wie gehabt), v.vor (ein befehlKey als
+   Text ODER eine Liste = alle Vorgaenger), neu v.nach (Liste: Nachfolger,
+   die NICHT mir gehoeren - ihr vor kann ich nicht schreiben, der Server
+   laesst keine fremde Zeile durch), v.folge (jetzt die Stufe im Strahl).
+   Zugehoerigkeit kommt aus dem Graphen, nie aus op allein - ein fremder
+   Befehl traegt nie meine op (Satz 4: "bestehende Befehle anderer ... in
+   Ihre Kette integrieren"). Nur unsere Seite (ENNO 05.09.2026: "eine
+   Verkettung der Gegner koennen wir ja nicht ehrlich feststellen").
+   Alte Ketten (op + folge, vor als Text) lesen sich unveraendert: ein Glied
+   ohne aufloesbaren Vorgaenger haengt hinter dem Glied derselben op mit der
+   groessten kleineren folge (Rueckfall). Eine LISTE in vor - auch die
+   leere - ist das Wort des neuen Schreibers, dort gilt kein Rueckfall
+   (FABLE-Wahl 11.09.2026). */
+const opVorListe  = v => !v ? [] : Array.isArray(v.vor) ? v.vor.filter(Boolean).map(String) : v.vor ? [String(v.vor)] : [];
+const opNachListe = v => (v && Array.isArray(v.nach)) ? v.nach.filter(Boolean).map(String) : [];
+function opGraph(alle){
+  const liste = (alle || alleBefehle(true)).filter(b => b && b.v && b.key && !b.fremd);
+  const knoten = new Map(liste.map(b => [b.key, b]));
+  const vor = new Map(), nach = new Map(), kanten = [];
+  const kante = (von, zu, traeger, feld) => {
+    if (von === zu || !knoten.has(von) || !knoten.has(zu)) return;
+    const n = nach.get(von) || [];
+    if (n.includes(zu)) return;
+    n.push(zu); nach.set(von, n);
+    const p = vor.get(zu) || []; p.push(von); vor.set(zu, p);
+    kanten.push({von, zu, traeger, feld});
+  };
+  for (const b of liste){
+    const vk = opVorListe(b.v).filter(k => knoten.has(k));
+    for (const k of vk) kante(k, b.key, b.key, "vor");
+    for (const k of opNachListe(b.v)) kante(b.key, k, b.key, "nach");
+    if (!vk.length && !Array.isArray(b.v.vor) && b.v.op && +b.v.folge > 0){
+      let p = null;
+      for (const x of liste){
+        if (x === b || x.v.op !== b.v.op || !(+x.v.folge > 0) || +x.v.folge >= +b.v.folge) continue;
+        if (!p || +x.v.folge > +p.v.folge || (+x.v.folge === +p.v.folge && x.key < p.key)) p = x;
+      }
+      if (p) kante(p.key, b.key, b.key, "alt");
+    }
+  }
+  /* Tiefe = laengster Weg von einer Wurzel, 1-basiert; Rueckkanten aus
+     Altdaten zaehlen nicht */
+  const tiefe = new Map(), pfad = new Set();
+  const tief = k => {
+    if (tiefe.has(k)) return tiefe.get(k);
+    if (pfad.has(k)) return 0;
+    pfad.add(k);
+    let t = 0;
+    for (const p of vor.get(k) || []) t = Math.max(t, tief(p));
+    pfad.delete(k);
+    tiefe.set(k, t + 1);
+    return t + 1;
+  };
+  for (const k of knoten.keys()) tief(k);
+  /* eine Operation = zusammenhaengende Menge mit mindestens einer Kante;
+     ihre Kennung lebt nur hier, gespeichert wird sie nirgends. Glieder in
+     Strahlreihenfolge (Stufe, Name); der Name der Operation ist der Name
+     des Kopfs (FABLE-Wahl 11.09.2026, kein neues Feld). */
+  const comp = new Map(), glieder = new Map(), stufen = new Map(), name = new Map(), opVon = new Map();
+  const nachName = (p, q) => (tiefe.get(p) - tiefe.get(q))
+    || String(knoten.get(p).name || "").localeCompare(String(knoten.get(q).name || "")) || (p < q ? -1 : 1);
+  let zaehl = 0;
+  for (const start of knoten.keys()){
+    if (comp.has(start) || !((vor.get(start) || []).length || (nach.get(start) || []).length)) continue;
+    const id = "c" + (zaehl++), mit = [], stapel = [start];
+    comp.set(start, id);
+    while (stapel.length){
+      const k = stapel.pop(); mit.push(k);
+      for (const n of [...(vor.get(k) || []), ...(nach.get(k) || [])]) if (!comp.has(n)){ comp.set(n, id); stapel.push(n); }
+    }
+    mit.sort(nachName);
+    glieder.set(id, mit);
+    stufen.set(id, Math.max(...mit.map(k => tiefe.get(k))));
+    name.set(id, knoten.get(mit[0]).name || "");
+    opVon.set(id, mit.map(k => knoten.get(k).v.op).find(Boolean) || null);
+  }
+  return {knoten, vor, nach, comp, glieder, tiefe, stufen, name, opVon, kanten};
+}
+/* the open direct successors of an order; done ones are stepped over
+   (their successors taken instead), drafts are left out */
+function opWeiter(b, g){
+  if (!b || !g) return [];
+  const raus = [], gesehen = new Set([b.key]);
+  const lauf = key => {
+    for (const k of g.nach.get(key) || []){
+      if (gesehen.has(k)) continue;
+      gesehen.add(k);
+      const x = g.knoten.get(k);
+      if (!x || x.entwurf) continue;
+      if (x.zs === "fertig") lauf(k); else raus.push(x);
+    }
+  };
+  lauf(b.key);
+  return raus;
+}
+/* a row of mine waiting at a fork: its order is done and has more than one
+   open successor. FABLE-Wahl 11.09.2026: there nothing moves by itself -
+   the owner picks the branch in the inbox (ENNO 05.09.2026: "der Besitzer
+   muss dann einmal bestaetigen") */
+function opGabel(z, alle, g){
+  const b = zuordBefehl(z, alle);
+  if (!b || b.fremd || b.entwurf || b.zs !== "fertig" || !z.ats.length) return null;
+  const w = opWeiter(b, g);
+  /* auch bei EINEM Nachfolger, wenn er mein eigener ist: das Nachruecken
+     laesst eine Zeile nicht auf einen eigenen Befehl wandern (die Sperre
+     "your own order is not yours to accept" bleibt), und ohne diesen Weg
+     verlor der General seine Teams nach der ersten Stufe seiner eigenen
+     Operation - gemessen (Skeptiker FABLE 11.09.2026). Er waehlt den
+     Schritt im Postfach, wie an der Gabel. */
+  return (w.length > 1 || (w.length === 1 && eigenerBefehl(w[0]))) ? w : null;
+}
+const opErreicht = (g, von, ziel) => {
+  const gesehen = new Set(), stapel = [von];
+  while (stapel.length){
+    const k = stapel.pop();
+    if (k === ziel) return true;
+    if (gesehen.has(k)) continue;
+    gesehen.add(k);
+    for (const n of g.nach.get(k) || []) stapel.push(n);
+  }
+  return false;
+};
+/* what an order's own fields carry: its predecessors (vor, or the old-chain
+   fallback) and its foreign successors (nach) */
+const opVorTraeger  = (g, key) => g.kanten.filter(k => k.zu === key && k.feld !== "nach").map(k => k.von);
+const opNachTraeger = (g, key) => g.kanten.filter(k => k.von === key && k.feld === "nach").map(k => k.zu);
+/* WRITING - onto my own orders only. vor is ALWAYS a list once the planner
+   writes it, the empty one included. The first build wrote a single
+   predecessor as text, and that is exactly the shape the fallback for old
+   chains (op + folge, no resolvable vor) wakes up on: after deleting a
+   member, the planner invented a link nobody had drawn, and a link to
+   someone else's order came back the moment it was removed. Three readers
+   measured it on 11.09.2026. Text is now the mark of an untouched old
+   chain, and only those fall back. Keys that resolve to nothing fall out
+   on the way. */
+const opVorSchreiben  = (b, liste) => { const l = [...new Set(liste)]; befehlSchreiben(b, {vor: l}); };
+const opNachSchreiben = (b, liste) => { const l = [...new Set(liste)]; befehlSchreiben(b, {nach: l.length ? l : undefined}); };
+const opOpVon = (g, key) => { const c = g.comp.get(key); return (c !== undefined && g.opVon.get(c)) || (g.knoten.get(key) && g.knoten.get(key).v.op) || null; };
+/* after every change: my own members get folge = depth, the operation's
+   op, and vor in list form (a touched operation is brought whole into the
+   new shape, so the old-chain fallback never applies to it again); an
+   order left without any link is out (all four fields gone). Other
+   people's members keep what they have: their folge is written only when
+   their owner links or unlinks something himself - until then they carry
+   no "#N" in Orders and no badge on the map. */
+function opNachziehen(keys, op){
+  const g = opGraph(alleBefehle(true));
+  const comps = new Set();
+  for (const k of keys){
+    const b = g.knoten.get(k);
+    if (!b || !eigenerBefehl(b)) continue;
+    const c = g.comp.get(k);
+    if (c !== undefined){ comps.add(c); continue; }
+    if (b.v.op !== undefined || b.v.vor !== undefined || b.v.nach !== undefined || b.v.folge !== undefined)
+      befehlSchreiben(b, {op: undefined, vor: undefined, nach: undefined, folge: undefined});
+  }
+  for (const c of comps){
+    const opC = op || g.opVon.get(c) || ("op" + pfeilId());
+    for (const k of g.glieder.get(c)){
+      const b = g.knoten.get(k);
+      if (!eigenerBefehl(b)) continue;
+      const neu = {};
+      if (+b.v.folge !== g.tiefe.get(k)) neu.folge = g.tiefe.get(k);
+      if (b.v.op !== opC) neu.op = opC;
+      if (!Array.isArray(b.v.vor)) neu.vor = opVorTraeger(g, k);   // angefasst = Listenform, der Rueckfall gilt hier nicht mehr
+      if (Object.keys(neu).length) befehlSchreiben(b, neu);
+    }
+  }
+}
+/* THE LINK "X comes after P" - one place, one rule: if X is mine, P goes
+   into X.vor (even when P is somebody else's); else, if P is mine, X goes
+   into P.nach; else it cannot be done. Self, loop and a link that already
+   stands are turned away. */
+function opVerbinden(vonKey, zuKey){
+  if (!vonKey || !zuKey || vonKey === zuKey) return false;
+  if (!darf("operationen")) return darfNicht("operationen");    // the bar sits here, not only at the handle
+  const g = opGraph(alleBefehle(true));
+  const P = g.knoten.get(vonKey), X = g.knoten.get(zuKey);
+  if (!P || !X) return false;
+  if ((g.nach.get(vonKey) || []).includes(zuKey)) return false;
+  if (opErreicht(g, zuKey, vonKey)){ toast("That would loop."); return false; }
+  const meinP = eigenerBefehl(P), meinX = eigenerBefehl(X);
+  if (!meinX && !meinP){ toast("Neither order is yours."); return false; }
+  const op = opOpVon(g, vonKey) || opOpVon(g, zuKey) || null;
+  if (meinX) opVorSchreiben(X, [...opVorTraeger(g, zuKey), vonKey]);
+  else opNachSchreiben(P, [...opNachTraeger(g, vonKey), zuKey]);
+  opNachziehen([vonKey, zuKey], op);
+  save();
+  return true;
+}
+/* taking a link out - only whoever's order carries it */
+function opTrennen(vonKey, zuKey){
+  if (!darf("operationen")) return darfNicht("operationen");
+  const g = opGraph(alleBefehle(true));
+  const k = g.kanten.find(e => e.von === vonKey && e.zu === zuKey);
+  if (!k) return false;
+  const T = g.knoten.get(k.traeger);
+  if (!T || !eigenerBefehl(T)){ toast("That link is not yours."); return false; }
+  const c = g.comp.get(vonKey), glieder = c !== undefined ? g.glieder.get(c).slice() : [vonKey, zuKey];
+  if (k.feld === "nach") opNachSchreiben(T, opNachTraeger(g, vonKey).filter(x => x !== zuKey));
+  else opVorSchreiben(T, opVorTraeger(g, zuKey).filter(x => x !== vonKey));
+  opNachziehen(glieder, null);
+  save();
+  return true;
 }
 /* where an order points, as the town the map jumps to: the arrow's target,
    the block's town, the line's first town, the town nearest the area */
@@ -5532,7 +5774,7 @@ function zuordNachruecken(){
   if (CFG && !ersterAbrufDurch) return false;
   if (pulling) return false;
   if (!S.me) return false;
-  const alle = alleBefehle(true);
+  const alle = alleBefehle(true), g = opGraph(alle);
   const depot = new Set(aufSeite(myDepotAlle(), clanFaktion()).map(d => d.id));
   let getan = 0;
   for (const k of Object.keys(S.zuord)){
@@ -5546,7 +5788,12 @@ function zuordNachruecken(){
       if (ats.length !== z.ats.length && zuordSchreiben(b, ats, z.st)) getan++;
       continue;
     }
-    let weiter = befehlNachfolger(b, alle);
+    /* the open successors in the graph. FABLE-Wahl 11.09.2026: at a fork
+       (two and more) nothing moves - the row stays on the done order and
+       the owner picks the branch in the inbox (see opGabel) */
+    const naechste = opWeiter(b, g);
+    if (ats.length && (naechste.length > 1 || (naechste.length === 1 && eigenerBefehl(naechste[0])))) continue;
+    let weiter = naechste[0] || null;
     /* the chain hands nothing onto an order of my own: nobody could ever
        confirm that row. Those teams come free instead */
     if (weiter && eigenerBefehl(weiter)) weiter = null;
@@ -5581,7 +5828,8 @@ function ordersZahl(){
   try {
     const seit = ordersGesehen(), alle = alleBefehle(true);
     const offen = alle.filter(x => !x.fremd && !x.entwurf && x.zs !== "fertig");
-    for (const z of meineZuord()) if (z.st === 0 && zuordBefehl(z, offen)) n++;
+    const g = opGraph(alle);
+    for (const z of meineZuord()) if ((z.st === 0 && zuordBefehl(z, offen)) || opGabel(z, alle, g)) n++;
     for (const x of offen){
       if (x.zs !== "aktiv") continue;
       if (befehlAktivSeit(x) > seit) n++;
@@ -5813,29 +6061,38 @@ function streckeText(b){
     return `\u2694 <b>${esc(MAP.n[o.i][0])}</b>${m.length ? ` <span style="color:var(--accent)">${esc(m.join(" \u00b7 "))}</span>` : ""}`;
   });
   if (!st.weg) return kaempfe.join(" \u00b7 ");
+  return `${streckeStreifen(b, st)}<b>${
+    st.genommen}</b> of <b>${st.n}</b> taken${kaempfe.length ? " \u00b7 " + kaempfe.join(" \u00b7 ") : ""}`;
+}
+/* NUR DER STREIFEN - ein Punkt je Stadt des Wegs (voll = genommen, hohl =
+   zu nehmen, Schwert = Gefecht, --f = Seitenfarbe), fuer streckeText und den
+   Kasten im Operationsplaner (ENNO 07.09.2026 Satz 9: "angedeutet die
+   Vesorgungslinien ... Fraktionsfarbe ... Staedte mit Gefechten"). Leer,
+   wenn der Befehl keinen Weg hat. */
+function streckeStreifen(b, st){
+  st = st || streckeStand(b);
+  if (!st || !st.weg) return "";
   const f = FACTIONS[st.f];
   const punkte = st.orte.map((o, k) => {
     const titel = `${MAP.n[o.i][0]}: ${o.unser ? "taken" : "to take"}${o.kampf ? ", contested" : ""}`;
     if (o.kampf) return `<em title="${esc(titel)}">\u2694</em>`;
     return `<i class="${o.unser ? "ja" : ""}${k === st.orte.length - 1 ? " ziel" : ""}" title="${esc(titel)}"></i>`;
   }).join("");
-  return `<span class="strecke"${f ? ` style="--f:${light() ? f.light : f.color}"` : ""}>${punkte}</span><b>${
-    st.genommen}</b> of <b>${st.n}</b> taken${kaempfe.length ? " \u00b7 " + kaempfe.join(" \u00b7 ") : ""}`;
+  return `<span class="strecke"${f ? ` style="--f:${light() ? f.light : f.color}"` : ""}>${punkte}</span>`;
 }
 /* dasselbe als Absatz im Kopf eines Befehlsfensters */
 function streckeAbsatz(b){ const t = streckeText(b); return t ? `<p>${t}</p>` : ""; }
-/* Kette: Stelle und Laenge. Die Laenge zaehlt alle Glieder derselben
-   Operation auf unserer Seite, fertige eingeschlossen. Eigene Entwuerfe
+/* Kette: Stelle und Laenge - seit dem 11.09.2026 aus dem Graphen: die
+   Stufe im Strahl von der Zahl der Stufen (FABLE-Wahl: bei Abzweigungen ist
+   das die einzige Zahl, die noch eindeutig ist). alle darf die Liste oder
+   ein fertiger Graph sein (das Postfach baut ihn einmal). Eigene Entwuerfe
    sieht kein anderer Rechner - dort fehlen sie in der Zahl. */
 function ketteStelle(b, alle){
-  if (!b || !b.v || !b.v.op) return "";
-  /* n ist die groesste Nummer in der Kette, mindestens die Zahl der
-     Glieder: eine geloeschte Mitte wird nicht nachnummeriert (folge wird nur
-     in ketteSetzen vergeben, nie neu gezaehlt), und "step 3 of 2" waere die
-     Folge. Zwei Skeptiker haben es am 11.09.2026 auf Kopien gemessen. */
-  const glieder = (alle || alleBefehle(true)).filter(x => x.v && x.v.op === b.v.op && !x.fremd);
-  const n = Math.max(glieder.length, ...glieder.map(x => +x.v.folge || 0));
-  return n ? `step <b>${+b.v.folge || "?"}</b> of <b>${n}</b>` : "";
+  if (!b || !b.key) return "";
+  const g = alle && alle.knoten ? alle : opGraph(alle);
+  const c = g.comp.get(b.key);
+  if (c === undefined) return "";
+  return `step <b>${g.tiefe.get(b.key)}</b> of <b>${g.stufen.get(c)}</b>`;
 }
 /* DIE ZWEITE ZEILE JE BEFEHL im Postfach. Bei einem Pfeil: die Anforderung
    nach Klassen und Typen mit dem Stand der Zusagen (anfStand - dieselben
@@ -5891,6 +6148,220 @@ function ordersDetail(b, st, hab, alle){
   if (kette) teile.push(kette);
   return teile;
 }
+/* ---- THE OPERATION PLANNER (ENNO 07.09.2026 Saetze 1, 2, 6, 9; ENNO 11.09.2026:
+   "drag an drop maessige Felder ... wie bei Flussdiagrammen die Ketten
+   erstellen"; gebaut FABLE 11.09.2026) ----
+   Ein Fenster (xwide) mit einer Flaeche: jeder Befehl unserer Seite ein
+   Kasten (HTML), die Kanten als SVG-Pfade dahinter. Beim Oeffnen liegt jede
+   Operation als Strahl (Spalte = Stufe, Zeile = Zweig), darunter die losen
+   Befehle als Raster. Griff ziehen und auf einem anderen Kasten loslassen =
+   "der kommt danach" (links -> rechts). Kasten ziehen = verschieben, nur
+   fuer dieses Fenster. Kante antippen = waehlen, x = loesen. Leerer Grund =
+   schieben. Alles Pointer Events mit setPointerCapture; Lagen ueber
+   getBoundingClientRect-Anteile, weil das Fenster CSS-gezoomt ist (wie
+   massenDialog). Ohne das Recht "operationen" sieht man die Flaeche, zieht
+   aber nichts. Der Zustand liegt ausserhalb, weil das Fenster nach jeder
+   Aenderung neu gebaut wird (wie ordersFilter); behalten = Neubau, die
+   Lagen bleiben. */
+let opStand = {hervor: null, pan: {x: 0, y: 0}, lage: new Map(), kante: null};
+/* die Zeile "Operation" in den vier Befehlsfenstern (ENNO 07.09.2026 Satz
+   6: "Absprungfeld in den Operationsplaner") - an der Stelle des alten
+   Selects "Chain after" (Satz 5) */
+function opAbsprungZeile(id, b){
+  const stelle = ketteStelle(b);
+  return `<div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Operation${stelle ? ` <small>${stelle}</small>` : ""}</span>
+        <button class="btn" id="${id}" style="font-size:11px">Open in operation planner</button>
+      </div>`;
+}
+function opDialog(hervorKey, behalten){
+  const BW = 170, BH = 60, SX = 230, SY = 76, RAND = 16, ETI = 20, LUFT = 30;
+  if (!behalten){ opStand.hervor = hervorKey || null; opStand.lage = new Map(); opStand.kante = null; opStand.pan = {x: 0, y: 0}; }
+  const alle = alleBefehle(true), g = opGraph(alle), lage = opStand.lage, pan = opStand.pan;
+  const darfZiehen = darf("operationen");
+  /* gezeigt: unsere Seite, nicht fertig - plus fertige in einer Operation,
+     sonst zerfaellt eine laufende (FABLE-Wahl 11.09.2026) */
+  const gezeigt = alle.filter(b => !b.fremd && (b.zs !== "fertig" || g.comp.has(b.key)));
+  const aktiv = c => g.glieder.get(c).some(k => g.knoten.get(k).zs !== "fertig") ? 0 : 1;
+  const ops = [...g.glieder.keys()].sort((p, q) => (aktiv(p) - aktiv(q)) || String(g.name.get(p)).localeCompare(String(g.name.get(q))));
+  const lose = gezeigt.filter(b => !g.comp.has(b.key));
+  openDlg(`
+    <div class="dlg-h"><h2>Operations</h2>
+      <p><b>${ops.length}</b> operation${ops.length === 1 ? "" : "s"} \u00b7 <b>${lose.length}</b> order${lose.length === 1 ? "" : "s"} not in one${
+        darfZiehen ? "" : " \u00b7 " + esc(rechtSatz("operationen"))}</p></div>
+    <div class="dlg-b">
+      <div id="op-feld"><div id="op-welt"><svg id="op-kanten"></svg></div></div>
+    </div>
+    <div class="dlg-f"><span style="flex:1"></span><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
+  document.getElementById("d-close").addEventListener("click", closeDlg);
+  const feld = document.getElementById("op-feld"), welt = document.getElementById("op-welt"), svg = document.getElementById("op-kanten");
+  /* DER STRAHL (Satz 9: "linearisiert in einen Strahl mit Abzweigungen"):
+     x = Stufe, y = erste freie Zeile der Spalte ab der Zeile des ersten
+     Vorgaengers. Nur Schluessel ohne Lage werden gesetzt. */
+  let y0 = RAND + ETI;
+  for (const c of ops){
+    const glieder = g.glieder.get(c), zeile = new Map(), belegt = new Map();
+    const nachName = keys => keys.slice().sort((p, q) => String(g.knoten.get(p).name || "").localeCompare(String(g.knoten.get(q).name || "")));
+    const lauf = (k, ab) => {
+      if (zeile.has(k)) return;
+      const sp = g.tiefe.get(k) - 1, hat = belegt.get(sp) || new Set();
+      let r = ab;
+      while (hat.has(r)) r++;
+      hat.add(r); belegt.set(sp, hat); zeile.set(k, r);
+      for (const n of nachName(g.nach.get(k) || [])) lauf(n, r);
+    };
+    for (const w of nachName(glieder.filter(k => !(g.vor.get(k) || []).length))) lauf(w, 0);
+    for (const k of glieder) lauf(k, 0);                 // Kreise aus Altdaten: kein Glied bleibt ohne Platz
+    let zeilen = 1;
+    for (const k of glieder){
+      zeilen = Math.max(zeilen, zeile.get(k) + 1);
+      if (!lage.has(k)) lage.set(k, {x: RAND + (g.tiefe.get(k) - 1) * SX, y: y0 + zeile.get(k) * SY});
+    }
+    y0 += (zeilen - 1) * SY + BH + LUFT + ETI;
+  }
+  const spalten = Math.max(1, Math.floor((feld.clientWidth - RAND) / (BW + RAND)));
+  lose.forEach((b, i) => { if (!lage.has(b.key)) lage.set(b.key, {x: RAND + (i % spalten) * (BW + RAND), y: y0 + Math.floor(i / spalten) * SY}); });
+  if (!behalten && opStand.hervor && lage.has(opStand.hervor)){
+    const l = lage.get(opStand.hervor);
+    pan.x = -Math.max(0, l.x - feld.clientWidth / 3); pan.y = -Math.max(0, l.y - feld.clientHeight / 3);
+  }
+  /* DIE KAESTEN: Art-Symbol (das SVG der Kachel), Name, Ort, Zustand,
+     Verfasser (wenn nicht meiner), der Streifen der Strecke; linker Rand in
+     der Farbe der Fraktion, die die Zielstadt haelt; warmer Hof bei Gefecht
+     dort (Satz 9: "Fraktionsfarbe fuer Kontrolle", "identisches Highlight") */
+  const symbol = art => { const q = document.querySelector(`.tool[data-t="${art}"] svg`); return q ? q.outerHTML : ""; };
+  const kasten = b => {
+    const ort = befehlOrt(b), o = ort !== null ? ownerOf(ort) : -1;
+    const kl = ["op-k"];
+    if (b.zs === "fertig") kl.push("op-fertig");
+    if (b.entwurf) kl.push("op-entwurf");
+    if (ort !== null && fightAt(ort)) kl.push("op-kampf");
+    if (b.key === opStand.hervor) kl.push("op-hervor");
+    if (!darfZiehen) kl.push("op-zu");
+    const l = lage.get(b.key);
+    const wer = eigenerBefehl(b) ? "" : " \u00b7 " + esc(befehlWer(b));
+    const art = b.art === "arrow" ? "arrow" : b.art === "line" ? "line" : b.art === "para" ? "parablock" : (b.v && b.v.aufkl ? "aufkl" : "area");
+    return `<div class="${kl.join(" ")}" data-key="${esc(b.key)}" style="left:${l.x}px;top:${l.y}px${o >= 0 ? `;--fk:${col(FACTIONS[o])}` : ""}">
+      <div class="op-z1">${symbol(art)}<b>${esc(b.name)}</b></div>
+      <div class="op-z2">${esc(befehlOrtName(b))} \u00b7 ${ZUSTAND_NAME[b.zs] || b.zs}${wer}</div>
+      <div class="op-z3">${streckeStreifen(b)}</div>
+      ${darfZiehen ? `<div class="op-griff">\u203a</div>` : ""}</div>`;
+  };
+  const etikett = (text, keys) => {
+    const l = keys.map(k => lage.get(k)).filter(Boolean);
+    if (!l.length) return "";
+    return `<div class="op-etikett" style="left:${Math.min(...l.map(p => p.x))}px;top:${Math.min(...l.map(p => p.y)) - ETI}px">${text}</div>`;
+  };
+  welt.insertAdjacentHTML("beforeend",
+    ops.map(c => etikett(`Operation <b>${esc(g.name.get(c))}</b> \u00b7 ${g.glieder.get(c).length} order${g.glieder.get(c).length === 1 ? "" : "s"}`, g.glieder.get(c))).join("")
+    + (lose.length ? etikett("Not in an operation", lose.map(b => b.key)) : "")
+    + gezeigt.map(kasten).join(""));
+  /* DIE KANTEN: kubischer Pfad von P rechts-mitte nach X links-mitte, die
+     Pfeilspitze als Marker; gestrichelt, wenn der Traeger nicht meiner ist;
+     darunter je Kante ein breiter, unsichtbarer Trefferpfad. Die gewaehlte
+     Kante bekommt ein x an der Pfadmitte - nur, wenn sie meine ist. */
+  const DEFS = `<defs><marker id="op-pfeil" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--dim)"/></marker><marker id="op-pfeil-wahl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>`;
+  let xEl = null;
+  const kantenMalen = () => {
+    const t = [];
+    if (xEl){ xEl.remove(); xEl = null; }
+    for (const k of g.kanten){
+      const a = lage.get(k.von), b = lage.get(k.zu);
+      if (!a || !b) continue;
+      const x1 = a.x + BW, y1 = a.y + BH / 2, x2 = b.x, y2 = b.y + BH / 2, dx = Math.max(40, Math.abs(x2 - x1) / 2);
+      const d = `M${x1} ${y1}C${x1 + dx} ${y1},${x2 - dx} ${y2},${x2} ${y2}`;
+      const wahl = !!opStand.kante && opStand.kante.von === k.von && opStand.kante.zu === k.zu;
+      const T = g.knoten.get(k.traeger), meins = !!T && eigenerBefehl(T);
+      t.push(`<path class="op-kante${meins ? "" : " op-fremd"}${wahl ? " op-wahl" : ""}" d="${d}" marker-end="url(#${wahl ? "op-pfeil-wahl" : "op-pfeil"})"/>`);
+      t.push(`<path class="op-treff" data-von="${esc(k.von)}" data-zu="${esc(k.zu)}" d="${d}">${meins ? "" : `<title>Set by ${esc(T ? befehlWer(T) : "?")}</title>`}</path>`);
+      if (wahl && meins){
+        const mx = (x1 + 3 * (x1 + dx) + 3 * (x2 - dx) + x2) / 8, my = (y1 + 3 * y1 + 3 * y2 + y2) / 8;
+        xEl = document.createElement("div");
+        xEl.className = "op-x"; xEl.dataset.von = k.von; xEl.dataset.zu = k.zu; xEl.textContent = "\u00d7";
+        xEl.style.left = mx + "px"; xEl.style.top = my + "px";
+      }
+    }
+    svg.innerHTML = DEFS + t.join("");
+    if (xEl) welt.appendChild(xEl);
+  };
+  const legen = () => { welt.style.transform = `translate(${pan.x}px,${pan.y}px)`; };
+  kantenMalen(); legen();
+  /* DIE BEDIENUNG - nur Pointer Events, kein Maus-Sonderweg (Telefon).
+     Zeiger -> Feld-Pixel vor dem Zoom: Anteil am Rechteck mal clientWidth. */
+  const feldXY = ev => { const r = feld.getBoundingClientRect();
+    return [(ev.clientX - r.left) / (r.width || 1) * feld.clientWidth, (ev.clientY - r.top) / (r.height || 1) * feld.clientHeight]; };
+  const neu = () => opDialog(opStand.hervor, true);
+  let zug = null, gummi = null;
+  feld.addEventListener("pointerdown", ev => {
+    if (ev.pointerType === "mouse" && ev.button !== 0) return;
+    const ziel = ev.target instanceof Element ? ev.target : null;
+    if (!ziel) return;
+    const x = ziel.closest(".op-x");
+    if (x){
+      ev.preventDefault();
+      if (opTrennen(x.dataset.von, x.dataset.zu)){ opStand.kante = null; toast("Link removed"); draw(); ordersZahl(); neu(); }
+      return;
+    }
+    const treff = ziel.closest(".op-treff");
+    if (treff){ ev.preventDefault(); opStand.kante = {von: treff.dataset.von, zu: treff.dataset.zu}; kantenMalen(); return; }
+    if (opStand.kante){ opStand.kante = null; kantenMalen(); }
+    const [fx, fy] = feldXY(ev);
+    const k = ziel.closest(".op-k");
+    if (k && darfZiehen && ziel.closest(".op-griff")){
+      const l = lage.get(k.dataset.key);
+      zug = {art: "griff", key: k.dataset.key, ax: l.x + BW, ay: l.y + BH / 2, ziel: null};
+      gummi = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      gummi.id = "op-gummi"; gummi.setAttribute("d", `M${zug.ax} ${zug.ay}L${fx - pan.x} ${fy - pan.y}`);
+      svg.appendChild(gummi);
+    } else if (k && darfZiehen){
+      const l = lage.get(k.dataset.key);
+      zug = {art: "kasten", key: k.dataset.key, el: k, fx0: fx, fy0: fy, lx: l.x, ly: l.y};
+    } else if (k){
+      return;                                          // ohne Recht steht der Kasten
+    } else {
+      zug = {art: "pan", fx0: fx, fy0: fy, px: pan.x, py: pan.y};
+    }
+    try { feld.setPointerCapture(ev.pointerId); } catch (e){}
+    ev.preventDefault();
+  });
+  feld.addEventListener("pointermove", ev => {
+    if (!zug) return;
+    const [fx, fy] = feldXY(ev);
+    if (zug.art === "pan"){ pan.x = zug.px + (fx - zug.fx0); pan.y = zug.py + (fy - zug.fy0); legen(); return; }
+    if (zug.art === "kasten"){
+      const l = lage.get(zug.key);
+      l.x = zug.lx + (fx - zug.fx0); l.y = zug.ly + (fy - zug.fy0);
+      zug.el.style.left = l.x + "px"; zug.el.style.top = l.y + "px";
+      kantenMalen();
+      return;
+    }
+    if (zug.art === "griff"){
+      gummi.setAttribute("d", `M${zug.ax} ${zug.ay}L${fx - pan.x} ${fy - pan.y}`);
+      const unter = document.elementFromPoint(ev.clientX, ev.clientY);
+      const kk = unter && unter.closest ? unter.closest(".op-k") : null;
+      const zielK = kk && kk.dataset.key !== zug.key ? kk : null;
+      if (zielK !== zug.ziel){
+        if (zug.ziel) zug.ziel.classList.remove("op-ziel");
+        zug.ziel = zielK;
+        if (zielK) zielK.classList.add("op-ziel");
+      }
+    }
+  });
+  const ende = ev => {
+    if (!zug) return;
+    const z = zug; zug = null;
+    try { feld.releasePointerCapture(ev.pointerId); } catch (e){}
+    if (z.art !== "griff") return;
+    if (gummi){ gummi.remove(); gummi = null; }
+    if (z.ziel) z.ziel.classList.remove("op-ziel");
+    if (ev.type !== "pointerup" || !z.ziel) return;
+    const P = g.knoten.get(z.key), X = g.knoten.get(z.ziel.dataset.key);
+    if (P && X && opVerbinden(P.key, X.key)){ toast(`${X.name} after ${P.name}`); draw(); ordersZahl(); neu(); }
+  };
+  feld.addEventListener("pointerup", ende);
+  feld.addEventListener("pointercancel", ende);
+  feld.addEventListener("wheel", ev => { pan.x -= ev.deltaX; pan.y -= ev.deltaY; legen(); ev.preventDefault(); }, {passive: false});
+}
 /* THE INBOX. Units: my teams with their assignment, then every open order
    of our side, active first. Players: the open role requests of our side,
    who took them, and the one role I hold, see ROLE REQUESTS. */
@@ -5907,21 +6378,21 @@ function ordersDialog(tab){
   const liste = (ordersFilter.zs === "fertig" ? quelle : offen).filter(ordersFilterPasst);
   const rang = {aktiv: 0, plan: 1};
   liste.sort((a, b) => (rang[a.zs] ?? 2) - (rang[b.zs] ?? 2)
-    || String(a.v.op || "").localeCompare(String(b.v.op || ""))
-    || (+a.v.folge || 0) - (+b.v.folge || 0)
     || String(a.name || "").localeCompare(String(b.name || "")));
   const teams = aufSeite(myDepotAlle(), clanFaktion());
   const meine = meineZuord();
   const wo = new Map();
   for (const z of meine) for (const id of z.ats) wo.set(id, z);
   const frei = teams.filter(d => !wo.has(d.id)).length;
-  const wartend = meine.filter(z => z.st === 0 && zuordBefehl(z, offen)).length;
+  const g = opGraph(alle);
+  const wartend = meine.filter(z => (z.st === 0 && zuordBefehl(z, offen)) || opGabel(z, alle, g)).length;
   const zsSpan = zs => `<span style="color:${zs === "aktiv" ? "var(--accent)" : zs === "fertig" ? "var(--dim2)" : "var(--dim)"}">${
     ZUSTAND_NAME[zs] || zs}</span>`;
   const klein = `style="font-size:11px;padding:3px 8px"`;
 
   const zeileFuer = d => {
     const z = wo.get(d.id), b = z ? zuordBefehl(z, alle) : null;
+    const gabel = z ? opGabel(z, alle, g) : null;
     const town = townOfTeam(d.id);
     let auftrag = `<span style="color:var(--dim2)">free</span>`, stand = "", knopf = "";
     if (z){
@@ -5936,9 +6407,15 @@ function ordersDialog(tab){
         const eigB = !!b && eigenerBefehl(b);
         knopf = `<button class="btn" data-zbest="${esc(z.key)}" title="${eigB ? esc(EIGEN_BEFEHL_WORT) : "Confirm every team on this row"}" ${klein}${eigB ? " disabled" : ""}>Confirm</button>
           <button class="btn" data-zab="${esc(z.key)}" title="Clear every team on this row" ${klein}>Decline</button>`;
+      } else if (gabel){
+        /* the row waits at a fork (FABLE-Wahl 11.09.2026, see opGabel): one
+           button per open branch, picking is confirming; Decline as before */
+        stand = `<b style="color:var(--su)">done \u2014 next step?</b>`;
+        knopf = gabel.map(x => `<button class="btn" data-zweig="${esc(z.key)}|${esc(x.key)}" ${klein}>\u2192 ${esc(x.name)}</button>`).join(" ")
+          + ` <button class="btn" data-zab="${esc(z.key)}" title="Clear every team on this row" ${klein}>Decline</button>`;
       } else knopf = `<button class="btn" data-zfrei="${esc(d.id)}" ${klein}>Release</button>`;
     }
-    return `<tr${z && z.st === 0 ? ' class="me"' : ""}>
+    return `<tr${z && (z.st === 0 || gabel) ? ' class="me"' : ""}>
       <td class="sy">${symbolSVG(d.k, c, 24, 17)}</td>
       <td>${esc(d.name || atName(d.k))}${d.tag ? ` <small style="color:var(--dim)">${esc(d.tag)}</small>` : ""}</td>
       <td style="text-align:left">${esc(atName(d.k))}${town !== null && MAP.n[town]
@@ -5985,15 +6462,15 @@ function ordersDialog(tab){
      seit dem 08.09.2026 nicht mehr gelesen, die Anforderung schon. Der
      Vorrat je Typ wird EINMAL gerechnet, nicht je Zeile. */
   const hab = liste.some(b => b.art === "arrow") ? zusageVorrat() : {};
-  const befehlZeilen = liste.map(b => {
+  const zeileBefehl = (b, drin) => {
     const {fest, offen: pend} = zuordZahlen(b);
     const ort = befehlOrt(b);
     const st = b.art === "arrow" ? anfStand(b.v) : null;
     const go = ort !== null ? ` data-go="${ort}" style="cursor:pointer"` : "";
-    const details = ordersDetail(b, st, hab, alle);
+    const details = ordersDetail(b, st, hab, g);
     return `<tr${go}>
       <td>${esc(befehlArtName(b))}</td>
-      <td style="text-align:left">${b.v.folge ? `<small style="color:var(--dim)">#${+b.v.folge}</small> ` : ""}${esc(b.name)}</td>
+      <td style="text-align:left${drin ? ";padding-left:18px" : ""}">${b.v.folge ? `<small style="color:var(--dim)">#${+b.v.folge}</small> ` : ""}${esc(b.name)}</td>
       <td style="text-align:left">${esc(befehlOrtName(b))}</td>
       <td style="text-align:left">${zsSpan(b.zs)}</td>
       <td>${(st ? st.soll : +b.v.soll) || "\u2014"}</td>
@@ -6003,7 +6480,30 @@ function ordersDialog(tab){
         b.zs === "fertig" ? ' disabled title="Done"'
         : frei ? "" : ' disabled title="No free team"'}>Assign my team \u2026</button></td></tr>${
       details.length ? `<tr class="orders-detail"${go}><td colspan="8">${details.map(d => `<div>${d}</div>`).join("")}</td></tr>` : ""}`;
-  }).join("");
+  };
+  /* OBERPUNKT JE OPERATION (ENNO 07.09.2026 Satz 8: "Befehlsketten als
+     Oberpunkt, in denen die Einzelbefehle eingruppiert werden. User koennen
+     dann der gesamten Kette beitreten oder nur Teilbefehlen"): eine
+     Kopfzeile nach dem Vorbild tr.gruppe, darunter die Glieder in
+     Strahlreihenfolge, danach die losen Befehle. "Assign to the whole
+     operation" = Zuordnung an das erste offene Glied, das Nachruecken
+     traegt weiter (FABLE-Wahl 11.09.2026); "nur Teilbefehlen" = der Knopf
+     je Befehl, wie bisher. Laufende Operationen zuerst, dann nach Name. */
+  const inListe = new Set(liste.map(b => b.key));
+  const opAktiv = c => g.glieder.get(c).some(k => g.knoten.get(k).zs !== "fertig") ? 0 : 1;
+  const opsHier = [...g.glieder.keys()].filter(c => g.glieder.get(c).some(k => inListe.has(k)))
+    .sort((p, q) => (opAktiv(p) - opAktiv(q)) || String(g.name.get(p)).localeCompare(String(g.name.get(q))));
+  const inOp = new Set();
+  for (const c of opsHier) for (const k of g.glieder.get(c)) inOp.add(k);
+  const befehlZeilen = opsHier.map(c => {
+    const glieder = g.glieder.get(c).map(k => g.knoten.get(k)).filter(b => inListe.has(b.key));
+    const erster = g.glieder.get(c).map(k => g.knoten.get(k)).find(b => b.zs !== "fertig" && !b.entwurf);
+    return `<tr class="gruppe"><td class="sy"></td>
+      <td colspan="6" style="text-align:left"><b>Operation ${esc(g.name.get(c))}</b> <small style="color:var(--dim)">${glieder.length} order${glieder.length === 1 ? "" : "s"}</small></td>
+      <td><button class="btn" data-opzuord="${esc(erster ? erster.key : "")}" ${klein}${
+        erster ? (frei ? "" : ' disabled title="No free team"') : ' disabled title="Done"'}>Assign to the whole operation</button></td></tr>`
+      + glieder.map(b => zeileBefehl(b, true)).join("");
+  }).join("") + liste.filter(b => !inOp.has(b.key)).map(b => zeileBefehl(b, false)).join("");
 
   openDlg(`
     <div class="dlg-h"><h2>Orders</h2>
@@ -6071,6 +6571,32 @@ function ordersDialog(tab){
     const b = alleBefehle(true).find(x => x.art === k.dataset.zwahl && String(x.id) === k.dataset.zid);
     if (!b){ toast("That order is gone."); wieder(); return; }
     zuordWahl(b, wieder);
+  }));
+  document.querySelectorAll("#dlg [data-opzuord]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    const b = alleBefehle(true).find(x => x.key === k.dataset.opzuord);
+    if (!b){ toast("That order is gone."); wieder(); return; }
+    zuordWahl(b, wieder);
+  }));
+  /* the branch at a fork: the teams of the row go onto the chosen order,
+     accepted (picking is confirming, as in zuordZuweisen); only teams still
+     in the depot, on a recon request only scouts within reach - the same
+     two filters zuordNachruecken applies */
+  document.querySelectorAll("#dlg [data-zweig]").forEach(k => k.addEventListener("click", ev => {
+    ev.stopPropagation();
+    const [zk, xk] = k.dataset.zweig.split("|");
+    const z = zuordZeile(zk), ziel = alleBefehle(true).find(x => x.key === xk);
+    if (!z || !z.mine){ toast("That row is gone."); wieder(); return; }
+    if (!ziel || ziel.fremd || ziel.entwurf || ziel.zs === "fertig"){ toast("That order is gone."); wieder(); return; }
+    const depot = new Set(aufSeite(myDepotAlle(), clanFaktion()).map(d => d.id));
+    let ids = z.ats.filter(id => depot.has(id));
+    if (ziel.art === "area" && ziel.v && ziel.v.aufkl){
+      const meineT = myDepotAlle(), lage = aufklLage(aufklPunkte(ziel.v));
+      ids = ids.filter(id => { const d = meineT.find(x => x.id === id); return !d || !aufklSperre(ziel, d, lage); });
+    }
+    if (!ids.length){ zuordLoeschen({art: z.art, id: z.id}); toast("No team of that row can move on."); wieder(); return; }
+    if (zuordZuweisen(ziel, ids)){ zuordLoeschen({art: z.art, id: z.id}); toast(`Moved on to ${ziel.name}`); }
+    wieder();
   }));
   document.querySelectorAll("#dlg [data-rolle-nimm]").forEach(k => k.addEventListener("click", ev => {
     ev.stopPropagation();
@@ -11830,7 +12356,7 @@ function setPara(town, f, plan, extra){
   /* the state travels with the block only while it stays the same side's,
      and so does the moment it went active; a new block, or one changing
      side, starts planned */
-  const v = f == null ? null : Object.assign({}, alt ? {label: alt.label, soll: alt.soll, farbe: alt.farbe, op: alt.op, vor: alt.vor, folge: alt.folge,
+  const v = f == null ? null : Object.assign({}, alt ? {label: alt.label, soll: alt.soll, farbe: alt.farbe, op: alt.op, vor: alt.vor, nach: alt.nach, folge: alt.folge,
                                                         st: +alt.f === +f ? alt.st : undefined, aktT: +alt.f === +f ? alt.aktT : undefined} : {},
                                             {f, plan: !!plan, art: (alt && alt.art !== undefined) ? alt.art : artNeu()}, extra || {});
   if (v) for (const k of Object.keys(v)) if (v[k] === undefined || v[k] === "" || v[k] === null) delete v[k];
@@ -11892,30 +12418,11 @@ function befehlSchreiben(b, aend){
     markeZeileSetzen(b.art, b.id, Object.assign({}, e.v, aend)); save(); return; }
   if (b.art === "para"){ const pb = paraAt(b.id); if (!pb) return; setPara(b.id, pb.f, pb.plan, aend); }
 }
-/* THE CHAIN: an order hangs after a predecessor of any kind. The
-   predecessor gets an operation if it has none, and the newcomer the next
-   number in that operation. Empty key: out of the chain. */
-function ketteSetzen(b, vorKey){
-  if (!vorKey){ befehlSchreiben(b, {op: undefined, vor: undefined, folge: undefined}); return; }
-  const alle = alleBefehle(true), vor = alle.find(x => x.key === vorKey);
-  if (!vor || vor.key === b.key) return;
-  let op = vor.v.op;
-  if (!op){ op = "op" + pfeilId(); befehlSchreiben(vor, {op, folge: vor.v.folge || 1}); }
-  const folge = Math.max(0, ...alleBefehle(true).filter(x => x.v.op === op && x.key !== b.key).map(x => +x.v.folge || 0)) + 1;
-  befehlSchreiben(b, {op, vor: vorKey, folge});
-}
-/* the "Chain after" select and the colour buttons, shared by every order window */
-function ketteWahl(b, id){
-  /* nothing done and nothing of another side is offered, but the stored
-     predecessor stays in the list whatever its state - otherwise a plain
-     save of the successor would read "" and cut the chain */
-  const vorKey = (b.v && b.v.vor) || "";
-  const eigene = alleBefehle(true).filter(x => x.by === S.me && x.key !== b.key
-    && (x.key === vorKey || (!x.fremd && x.zs !== "fertig")));
-  return `<select id="${id}" class="mini" style="width:190px"><option value="">\u2014</option>${
-    eigene.map(x => `<option value="${esc(x.key)}"${vorKey === x.key ? " selected" : ""}>${
-      x.v.folge ? "#" + x.v.folge + " " : ""}${esc(x.name)}${x.art !== "arrow" ? " (" + x.art + ")" : ""}${x.entwurf ? " (draft)" : x.plan ? " (planned)" : ""}${x.zs === "fertig" ? " (done)" : ""}</option>`).join("")}</select>`;
-}
+/* ketteSetzen und ketteWahl (das Select "Chain after") sind am 11.09.2026
+   gefallen - ENNO 07.09.2026: "Fuer alle Befehle: Chain after brauchen wir
+   in dieser Form nicht mehr". Die Kette schreibt jetzt der Operationsplaner
+   (opVerbinden / opTrennen, siehe OPERATIONS: THE CHAIN AS A GRAPH). */
+/* the colour buttons, shared by every order window */
 function farbKnoepfe(akt){
   return PFEIL_FARBEN.map(p => `<button type="button" data-farbe="${p.k}" title="${p.name}"
     aria-pressed="${(akt||"") === p.k}" style="${p.d ? `--pf:${light() ? p.l : p.d}` : ""}">${p.d ? "" : "\u00d7"}</button>`).join("");
@@ -11961,16 +12468,12 @@ function paraDialog(i){
         <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
         <input type="number" id="pd-soll" min="0" max="999" value="${(pb && +pb.soll) || ""}" placeholder="\u2014" style="width:70px">
       </div>
-      <div class="row" style="align-items:center">
-        <span style="font-size:12px;color:var(--dim);flex:1">Chain after</span>
-        ${ketteWahl(b, "pd-kette")}
-      </div>
+      ${pb ? opAbsprungZeile("pd-op", b) : ""}
       <div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
         <input type="hidden" id="pd-farbe" value="${esc((pb && pb.farbe) || "")}">
         <div class="pf-farben">${farbKnoepfe(pb && pb.farbe)}</div>
       </div>`}
-      ${pb && pb.folge ? `<div class="note">Step <b>${pb.folge}</b> of its operation.</div>` : ""}
       <div class="note">A block seals the town against drops. "Only planned" is your own plan and stays your side's; a block of another side is a sighting.
         It cannot be a draft: a town carries one block, so yours and a comrade's would be the same entry.</div>
     </div>
@@ -11984,6 +12487,7 @@ function paraDialog(i){
   document.getElementById("d-close").addEventListener("click", closeDlg);
   zustandVerdrahten();
   farbVerdrahten("pd-farbe");
+  document.getElementById("pd-op")?.addEventListener("click", ()=>opDialog(key));
   document.querySelectorAll("#dlg [data-pbd]").forEach(k => k.addEventListener("click", ()=>{
     seite = k.dataset.pbd === "" ? null : +k.dataset.pbd;
     document.querySelectorAll("#dlg [data-pbd]").forEach(x => x.setAttribute("aria-pressed", String(x === k)));
@@ -11998,8 +12502,6 @@ function paraDialog(i){
     const farbe = farbeEl ? farbeEl.value : ((pb && pb.farbe) || "");
     if (seite === null){ if (pb) setPara(i, null, false); closeDlg(); if (sel === i) side(); draw(); tally(); return; }
     if (!setPara(i, seite, plan, {label, soll: soll || undefined, farbe: farbe || undefined})) return;
-    const kette = document.getElementById("pd-kette");
-    if (kette && kette.value !== ((pb && pb.vor) || "")) ketteSetzen({art: "para", id: i, key, v: paraAt(i) || {}}, kette.value);
     closeDlg(); if (sel === i) side(); draw(); tally(); toast("Saved");
   });
   document.getElementById("pd-del")?.addEventListener("click", ()=>{
@@ -13354,10 +13856,11 @@ document.addEventListener("keydown", e => {
      die Zustimmung waere weg, ohne dass jemand etwas anklickt. */
   if (dlgPflicht){ if (e.key === "Escape") dlgRuetteln(); return; }
   const k = e.key.toLowerCase();
-  /* 3 und 8 sind frei: Unit und Sighting sind aus der Leiste raus, und
-     eine Taste, die ein unsichtbares Werkzeug waehlt, ist eine Falle.
+  /* 8 ist frei: Unit und Sighting sind aus der Leiste raus, und eine
+     Taste, die ein unsichtbares Werkzeug waehlt, ist eine Falle.
+     3 oeffnet seit dem 11.09.2026 den Operationsplaner (Kachel "Operation").
      Die uebrigen Ziffern bleiben, wo sie waren. */
-  const t = {"1":"inspect","2":"owner","4":"arrow","5":"line","6":"para",
+  const t = {"1":"inspect","2":"owner","3":"op","4":"arrow","5":"line","6":"para",
              "7":"area","9":"battle","0":"erase"}[e.key];
   if (t){ setTool(t);
           if (t === "para" && tool === "para") paraMenueWechsel();                 // 6 brings the menu along
@@ -13430,6 +13933,9 @@ function setTool(t){
      gar nicht erst haben. Der Riegel steht hier und nicht nur am Knopf,
      weil die Zifferntasten durch dieselbe Funktion laufen - ein
      abgeblendeter Knopf allein wuerde sie nicht aufhalten. */
+  /* "Operation" ist kein Werkzeug: die Kachel oeffnet den Planer (ENNO
+     07.09.2026 Satz 1), das gewaehlte Werkzeug bleibt, wo es war */
+  if (t === "op"){ opDialog(null); return; }
   const noetig = WERKZEUG_RECHT[t];
   if (noetig && !darf(noetig)) return darfNicht(noetig);
   /* UND die Menge, schon hier. Sonst erfaehrt man es erst NACH der Arbeit:
@@ -15315,16 +15821,12 @@ function arrowDialog(a, frisch){
         <span style="flex:1"></span>
         <button class="btn primary" id="a-join">Save</button>
       </div>
-      ${a.by === S.me && !fremd ? `<div class="row" style="align-items:center">
-        <span style="font-size:12px;color:var(--dim);flex:1">Chain after</span>
-        ${ketteWahl({art: "arrow", id: a.id, key: befehlKey("arrow", a.id), v: a}, "a-kette")}
-      </div>` : ""}
+      ${fremd || frisch ? "" : opAbsprungZeile("a-op", {art: "arrow", id: a.id, key: befehlKey("arrow", a.id), v: a})}
       ${a.by === S.me ? `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Draft <small>(only you see it)</small></span>
         <label class="toggle"><input type="checkbox" id="a-entwurf" ${a.entwurf ? "checked" : ""}><span></span></label>
       </div>` : ""}
       ${a.entwurf ? ENTWURF_WARNUNG : ""}
-      ${a.folge ? `<div class="note">Step <b>${a.folge}</b> of its operation${a.entwurf ? " — still a draft" : ""}.</div>` : ""}
       ${fremd ? "" : (() => {
         /* THE ORDER'S OWN KIND. Switching it on asks the two questions the
            map can answer: is the start an airfield, and is the target
@@ -15380,6 +15882,7 @@ function arrowDialog(a, frisch){
   });
   anfVerdrahten();
   anfZuordVerdrahten(a);
+  document.getElementById("a-op")?.addEventListener("click", ()=>opDialog(befehlKey("arrow", a.id)));
   document.querySelectorAll("#dlg .pf-farben button").forEach(b => b.addEventListener("click", ()=>{
     const farbeFeld = document.getElementById("a-farbe");
     if (farbeFeld) farbeFeld.value = b.dataset.farbe;
@@ -15459,12 +15962,6 @@ function arrowDialog(a, frisch){
     const symEl = document.getElementById("a-sym");
     const sym = symEl ? symEl.value : (a.sym||"");
     if (sym !== (a.sym||"")){ a.sym = sym || undefined; neu = true; }
-    /* chain: take the predecessor's operation and the next number */
-    const ketteEl = document.getElementById("a-kette");
-    if (ketteEl && ketteEl.value !== (a.vor || "")){
-      ketteSetzen({art: "arrow", id: a.id, key: befehlKey("arrow", a.id), v: a}, ketteEl.value);
-      neu = true;
-    }
     if (neu) pfeilGeaendert(a);
     /* draft <-> shared: a shared arrow that becomes a draft vanishes for the
        others (tombstone) and gets a fresh id; a published draft joins S.arrows */
@@ -34501,10 +34998,7 @@ function areaDialog(id, e, neuGezogen){
         <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
         <input type="number" id="ar-soll" min="0" max="999" value="${+a.soll || ""}" placeholder="\u2014" style="width:70px" ${meins?"":"disabled"}>
       </div>`}
-      ${meins && !fremd ? `<div class="row" style="align-items:center">
-        <span style="font-size:12px;color:var(--dim);flex:1">Chain after</span>
-        ${ketteWahl({art: "area", id, key: befehlKey("area", id), v: a}, "ar-kette")}
-      </div>` : ""}
+      ${fremd || neuGezogen ? "" : opAbsprungZeile("ar-op", {art: "area", id, key: befehlKey("area", id), v: a})}
       ${fremd ? "" : `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
         <input type="hidden" id="ar-farbe" value="${esc(a.farbe||"")}">
@@ -34515,7 +35009,6 @@ function areaDialog(id, e, neuGezogen){
         <label class="toggle"><input type="checkbox" id="ar-entwurf" ${a.entwurf ? "checked" : ""}><span></span></label>
       </div>` : ""}
       ${a.entwurf ? ENTWURF_WARNUNG : ""}
-      ${a.folge ? `<div class="note">Step <b>${a.folge}</b> of its operation${a.entwurf ? " — still a draft" : ""}.</div>` : ""}
       ${a.aufkl ? `<div class="note">Eyes are asked from our nearest town; a scout that sees that far can take it. On towns it closes itself once the capture has written every one of them. A town found empty writes no record, so mark that one done by hand.</div>`
                 : `<div class="note">The colour of the area follows the faction selected on the left — pick the enemy
         before drawing and the area reads as theirs; the outline colour is your own accent.</div>`}
@@ -34535,6 +35028,7 @@ function areaDialog(id, e, neuGezogen){
     document.getElementById("ar-lbl").value = b.dataset.vor;
   }));
   farbVerdrahten("ar-farbe");
+  document.getElementById("ar-op")?.addEventListener("click", ()=>opDialog(befehlKey("area", id)));
   document.getElementById("ar-kette-frei")?.addEventListener("click", ()=>{
     const liste = entwuerfeDerOp(a.op);
     for (const x of liste) entwurfFreigeben(x.art, x.id);
@@ -34564,10 +35058,6 @@ function areaDialog(id, e, neuGezogen){
       entwurfFreigeben("area", id, v);
     }
     save();
-    const kette = document.getElementById("ar-kette");
-    const zeileJetzt = markeZeile("area", zid);
-    if (kette && kette.value !== (a.vor || "") && zeileJetzt)
-      ketteSetzen({art: "area", id: zid, key: befehlKey("area", zid), v: zeileJetzt.v}, kette.value);
     closeDlg(); draw(); toast(willEntw ? "Saved as a draft" : warEntw ? "Published" : "Saved");
     /* "recon wanted" is a request, not a note: it also goes to the board as
        a call for help, pinned to the town nearest the area's centre.
@@ -34607,10 +35097,7 @@ function lineDialog(id, e){
         <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
         <input type="number" id="l-soll" min="0" max="999" value="${+l.soll || ""}" placeholder="\u2014" style="width:70px">
       </div>`}
-      ${e.by === S.me && !fremd ? `<div class="row" style="align-items:center">
-        <span style="font-size:12px;color:var(--dim);flex:1">Chain after</span>
-        ${ketteWahl({art: "line", id, key: befehlKey("line", id), v: l}, "l-kette")}
-      </div>` : ""}
+      ${fremd ? "" : opAbsprungZeile("l-op", {art: "line", id, key: befehlKey("line", id), v: l})}
       ${fremd ? "" : `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
         <input type="hidden" id="l-farbe" value="${esc(l.farbe||"")}">
@@ -34621,7 +35108,6 @@ function lineDialog(id, e){
         <label class="toggle"><input type="checkbox" id="l-entwurf" ${l.entwurf ? "checked" : ""}><span></span></label>
       </div>` : ""}
       ${l.entwurf ? ENTWURF_WARNUNG : ""}
-      ${l.folge ? `<div class="note">Step <b>${l.folge}</b> of its operation${l.entwurf ? " — still a draft" : ""}.</div>` : ""}
     </div>
     <div class="dlg-f">
       ${darfWeg(e) ? `<button class="btn danger" id="l-del">${istEinzelLinie(l) ? "Delete defence" : "Delete line"}</button>` : ""}
@@ -34635,6 +35121,7 @@ function lineDialog(id, e){
   document.getElementById("d-close").addEventListener("click", closeDlg);
   zustandVerdrahten();
   farbVerdrahten("l-farbe");
+  document.getElementById("l-op")?.addEventListener("click", ()=>opDialog(befehlKey("line", id)));
   document.getElementById("l-kette-frei")?.addEventListener("click", ()=>{
     const liste = entwuerfeDerOp(l.op);
     for (const x of liste) entwurfFreigeben(x.art, x.id);
@@ -34663,10 +35150,6 @@ function lineDialog(id, e){
       entwurfFreigeben("line", id, v);
     }
     save();
-    const kette = document.getElementById("l-kette");
-    const zeileJetzt = markeZeile("line", zid);
-    if (kette && kette.value !== (l.vor || "") && zeileJetzt)
-      ketteSetzen({art: "line", id: zid, key: befehlKey("line", zid), v: zeileJetzt.v}, kette.value);
     closeDlg(); draw(); toast(willEntw ? "Saved as a draft" : warEntw ? "Published" : "Saved");
   });
   document.getElementById("l-del")?.addEventListener("click", ()=>{
@@ -40242,6 +40725,7 @@ function ordnungAnwenden(){
        button - it takes its place right behind the first */
     if (wunsch && wunsch.includes("para") && !wunsch.includes("parablock")) wunsch.splice(wunsch.indexOf("para") + 1, 0, "parablock");
     if (wunsch && wunsch.includes("area") && !wunsch.includes("aufkl")) wunsch.splice(wunsch.indexOf("area") + 1, 0, "aufkl");
+    if (wunsch && wunsch.includes("aufkl") && !wunsch.includes("op")) wunsch.splice(wunsch.indexOf("aufkl") + 1, 0, "op");
     for (const el of g.wahl()){
       if (!wunsch){ el.style.order = ""; continue; }
       const i = wunsch.indexOf(g.id(el));
@@ -45558,7 +46042,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 921bc6d094</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 6ff48e4b9b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -45786,7 +46270,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "921bc6d094";
+const BAU = "6ff48e4b9b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
