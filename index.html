@@ -16128,6 +16128,7 @@ search.addEventListener("blur", ()=>setTimeout(()=>hits.style.display="none", 18
    Die Freigabe bleibt danach stehen, jedes weitere Bild geht ohne Rückfrage. */
 let bildStrom = null;        // laufende Freigabe
 let bildVideo = null;        // das eine Element, das den Strom zeigt
+let bildAnfrage = null;      // die eine offene Frage nach einem Fenster (bildStromHolen)
 let bildAbmelden = null;     // räumt die Zuhörer des offenen Fensters weg
 
 const bildAufnahmeMoeglich = () =>
@@ -16180,15 +16181,29 @@ let bildTaktGesetzt = false;
 async function bildVideoHolen(){
   await bildStromHolen();
   if (bildVideo && bildVideo.srcObject === bildStrom && bildVideo.videoWidth) return bildVideo;
+  const strom = bildStrom;
   const v = document.createElement("video");
-  v.srcObject = bildStrom; v.muted = true; v.playsInline = true;
+  v.srcObject = strom; v.muted = true; v.playsInline = true;
   await v.play();
   /* the very first picture is often still black - wait for a real one */
   await new Promise(fertig => {
     if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(()=>fertig());
     else setTimeout(fertig, 260);
   });
-  if (!v.videoWidth) throw new Error("The picture came back empty.");
+  /* ONE ELEMENT, HOWEVER MANY ASKED. Several looks can land here in the
+     same moment - the shared question in bildStromHolen answers them all
+     at once - and each of them built an element: only the last became
+     bildVideo, the others went on decoding with nobody watching (measured
+     12.09.2026: three rooms, four elements after one "Share again"). So
+     whoever finds an element already standing lets its own go and takes
+     that one. And the share this one was built on may be gone by now
+     ("Share again" while it loaded): then it goes too, and the next pass
+     builds on the new share. FABLE 12.09.2026 */
+  if (strom !== bildStrom || (bildVideo && bildVideo.srcObject === bildStrom && bildVideo.videoWidth)){
+    try { v.pause(); } catch(e){} v.srcObject = null;
+    return bildVideoHolen();
+  }
+  if (!v.videoWidth){ v.srcObject = null; throw new Error("The picture came back empty."); }
   bildVideo = v;
   bildBilderZaehlen(v);
   return v;
@@ -16253,6 +16268,19 @@ async function bildStromHolen(){
     return bildStrom;
   }
   /* no share yet, or the last one ended - ask for one */
+  /* ONE QUESTION, HOWEVER MANY ASK. While the picker is open every room's
+     tick lands here, finds no stream and used to open a picker of its own -
+     three dialogs for one share. "Share again" (bildFreigabeNeu) ends the
+     share on purpose while the rooms keep looking, so the open question is
+     shared: whoever asks meanwhile waits for the same answer. The question
+     itself is unchanged, it moved to bildStromFragen. FABLE 12.09.2026 */
+  if (bildAnfrage) return bildAnfrage;
+  bildAnfrage = bildStromFragen();
+  try { return await bildAnfrage; }
+  finally { bildAnfrage = null; }
+}
+/* the question itself - the tail of bildStromHolen up to 12.09.2026 */
+async function bildStromFragen(){
   bildVideo = null; bildTaktGesetzt = true;
   {
     /* Ein Fenster kann die Seite nicht selbst waehlen - das laesst kein
@@ -16306,6 +16334,47 @@ function bildFreigabeBeenden(){
   if (bildVideo){ try { bildVideo.pause(); } catch(e){} bildVideo.srcObject = null; bildVideo = null; }
   bildTaktGesetzt = false;
   if (bildStrom){ bildStrom.getTracks().forEach(t => t.stop()); bildStrom = null; }
+}
+/* SHARE AGAIN. The share sometimes hangs - the picture stops while the rooms
+   keep ticking - and the only way out used to be stopping every room and
+   starting again. This is the third way beside the switches: end the share
+   and ask ONCE for a new one, without restarting the rooms.
+   ENNO 02.09.2026: "Idealerweise wird man nur einmal gefragt."
+   ENNO 12.09.2026 (SON-7): "Ja bau das erstmal so, wie genannt."
+   Units, Players and Battlereader need nothing: their next look goes
+   through bildVideoHolen, which sees a new stream and builds a fresh video
+   element. The radar holds the stream itself (wacheStart), so it is handed
+   the new one; the watch - counters, targets, memory - stays as it is.
+   Declined, or a whole screen picked: the toast says so, and there is no
+   stream. The three rooms' ticks find that on their next look and stop
+   themselves, as after a share the browser ended ("The screen sharing has
+   ended."). The radar is stopped here the same way (wacheStop(true), as
+   after "Sharing ended") - measured: left running, it kept searching a
+   black picture. stop() fires no "ended" on its own track, so its own
+   listener does not go off. FABLE 12.09.2026
+   NOBODY WATCHING: a stale SHARE AGAIN (radar stopped by the browser,
+   button still drawn) must not leave a share standing that no room reads -
+   ended again on the spot. */
+async function bildFreigabeNeu(){
+  bildFreigabeBeenden();
+  let neu;
+  try { neu = await bildStromHolen(); }
+  catch(e){
+    toast(e && e.nurFenster ? e.message : "Nothing picked — nothing is being captured.");
+    if (wache) wacheStop(true);
+    return false;
+  }
+  const liest = !!wache || !!(typeof KB !== "undefined" && KB && KB.live)
+      || !!(typeof PG !== "undefined" && PG && PG.live) || !!(typeof GEF !== "undefined" && GEF && GEF.live);
+  if (!liest){ bildFreigabeBeenden(); toast("No room is watching — the sharing was stopped."); return false; }
+  if (wache){
+    wache.stream = neu;
+    try { wache.video.srcObject = neu; wache.video.play().catch(()=>{}); } catch(e){}
+    bildZuschnitt();
+    const spur = neu.getVideoTracks()[0];
+    if (spur) spur.addEventListener("ended", ()=>wacheStop(true));
+  }
+  return true;
 }
 
 /* Verdrahtet alle drei Wege für ein geöffnetes Fenster. */
@@ -23923,6 +23992,7 @@ function kbPult(){
   const pipDa = ("documentPictureInPicture" in window);
   pult.innerHTML = `
     <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="kb-kraft">${ICO_CAPTURE}${live ? "Capture running" : "Capture the game"}</button>
+    ${live ? `<button class="rd-schalter" id="kb-teilen" style="font-size:10.5px;padding:6px 0">Share again</button>` : ""}
     <div class="kb-abstand"></div>
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="kb-ton">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
@@ -23936,6 +24006,8 @@ function kbPult(){
     <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run borderless or windowed. Your own units are shown but not kept.</div>`;
   /* the user's own switch: off means off, sharing included */
   document.getElementById("kb-kraft").addEventListener("click", ()=>{ KB.live ? kbLiveStop(true) : kbLiveStart(); });
+  /* share again: end the share and ask once; declined, the tick stops the room itself */
+  document.getElementById("kb-teilen")?.addEventListener("click", async ()=>{ await bildFreigabeNeu(); if (KB) kbPult(); });
   document.getElementById("kb-ton").addEventListener("click", ()=>{ kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); kbPult(); });
   document.getElementById("kb-keep").addEventListener("click", ()=>{
     /* CUT NAMES ARE SAID ONCE BEFORE THEY ARE KEPT. The Kommodore wants
@@ -25705,6 +25777,7 @@ function pgPult(){
   pult.innerHTML = `
     <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="sp-kraft">${ICO_CAPTURE}${
       live ? "Capture running" : "Capture the game"}</button>
+    ${live ? `<button class="rd-schalter" id="sp-teilen" style="font-size:10.5px;padding:6px 0">Share again</button>` : ""}
     <div class="kb-abstand"></div>
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="sp-ton">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
@@ -25716,6 +25789,8 @@ function pgPult(){
       borderless or windowed. Names go into the register with their side; nothing else is kept.</div>`;
   /* the user's own switch: off means off, sharing included */
   document.getElementById("sp-kraft").addEventListener("click", () => { PG.live ? pgLiveStop(true) : pgLiveStart(); });
+  /* share again: end the share and ask once; declined, the tick stops the room itself */
+  document.getElementById("sp-teilen")?.addEventListener("click", async () => { await bildFreigabeNeu(); if (PG) pgPult(); });
   document.getElementById("sp-ton").addEventListener("click", () => {
     kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); pgPult(); });
   document.getElementById("sp-keep").addEventListener("click", pgBehalten);
@@ -27102,6 +27177,7 @@ function gefPult(){
   pult.innerHTML = `
     <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="gf-kraft">${ICO_CAPTURE}${
       live ? "Capture running" : "Capture the game"}</button>
+    ${live ? `<button class="rd-schalter" id="gf-teilen" style="font-size:10.5px;padding:6px 0">Share again</button>` : ""}
     ${(() => {
       /* WAS STEHT GERADE AN - und nichts Dazuerfundenes. Gefragt wird die
          gegebene Bestaetigung durch ihr Frischefenster, NICHT der Befund
@@ -27125,6 +27201,8 @@ function gefPult(){
       goes into it.</div>`;
   document.getElementById("gf-kraft").addEventListener("click", () => {
     if (GEF && GEF.live) gefLiveStop(true); else gefLiveStart(); });
+  /* share again: end the share and ask once; declined, the tick stops the desk itself */
+  document.getElementById("gf-teilen")?.addEventListener("click", async () => { await bildFreigabeNeu(); gefPult(); });
   /* THE SAME SWITCH THE CABIN AND THE PLAYER ROOM CARRY, on the same kbTon.
      Without it the confirmation would be the only sound in the tool that
      cannot be turned off - this desk was the one of the three that had no
@@ -32690,6 +32768,10 @@ function radarPult(){
              : esc(rdS(W.kraft)) + " · " + esc(rdS(laeuft ? W.ein : W.aus))}</button>
 
 
+    ${/* Freigabe beenden und einmal neu anfordern, die Wache bleibt stehen
+         (bildFreigabeNeu). Nur bei eigener laufender Wache. FABLE 12.09.2026 */
+      laeuft ? `<button class="rd-schalter" id="rd-teilen"
+      style="font-size:10.5px;padding:6px 0">${esc(rdS("SHARE AGAIN"))}</button>` : ""}
     ${/* HIER STAND der TAKE-OVER-Knopf des wartet-Zustands - der
          Zwischenschritt ist abgeschafft (Die Direktive 30.08.),
          uebernommen wird direkt, UNDO LAST READING bleibt das
@@ -32756,6 +32838,7 @@ function radarPult(){
     }
     await wacheStart(2); radarPult();
   });
+  el.querySelector("#rd-teilen")?.addEventListener("click", async ()=>{ await bildFreigabeNeu(); radarPult(); });
   el.querySelector("#rd-neu")?.addEventListener("click", ()=>{
     zielZiehen(); radarPult(); radarZeichnen();
     if (!sichtbareOrte()) toast("Nothing in view — picked from the whole map");
@@ -33681,7 +33764,9 @@ function wacheStop(vonAussen){
      100) beliebig lange eingefroren, waehrend die Anlage leer dreht. */
   radarScan = 0; radarSignal = 0;
   wacheAnzeigen(); radarZeichnen();
-  if (radarOffen) radarFrisch();
+  /* the desk too: SHARE AGAIN is drawn only with a running watch, and
+     radarFrisch alone leaves the old desk standing (FABLE 12.09.2026) */
+  if (radarOffen){ radarFrisch(); radarPult(); }
   toast(`${vonAussen ? "Sharing ended" : "Stopped watching"} — ${gesehen} of ${MAP.n.length} `
       + `towns were seen, ${geaendert} changed.`);
 }
@@ -46002,7 +46087,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 61f62f3120</span></p></div>
+         installation. <span style="color:var(--dim2)">· build f6e7666ec9</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -46230,7 +46315,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "61f62f3120";
+const BAU = "f6e7666ec9";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
