@@ -8617,18 +8617,26 @@ function rebuildUnits(){
   }
 }
 const unitsAt = i => unitIdx.get(i) || [];
-/* Der Name einer eingesetzten Einheit ist Sache ihres Besitzers und sonst
-   niemandes. Fuer FREMDE Einheiten gibt es hier nichts - die Namen der
-   Kameraden stehen ohnehin auf der Karte im Spiel, im Werkzeug waeren sie
-   nur Zierat. Fuer die eigenen wird der oertliche Speicher befragt, der die
-   Datenbank nie sieht. */
+/* Der Name einer eingesetzten Einheit steht in der Depotzeile ihres
+   Besitzers - seit dem 12.09.2026 auch fuer den Clan. Hier stand einmal das
+   Gegenteil. ENNO Ende August: "Die Namen der ATs meiner Clanmitglieder
+   sehe ich ja auf der ingame Karte eh. Das ist dann nur unnoetiges Zieren."
+   ENNO 08.09.2026 (DEP-B): "nur das publizieren der Namen privat ist. Wenn
+   man die eigens vergebenen Namen nicht teilen moechte, dann werden die ATs
+   einfach nach der Bennenungsregel des Spiels benannt." ENNO 12.09.2026
+   (DEP-10): "Vermutlich macht es keinen Sinn, die Namen zu verstecken. Lass
+   uns diese einfach mit an den Clan uebergeben. Dann sparen wir uns hier
+   die Arbeit"
+   Fuer die eigenen greift die oertliche Kopie (eigenNamen) nur noch dort,
+   wo die Zeile keinen Namen traegt - das zweite Geraet, bis namenEinbringen
+   dort gelaufen ist. */
 function teamNameVon(who, id){
-  if (!id || who !== S.me) return "";
-  const n = eigenNamen[id];
-  if (n && n.name) return n.name;
+  if (!id) return "";
   const d = depotIdx.get(who);
   const e = d && d.list.find(x => x.id === id);
-  return (e && e.name) || "";
+  if (e && e.name) return e.name;
+  const n = who === S.me ? eigenNamen[id] : null;
+  return (n && n.name) || "";
 }
 /* MIT KRIEGSSCHNITT. Hier stand die Abfrage ohne imKrieg - anders als bei
    ownerOf, fightAt und starAt gleich darueber, und anders als in
@@ -8673,10 +8681,12 @@ function myDepotAlle(){
   return depotListe(S.depot[S.me] && S.depot[S.me].v).map(namenAn);
 }
 /* ---- Namen der eigenen Kampfeinheiten --------------------------------
-   Sie gehen niemanden sonst etwas an, also werden sie nicht uebertragen.
-   Sie liegen unter einem eigenen Schluessel in diesem Browser - ausserhalb
-   des synchronisierten Zustands und damit auch ausserhalb jedes
-   Teilen-Verweises. Die Sicherungsdatei nimmt sie mit. */
+   Sie gehen mit der Depotzeile an den Clan (ENNO 12.09.2026, siehe
+   teamNameVon). Daneben liegt eine oertliche Kopie unter einem eigenen
+   Schluessel in diesem Browser - ausserhalb des synchronisierten Zustands:
+   der Vorrat fuer eine Zeile, die noch keine Namen traegt
+   (namenEinbringen), und die gelesene Staerke (st, stT, stO), die weiter
+   nur hier steht. Die Sicherungsdatei nimmt sie mit. */
 const NAMEN_STORE = "hng-warmap-namen";
 let eigenNamen = {};
 function namenLaden(){
@@ -8690,68 +8700,89 @@ function namenAn(d){
   const n = eigenNamen[d.id];
   if (!n) return d;
   const raus = {...d};
-  /* CLEANED ON THE WAY BACK TOO. What was laid down before the limit
-     existed still lies there - with trailing dots, or longer than the game
-     allows - and would match nothing at the next comparison with a
-     screenshot. Cleaning it here heals it without rewriting anything. */
-  if (n.name) raus.name = atNameSauber(n.name);
-  if (n.tag)  raus.tag  = atTagSauber(n.tag);
+  /* THE ROW COMES FIRST (12.09.2026): the names travel with it, so it is
+     what this player wrote last - on whichever device. The copy here only
+     fills what the row lacks, and it is CLEANED ON THE WAY: what was laid
+     down before the limit existed still lies there - with trailing dots,
+     or longer than the game allows - and would match nothing at the next
+     comparison with a screenshot. */
+  if (n.name && !raus.name){
+    raus.name = atNameSauber(n.name);
+    /* OWN NAMES CUT OFF: the mark rides with the name, see below */
+    if (n.cut && raus.name) raus.cut = 1;
+  }
+  if (n.tag && !raus.tag) raus.tag = atTagSauber(n.tag);
+  /* the strength read from the map lives only here, see namenAbstreifen */
   if (n.st){ raus.st = n.st; raus.stT = n.stT; raus.stO = n.stO; }
-  /* OWN NAMES CUT OFF: the mark rides with the name, see below */
-  if (n.cut && raus.name) raus.cut = 1;
   return raus;
 }
-/* Namen und Kuerzel aus der geteilten Zeile herausholen und hierher legen.
-   Hier stand einmal das Gegenteil - ein Umzug IN die geteilte Zeile, mit der
-   Begruendung, man wolle auf der Karte sehen, welche Einheit des Clans in der
-   Naehe steht. Das war ausdruecklich nicht gewollt: "Die Namen der ATs meiner
-   Clanmitglieder sehe ich ja auf der ingame Karte eh. Das ist dann nur
-   unnoetiges Zieren."
+/* Einmal beim Start: die Namen aus der oertlichen Kopie in die eigene Zeile
+   bringen, wo sie dort fehlen. Bis zum 12.09.2026 lief es andersherum
+   (namenAbholen: Namen AUS der Zeile in diesen Browser, Zeile geleert) -
+   ENNO Ende August: "Die Namen der ATs meiner Clanmitglieder sehe ich ja
+   auf der ingame Karte eh. Das ist dann nur unnoetiges Zieren." Seit dem
+   12.09.2026 gehen sie mit (ENNO: "Lass uns diese einfach mit an den Clan
+   uebergeben. Dann sparen wir uns hier die Arbeit"), und was schon hier
+   liegt, muss einmal hinauf. Geschrieben wird nur, wenn sich etwas
+   aendert; geloescht wird nichts - die Kopie bleibt (Sicherungsdatei,
+   zweites Geraet). Direkt, nicht ueber depotSchreiben: der legte beim
+   Start eine sold-Zeile an und fuehrte den Verlauf fort.
 
-   Deshalb laeuft es jetzt andersherum, und zwar auch rueckwirkend: was
-   frueher schon hochgeladen wurde, wird beim naechsten Start aus der
-   Datenbank ENTFERNT. Verloren geht nichts - es landet vorher hier. */
-function namenAbholen(){
+   WANN: mit Server in syncStart, HINTER dem ersten Abgleich - dirty
+   schlaegt in applyRemote alles, was vom Server kommt, und vor dem Abgleich
+   stuende hier nur die zwischengespeicherte Zeile dieses Browsers. Und nur,
+   wenn der Abgleich auch DURCH ist: syncPull faengt jeden Fehler selbst und
+   kehrt still zurueck, ersterAbrufDurch steht erst nach der letzten Seite -
+   sonst kommen die Namen beim naechsten Start mit hinauf, der Riegel ist
+   derselbe wie in neuerKrieg. Ohne Server im Startblock. Die Anzeige
+   braucht den Lauf nicht: namenAn fuellt die Luecken aus der Kopie. */
+function namenEinbringen(){
+  if (hatBuiltin() && !ersterAbrufDurch) return;
   const e = S.depot[S.me];
   if (!e || !Array.isArray(e.v)) return;
-  const liste = depotListe(e.v);
-  let gerettet = 0, blank = false;
-  const ohne = liste.map(d => {
-    if (!d.name && !d.tag) return d;
-    const alt = eigenNamen[d.id] || {};
-    if (d.name && !alt.name){ alt.name = d.name; gerettet++; }
-    if (d.tag && !alt.tag){ alt.tag = d.tag; gerettet++; }
-    eigenNamen[d.id] = alt;
-    blank = true;
-    const raus = {...d}; delete raus.name; delete raus.tag;
-    return raus;
+  let fehlt = false;
+  const voll = depotListe(e.v).map(d => {
+    const n = d && eigenNamen[d.id];
+    if (!n) return d;
+    const nm = (!d.name && n.name) ? atNameSauber(n.name) : "";
+    const tg = (!d.tag  && n.tag)  ? atTagSauber(n.tag)   : "";
+    if (!nm && !tg) return d;
+    const k = {...d};
+    if (nm){ k.name = nm; if (n.cut) k.cut = 1; }
+    if (tg) k.tag = tg;
+    fehlt = true;
+    return k;
   });
-  if (gerettet) namenSichern();
-  if (!blank) return;
-  S.depot[S.me] = {...e, v: ohne, t: jetzt()};
+  if (!fehlt) return;
+  S.depot[S.me] = {...e, v: voll, t: jetzt()};
   dirty.add(`depot:${S.me}`); save();
 }
-/* Beim Schreiben in die geteilte Zeile werden Name und Kuerzel abgestreift
-   und hier behalten. Das ist die eine Stelle, an der das passieren muss -
-   alle Depotschreibwege laufen durch depotSchreiben. */
+/* Beim Schreiben in die geteilte Zeile bleiben Name, Kuerzel und die Marke
+   "abgeschnitten" DRIN (ENNO 12.09.2026: "Lass uns diese einfach mit an den
+   Clan uebergeben"); abgestreift wird nur noch die vom Kartenleser gelesene
+   Staerke (st, stT, stO), die hier liegen bleibt. Die oertliche Kopie wird
+   nebenher nachgefuehrt - der Vorrat fuer eine Zeile, die noch keine Namen
+   traegt (namenEinbringen). Das ist die eine Stelle, an der das passieren
+   muss - alle Depotschreibwege laufen durch depotSchreiben. */
 function namenAbstreifen(liste){
   let geaendert = false;
   const raus = (liste || []).map(d => {
-    if (!d || (!d.name && !d.tag && d.st === undefined)) return d;
+    if (!d || (!d.name && !d.tag && !d.cut && d.st === undefined)) return d;
     const alt = eigenNamen[d.id] || {};
+    const k = {...d};
     /* THE GAME'S LIMIT BELONGS IN THE FUNNEL. The two ways a hand can reach
        a name - the field in the depot and the picture reader's button -
        each carry the bolt already, but this is the place the file itself
        names as the one every write must pass. What is caught here is caught
        on ways not yet built. */
-    if (d.name) alt.name = atNameSauber(d.name);
-    if (d.tag)  alt.tag  = atTagSauber(d.tag);
+    if (d.name) alt.name = k.name = atNameSauber(d.name);
+    if (d.tag)  alt.tag  = k.tag  = atTagSauber(d.tag);
     if (d.st !== undefined){ alt.st = d.st; alt.stT = d.stT; alt.stO = d.stO; }
-    /* OWN NAMES CUT OFF: the mark stays here with the name, never in the
-       shared row */
-    if (d.cut && d.name) alt.cut = 1; else delete alt.cut;
+    /* OWN NAMES CUT OFF: the mark rides with the name, in the row as in
+       the copy */
+    if (d.cut && k.name) alt.cut = k.cut = 1; else { delete alt.cut; delete k.cut; }
     eigenNamen[d.id] = alt; geaendert = true;
-    const k = {...d}; delete k.name; delete k.tag; delete k.st; delete k.stT; delete k.stO; delete k.cut;
+    delete k.st; delete k.stT; delete k.stO;
     return k;
   });
   if (geaendert) namenSichern();
@@ -8768,7 +8799,8 @@ const teamById = id => myDepot().find(d => d.id === id);
    is completed from its owner, which stands one line below; one's own
    unit has no such line, the owner is oneself. So a cut name of one's
    own is filed without the dots and marked cut: 1, the mark living beside
-   the name in the private store. A whole name read later, from the unit
+   the name - in the shared row as in the private store (12.09.2026). A
+   whole name read later, from the unit
    box or the mouse-over window, replaces it and clears the mark.
    The match is the enemy rule turned around: the beginning on file
    against the same length of the whole name, one slip per six characters,
@@ -12302,9 +12334,10 @@ function depotSchreiben(felder){
   const f = aktiveSeite();
   const hf = Object.assign({}, alt.hf);
   hf[f] = verlaufFort(alt, aufSeite(depotListe(liste), f), f);
-  /* Name und Kuerzel gehen NICHT mit. Was der Clan sehen soll, ist WAS
-     jemand mitbringt - Gattung und Anzahl. Wie die Einheit heisst, ist
-     Privatsache und steht ohnehin im Spiel auf der Karte. */
+  /* Name, Kuerzel und die Marke "abgeschnitten" gehen MIT (ENNO
+     12.09.2026: "Vermutlich macht es keinen Sinn, die Namen zu verstecken.
+     Lass uns diese einfach mit an den Clan uebergeben."). namenAbstreifen
+     nimmt nur noch die gelesene Staerke heraus. */
   /* TWO ROWS. Only the half this call actually touched is rewritten and
      queued - that is the point of the split. Changing one weapon used to
      push the whole team list back up as well, and the other way round.
@@ -13264,14 +13297,14 @@ function teamLoeschen(id){
    SIE LIEGEN IN EINER EIGENEN ZEILE grp:<spieler>, nicht im Depoteintrag.
    namenAbstreifen wirft vor JEDEM Schreiben Felder aus dem Eintrag; ein
    dort abgelegtes Gruppenfeld waere entweder still weg oder muesste in
-   jene Liste - und dann saehe es der ganze Clan, was depotSchreiben
-   ausdruecklich nicht will ("Name und Kuerzel gehen NICHT mit").
+   die geteilte Depotliste.
 
-   WAS DER CLAN TROTZDEM SIEHT: diese Zeile geht ueber den Server wie jede
-   andere, der Gruppenname steht also darin. Anders als bei den Teamnamen
-   ist das gewollt - eine Gruppe gibt es nur in diesem Werkzeug und soll
-   dem Spieler auf sein zweites Geraet folgen. Der Satz steht auch im
-   Fenster, denn von aussen sieht man es nicht.
+   WAS DER CLAN SIEHT: diese Zeile geht ueber den Server wie jede andere,
+   der Gruppenname steht also darin - wie seit dem 12.09.2026 auch die
+   Teamnamen (ENNO: "Lass uns diese einfach mit an den Clan uebergeben").
+   Gewollt: eine Gruppe gibt es nur in diesem Werkzeug und soll dem Spieler
+   auf sein zweites Geraet folgen. Der Satz steht auch im Fenster, denn von
+   aussen sieht man es nicht.
 
    KRIEGSSCHNITT: grp traegt krieg:1 wie depot. Beide stehen zusammen in
    KRIEG_BLEIBT, werden zusammen von altlastFegen uebersprungen, von
@@ -45593,8 +45626,10 @@ function sicherungZurueck(){
 }
 
 async function saveFile(){
-  /* Die Namen der eigenen Kampfeinheiten liegen nur in diesem Browser. Ohne
-     sie waere die Sicherung unvollstaendig, also fahren sie mit. */
+  /* Die oertliche Kopie der Kampfeinheiten-Namen faehrt mit: seit dem
+     12.09.2026 stehen Name und Kuerzel zwar in der Depotzeile (also in S),
+     aber die gelesene Staerke (st, stT, stO) und der Vorrat fuer eine Zeile
+     ohne Namen liegen nur hier. */
   const text = JSON.stringify({...S, _namen: eigenNamen}, null, 1);
   const host = (typeof claude !== "undefined" && claude.use) ? await claude.use("downloads") : null;
   if (host){
@@ -46087,7 +46122,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f6e7666ec9</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 713415f6f5</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -46315,7 +46350,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f6e7666ec9";
+const BAU = "713415f6f5";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -47064,7 +47099,16 @@ async function syncStart(){
   };
   syncRunde = runde;
   syncTimer = setTimeout(runde, syncTakt());
-  await syncPull(); await syncPush();
+  await syncPull();
+  /* ERST HOLEN, DANN EINBRINGEN, DANN SCHIEBEN. namenEinbringen setzt die
+     eigene Depotzeile auf dirty, und dirty schlaegt in applyRemote alles,
+     was vom Server kommt. Liefe es vor dem ersten Abgleich, stuende hier
+     die ZWISCHENGESPEICHERTE Zeile dieses Browsers als offene Aenderung
+     fest - ein zweites Geraet, das laenger nicht lief, ueberschriebe damit
+     still, was auf dem ersten inzwischen angelegt, geloescht oder
+     hochgestuft wurde. Dieselbe Klasse Vorfall, die offenLaden beschreibt. */
+  namenEinbringen();
+  await syncPush();
   /* Auch hier uebernehmen. Wer "angemeldet bleiben" angehakt hat, sieht die
      Passwortmaske nie - und damit lief anmeldungNachtragen nie, das den Wert
      sonst setzt. Hat der Server dem Konto wegen einer Namenskollision einen
@@ -47504,9 +47548,12 @@ async function mitgliederDialog(meldung){
      sobald ein Browser den Schnitt nicht kennt. */
   gefegt += altlastFegen();
   if (gefegt) save();
-  /* Einmaliger Umzug der Kampfeinheiten-Namen aus der geteilten Zeile in
-     diesen Browser. Muss vor der ersten Anzeige laufen. */
-  namenAbholen();
+  /* Ohne eingebauten Server (Vorlage, Probe): einmal beim Start die Namen
+     aus der oertlichen Kopie in die geteilte Zeile bringen, wo sie dort
+     fehlen. Mit Server laeuft das in syncStart HINTER dem ersten Abgleich,
+     siehe dort - und !CFG heisst dort nicht "ohne Server", sondern
+     "abgemeldet": das Tor steht davor, die Anmeldung fuehrt in syncStart. */
+  if (!hatBuiltin()) namenEinbringen();
   rebuildUnits(); kopfzeile(); tally(); tips(); depotZeichnen(); boardZahl(); ordersZahl();
   kraftLeiste(); resize();
   mitgliederKnopf();
