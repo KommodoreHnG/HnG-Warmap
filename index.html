@@ -11535,7 +11535,10 @@ function anfTabelle(a){
      Tafel (FABLE-Lesart, siehe Kopf des Flicks). Er ist ein Griff wie die
      Bring-Felder: nicht gespeichert, beim Oeffnen leer, gelesen beim Save.
      Wer die Anforderung nicht schreiben darf, sieht ihn abgeblendet. */
-  return `<div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim)"><span style="flex:1">What this order needs${
+  /* Die Vorlagenreihe (BEF-10) steht nur, wo die Felder stehen: wer die
+     Anforderung nicht schreiben darf, hat nichts zu laden oder zu merken. */
+  return `${schreibt ? anfVorlagenReihe() : ""}
+    <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim)"><span style="flex:1">What this order needs${
       zeigeBring ? ", and what you bring" : ""}</span>${zeigeZuord
       ? `<label class="toggle"><input type="checkbox" id="a-zauto"${schreibt ? "" : " disabled"}><span>Auto-assign own ATs</span></label>` : ""}</div>
     <div class="sp-filter" style="margin:4px 0 6px">${reihe.map(x =>
@@ -11568,6 +11571,90 @@ function anfVerdrahten(){
     zeigen();
   });
   zeigen();
+}
+
+/* ---- DIE ANFORDERUNG ALS VORLAGE (BEF-10) ----
+   ENNO 08.09.2026 (BEF-B): "Zudem soll der Befehlsersteller hier auch
+   ueber speicherbare Templates arbeiten, damit man nicht jedes mal
+   durchklicken muss." ENNO 12.09.2026 (BEF-10): "Die
+   koennen wir erstmal als privat bauen, damit man sich gegenseitig nicht
+   mit Vorlagen vollmuellt."
+   PRIVAT HEISST HIER IM BROWSER, JE KONTO - derselbe Weg wie die
+   Filter-Vorlagen (ORDERS_FILTER): kein Topf traegt persoenliche
+   Einstellungen, ein neuer waere eine Serverwanderung. Auf dem Telefon
+   sind es darum andere Vorlagen als am Rechner (FABLE 13.09.2026,
+   vorzulegen). Eine Vorlage ist {n: Name, req: {at, cls}} wie a.req und
+   geht beim Lesen durch anfLesen, damit nur 1..99 und bekannte Typen und
+   Klassen stehen bleiben; was danach keine Zahl traegt, ist keine Vorlage.
+   Hoechstens ANF_VORLAGEN_MAX je Konto.
+   LADEN FUELLT NUR DIE FELDER. An den Pfeil schreibt weiter allein das
+   Save des Fensters - hier wird nichts gespeichert und nichts neu
+   gezeichnet, getippte Zahlen und die Klassenwahl bleiben stehen. */
+const ANF_VORLAGEN = "hng-warmap-anf-vorlagen", ANF_VORLAGEN_MAX = 20;
+const anfVorlagenKey = () => ANF_VORLAGEN + ":" + (S.me || "");
+function anfVorlagen(){
+  try {
+    const l = JSON.parse(lies(anfVorlagenKey(), "[]") || "[]");
+    if (!Array.isArray(l)) return [];
+    return l.filter(v => v && typeof v.n === "string" && v.req && typeof v.req === "object")
+      .map(v => ({n: v.n, req: anfLesen({req: v.req})}))
+      .filter(v => Object.keys(v.req.at).length || Object.keys(v.req.cls).length);
+  } catch (e){ return []; }
+}
+function anfVorlagenSchreiben(liste){ schreib(anfVorlagenKey(), JSON.stringify(liste)); }
+/* die Eintraege des Auswahlfelds; der leere ist die Beschriftung */
+const anfVorlagenOptionen = name => `<option value="">Templates …</option>` + anfVorlagen().map((v, i) =>
+  `<option value="${i}"${v.n === name ? " selected" : ""}>${esc(v.n)}</option>`).join("");
+/* die Reihe ueber der Tafel, .sp-filter wie die Klassenreihe darunter */
+const anfVorlagenReihe = () => `<div class="sp-filter" style="align-items:center;margin:0 0 4px">
+      <select id="a-anfv" class="mini">${anfVorlagenOptionen("")}</select>
+      <button id="a-anfv-load">Load</button><button id="a-anfv-save">Save as …</button><button id="a-anfv-del">Delete</button></div>`;
+/* Was in den Feldern steht, als {at, cls} - dieselbe Schleife, mit der das
+   Save des Fensters a.req liest, auch ueber versteckte Zeilen. Leer: null. */
+function anfFelderLesen(){
+  const req = {at: {}, cls: {}};
+  for (const el of document.querySelectorAll("#dlg input[data-anft], #dlg input[data-anfk]")){
+    const z = Math.max(0, Math.min(99, Math.round(+el.value || 0)));
+    if (!z) continue;
+    if (el.dataset.anft) req.at[el.dataset.anft] = z; else req.cls[el.dataset.anfk] = z;
+  }
+  return (Object.keys(req.at).length || Object.keys(req.cls).length) ? req : null;
+}
+function anfVorlagenVerdrahten(){
+  const sel = document.getElementById("a-anfv");
+  if (!sel) return;
+  const gewaehlt = () => sel.value === "" ? null : (anfVorlagen()[+sel.value] || null);
+  document.getElementById("a-anfv-load").addEventListener("click", ()=>{
+    const v = gewaehlt();
+    if (!v) return;
+    /* jedes Feld, auch das vom Klassenfilter versteckte: was die Vorlage
+       nicht nennt, wird leer */
+    document.querySelectorAll("#dlg input[data-anft], #dlg input[data-anfk]").forEach(el => {
+      const n = el.dataset.anft ? v.req.at[el.dataset.anft] : v.req.cls[el.dataset.anfk];
+      el.value = n || "";
+    });
+  });
+  document.getElementById("a-anfv-save").addEventListener("click", ()=>{
+    const req = anfFelderLesen();
+    if (!req){ toast("Nothing to save."); return; }
+    const liste = anfVorlagen();
+    if (liste.length >= ANF_VORLAGEN_MAX){ toast(`${ANF_VORLAGEN_MAX} templates at most.`); return; }
+    const name = (prompt("Name?", "") || "").trim().slice(0, 40);
+    if (!name) return;
+    /* nie still ueber eine gespeicherte Vorlage - ein eigener Name */
+    if (liste.some(v => v.n === name)){ toast("Name taken."); return; }
+    liste.push({n: name, req});
+    anfVorlagenSchreiben(liste);
+    sel.innerHTML = anfVorlagenOptionen(name);
+  });
+  document.getElementById("a-anfv-del").addEventListener("click", ()=>{
+    const v = gewaehlt();
+    if (!v) return;
+    if (!confirm(`Delete the template "${v.n}"?`)) return;
+    const liste = anfVorlagen(); liste.splice(+sel.value, 1);
+    anfVorlagenSchreiben(liste);
+    sel.innerHTML = anfVorlagenOptionen("");
+  });
 }
 
 /* ---------------- gathering time ----------------
@@ -16191,6 +16278,7 @@ function arrowDialog(a, frisch){
     zuordWahl(b, ()=>arrowDialog(a));
   });
   anfVerdrahten();
+  anfVorlagenVerdrahten();
   anfZuordVerdrahten(a);
   document.getElementById("a-op")?.addEventListener("click", ()=>opDialog(befehlKey("arrow", a.id)));
   prioVerdrahten("a-prio");
@@ -46469,7 +46557,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 24f701a022</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bc49814596</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -46697,7 +46785,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "24f701a022";
+const BAU = "bc49814596";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
