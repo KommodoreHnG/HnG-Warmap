@@ -2908,13 +2908,79 @@ function aufklaerung(){
    files (armyresourcecategory, ArmyResourceProductionTemplate and
    commandnodetemplatearmyresourcetemplaterelation) — the cost table
    reproduces the crew figures exactly, which is how it was checked. Only the
-   current stock is live server state and has to be read off the game. */
+   current stock is live server state and has to be read off the game.
+   The production per resource can be overridden by the admin (War settings,
+   meta:versorgung, 13.09.2026) - see versorgungVon. */
 const RES = {};
 for (const r of (MAP.res || [])) RES[r.k] = r;
 const resListe = () => MAP.res || [];
 const RES_GRP = {army: "Army", armor: "Armor", air: "Air Force", other: "Other"};
 const resName = k => String(k || "").split("_")
   .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+/* DIE EINGESTELLTE VERSORGUNG. ENNO 07.09.2026: "Moeglichkeit die
+   Versorgungsmengen der Truppentypen einzustellen ueber Tabelle, die vom
+   Code dann entsprechend umgesetzt wird." Die Meta-Zeile versorgung traegt
+   { <res.k>: Stueck je Takt } NUR fuer Ressourcen, die von r.pro abweichen;
+   leer oder fehlend = Spieldaten. Der Takt (r.sek, 600 s) ist nicht
+   einstellbar. Verwalterzeile (META_VERWALTER), gesetzt in War settings.
+   Alles, was mit der Produktion rechnet, liest versorgungVon statt r.pro:
+   poolStand, teamAusVorrat, zeitFuer, poolPanel, poolDialog. Bis der War
+   grabber die Werte aus dem Spiel liest (ENNO 12.09.2026), Handeingabe.
+   FABLE 13.09.2026 */
+const VERS_MAX = 99999;
+function versorgungWerte(){
+  const v = S.meta.versorgung && S.meta.versorgung.v;
+  const raus = {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return raus;
+  for (const [k, n] of Object.entries(v)){
+    if (!RES[k]) continue;
+    if (!Number.isInteger(n) || n < 0 || n > VERS_MAX) continue;
+    raus[k] = n;
+  }
+  return raus;
+}
+function versorgungVon(k){
+  const vers = versorgungWerte();
+  if (vers[k] !== undefined) return vers[k];
+  return (RES[k] && RES[k].pro) || 0;
+}
+/* Die Tabelle in War settings: je Gruppe die Ressourcen, ein Zahlenfeld mit
+   der Abweichung (leer = Vorgabe, der Platzhalter zeigt sie), grau die
+   Vorgabe daneben. Nur der Verwalter darf tippen. */
+function versorgungTabelle(verw){
+  const vers = versorgungWerte();
+  const gruppen = ["army", "armor", "air", "other"].filter(g => resListe().some(r => r.grp === g));
+  return gruppen.map(g => `
+    <div>
+      <h3 style="font-size:10.5px;letter-spacing:.09em;color:var(--dim2);
+        text-transform:uppercase;margin-bottom:5px">${esc(RES_GRP[g] || g)}</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:4px 12px">
+        ${resListe().filter(r => r.grp === g).map(r => `
+          <label style="display:flex;align-items:center;gap:6px;font-size:11.5px">
+            <span style="flex:1;color:var(--dim)">${esc(resName(r.k))}</span>
+            <input type="number" min="0" max="${VERS_MAX}" step="1" data-vers="${esc(r.k)}"
+              value="${vers[r.k] !== undefined ? vers[r.k] : ""}" placeholder="${r.pro}"
+              style="width:72px;background:var(--panel2);border:1px solid var(--line);
+                border-radius:2px;padding:4px 6px;outline:0;text-align:right" ${verw ? "" : "disabled"}>
+            <small style="color:var(--dim2);width:92px">game value ${r.pro}</small>
+          </label>`).join("")}
+      </div>
+    </div>`).join("");
+}
+/* Die Felder zurueck in die Zeile: nur Abweichungen; ein Feld, das keine
+   ganze Zahl von 0 bis VERS_MAX traegt, weist den ganzen Speichervorgang
+   ab - {fehler: feld} statt {werte}. */
+function versorgungAusFeldern(){
+  const raus = {};
+  for (const f of document.querySelectorAll("#dlg [data-vers]")){
+    const t = f.value.trim();
+    if (!t) continue;
+    const n = Number(t), r = RES[f.dataset.vers];
+    if (!r || !Number.isInteger(n) || n < 0 || n > VERS_MAX) return {fehler: f};
+    if (n !== r.pro) raus[r.k] = n;
+  }
+  return {werte: raus};
+}
 /* The reading plus what has been delivered since, so the figure stays usable
    without somebody opening the game every ten minutes. */
 function poolStand(){
@@ -2927,7 +2993,7 @@ function poolStand(){
     const takte = r.sek ? Math.floor(seit / (r.sek * 1000)) : 0;
     raus.gelesen[r.k] = gelesen;
     raus.takte[r.k] = takte;
-    raus.jetzt[r.k] = gelesen + takte * (r.pro || 0);
+    raus.jetzt[r.k] = gelesen + takte * (versorgungVon(r.k) || 0);
   }
   return raus;
 }
@@ -2945,11 +3011,11 @@ function teamAusVorrat(k, stand){
   for (const [rk, n] of posten){
     const r = RES[rk];
     if (!r || !n) continue;
-    const da = stand.jetzt[rk] || 0;
+    const da = stand.jetzt[rk] || 0, pro = versorgungVon(rk);
     const moeglich = Math.floor(da / n);
     if (moeglich < stueck){ stueck = moeglich; engpass = rk; }
     if (da < n) wartenS = Math.max(wartenS,
-      r.pro > 0 ? Math.ceil((n - da) / r.pro) * r.sek : Infinity);
+      pro > 0 ? Math.ceil((n - da) / pro) * r.sek : Infinity);
   }
   return {stueck: isFinite(stueck) ? stueck : 0, engpass, wartenS, cost};
 }
@@ -2969,9 +3035,9 @@ function zeitFuer(k, stand, n){
   for (const [rk, menge] of Object.entries(cost)){
     const r = RES[rk];
     if (!r || !menge) continue;
-    const brauche = menge * n, da = stand.jetzt[rk] || 0;
+    const brauche = menge * n, da = stand.jetzt[rk] || 0, pro = versorgungVon(rk);
     if (da >= brauche) continue;
-    const s = r.pro > 0 ? Math.ceil((brauche - da) / r.pro) * r.sek : Infinity;
+    const s = pro > 0 ? Math.ceil((brauche - da) / pro) * r.sek : Infinity;
     if (s > sek){ sek = s; engpass = rk; }
   }
   return {sek, engpass};
@@ -13169,7 +13235,9 @@ function lineHit(sx, sy){
    Rollen und ihre Namen bleiben beim Leiter.
    Der Server zieht mit (Zweig meta:texte in warmap_may_write); eine
    Trennlinie, die nur in der Seite steht, ist keine. */
-const META_VERWALTER = ["epoch", "war", "start", "texte", "sieg"];
+/* "versorgung" seit dem 13.09.2026: die Produktion je Ressource, War
+   settings, siehe versorgungVon. */
+const META_VERWALTER = ["epoch", "war", "start", "texte", "sieg", "versorgung"];
 function setMeta(k, v){
   if (META_VERWALTER.includes(k)){
     if (!istAdmin()){
@@ -45435,13 +45503,15 @@ function poolPanel(){
 
   const gruppen = ["army", "armor", "air", "other"].filter(g => resListe().some(r => r.grp === g));
   const zeile = r => {
-    const proStunde = r.sek ? Math.round(r.pro * 3600 / r.sek) : 0;
+    /* the admin's figure where one is set (War settings), else the game's */
+    const pro = versorgungVon(r.k);
+    const proStunde = r.sek ? Math.round(pro * 3600 / r.sek) : 0;
     return `<tr>
       <td>${esc(resName(r.k))}</td>
       <td><b>${nz(stand.jetzt[r.k])}</b></td>
       <td style="color:var(--dim2)">${nz(stand.gelesen[r.k])}${
-        stand.takte[r.k] ? ` +${stand.takte[r.k]}×${r.pro}` : ""}</td>
-      <td>+${nz(r.pro)}</td>
+        stand.takte[r.k] ? ` +${stand.takte[r.k]}×${pro}` : ""}</td>
+      <td>+${nz(pro)}${pro !== r.pro ? ` <small style="color:var(--dim2)">(set)</small>` : ""}</td>
       <td>${nz(proStunde)}</td>
       <td>${nz(proStunde * 24)}</td></tr>`;
   };
@@ -45532,7 +45602,8 @@ function poolDialog(){
             ${resListe().filter(r => r.grp === g).map(r => `
               <label style="display:flex;align-items:center;gap:6px;font-size:11.5px">
                 <span style="flex:1;color:var(--dim)">${esc(resName(r.k))}
-                  <small style="color:var(--dim2)">+${r.pro}</small></span>
+                  <small style="color:var(--dim2)">+${versorgungVon(r.k)}${
+                    versorgungVon(r.k) !== r.pro ? " (set)" : ""}</small></span>
                 <input type="number" min="0" step="1" data-res="${esc(r.k)}"
                   value="${stand ? stand.jetzt[r.k] : ""}" placeholder="0"
                   style="width:96px;background:var(--panel2);border:1px solid var(--line);
@@ -46313,6 +46384,15 @@ document.getElementById("b-war").addEventListener("click", ()=>{
             counts down to this number for every side.</span>
         </div>
       </div>
+      ${/* ENNO 07.09.2026: "Moeglichkeit die Versorgungsmengen der Truppentypen
+           einzustellen ueber Tabelle, die vom Code dann entsprechend umgesetzt
+           wird." - die Produktion je Ressource, siehe versorgungVon.
+           Gespeichert ueber Save, wie die Zeilen darueber. */ ""}
+      <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:12px;color:var(--dim)">Supply per 10 min</span>
+        ${versorgungTabelle(verw)}
+        <span class="note" style="font-size:11px">Empty = game value.</span>
+      </div>
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;gap:7px;flex-wrap:wrap">
         <button class="btn danger" id="d-newwar" ${verw ? "" :
           `disabled title="Starting a new war is the admin's call."`}>Start a new war</button>
@@ -46386,18 +46466,31 @@ document.getElementById("b-war").addEventListener("click", ()=>{
        unbedingt, ohne einen der Rueckgabewerte anzusehen. */
     /* Two separate flags, one per row written. A single counter hid
        which of the two the server refused. */
-    let kriegOk = false, startOk = false, siegOk = false;
+    let kriegOk = false, startOk = false, siegOk = false, versOk = false;
     if (istAdmin()){
+      /* Erst die Versorgung lesen: ein Feld ausserhalb 0..99999 weist den
+         ganzen Vorgang ab, bevor irgendeine Zeile geschrieben ist. */
+      const vers = versorgungAusFeldern();
+      if (vers.fehler){
+        toast("Supply: whole numbers from 0 to 99,999.");
+        vers.fehler.focus();
+        return;
+      }
       kriegOk = setMeta("war", document.getElementById("set-war").value.trim());
       startOk = setStartStaedte(startNeu);
       const roh = parseInt(document.getElementById("set-sieg").value, 10);
       siegOk = setMeta("sieg", Math.max(1, Math.min(13, roh || SIEG_STD)));
+      /* nur die Abweichungen; ohne Zeile und ohne Abweichung wird keine
+         angelegt */
+      const versNeu = vers.werte;
+      versOk = (!S.meta.versorgung && !Object.keys(versNeu).length)
+        ? true : setMeta("versorgung", versNeu);
     }
     closeDlg();
     /* Jede der drei Zeilen einzeln melden. Ein Sammelsatz verschweigt, welche
        der Server abgewiesen hat. */
-    const wort = {war: "war name", start: "start towns", sieg: "capitals to win"};
-    const stand = {war: kriegOk, start: startOk, sieg: siegOk};
+    const wort = {war: "war name", start: "start towns", sieg: "capitals to win", vers: "supply"};
+    const stand = {war: kriegOk, start: startOk, sieg: siegOk, vers: versOk};
     const gut = Object.keys(wort).filter(k => stand[k]).map(k => wort[k]);
     const schlecht = Object.keys(wort).filter(k => !stand[k]).map(k => wort[k]);
     toast(gut.length
@@ -46557,7 +46650,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build bc49814596</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0a24892bb8</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -46785,7 +46878,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "bc49814596";
+const BAU = "0a24892bb8";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
