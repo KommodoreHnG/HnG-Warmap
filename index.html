@@ -4522,8 +4522,11 @@ const MARKEN_GRENZE = {
    Zwei Zeilen unter meta, und die Trennung ist die zwischen Seite und
    Server - sie beim Lesen zu verwechseln, waere teuer:
 
-     meta:regeln  Was DIESE SEITE durchsetzt: die Markengrenzen und die
-                  Sperre gegen den leeren Befehl. Der Server liest sie nie.
+     meta:regeln  Was DIESE SEITE durchsetzt: die Markengrenzen. Der
+                  Server liest sie nie. (Bis zum 12.09.2026 stand hier auch
+                  der Schalter leer fuer die Sperre gegen den leeren Befehl;
+                  die gilt seither fest, siehe zustandSetzen. Alte Zeilen
+                  mit leer: 1 bleiben stehen, niemand liest das Feld.)
      meta:punkte  Was der SERVER auszahlt. Die Seite schreibt die Zeile und
                   rechnet nichts damit; gebucht wird im Ausloeser
                   warmap_punkte_buchen.
@@ -5081,12 +5084,16 @@ function darfZustand(key, v, e){
        entsteht gerade in einem anderen Auftrag; ihr Feldname ist hier nicht
        bekannt und wird nicht geraten.
 
-   DER PFEIL HAT HEUTE KEINE VON BEIDEN. Ein paar Zeilen weiter unten in
-   dieser Datei steht warum: "'Planned strength' ist am 08.09.2026 aus
-   diesem Fenster gefallen ... a.soll wird bei einem Pfeil nur nirgends mehr
-   gelesen." Solange das so ist, gilt jeder Pfeil hier als ohne Anforderung.
-   Deshalb ist die Sperre darunter AUS, bis der Leiter sie einschaltet, und
-   der Raum zeigt ihm vorher, wie viele Befehle sie gerade traefe. */
+   DER PFEIL TRAEGT DIE ZWEITE FORM seit BEF-4 (Bau 921bc6d094): a.req =
+   {at:{typ:n}, cls:{klasse:n}}, gelesen von anfLesen; die Suche unten
+   findet sie zwei Ebenen tief. a.soll hat er nicht mehr - "'Planned
+   strength' ist am 08.09.2026 aus diesem Fenster gefallen" -, ein Pfeil
+   ohne a.req ist also ohne Anforderung.
+   DIE SPERRE DARUNTER GILT FEST (12.09.2026, vorher am Schalter
+   regeln.leer): kein Pfeil, keine Linie, keine Flaeche ohne Anforderung
+   geht auf aktiv. Frei bleiben die Aufklaerungsanfrage und der Active
+   Parablock - anforderungNoetig sagt, wen sie trifft. Der Regel-Raum zeigt
+   dem Leiter nur noch, wie viele Befehle das gerade sind. */
 function anforderungGestellt(v){
   if (!v || typeof v !== "object") return false;
   if (+v.soll > 0) return true;
@@ -5095,8 +5102,8 @@ function anforderungGestellt(v){
      a.req = {at:{typ:n}, cls:{klasse:n}} am Pfeil - also eine Ebene tiefer
      als v.<feld>.<typ>. Ein Gegenleser hat vorgefuehrt, dass die flache
      Suche sie nicht sieht: {req:{at:{infantry:4},cls:{}}} gab false. Mit
-     eingeschalteter Sperre waere danach GAR KEIN Pfeil mehr auf aktiv
-     gegangen, auch keiner mit voller Anforderung. */
+     der Sperre waere danach GAR KEIN Pfeil mehr auf aktiv gegangen, auch
+     keiner mit voller Anforderung. */
   const zahlDrin = o => {
     if (!o || typeof o !== "object" || Array.isArray(o)) return false;
     for (const t of MAP.at) if (+o[t.k] > 0) return true;
@@ -5111,6 +5118,19 @@ function anforderungGestellt(v){
   }
   return false;
 }
+/* WEN DIE SPERRE TRIFFT: Pfeil, Linie und Flaeche fordern Einheiten und
+   brauchen darum eine Anforderung. Frei: die Aufklaerungsanfrage (area mit
+   aufkl) fordert keine; der Active Parablock (para) meldet ein Gefecht,
+   das schon steht - ob er eine Staerke braucht, ist ihm vorgelegt
+   (Bauliste 12.09.2026, 5.1; das Feld pd-soll zaehlt Teams).
+   ENNO 12.09.2026 auf die Frage, ob auch Aufklaerungsanfragen und Active
+   Parablocks darunter fallen: "Deine Intuition ist schon fast richtig. Beim
+   active parablock, der ja nichts anderes ist als ein Gefecht, auf der bei
+   einer Seite nur Fallschirm-Einheiten sind, ist die Anzahl der
+   tatsaechlich vorhandenen Einheiten, bzw. die genaue Truppenstaerke aber
+   relevant." Eine Stelle fuer zwei Leser: zustandSetzen und der Hinweis im
+   Regel-Raum. FABLE 12.09.2026 */
+const anforderungNoetig = (art, v) => art !== "para" && !(art === "area" && v && v.aufkl);
 /* set the state: 0 planned, 1 active, 2 done. Writes every road this
    machine has - the ok bucket with the right to confirm, the own row as
    the author - so both say the same wherever possible. */
@@ -5126,11 +5146,12 @@ function zustandSetzen(key, v, st, leise){
     toast(`${MAP.n[w.from][0]} is not ours yet. Take the airfield first.`);
     return false;
   }
-  /* KEIN LEERER BEFEHL AUF AKTIV - wenn der Leiter es so gesetzt hat.
-     Sein Wort vom 08.09.2026 steht ueber anforderungGestellt. Wie die
+  /* KEIN LEERER BEFEHL AUF AKTIV. Fest seit dem 12.09.2026 - bis dahin
+     hing es am Schalter regeln.leer aus dem Regel-Raum, und ohne Schalter
+     ging jeder leere Befehl auf aktiv. Sein Wort vom 08.09.2026 steht ueber
+     anforderungGestellt, wen es trifft steht an anforderungNoetig. Wie die
      Bedingung darueber ist das keine Rechtefrage, sondern eine Bedingung am
-     Befehl selbst: die Meldung nennt darum, was fehlt, nicht wer duerfte.
-     Was der Leiter nicht gesetzt hat, sperrt nicht. */
+     Befehl selbst: die Meldung nennt darum, was fehlt, nicht wer duerfte. */
   /* NICHT BEI DEN SELBSTTAETIGEN WEGEN. zustandSetzen ruft sich beim
      Abschluss eines Luftpfeils selbst mit st=1 fuer den Parablock am Ziel -
      und ein frischer Parablock hat naturgemaess keine Anforderung. Ein
@@ -5138,9 +5159,8 @@ function zustandSetzen(key, v, st, leise){
      "plan" stehen, waehrend der Mensch "Marked done" las, und die Absage der
      Sperre wurde vom spaeteren Toast ueberschrieben. leise steht genau fuer
      diese Aufrufe. */
-  if (st === 1 && !leise && clanRegeln().leer === 1 && !anforderungGestellt(w)){
-    toast("It does not say how many units it needs. "
-        + "Your leader made that a condition for going active.");
+  if (st === 1 && !leise && anforderungNoetig(b.art, w) && !anforderungGestellt(w)){
+    toast("It does not say how many units it needs. Fill that in first.");
     return false;
   }
   const chef = darf("bestaetigen"), autor = b.by === S.me && darf("befehl");
@@ -6827,11 +6847,14 @@ function paraVorratWarnung(){
   if (!v || (!v.gesamt && v.unbekannt) || v.ungedeckt <= v.frei) return;
   setTimeout(() => toast(`More drops planned than paras on hand: ${v.frei} free, ${v.ungedeckt} drop${v.ungedeckt === 1 ? "" : "s"} without teams`), 2600);
 }
-/* C. who could meet an order asking for one of these types */
+/* C. who could meet an order asking for one of these types. Since
+   12.09.2026 by status too: Mobile and Inactive members are left out
+   altogether, neither counted nor unknown (statusKannAT). */
 function paraErfuellbar(typen, ausser){
   const will = new Set(typen || []), belegt = paraBelegteTeams(ausser), gefunden = new Set();
   let n = 0, unbekannt = 0;
   for (const who of paraMitglieder()){
+    if (!statusKannAT(who)) continue;
     const liste = paraDepotVon(who);
     if (!liste){ unbekannt++; continue; }
     const weg = deployedIds(who);
@@ -7960,6 +7983,35 @@ function rolleKannIch(k, men){
 }
 /* der Satz hinter dem Kreuz: warum diese Rolle nicht zu bedienen ist */
 const rolleWarum = k => (kampfRolle(k) || {}).warum || "your soldiers cannot fill it";
+/* WER EINE ROLLE FUELLEN KOENNTE, fuer das Rollenfenster: Mitglieder am
+   Rechner (statusKannFPS: Active oder ohne Status - RTS only nicht, der kann
+   "nicht aber das FPS-Spiel sinnvoll nutzen"), deren Soldaten die Rolle nach
+   rolleKannIch fuellen. Wer kein Arsenal fuehrt (kein Soldat mit Waffe oder
+   Fahrzeug), ist UNBEKANNT, nicht "kann": rolleKannIch sagt dort mit
+   Absicht ja, weil ein Kreuz gegen einen Unbekannten eine Luege waere - eine
+   Zaehlung darf ihn aber nicht mitzaehlen, sie fuehrt ihn getrennt wie
+   paraErfuellbar. Immer-Rollen (Infantry, Runner): jeder, der zaehlt.
+   Zaehlbasis paraMitglieder, dieselbe wie bei den AT-Befehlen.
+   ENNO 05.09.2026: "Der Befehlsersteller soll grundsaetzlich bei allen
+   Befehlen, die sich auf bestimmte Ausruestungen oder Einheiten bezieht
+   immer direkt sehen, wie viele (aktive) Spieler diesen Auftrag ueberhaupt
+   erfuellen koennen." FABLE 12.09.2026 */
+function rolleErfuellbar(k){
+  const r = kampfRolle(k);
+  let n = 0, unbekannt = 0;
+  for (const who of paraMitglieder()){
+    if (!statusKannFPS(who)) continue;
+    if (r && r.immer){ n++; continue; }
+    const men = soldatenVon(who);
+    if (!men.some(s => (s.w && s.w.length) || (s.v && s.v.length))){ unbekannt++; continue; }
+    if (rolleKannIch(k, men)) n++;
+  }
+  return {n, unbekannt};
+}
+function rolleErfuellbarText(k){
+  const e = rolleErfuellbar(k);
+  return `Could be met by ${e.n} member${e.n === 1 ? "" : "s"}${e.unbekannt ? ` (${e.unbekannt} unknown)` : ""}`;
+}
 /* Der Annahmeknopf einer Anforderung. Wer die Rolle nach eigenem Arsenal
    nicht bedienen kann, sieht die Anforderung weiter, kann sie aber nicht
    nehmen: der Knopf ist aus, das rote Kreuz liegt darueber, der Grund steht
@@ -8317,6 +8369,7 @@ function rolleDialog(i){
           placeholder="e.g. Panther, HE ammo" style="flex:1;min-width:150px">
         <button class="btn primary" id="rr-ok">Ask</button>
       </div>
+      <div class="note" id="rr-kann">${paraTextSicher(() => rolleErfuellbarText(KAMPFROLLEN[0].k))}</div>
       <div class="note">Everyone on our side sees it in the orders inbox and on the town.
         A cross marks a role your own soldiers cannot fill.</div>
     </div>
@@ -8333,6 +8386,13 @@ function rolleDialog(i){
   };
   nFuellen();
   rSel.addEventListener("change", nFuellen);
+  /* the line under the pick follows the role: who could fill it, by status
+     and arsenal (rolleErfuellbar, 12.09.2026) */
+  rSel.addEventListener("change", () => {
+    const z = document.getElementById("rr-kann");
+    if (!z) return;
+    try { z.textContent = rolleErfuellbarText(rSel.value); } catch (e){ z.textContent = ""; }
+  });
   document.getElementById("rr-ok").addEventListener("click", ()=>{
     if (!rolleAnlegen(i, document.getElementById("rr-rolle").value,
                       +document.getElementById("rr-n").value || 1,
@@ -28552,68 +28612,20 @@ function sichtTeilen(){
 }
 
 /* ---- Kampfeinheiten von der Karte lesen ------------------------------
-   Bei genug Zoom zeigt die Karte, wer wo steht. Eine einzelne Einheit traegt
-   ihr Typensymbol - exakt bestimmbar, die achtzehn Vorlagen liegen schon im
-   Bau. Mehrere werden zu einem Stapel mit roemischer Ziffer, und die ist eine
-   Groessenklasse, kein Zaehlwert. Kein IV: die NATO-Groessensymbolik kennt
-   keines, deshalb springt es von III direkt auf X.
-
-   Gemessen an den Bildschirmfotos: 29 von 36 Stapeln richtig gelesen. Die
-   uebrigen melden sich als "weiss nicht" statt etwas zu behaupten - bei
-   Aufklaerung ist eine Luecke billiger als eine Falschmeldung. */
-const AT_ZIFF_B = 28, AT_ZIFF_H = 18;
-const AT_ZIFFERN = {
-  "II":  "///////xewUAAAAAAAAAAAAAAAAAAABp3///////////8XsFAAAAAAAAAAAAAAAAAAAAad////////////F7BQAAAAAAAAAAAAAAAAAAAGnf///////////xewUAAAAAAAAAAAAAAAAAAABp3///////////8XsFAAAAAAAAAAAAAAAAAAAAad////////////F7BQAAAAAAAAAAAAAAAAAAAGnf///////////xewUAAAAAAAAAAAAAAAAAAABp3///////////8XsFAAAAAAAAAAAAAAAAAAAAad////////////F7BQAAAAAAAAAAAAAAAAAAAGnf///////////xewUAAAAAAAAAAAAAAAAAAABp3///////////8XsFAAAAAAAAAAAAAAAAAAAAad////////////F7BQAAAAAAAAAAAAAAAAAAAGnf///////////xewUAAAAAAAAAAAAAAAAAAABp3///////////8XsFAAAAAAAAAAAAAAAAAAAAad////////////F7BQAAAAAAAAAAAAAAAAAAAGnf////////++rQagQAAAAAAAAAAAAAAAAAAABp3////+ru+N9pAAAAAAAAAAAAAAAAAAAAAAAAad////8AMqjfaQAAAAAAAAAAAAAAAAAAAAAAAGnf////",
-  "III": "ANZEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAETWAOr871gAAAAAAAAAAACB6poAAAAAAAAAAFjv/Or///9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////////YAAAAAAAAAAAAI3/qAAAAAAAAAAAYP///////2AAAAAAAAAAAACN/6gAAAAAAAAAAGD///////9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////////YAAAAAAAAAAAAI3/qAAAAAAAAAAAYP///////2AAAAAAAAAAAACN/6gAAAAAAAAAAGD///////9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////////YAAAAAAAAAAAAI3/qAAAAAAAAAAAYP///////2AAAAAAAAAAAACN/6gAAAAAAAAAAGD///////9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////////YAAAAAAAAAAAAI3/qAAAAAAAAAAAYP///////2AAAAAAAAAAAACN/6gAAAAAAAAAAGD///////9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////////YAAAAAAAAAAAAI3/qAAAAAAAAAAAYP///////2AAAAAAAAAAAACN/6gAAAAAAAAAAGD///////9gAAAAAAAAAAAAjf+oAAAAAAAAAABg////",
-  "X":   "///////////EciAAAAAAAAAgcsT/////////////////////xHIgAAAAAAAAIHLE//////////////////////fr4LFqIwAAACByxP////OsZiMjMjJwsvT////////15dXNzc3U5PT////xn00AAAAAEyg8c7Du////////////////7rBzPCgTAAAAAAAAAESW6P///////////////+iWRAAAAAAAAAAAAABEluj////////////////olkQAAAAAAAAAAAAARJbo////////////////6JZEAAAAAAAAAAAAACBHbpjD7v///////+7DmG5HIAAAAAAAAAAAAAAAAAA7jd/////////fjTsAAAAAAAAAAAAAAAAAHD9hjb3s////////7L2NYT8cAAAAAAAAAAAAAESW6P///////////////+iWRAAAAAAAAAAAAABEluj////////////////olkQAAAAAAAAAAAAARJbo////////////////6JZEAAAAAAAAAA8fL2iq7P///////////////+yqaC8fDwAAIyNmrPP////////47eHc3Nzg6/f////xn00AAP//////////+vPsvHEmAAAAIHLE////8Z9NAAD//////////8RyIAAAAAAAACByxP////GfTQAA",
-  "XX":  "///NIAAAAABE8f+yBQBX////8UQAAAAAIM3/////++zq6urq7/7/sgUAV/////7vigAAACDN//8jlf///////////7IFAAwovf///5YAAGLg+JUjAIT///////////+yBQAABbL////rzc3k//+EAACE//////////+ILQEAAAEtiP//////////hAAAhP//////////YAAAAAAAAGD////////pcSgAADB86//////UZSMAAAAAAAAjZdT/////3zIAAAAAMt//////uw4AAAAAAAAAAA67/////98yAAAAADLf/////7sOAAAAAAAAAAAOu////8NpGAAAAAAy3////7hjBwAAAAAAAAAADrv///+NAAAAAAAAMt////+oTgYAAAAAAAAAAA67////vV0VAAAAADLf/////7sOAAAAAAAAAAAOu//////fMgAAAChx6f/////QWB0AAAAAAAAADrv/////6XEoAACE//////////9gAAAAAAAAGErM////////hAAAhP//////////fyMBAAABI3///////////4QAAIT///////////+yBQAABbL////w3Nzr//+EAACE///z6ur2///yowUAAAWy////lgAAaez7hAAAhP//cgAAlv//YAAAAAAFsv///5YAAAAgzYQA",
-};
-/* Was eine Ziffer ueber die Anzahl sagt. Ausgemessen, nicht abgeleitet. */
-const AT_ANZAHL = {"II":[2,2], "III":[3,5], "X":[6,10], "XX":[11,0]};
-const AT_ANZ_WORT = a => a[1] ? (a[0]===a[1] ? String(a[0]) : `${a[0]}–${a[1]}`)
-                              : `over ${a[0]-1}`;
+   Bei genug Zoom zeigt die Karte, wer wo steht: eine Marke in der
+   Fuellfarbe der Seite ueber der Stadt. Gelesen wird nur noch, OB dort
+   eine Marke steht und von welcher Seite - nicht mehr, wie gross der
+   Stapel ist. Die Ziffernlesung (roemische Groessenklasse II/III/X/XX im
+   schwarzen Balken ueber der Marke) ist am 12.09.2026 gestrichen.
+   ENNO 12.09.2026: "Es reicht in Bezug auf die AT-Erkennung in Zukunft,
+   wenn das blosse Vorhandensein der Stapel erfasst wird, die Nato-symbole
+   (II, III, X etc.) muessen wir NICHT mehr erfassen." Und: "Ob das jetzt
+   5 oder 50 ATs sind muessen wir von der blossen Kriegskarte nicht mehr
+   ableiten." Die Stueckzahl kommt aus dem AT-Grabber (Units-Raum). */
 /* Fuellfarben der Karten: fremd beige, eigen orange. Beide sind auf dem
    Gelaende praktisch einzigartig - das macht sie zum besten Anker. */
 const AT_FUELL_FREMD = [218,213,197], AT_FUELL_EIGEN = [248,177,51];
 const atNah = (r,g,b,s,t) => Math.abs(r-s[0])<t && Math.abs(g-s[1])<t && Math.abs(b-s[2])<t;
-
-let AT_ZIFF_V = null;
-function atZiffernVorlagen(){
-  if (AT_ZIFF_V) return AT_ZIFF_V;
-  AT_ZIFF_V = [];
-  for (const [name, b64] of Object.entries(AT_ZIFFERN)){
-    const roh = unb(b64);
-    const v = new Float32Array(roh.length);
-    let m = 0;
-    for (let i = 0; i < roh.length; i++){ v[i] = roh[i]/255; m += v[i]; }
-    m /= v.length;
-    let q = 0;
-    for (let i = 0; i < v.length; i++){ v[i] -= m; q += v[i]*v[i]; }
-    q = Math.sqrt(q) || 1;
-    for (let i = 0; i < v.length; i++) v[i] /= q;
-    AT_ZIFF_V.push({name, v});
-  }
-  return AT_ZIFF_V;
-}
-/* Ein Ausschnitt auf Normmass, mittelwertfrei und auf Laenge eins - dann
-   haengt der Vergleich nicht daran, wie hell das Bild gerade ist. */
-function atNormieren(werte, br, ho, zielB, zielH){
-  const v = new Float32Array(zielB*zielH);
-  for (let y = 0; y < zielH; y++)
-    for (let x = 0; x < zielB; x++){
-      const sx = Math.min(br-1, Math.floor(x*br/zielB));
-      const sy = Math.min(ho-1, Math.floor(y*ho/zielH));
-      v[y*zielB + x] = werte[sy*br + sx];
-    }
-  let m = 0;
-  for (let i = 0; i < v.length; i++) m += v[i];
-  m /= v.length;
-  let q = 0;
-  for (let i = 0; i < v.length; i++){ v[i] -= m; q += v[i]*v[i]; }
-  q = Math.sqrt(q) || 1;
-  for (let i = 0; i < v.length; i++) v[i] /= q;
-  return v;
-}
 
 /* Zusammenhaengende Flaechen einer Maske. Auf dem verkleinerten Bild sind es
    wenige hundert Pixel je Karte - das laeuft in Millisekunden. */
@@ -28669,77 +28681,6 @@ function atSeite(g, x0, y0, w, h, eigen){
   if (b  > r+40 && b  > gg+40) return 1;           // violett = GE
   if (r  > gg+60 && r > b+60)  return 2;           // rot     = UdSSR
   return null;
-}
-
-/* Der schwarze Balken ueber der Karte. Dazwischen liegt der farbige
-   Kartenrand - daran muss man erst vorbei, sonst bricht die Suche sofort ab.
-   Das hat mich drei Anlaeufe gekostet, bis ich die Zeilen ausgedruckt habe. */
-function atBalken(grau, W, H, x0, y0, w, hoehe){
-  const dunkelAnteil = y => {
-    let n = 0;
-    for (let x = x0; x < x0+w; x++) if (grau[y*W + x] < 55) n++;
-    return n / w;
-  };
-  /* WIEVIELE ZEILEN DARF DER FARBIGE KARTENRAND HOCH SEIN? Frueher stand
-     hier eine feste 8 - ein Mass in Bildpunkten an einer Stelle, die mit
-     Zoom UND Bildschirmaufloesung mitwaechst. Gemessen an 36 Marken
-     betraegt die Luecke 0,047 bis 0,204 Karteneinheiten (Median 0,136),
-     und sie skaliert sauber mit dem Massstab: bei Spanne 63,8 sind das
-     4 bis 8 Punkte, bei 91,2 nur noch 3 bis 6.
-     Die Folge des festen Deckels ist keine Luecke, sondern eine
-     UNTERTREIBUNG - aus einem Stapel wird "1 assault team". Heute kostet
-     das einen von 43 Stapeln (Weimar auf Radar/4, genau 8 Punkte); bei
-     5120 Punkten Schirmbreite waeren die weitesten Marken im ganzen
-     Lesefenster betroffen.
-     Die Markenhoehe skaliert mit allem, woran es haengt. Die weiteste
-     gemessene Luecke entspricht rund 0,23 Markenhoehen; 0,30 mit Marge.
-     Die alte 8 bleibt als Untergrenze - bei winzigen Marken soll nichts
-     strenger werden als bisher. */
-  const deckel = Math.max(8, Math.round(hoehe*0.30));
-  let y = y0-1, sprung = 0;
-  while (y >= 0 && sprung < deckel && dunkelAnteil(y) < 0.35){ y--; sprung++; }
-  if (y < 0 || sprung >= deckel) return null;
-  const unten = y;
-  let hoch = 0;
-  while (y >= 0 && hoch < hoehe*1.3 && dunkelAnteil(y) >= 0.35){ y--; hoch++; }
-  if (hoch < 9) return null;
-  return {y0: y+1, y1: unten};
-}
-function atZiffer(hell, W, x0, w, by0, by1){
-  let zx0=W, zx1=0, zy0=by1, zy1=by0;
-  for (let y = by0; y <= by1; y++)
-    for (let x = x0; x < x0+w; x++)
-      if (hell[y*W + x]){
-        if (x<zx0) zx0=x; if (x>zx1) zx1=x;
-        if (y<zy0) zy0=y; if (y>zy1) zy1=y;
-      }
-  if (zx1 <= zx0 || zy1-zy0 < 4) return null;
-  const bw = zx1-zx0+1, bh = zy1-zy0+1;
-  const feld = new Float32Array(bw*bh);
-  for (let y = 0; y < bh; y++)
-    for (let x = 0; x < bw; x++)
-      feld[y*bw + x] = hell[(zy0+y)*W + (zx0+x)] ? 1 : 0;
-  const v = atNormieren(feld, bw, bh, AT_ZIFF_B, AT_ZIFF_H);
-  let best = null, bv = -9, zweit = -9;
-  for (const t of atZiffernVorlagen()){
-    let s = 0;
-    for (let i = 0; i < v.length; i++) s += v[i]*t.v[i];
-    if (s > bv){ zweit = bv; bv = s; best = t.name; }
-    else if (s > zweit) zweit = s;
-  }
-  /* GUETE ALLEIN REICHT NICHT. Die vier Vorlagen aehneln einander, und
-     II und III liegen mit 0,583 UEBER der Annahmeschwelle 0,55 - sie
-     schuetzt also gerade gegen die einzige gefaehrliche Verwechslung
-     nicht. Der Fall tritt im Bestand auf: Radar/5, gruener Stapel auf
-     Muensingen, mit blossem Auge zwei Striche, gelesen als III mit 0,778
-     gegen II 0,773 - Vorsprung 0,005. Geschrieben wurde "3-5 assault
-     teams" statt "2".
-     Alle sicheren Faelle haben mindestens 0,20 Vorsprung (gemessen
-     0,20 bis 0,43 in fuenf Faellen). Bei 0,15 bleibt Marge nach unten,
-     und der eine falsche Fall faellt mit 0,005 klar heraus. Lieber
-     "2+ unreadable" als eine falsche Stueckzahl - dieselbe Bilanz wie
-     ueberall im Werkzeug. */
-  return (bv >= 0.55 && bv - zweit >= 0.15) ? {ziffer: best, guete: bv} : null;
 }
 
 /* Der Hauptdurchgang. quelle: das Vollbild. klein: das verkleinerte Bild aus
@@ -28803,33 +28744,31 @@ function atVonKarte(quelle, klein, tr, feld){
          erfundene (22)          1,03 bis 3,73, Median 1,79
      Das Fenster haelt 44 der 45 geschriebenen echten Zeilen und entfernt
      9 der 10 erfundenen. Der Preis ist eine Einzelkarte am oberen Rand -
-     sie meldet nur "1 assault team", waehrend jede Erfindung eine
-     Phantom-Einheit erzeugt. Ohne brauchbare Lage wird nicht gefiltert:
+     eine fehlende Marke, waehrend jede Erfindung eine Phantom-Einheit
+     erzeugt. Ohne brauchbare Lage wird nicht gefiltert:
      dann ist die Sollbreite unbekannt, und ein Fenster um eine unbekannte
      Mitte waere schlimmer als keines. */
   const sollB = tr && tr.s > 0 ? AT_FUELL_EINH * tr.s : 0;
-  /* Die Breite entscheidet nicht mehr ueber "echt oder nicht", sondern
-     ueber "Stapel oder Einzeleinheit". Verworfen wird nur, was in
-     KEINES der beiden Baender passt. */
+  /* Die Breite entscheidet nur noch ueber "echt oder nicht". Stapelband
+     und Einzelband gelten beide als Marke; ob dort ein Stapel oder eine
+     einzelne Einheit steht, wird seit dem 12.09.2026 nicht mehr
+     unterschieden (ENNO 12.09.2026: "die blosse Existenz der Stapel"). Verworfen
+     wird, was in KEINES der beiden Baender passt. */
   const imFenster = [];
   for (const k of kandidaten){
     if (sollB <= 0){ imFenster.push(k); continue; }
     const v = k.w / sollB;
-    if (v >= AT_FUELL_ENG && v <= AT_FUELL_WEIT) imFenster.push(k);
-    else if (v > AT_EINZEL_ENG && v <= AT_EINZEL_WEIT){
-      /* Breit genug fuer ein Typensymbol statt einer Ziffer: eine
-         einzelne Einheit. Der Balkenleser wuerde hier ohnehin keine
-         Ziffer finden - er soll es gar nicht erst versuchen und die
-         Marke auch nicht als unklar abtun. */
-      k.einzeln = true; imFenster.push(k);
-    }
+    if ((v >= AT_FUELL_ENG && v <= AT_FUELL_WEIT)
+        || (v > AT_EINZEL_ENG && v <= AT_EINZEL_WEIT)) imFenster.push(k);
   }
   if (!imFenster.length) return [];
 
   const marker = [];
   for (const k of imFenster){
-    /* Am Original nachsehen - dort ist die Ziffer vierzehn Pixel hoch statt
-       sechs. Nur der Ausschnitt, nicht das ganze Bild. */
+    /* Am Original nachsehen, nur der Ausschnitt um die Marke: daraus liest
+       atSeite den Kartenrand und die Fuellprobe die Mitte. Der Ausschnitt
+       reicht wie bisher ueber die Marke hinaus (rand); die Geometrie ist
+       beim Streichen der Ziffernlesung nicht umgemessen worden. */
     const nx = Math.round(versatzX + k.x0*faktor), ny = Math.round(versatzY + k.y0*faktorY);
     const nw = Math.round(k.w*faktor),  nh = Math.round(k.h*faktorY);
     const rand = Math.round(nh*1.6) + 12;
@@ -28841,11 +28780,6 @@ function atVonKarte(quelle, klein, tr, feld){
     const g = c.getContext("2d", {willReadFrequently:true});
     g.drawImage(quelle, ax, ay, aw, ah, 0, 0, aw, ah);
     const d = g.getImageData(0, 0, aw, ah).data;
-    const grau = new Uint8Array(aw*ah), hell = new Uint8Array(aw*ah);
-    for (let p = 0, i = 0; p < aw*ah; p++, i += 4){
-      grau[p] = (299*d[i] + 587*d[i+1] + 114*d[i+2]) / 1000;
-      hell[p] = (d[i] > 140 && d[i+1] > 140 && d[i+2] > 140) ? 1 : 0;
-    }
     const kx = nx-ax, ky = ny-ay;
     const eigen = atNah(d[((ky+((nh/2)|0))*aw + kx + ((nw/2)|0))*4],
                         d[((ky+((nh/2)|0))*aw + kx + ((nw/2)|0))*4+1],
@@ -28881,36 +28815,20 @@ function atVonKarte(quelle, klein, tr, feld){
        Begegnung. ortBei.abstand ist der Wert aus dem gerade gelaufenen
        Aufruf. */
     const ortAbstand = ortBei.abstand;
-    /* Unter nh = 7 kann atBalken nie fuendig werden: der Suchdeckel
-       hoehe*1.3 erlaubt hoechstens ceil(7.8) = 8 Zeilen, anerkannt wird
-       der Balken erst ab 9 - null hiesse hier "nicht pruefbar", nicht
-       "kein Balken". Ein Stapel wuerde sonst verlaesslich als 1 assault
-       team gemeldet (Fenster schmaler als 1143 Punkte: sk = 1, der
-       Kandidatenfilter laesst k.h ab 6 zu - Unterschaetzung mindestens
-       Faktor zwei). Lieber Luecke als Falschmeldung, Grundsatz oben. */
-    /* Nach der Breite eine einzelne Einheit mit Typensymbol. Nicht nach
-       einer Ziffer suchen - es gibt keine, und ein Fehlversuch
-       endete bisher als "unklar" oder als Erfindung. Der Typ selbst
-       bleibt vorerst ungelesen: die achtzehn Vorlagen im Werkzeug sind
-       fuer die Detailleiste gezeichnet (schwarzer Rahmen im goldenen
-       Kasten) und treffen die Kartendarstellung nicht - nachgemessen an
-       den vier Fundstellen, Guete 0,09 bis 0,15 ohne Vorsprung. */
-    if (k.einzeln){ marker.push({ort, seite, eigen, art:"einzeln", ortAbstand, mx, my}); continue; }
-    if (nh*1.3 < 9){ marker.push({ort, seite, eigen, art:"unklar", ortAbstand, mx, my}); continue; }
-    const bal = atBalken(grau, aw, ah, kx, ky, nw, nh);
-    if (!bal){ marker.push({ort, seite, eigen, art:"einzeln", ortAbstand, mx, my}); continue; }
-    const z = atZiffer(hell, aw, kx, nw, bal.y0, bal.y1);
-    marker.push({ort, seite, eigen, art:"stapel", ortAbstand, mx, my,
-                 ziffer: z ? z.ziffer : null, guete: z ? z.guete : 0});
+    /* Was fuer eine Marke das ist - einzelne Einheit oder Stapel, und wie
+       gross der Stapel - wird nicht mehr gelesen. Es zaehlt, dass dort
+       eine steht (ENNO 12.09.2026). */
+    marker.push({ort, seite, eigen, art:"marke", ortAbstand, mx, my});
   }
   return marker;
 }
 
-/* Was gelesen wurde, geht in die Toepfe, die es schon gibt: eine einzelne
-   Einheit ist eine Sichtung, ein Stapel eine Staerkeschaetzung. Eigene
-   Einheiten werden uebergangen - wo die stehen, wissen wir ohnehin. */
+/* Was gelesen wurde, geht als Schaetzzeile in den Topf, den es schon gibt:
+   je Marke eine Zeile "<Seite> assault team(s)" - ob eine oder mehrere,
+   sagt die Karte seit dem 12.09.2026 nicht mehr. Eigene Einheiten werden
+   uebergangen - wo die stehen, wissen wir ohnehin. */
 function atEintragen(marker){
-  let sicht = 0, schaetz = 0, blind = 0, fern = 0;
+  let gesehen = 0, fern = 0;
   /* BEGEGNUNGSGEFECHTE AUSSORTIEREN. Zwei Marken verschiedener Fraktion,
      beide WEIT von ihrer Stadt und nah beieinander: das ist kein
      Stadtbesatz, sondern ein Gefecht auf der Versorgungslinie.
@@ -28948,9 +28866,8 @@ function atEintragen(marker){
     if (m.seite !== clanFaktion() && atImFeindHinterland(m.ort)){ fern++; continue; }
     /* "Ja aber bei maximalem Zoom? ... wenn das Auslesen der Zahl nicht
        klappt vllt wenigstens das da was ist und das auf der Karte vermerken."
-       Also nicht mehr wegwerfen, was sich nicht ganz lesen liess. Ein Stapel
-       ohne lesbare Ziffer ist immer noch die Auskunft, dass dort etwas steht,
-       und mindestens zwei sind es bei einem Stapel allemal. */
+       Genau das ist seit dem 12.09.2026 alles, was hier gebucht wird: dass
+       dort etwas steht. */
     const l = proOrt.get(m.ort) || [];
     l.push(m); proOrt.set(m.ort, l);
   }
@@ -28975,24 +28892,8 @@ function atEintragen(marker){
     const texte = [];
     for (const m of liste){
       const wer = m.seite === null ? "Unknown side" : FACTIONS[m.seite].tag;
-      if (m.art === "stapel" && m.ziffer){
-        texte.push(`${wer} ${AT_ANZ_WORT(AT_ANZAHL[m.ziffer])} assault teams`);
-        schaetz++;
-      } else if (m.art === "stapel"){
-        texte.push(`${wer} 2+ assault teams (number unreadable)`);
-        blind++;
-      } else if (m.art === "unklar"){
-        /* Marke zu klein fuer die Balkenpruefung (nh <= 6): ob dort eine
-           Einheit steht oder ein Stapel, ist nicht entscheidbar - das
-           wird auch so gesagt, statt "1 assault team" zu behaupten.
-           Zaehlt als blind, damit die Summe der Bestandskarte
-           (wache.atJeOrt) unveraendert funktioniert. */
-        texte.push(`${wer} assault team(s) (stack size unreadable at this zoom)`);
-        blind++;
-      } else {
-        texte.push(`${wer} 1 assault team`);
-        sicht++;
-      }
+      texte.push(`${wer} assault team(s)`);
+      gesehen++;
     }
     /* Zeigt das Bild gerade WENIGER als vor kurzem, gilt das Gemerkte -
        eine Marke verschwindet nicht dadurch, dass sie blinkt. Zeigt es
@@ -29011,7 +28912,10 @@ function atEintragen(marker){
        vorkam - ohne Meldung und ohne Rueckweg. Fuer Bestandszeilen von
        vor diesem Stand, die noch kein auto tragen, greift das exakte
        Muster der Erzeugerzeilen (Seite vorangestellt, dann assault team);
-       es faengt weiterhin JEDE Maschinenform, also stapelt sich nichts. */
+       es faengt weiterhin JEDE Maschinenform, also stapelt sich nichts -
+       auch die Formen von vor dem 12.09.2026 ("3-5 assault teams",
+       "1 assault team", "2+ assault teams (number unreadable)") fallen
+       hier beim naechsten Schreiben heraus. */
     const MASCHINE = /^(US|GE|USSR|Unknown side) .*assault team/;
     const alt = myEst(ort).filter(e => !e.auto && !MASCHINE.test(e.text || ""));
     const neu = alt.concat(endTexte.map(tx => ({text: tx, auto: 1, t: jetzt()})));
@@ -29041,7 +28945,7 @@ function atEintragen(marker){
   for (const [ort, liste] of proOrt) jeOrt.set(ort, liste.length);
   for (const [ort, z] of atEintragen.ged)
     if (z.texte.length > (jeOrt.get(ort) || 0)) jeOrt.set(ort, z.texte.length);
-  return {sicht, schaetz, blind, fern, orte: proOrt.size, jeOrt};
+  return {gesehen, fern, orte: proOrt.size, jeOrt};
 }
 
 /* ---- Die Zoomstufe aus dem Spiel ------------------------------------
@@ -29205,8 +29109,8 @@ let radarBeam = 0.5;
 let beamEcht = false;
 let radarZiel = null, radarScan = 0, radarSignal = 0;
 /* Einheitenortung: kostet Naehe und Tempo, dafuer sieht man, wer wo steht.
-   Die Kosten sind nicht erfunden - die roemische Ziffer ist vierzehn Pixel
-   hoch, aus der Vogelperspektive ist sie schlicht weg, und der zusaetzliche
+   Die Kosten sind nicht erfunden - eine Kartenmarke ist 1,3 Karteneinheiten
+   breit, aus der Vogelperspektive ist sie schlicht weg, und der zusaetzliche
    Durchgang kostet gemessen achtzig Millisekunden. */
 /* Kein Handschalter mehr: was gewollt ist, sagen SWEEP/UNITS, und die
    Automatik in wacheTickIntern folgt der tatsaechlich lesbaren Spanne.
@@ -34148,8 +34052,8 @@ function wacheTickIntern(){
      Einpassung sitzt. Eine unsichere Lage wuerde Stapel auf Staedte schreiben,
      an denen sie nie standen, und das waere schlimmer als gar nichts.
      Gemessen auf einem Pruefbild mit bekannten Standorten: vier von fuenf
-     Markern landen auf der richtigen Stadt. Die Ziffer selbst liest sich
-     schwerer - was unlesbar bleibt, wird als "2+" vermerkt statt verworfen. */
+     Markern landen auf der richtigen Stadt. Mehr als "dort steht eine
+     Marke" wird seit dem 12.09.2026 nicht gelesen. */
   /* Die Markersuche schaltet sich allein: an, sobald die Spanne lesbar ist,
      aus beim Herauszoomen. Der fruehere Handknopf ist raus - die Absicht
      steckt schon in SWEEP/UNITS, und ein einziger Klick auf den Knopf
@@ -39117,6 +39021,16 @@ const statusVon = who => {
   const e = S.stat && S.stat[who];
   return e && statusArt(e.v) ? e.v : "";
 };
+/* WER NACH SEINEM STATUS EINEN BEFEHL ERFUELLEN KANN. AT-Befehle (Pfeil,
+   Parablock, Flaeche): Active und RTS only - der schiebt seine Einheiten.
+   FPS-Rollen: nur Active. Mobile sieht nur zu, Inactive ist weg. Wer nichts
+   gesetzt hat, zaehlt: ueber ihn wird nichts behauptet, wie beim Punkt.
+   ENNO 12.09.2026: "Bei mobile nein, diese Spieler haben ja auf das Spiel
+   keinen Zugriff ueber das Handy. ... Die RTS Only Spieler hingegen ...
+   nur ihre Kampfeinheiten verschieben koennen, nicht aber das FPS-Spiel
+   sinnvoll nutzen koennen." FABLE 12.09.2026 */
+const statusKannAT  = who => { const s = statusVon(who); return s === "" || s === "on" || s === "rts"; };
+const statusKannFPS = who => { const s = statusVon(who); return s === "" || s === "on"; };
 /* Der Punkt vor einem Namen. Wer nichts gesetzt hat, bekommt KEINEN: ein
    grauer Punkt saehe aus wie Inactive, und das waere eine Behauptung ueber
    jemanden, der nie etwas gesagt hat. */
@@ -41844,11 +41758,13 @@ const PUNKTE_REGEL_FELDER = [
 function regelnDialog(tab){
   if (!istLeader()){ toast("Only the clan leader sets these."); return; }
   const r = clanRegeln(), p = punkteRegeln();
-  /* Was die Sperre GERADE JETZT traefe. Diese Zahl wird gezaehlt und nicht
+  /* Was die Sperre GERADE JETZT trifft. Diese Zahl wird gezaehlt und nicht
      behauptet - sie bleibt richtig, auch wenn die Anforderung je Typ in
      einer Form kommt, die hier niemand kennt. alleBefehle() laesst fremde
-     Seiten und Fertiges schon weg. */
-  const bef = alleBefehle().filter(b => !b.entwurf);
+     Seiten und Fertiges schon weg; Aufklaerungsanfragen und Parablocks
+     fallen hier heraus, weil die Sperre sie nicht trifft (anforderungNoetig,
+     12.09.2026). */
+  const bef = alleBefehle().filter(b => !b.entwurf && anforderungNoetig(b.art, b.v));
   const ohne = bef.filter(b => !anforderungGestellt(b.v));
   /* hoch ist der Deckel des Feldes. 999 bei den Marken wie bei l-soll und
      ar-soll, 99 bei den Punkten - dieselbe Grenze, die warmap_punkte_satz am
@@ -41897,15 +41813,11 @@ function regelnDialog(tab){
       </div>
 
       <div class="tabp" data-tab="befehl">
-        <div class="row" style="align-items:center;gap:8px">
-          <span style="font-size:12px;color:var(--dim);flex:1">An order must say how many
-            units it needs before it can go active</span>
-          <label class="toggle"><input type="checkbox" id="rg-leer"${
-            r.leer === 1 ? " checked" : ""}><span></span></label>
-        </div>
+        <div class="note">An order must say how many units it needs before it can go
+          active. Recon requests and para-blocks are exempt.</div>
         <div class="note">${bef.length
           ? `<b>${ohne.length}</b> of <b>${bef.length}</b> orders on the map say nothing about
-             strength right now. With this on, none of them goes active until it does.`
+             strength right now. None of them goes active until it does.`
           : `Nothing on the map to measure this against right now.`}</div>
       </div>
 
@@ -41984,7 +41896,6 @@ function regelnSpeichern(){
   }
   const regeln = {};
   if (Object.keys(marken).length) regeln.marken = marken;
-  if (document.getElementById("rg-leer")?.checked) regeln.leer = 1;
 
   const punkte = {};
   for (const f of PUNKTE_REGEL_FELDER){
@@ -46091,7 +46002,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 9a3262b6a3</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 61f62f3120</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -46319,7 +46230,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "9a3262b6a3";
+const BAU = "61f62f3120";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
