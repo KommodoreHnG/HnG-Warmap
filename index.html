@@ -708,6 +708,13 @@ body.txt-modus{cursor:text}
 .pf-farben button{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);cursor:pointer;
   background:var(--pf,transparent);color:var(--dim);font:inherit;font-size:12px;line-height:1;padding:0}
 .pf-farben button[aria-pressed="true"]{border-color:var(--text);box-shadow:0 0 0 1px var(--text)}
+/* the priority of an order: three buttons in the windows, a dot in the rows */
+.pf-prio{display:flex;gap:5px}
+.pf-prio button{display:inline-flex;align-items:center;gap:5px;background:transparent;border:1px solid var(--line);
+  border-radius:10px;padding:2px 8px 2px 6px;color:var(--dim);font:inherit;font-size:12px;line-height:1.3;cursor:pointer}
+.pf-prio button i,i.prio{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--pf)}
+.pf-prio button[aria-pressed="true"]{border-color:var(--text);color:var(--text);box-shadow:0 0 0 1px var(--text)}
+i.prio{margin-right:5px;vertical-align:-1px}
 /* the lifted player's note above the map */
 #hebe-zettel{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:12;
   display:flex;align-items:center;gap:8px;padding:5px 6px 5px 12px;font-size:12px;
@@ -3626,7 +3633,17 @@ const BUCKETS = Object.keys(TOPFTAFEL);
    und Guete; die Zielwahl zieht sie nach der Abdeckung wieder heran. Wie
    blick: nie in dirty, nie im Abgleich - der Vermerk sagt nur DIESEM
    Rechner, wo er nachbessern muss. */
-const neu = () => Object.assign({me:"", name:"", arrows:[], gone:{}, blick:{}, nachschau:{}},
+/* widerspruch: oertlicher Vermerk je Stadt, die eine Radarlesung UMGEFAERBT
+   hat - ein Besitzer stand schon, das Bild sagte einen anderen. Die
+   Buchung bleibt sofort (Direktive 30.08.), der Vermerk polt die Zielwahl:
+   solche Staedte fahren vor den Luecken, bis ein zweites Bild sie
+   bestaetigt oder zurueckfaerbt. {t, von, zu, by, n, k} - by/n vom ALTEN
+   Eintrag, k = wie oft die Stadt seither hin- und hergeschlagen ist.
+   Wie blick und nachschau: nie in dirty, nie im Abgleich.
+   ENNO 12.09.2026: "Wenn es eine Diskrepanz gibt muss hier die
+   automatische Vergabe von Staedten entsprechend gepolt werden, an dieser
+   Stelle priorisiert nachzupruefen." FABLE 12.09.2026 */
+const neu = () => Object.assign({me:"", name:"", arrows:[], gone:{}, blick:{}, nachschau:{}, widerspruch:{}},
                                 ...BUCKETS.map(b => ({[b]:{}})));
 let S = neu();
 /* Die Zeichenfraktion beginnt bei der Seite, die der Clan spielt. Fest auf
@@ -5857,6 +5874,7 @@ function ordersZahl(){
       if (befehlAktivSeit(x) > seit) n++;
     }
     n += rolleOffenFuerMich();          // open role requests I have not taken, see ROLE REQUESTS
+    n += mineNeuZahl(alle);             // events on my own orders since the inbox tab was last open, see MINE
   } catch (e){}
   const m = b.querySelector(".marke");
   if (m){ m.textContent = String(n); m.hidden = !n; }
@@ -6174,6 +6192,8 @@ function ordersDetail(b, st, hab, alle){
   if (strecke) teile.push(strecke);
   const kette = ketteStelle(b, alle);
   if (kette) teile.push(kette);
+  /* the priority as a word (BEF-16); the dot in the row above says the same */
+  teile.push(`priority <b>${prioEintrag(b.v).name}</b>`);
   return teile;
 }
 /* ---- THE OPERATION PLANNER (ENNO 07.09.2026 Saetze 1, 2, 6, 9; ENNO 11.09.2026:
@@ -6393,12 +6413,105 @@ function opDialog(hervorKey, behalten){
 /* THE INBOX. Units: my teams with their assignment, then every open order
    of our side, active first. Players: the open role requests of our side,
    who took them, and the one role I hold, see ROLE REQUESTS. */
+/* ---- MINE: THE PERSONAL INBOX (BEF-7, FABLE 12.09.2026) ----
+   ENNO 07.09.2026: "Beim Annehmen von Befehlen, Erfolgen bzw. Einnahmen
+   von Staedten auf der Einnahmestrecke soll der Ersteller hierueber eine
+   Rueckmeldung kriegen." ENNO 12.09.2026: "neben dem Orders Postfach ...
+   auch noch ein persoenliches Postfach, wo diese Aspekte reinkommen."
+   A third tab in the Orders window, one line per event on MY OWN orders,
+   newest first, all of it read from the state - nothing new is stored on
+   the server:
+     1. another player's assignment row on my order (zuordVon), accepted or
+        still pending from the chain; the row carries one stamp, so an
+        assignment and its later confirmation are the same line;
+     2. a town on the road of my active ground arrow that became ours after
+        the arrow went active (S.owner, befehlAktivSeit);
+     3. my order marked done (the ok row when it says done, else my own row);
+     4. somebody taking a role I asked for (rollezu).
+   Seen is a browser mark per account, like the filter templates - a mark
+   on the account would be a new pot on the server (ANSCHLUSS-ORDERS 5.1),
+   so phone and desktop count on their own. Lines newer than the mark are
+   highlighted and counted on the Orders button (ordersZahl). Seven days
+   back, sixty lines at most (FABLE numbers, to be put to him). */
+const MINE_STORE = "hng-warmap-mine-gesehen";
+const mineKey = () => MINE_STORE + ":" + (S.me || "");
+const mineGesehen = () => +lies(mineKey(), 0) || 0;
+const mineGesehenSetzen = () => schreib(mineKey(), String(jetzt()));
+const MINE_ALT = 7 * 86400000, MINE_DECKEL = 60;
+function mineEreignisse(alle){
+  const raus = [];
+  if (!S.me) return raus;
+  alle = alle || alleBefehle(true);
+  const ab = jetzt() - MINE_ALT;
+  const teams = n => `${n} team${n === 1 ? "" : "s"}`;
+  for (const b of alle){
+    if (b.fremd || b.entwurf || befehlUrheber(b) !== S.me) continue;
+    const go = befehlOrt(b);
+    const zeile = (t, text) => { if (t > ab) raus.push({t, text, b, go}); };
+    for (const z of zuordVon(b)){
+      if (z.who === S.me) continue;
+      zeile(z.t, z.st === 1 ? `${esc(z.name)} assigned ${teams(z.ats.length)}` : `${esc(z.name)}: ${teams(z.ats.length)} pending`);
+    }
+    /* the other way of taking an order: a commitment by type ("Bring",
+       S.join, arrows only) - ENNO 07.09.2026: "Beim Annehmen von Befehlen"
+       (Skeptiker WORT, 13.09.2026) */
+    if (b.art === "arrow") for (const k of Object.keys(S.join)){
+      if (!k.startsWith(b.id + ":") || k.endsWith(":" + S.me)) continue;
+      const e = S.join[k];
+      if (!e || !imKrieg(e) || !(+e.v > 0)) continue;
+      zeile(e.t || 0, `${esc(e.n || k.slice(b.id.length + 1))} committed ${teams(+e.v)}`);
+    }
+    if (b.zs === "fertig"){
+      const e = okEintrag(b.ok), ef = e && +e.v === 2 ? e : null;
+      const z = b.art === "arrow" ? null : (S[b.art] && S[b.art][b.id]);
+      const t = ef ? (ef.t || 0) : (b.art === "arrow" ? (b.v.t || 0) : ((z && z.t) || 0));
+      zeile(t, ef && ef.by !== S.me ? `done, set by ${esc(ef.n || ef.by)}` : "done");
+    }
+    if (b.art === "arrow" && b.zs === "aktiv"){
+      const seit = befehlAktivSeit(b), st = streckeStand(b);
+      if (st) for (const o of st.orte){
+        const e = S.owner[o.i];
+        if (e && imKrieg(e) && +e.v === +b.v.f && (e.t || 0) > seit) zeile(e.t, `${esc(MAP.n[o.i][0])} taken`);
+      }
+    }
+  }
+  for (const z of rolleZuAlle()){
+    if (z.mine || z.ok !== 1) continue;
+    const r = rolleZeile(z.rolle);
+    if (!r || !r.mine || z.t <= ab) continue;
+    raus.push({t: z.t, text: `${esc(z.name)} took ${esc(kampfRolleName(r.rolle))}`, b: null,
+               name: MAP.n[r.stadt][0], art: "Role", go: r.stadt});
+  }
+  raus.sort((p, q) => q.t - p.t);
+  return raus.slice(0, MINE_DECKEL);
+}
+/* how many of them are newer than the mark - the share on the Orders button */
+function mineNeuZahl(alle, seit){
+  if (seit === undefined) seit = mineGesehen();
+  return mineEreignisse(alle).filter(e => e.t > seit).length;
+}
+/* the tab's content: Order | Event | When, a click jumps to the town */
+function mineInhalt(liste, seit){
+  const kopf = `<h3 class="zuord-h">On your orders</h3>`;
+  if (!liste.length) return kopf + `<div class="empty">Nothing yet.</div>`;
+  const zeilen = liste.map(e => `<tr${e.go !== null && e.go !== undefined ? ` data-go="${e.go}" style="cursor:pointer"` : ""}${e.t > seit ? ' class="me"' : ""}>
+      <td style="text-align:left">${e.b ? `${prioKreis(e.b.v)}${esc(e.b.name)} <small style="color:var(--dim)">${esc(befehlArtName(e.b))}</small>`
+                                        : `${esc(e.name)} <small style="color:var(--dim)">${esc(e.art)}</small>`}</td>
+      <td style="text-align:left">${e.text}</td>
+      <td style="text-align:left;color:var(--dim2)">${esc(alterText(e.t))}</td></tr>`).join("");
+  return `${kopf}
+    <div class="tw"><table><thead><tr><th>Order</th><th>Event</th><th>When</th></tr></thead>
+      <tbody>${zeilen}</tbody></table></div>
+    <div class="note">Click a line to jump to it on the map.</div>`;
+}
 function ordersDialog(tab){
   try { localStorage.setItem(ZUORD_STORE, String(jetzt())); } catch (e){}
   try { if (zuordNachruecken()) draw(); } catch (e){}
   ordersZahl();
   const c = light() ? "#1a2029" : "#e9e2d5";
   const alle = alleBefehle(true);
+  /* the personal inbox (MINE): counted once here, before the mark moves */
+  const mineSeit = mineGesehen(), mine = mineEreignisse(alle), mineNeu = mine.filter(e => e.t > mineSeit).length;
   const quelle = alle.filter(x => !x.fremd && !x.entwurf);
   const offen = quelle.filter(x => x.zs !== "fertig");
   /* die Liste, die gezeigt wird: nach dem Filter (ordersFilter); mit
@@ -6498,7 +6611,7 @@ function ordersDialog(tab){
     const details = ordersDetail(b, st, hab, g);
     return `<tr${go}>
       <td>${esc(befehlArtName(b))}</td>
-      <td style="text-align:left${drin ? ";padding-left:18px" : ""}">${b.v.folge ? `<small style="color:var(--dim)">#${+b.v.folge}</small> ` : ""}${esc(b.name)}</td>
+      <td style="text-align:left${drin ? ";padding-left:18px" : ""}">${prioKreis(b.v)}${b.v.folge ? `<small style="color:var(--dim)">#${+b.v.folge}</small> ` : ""}${esc(b.name)}</td>
       <td style="text-align:left">${esc(befehlOrtName(b))}</td>
       <td style="text-align:left">${zsSpan(b.zs)}</td>
       <td>${(st ? st.soll : +b.v.soll) || "\u2014"}</td>
@@ -6537,10 +6650,12 @@ function ordersDialog(tab){
     <div class="dlg-h"><h2>Orders</h2>
       <p>${teams.length ? `<b>${teams.length}</b> team${teams.length === 1 ? "" : "s"}, <b>${frei}</b> free${
         wartend ? `, <b>${wartend}</b> waiting for your word` : ""}.` : "No teams in your depot yet."}
-        <b>${offen.length}</b> open order${offen.length === 1 ? "" : "s"} on our side.</p></div>
+        <b>${offen.length}</b> open order${offen.length === 1 ? "" : "s"} on our side.${
+        mineNeu ? ` <b>${mineNeu}</b> new for you.` : ""}</p></div>
     <div class="tabs">
       <button data-tab="units"   aria-pressed="true">Units</button>
       <button data-tab="players" aria-pressed="false">Players</button>
+      <button data-tab="mine"    aria-pressed="false">Mine${mineNeu ? ` <b style="color:var(--su)">${mineNeu}</b>` : ""}</button>
     </div>
     <div class="dlg-b">
       <div class="tabp on" data-tab="units">
@@ -6560,9 +6675,17 @@ function ordersDialog(tab){
       <div class="tabp" data-tab="players">
         ${rollePostfachInhalt()}
       </div>
+      <div class="tabp" data-tab="mine">
+        ${mineInhalt(mine, mineSeit)}
+      </div>
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
   tabsAktiv(document.getElementById("dlg"), tab || "units");
+  /* the personal inbox counts as seen the moment its tab is open - on
+     opening and on a click on the tab; the badge is counted afresh */
+  const mineGesehenJetzt = () => { mineGesehenSetzen(); ordersZahl(); };
+  if ((tab || "units") === "mine") mineGesehenJetzt();
+  document.querySelector('#dlg .tabs button[data-tab="mine"]')?.addEventListener("click", mineGesehenJetzt);
   document.getElementById("d-close").addEventListener("click", closeDlg);
   /* after a change the window is built afresh on the tab that was open */
   const wieder = () => {
@@ -12498,7 +12621,7 @@ function setPara(town, f, plan, extra){
   /* the state travels with the block only while it stays the same side's,
      and so does the moment it went active; a new block, or one changing
      side, starts planned */
-  const v = f == null ? null : Object.assign({}, alt ? {label: alt.label, soll: alt.soll, farbe: alt.farbe, op: alt.op, vor: alt.vor, nach: alt.nach, folge: alt.folge,
+  const v = f == null ? null : Object.assign({}, alt ? {label: alt.label, soll: alt.soll, farbe: alt.farbe, prio: alt.prio, op: alt.op, vor: alt.vor, nach: alt.nach, folge: alt.folge,
                                                         st: +alt.f === +f ? alt.st : undefined, aktT: +alt.f === +f ? alt.aktT : undefined} : {},
                                             {f, plan: !!plan, art: (alt && alt.art !== undefined) ? alt.art : artNeu()}, extra || {});
   if (v) for (const k of Object.keys(v)) if (v[k] === undefined || v[k] === "" || v[k] === null) delete v[k];
@@ -12576,6 +12699,34 @@ function farbVerdrahten(feldId){
     document.querySelectorAll("#dlg .pf-farben button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
   }));
 }
+/* THE PRIORITY OF AN ORDER (BEF-16). ENNO 12.09.2026: "mit Symbol rot,
+   gelb, gruen. Jeweils High, medium und low. Erstmal ganz easy fahren."
+   v.prio: 2 high, 1 medium, 0 low; an order without the field is medium
+   (FABLE-Wahl 12.09.2026, to be put to him). Written by the four windows
+   like the colour, no right of its own, nothing sorted or filtered by it,
+   no sign on the map. The colours are the page's own three tones so that
+   light and dark keep them apart. */
+const BEFEHL_PRIO = [
+  {v:2, name:"High",   farbe:"#d64541"},
+  {v:1, name:"Medium", farbe:"#d9a441"},
+  {v:0, name:"Low",    farbe:"#3f9d5a"},
+];
+const befehlPrio = v => { const p = v && v.prio !== undefined && v.prio !== null ? +v.prio : 1; return p === 0 || p === 2 ? p : 1; };
+const prioEintrag = v => BEFEHL_PRIO.find(p => p.v === befehlPrio(v));
+/* the dot before an order's name, the word in its title */
+const prioKreis = v => { const p = prioEintrag(v); return `<i class="prio" style="--pf:${p.farbe}" title="${p.name}"></i>`; };
+/* the three buttons, shared by every order window - the colour buttons' pattern */
+function prioKnoepfe(v){
+  const akt = befehlPrio(v);
+  return BEFEHL_PRIO.map(p => `<button type="button" data-prio="${p.v}" aria-pressed="${akt === p.v}" style="--pf:${p.farbe}"><i></i>${p.name}</button>`).join("");
+}
+function prioVerdrahten(feldId){
+  document.querySelectorAll("#dlg .pf-prio button").forEach(b => b.addEventListener("click", ()=>{
+    const feld = document.getElementById(feldId);
+    if (feld) feld.value = b.dataset.prio;
+    document.querySelectorAll("#dlg .pf-prio button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  }));
+}
 /* THE PARA-BLOCK'S OWN WINDOW - what the arrow has had since the second:
    side, planned or in place, name, planned strength, chain, colour. */
 function paraDialog(i){
@@ -12615,6 +12766,11 @@ function paraDialog(i){
         <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
         <input type="hidden" id="pd-farbe" value="${esc((pb && pb.farbe) || "")}">
         <div class="pf-farben">${farbKnoepfe(pb && pb.farbe)}</div>
+      </div>
+      <div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Priority</span>
+        <input type="hidden" id="pd-prio" value="${befehlPrio(pb)}">
+        <div class="pf-prio">${prioKnoepfe(pb)}</div>
       </div>`}
       <div class="note">A block seals the town against drops. "Only planned" is your own plan and stays your side's; a block of another side is a sighting.
         It cannot be a draft: a town carries one block, so yours and a comrade's would be the same entry.</div>
@@ -12629,6 +12785,7 @@ function paraDialog(i){
   document.getElementById("d-close").addEventListener("click", closeDlg);
   zustandVerdrahten();
   farbVerdrahten("pd-farbe");
+  prioVerdrahten("pd-prio");
   document.getElementById("pd-op")?.addEventListener("click", ()=>opDialog(key));
   document.querySelectorAll("#dlg [data-pbd]").forEach(k => k.addEventListener("click", ()=>{
     seite = k.dataset.pbd === "" ? null : +k.dataset.pbd;
@@ -12642,8 +12799,10 @@ function paraDialog(i){
     /* another side's block has no colour row; what stands there stays */
     const farbeEl = document.getElementById("pd-farbe");
     const farbe = farbeEl ? farbeEl.value : ((pb && pb.farbe) || "");
+    const prioEl = document.getElementById("pd-prio");
+    const prio = prioEl ? befehlPrio({prio: prioEl.value}) : (pb ? pb.prio : undefined);
     if (seite === null){ if (pb) setPara(i, null, false); closeDlg(); if (sel === i) side(); draw(); tally(); return; }
-    if (!setPara(i, seite, plan, {label, soll: soll || undefined, farbe: farbe || undefined})) return;
+    if (!setPara(i, seite, plan, {label, soll: soll || undefined, farbe: farbe || undefined, prio})) return;
     closeDlg(); if (sel === i) side(); draw(); tally(); toast("Saved");
   });
   document.getElementById("pd-del")?.addEventListener("click", ()=>{
@@ -13027,9 +13186,10 @@ function altlastFegen(){
       if (e && (e.t || 0) < grenze){ delete topf[k]; weg++; }
     }
   }
-  /* blick und nachschau liegen NEBEN den Toepfen: sie werden in neu()
-     eigens angelegt und stehen in keiner BUCKETS-Liste, wurden hier also
-     nie gefegt. Beide tragen aber denselben Zeitstempel wie alles andere.
+  /* blick, nachschau und widerspruch liegen NEBEN den Toepfen: sie werden
+     in neu() eigens angelegt und stehen in keiner BUCKETS-Liste, wurden
+     hier also nie gefegt. Alle tragen aber denselben Zeitstempel wie alles
+     andere.
 
      Warum das zaehlt: nachschau schickt das Radar bevorzugt zu einer
      Stadt ("gewicht *= 8") und der Pult-Zaehler nennt sie - beides auf
@@ -13042,7 +13202,7 @@ function altlastFegen(){
      S.nachschau[i] ein Objekt {t, g} ist. Wer hier nur e.t liest, bekommt
      bei blick undefined, rechnet mit 0 - und loescht damit den ganzen
      Topf, bei jedem Aufruf. */
-  for (const topf of [S.blick, S.nachschau]){
+  for (const topf of [S.blick, S.nachschau, S.widerspruch]){
     if (!topf) continue;
     for (const k of Object.keys(topf)){
       const e = topf[k];
@@ -13050,6 +13210,9 @@ function altlastFegen(){
       if (t < grenze){ delete topf[k]; weg++; }
     }
   }
+  /* widerspruch verfaellt ausserdem nach WIDERSPRUCH_VERFALL und ist
+     gedeckelt - beides unabhaengig vom Kriegsstrich (FABLE 12.09.2026) */
+  weg += widerspruchFegen();
   /* Die Pfeile liegen in einer Liste, nicht in einem Topf - und tragen
      denselben Zeitstempel. */
   if (Array.isArray(S.arrows)){
@@ -16000,6 +16163,11 @@ function arrowDialog(a, frisch){
         <div class="pf-farben">${PFEIL_FARBEN.map(p => `<button type="button" data-farbe="${p.k}" title="${p.name}"
           aria-pressed="${(a.farbe||"") === p.k}" style="${p.d ? `--pf:${light() ? p.l : p.d}` : ""}">${p.d ? "" : "×"}</button>`).join("")}</div>
       </div>
+      <div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Priority</span>
+        <input type="hidden" id="a-prio" value="${befehlPrio(a)}">
+        <div class="pf-prio">${prioKnoepfe(a)}</div>
+      </div>
       <div class="note">You have <b>${habe}</b> teams on the map in total. Committing here is a plan,
         it does not move anything by itself.</div>`}
     </div>
@@ -16025,6 +16193,7 @@ function arrowDialog(a, frisch){
   anfVerdrahten();
   anfZuordVerdrahten(a);
   document.getElementById("a-op")?.addEventListener("click", ()=>opDialog(befehlKey("arrow", a.id)));
+  prioVerdrahten("a-prio");
   document.querySelectorAll("#dlg .pf-farben button").forEach(b => b.addEventListener("click", ()=>{
     const farbeFeld = document.getElementById("a-farbe");
     if (farbeFeld) farbeFeld.value = b.dataset.farbe;
@@ -16091,6 +16260,9 @@ function arrowDialog(a, frisch){
        keine Zahl stehenbleibt, die niemand mehr aendern kann. Linie,
        Flaeche und Parablock behalten ihr soll. */
     if (farbe !== (a.farbe||"")){ a.farbe = farbe || undefined; neu = true; }
+    /* the priority, like the colour: written only when it changed */
+    const prioEl = document.getElementById("a-prio");
+    if (prioEl && befehlPrio({prio: prioEl.value}) !== befehlPrio(a)){ a.prio = befehlPrio({prio: prioEl.value}); neu = true; }
     /* a sighting's window has no airborne row; then the old value stands */
     const luftEl = document.getElementById("a-luft");
     const luftAn = luftEl ? !!luftEl.checked : !!a.luft;
@@ -28385,20 +28557,104 @@ let besitzRueck = null;
 /* The brush keeps its own slot. A radar reading that lands while the room
    is open must not bury the stroke the toast just promised to undo. */
 let pinselRueck = null;
+/* DER WIDERSPRUCH. Faerbt eine Lesung eine Stadt UM - ein Besitzer stand
+   schon (Pinsel, andere Wache, gebuchtes Schlachtende; S.owner traegt
+   keine Quelle, also wird nicht unterschieden) und das Bild sagt einen
+   anderen -, dann wird gebucht wie bisher (Direktive 30.08., UNDO LAST
+   READING als Netz) UND die Stadt zum Nachpruefen vorgemerkt: die
+   Zielwahl faehrt sie vor den Luecken an (widerspruchZiel), die Ernte
+   eines ZWEITEN Bildes hebt den Vermerk auf (widerspruchAufheben).
+   ENNO 12.09.2026: "Das Radar kann ja selber nicht nachschauen. Wenn es
+   eine Diskrepanz gibt muss hier die automatische Vergabe von Staedten
+   entsprechend gepolt werden, an dieser Stelle priorisiert
+   nachzupruefen."
+   Hoechstens WIDERSPRUCH_DECKEL Vermerke, die aeltesten fallen; ein
+   Vermerk verfaellt nach WIDERSPRUCH_VERFALL. Eine Stadt, die
+   WIDERSPRUCH_VERSUCHE mal vergeblich im Bild lag (radarVergeblich),
+   zieht die Nadel nicht weiter an - der Vermerk bleibt bis Deckel oder
+   Verfall. Zahlen: FABLE 12.09.2026, vorzulegen.
+   FLATTERN: bringt das zweite Bild wieder den alten Besitzer, wird
+   zurueckgebucht und die Stadt erneut vorgemerkt - eine Stadt, deren
+   Farbe bei jeder Lesung anders ausfaellt, zoege die Nadel ohne Ende.
+   Darum zaehlt k im Vermerk die Umschlaege: der neue Vermerk erbt k+1,
+   wenn der vorige (noch stehend, oder an der Ernte aufgehoben und in
+   widerspruchGeprueft gemerkt) genau die Gegenrichtung war. Ab
+   WIDERSPRUCH_VERSUCHE Umschlaegen ist der Vermerk zu - kein Ziel, nicht
+   im Pult - bis er verfaellt. widerspruchGeprueft lebt wie
+   radarVergeblich nur im RAM. FABLE 12.09.2026 */
+const WIDERSPRUCH_DECKEL = 20, WIDERSPRUCH_VERFALL = 6*3600e3, WIDERSPRUCH_VERSUCHE = 3;
+let widerspruchGeprueft = new Map();
+function widerspruchFegen(){
+  S.widerspruch ||= {};
+  const w = S.widerspruch, nun = jetzt(); let weg = 0;
+  for (const k of Object.keys(w)){
+    const e = w[k];
+    if (!e || !(e.t > nun - WIDERSPRUCH_VERFALL)){ delete w[k]; weg++; }
+  }
+  /* aelteste zuerst, bei gleicher Zeit der kleinere Ortsindex - dieselbe
+     Ordnung wie in widerspruchZiel */
+  const rest = Object.keys(w).sort((a, b) => (w[a].t - w[b].t) || (+a - +b));
+  while (rest.length > WIDERSPRUCH_DECKEL){ delete w[rest.shift()]; weg++; }
+  for (const [i, e] of widerspruchGeprueft)
+    if (!(e.t > nun - WIDERSPRUCH_VERFALL)) widerspruchGeprueft.delete(i);
+  return weg;
+}
+/* taugt der Vermerk dieser Stadt noch als Ziel? */
+function widerspruchOffen(i){
+  const e = S.widerspruch && S.widerspruch[i];
+  if (!e || !MAP.n[i]) return false;
+  if (!(e.t > jetzt() - WIDERSPRUCH_VERFALL)) return false;
+  if ((e.k || 0) >= WIDERSPRUCH_VERSUCHE) return false;
+  return (radarVergeblich.get(+i) || 0) < WIDERSPRUCH_VERSUCHE;
+}
+function widerspruchZahl(){
+  if (!S.widerspruch) return 0;
+  let n = 0;
+  for (const k of Object.keys(S.widerspruch)) if (widerspruchOffen(k)) n++;
+  return n;
+}
+/* SKIP THIS ONE. widerspruchZiel lost nicht aus - es liefert stur den
+   aeltesten Vermerk, und der Knopf zoege dasselbe Ziel noch einmal. Darum
+   gilt das uebersprungene Ziel als vergeblich, wie nach WIDERSPRUCH_VERSUCHE
+   Bildern ohne Lesung: es zieht nicht mehr an, bis eine Lesung an der
+   Ernte den Zaehler loescht oder der Vermerk verfaellt. FABLE 12.09.2026 */
+function widerspruchUeberspringen(){
+  /* only where the needle is drawn by the tool: in TOWN mode the button
+     used to do nothing, and a stamp there would outlive the mode switch
+     (Skeptiker HANDWERK, 13.09.2026) */
+  if (radarOrtArt !== "auto") return false;
+  if (radarZiel === null || !widerspruchOffen(radarZiel)) return false;
+  radarVergeblich.set(radarZiel, WIDERSPRUCH_VERSUCHE);
+  return true;
+}
 function besitzUebernehmen(besitz){
   const t = jetzt(); let n = 0;
   const vorher = {};
+  S.widerspruch ||= {};
   for (const [idx, f] of Object.entries(besitz)){
     const alt = S.owner[idx] && S.owner[idx].v;
     if (alt === f) continue;
+    /* vor stamp() lesen - stamp ersetzt die Zeile samt by und n */
+    const altZeile = S.owner[idx];
     /* Through stamp(): the right is checked there, and a refused town
        must not enter the undo memory. stamp() sets t and by itself. */
     if (stamp("owner", idx, f, {n: S.name || ""})){
       vorher[idx] = alt === undefined ? null : alt;
       n++;
+      /* UMGEFAERBT, nicht erst eingetragen: ein Besitzer stand (nicht
+         undefined, nicht null, im laufenden Krieg) - das ist der
+         Widerspruch, der nachgeprueft wird. Schlaegt die Stadt in die
+         Gegenrichtung des vorigen Vermerks zurueck, zaehlt k weiter
+         (Flattern). FABLE 12.09.2026 */
+      if (alt != null && imKrieg(altZeile)){
+        const vor = S.widerspruch[idx] || widerspruchGeprueft.get(+idx);
+        const k = (vor && vor.zu === alt && vor.von === f && vor.t > t - WIDERSPRUCH_VERFALL)
+          ? (vor.k || 0) + 1 : 0;
+        S.widerspruch[idx] = {t, von: alt, zu: f, by: altZeile.by || "", n: altZeile.n || "", k};
+      }
     }
   }
-  if (n){ besitzRueck = {vorher, t}; save(); tally(); draw(); side(); }
+  if (n){ widerspruchFegen(); besitzRueck = {vorher, t}; save(); tally(); draw(); side(); }
   return n;
 }
 function rueckSpielen(vorher){
@@ -28413,6 +28669,13 @@ function rueckSpielen(vorher){
 function besitzZurueck(){
   if (!besitzRueck) return 0;
   const vorher = besitzRueck.vorher; besitzRueck = null;
+  /* mit der Lesung fallen ihre Widerspruchs-Vermerke und das
+     Flatter-Gedaechtnis: was zurueckgenommen ist, muss nicht nachgeprueft
+     werden (FABLE 12.09.2026) */
+  for (const idx of Object.keys(vorher)){
+    if (S.widerspruch) delete S.widerspruch[idx];
+    widerspruchGeprueft.delete(+idx);
+  }
   return rueckSpielen(vorher);
 }
 function pinselZurueck(){
@@ -31800,6 +32063,26 @@ function lueckenZiel(){
   return spitze[Math.floor(Math.random()*spitze.length)].i;
 }
 
+/* WIDERSPRUCH ZUERST. Die aelteste vorgemerkte Umfaerbung (S.widerspruch,
+   siehe besitzUebernehmen) wird zum Ziel - deterministisch, kein
+   Auslosen: bei gleicher Zeit der kleinere Ortsindex. Ausgelassen: wer im
+   zuletzt geernteten Bild lag (dasselbe Bild noch einmal prueft nichts;
+   der Riegel aus lueckenZiel, Tiefe 1), wer WIDERSPRUCH_VERSUCHE mal
+   vergeblich im Bild lag oder uebersprungen wurde, und wer so oft
+   geflattert ist. Null heisst: nichts nachzupruefen, die Luecken sind
+   dran. FABLE 12.09.2026 */
+function widerspruchZiel(){
+  if (!S.widerspruch) return null;
+  widerspruchFegen();
+  let ziel = null, aeltest = Infinity;
+  for (const k of Object.keys(S.widerspruch)){
+    const i = +k, e = S.widerspruch[k];
+    if (!widerspruchOffen(k)) continue;
+    if (imFrischenRahmen(MAP.n[i], 1)) continue;
+    if (e.t < aeltest || (e.t === aeltest && i < ziel)){ ziel = i; aeltest = e.t; }
+  }
+  return ziel;
+}
 function zielZiehen(){
   /* Bei Handauswahl und beim freien Scan zieht niemand ein neues Ziel -
      sonst ueberschriebe der naechste Takt, was der Nutzer gerade
@@ -31808,6 +32091,15 @@ function zielZiehen(){
      Richtungsansage, Zielmarke und Locked-on weg. */
   if (radarOrtArt === "frei"){ radarZiel = null; return; }
   if (radarOrtArt === "stadt") return;
+  /* Vor den Luecken: eine umgefaerbte Stadt, die noch kein zweites Bild
+     bestaetigt hat (ENNO 12.09.2026: "priorisiert nachzupruefen"). */
+  {
+    const ziel = widerspruchZiel();
+    if (ziel !== null){
+      radarZiel = ziel; radarScan = 0; radarSignal = 0;
+      return radarZiel;
+    }
+  }
   /* Solange es erfassungsbeduerftige Orte gibt - nie gesehen ODER im
      laufenden Krieg ohne gelesenen Besitz (ortOffen) -, geht die
      Abdeckung vor, und zwar dorthin, wo ein Bild die meisten auf einmal
@@ -32102,6 +32394,31 @@ function radarZu(){
    wurden Rasterfelder gutgeschrieben und der Schieber bestimmte, wieviele
    Nachbarfelder dazukamen - eine Buchhaltung ueber gedachte Rechtecke. Jetzt
    zaehlt, was wirklich im Bild war. */
+/* NACHGEPRUEFT heisst: schreibreif GELESEN (gelesen.has, nicht nur im
+   Feld gelegen) in einem ZWEITEN Bild. Das zweite Bild misst sich am
+   vorigen gemerkten Lesefeld (radarRahmen[1]; [0] ist die Ernte von
+   eben): lag die Stadt darin und ist es keine RAHMEN_FRIST alt, ist dies
+   noch dasselbe Bild - der naechste Takt derselben Aufnahme pruefte nichts.
+   Nicht am Blickstempel: der faellt im Messtakt (AT-Zweig in
+   wacheTickIntern) und waere 240 ms nach dem Vermerk juenger als er.
+   Gleich, ob die Lesung den neuen oder wieder den alten Besitzer bringt:
+   im zweiten Fall bucht besitzUebernehmen erneut um und setzt einen
+   neuen Vermerk - und findet den aufgehobenen in widerspruchGeprueft,
+   um das Flattern zu zaehlen. Gerufen aus scanGutschrift. FABLE 12.09.2026 */
+function widerspruchAufheben(orte, gelesen){
+  if (!S.widerspruch || !gelesen) return 0;
+  const vor = radarRahmen[1], nun = jetzt(); let n = 0;
+  for (const i of orte){
+    const e = S.widerspruch[i];
+    if (!e || !gelesen.has(i)) continue;
+    const m = MAP.n[i];
+    if (vor && m && nun - vor.t <= RAHMEN_FRIST
+        && Math.abs(m[1]-vor.x) < vor.hb && Math.abs(m[2]-vor.y) < vor.hh) continue;
+    widerspruchGeprueft.set(i, e);
+    delete S.widerspruch[i]; n++;
+  }
+  return n;
+}
 function scanGutschrift(){
   /* Erst die Ernte ist ein AUFGENOMMENES Bild. Der Eintrag wohnte im
      Messtakt - drei Eintraege deckten 0,7 s, RAHMEN_FRIST (120 s) kam
@@ -32138,6 +32455,7 @@ function scanGutschrift(){
       else radarVergeblich.set(i, Math.min(6, (radarVergeblich.get(i) || 0) + 1));
     }
   }
+  widerspruchAufheben(orte, gelesen);
   if (orte.length) radarPing(true);
   radarScan = 0;
   /* Nur weiterziehen, wenn die gesuchte Stadt auch wirklich im Bild lag.
@@ -32300,9 +32618,17 @@ function radarLage(){
   }
   /* Der Lueckenhinweis stand hier frueher als dreizeiliger Block - und
      gleichzeitig in der Kopfleiste. Einmal reicht. */
+  /* Der Widerspruch geht vor den Luecken (widerspruchZiel), also steht er
+     auch davor - solange Vermerke stehen, die noch als Ziel taugen. Die
+     Lueckenzeile sagt dann "then those", sonst hiesse es zweimal "first".
+     FABLE 12.09.2026 */
+  const wid = laeuft ? widerspruchZahl() : 0;
+  if (wid)
+    sagen += `<div style="margin-top:5px;font-size:11px;color:#e0b96a">`
+      + `${wid} contradicted — checking those first</div>`;
   if (laeuft && offen)
     sagen += `<div style="margin-top:5px;font-size:11px;color:#e0b96a">`
-      + `${offen} blank — those first</div>`;
+      + `${offen} blank — ${wid ? "then those" : "those first"}</div>`;
   /* Erst wenn nichts mehr blank ist - vorher gehen die Luecken ohnehin vor,
      und zwei Zahlen nebeneinander liest niemand. */
   const nachzu = S.nachschau ? Object.keys(S.nachschau).length : 0;
@@ -32873,6 +33199,8 @@ function radarPult(){
   });
   el.querySelector("#rd-teilen")?.addEventListener("click", async ()=>{ await bildFreigabeNeu(); radarPult(); });
   el.querySelector("#rd-neu")?.addEventListener("click", ()=>{
+    /* ein Widerspruchsziel kaeme sonst sofort wieder (FABLE 12.09.2026) */
+    widerspruchUeberspringen();
     zielZiehen(); radarPult(); radarZeichnen();
     if (!sichtbareOrte()) toast("Nothing in view — picked from the whole map");
   });
@@ -34274,6 +34602,9 @@ function wacheTickIntern(){
       if (res.schreibreif) delete S.nachschau[idx];
       else S.nachschau[idx] = {t: nunB, g: Math.round(res.guete*100)};
     }
+    /* S.widerspruch faellt hier NICHT: dieser Block laeuft im Messtakt aus
+       demselben Bild, das den Vermerk gesetzt hat. Aufgehoben wird an der
+       Ernte eines zweiten Bildes (widerspruchAufheben). FABLE 12.09.2026 */
     /* Hier stand rahmenMerken(wache.peil) - also im MESSTAKT, rund alle
        240 ms. Drei Eintraege im Takt deckten 0,7 Sekunden statt der
        zugesagten RAHMEN_FRIST von zwei Minuten, und die Stufenlockerung
@@ -35074,6 +35405,11 @@ function areaDialog(id, e, neuGezogen){
         <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
         <input type="hidden" id="ar-farbe" value="${esc(a.farbe||"")}">
         <div class="pf-farben">${farbKnoepfe(a.farbe)}</div>
+      </div>
+      <div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Priority</span>
+        <input type="hidden" id="ar-prio" value="${befehlPrio(a)}">
+        <div class="pf-prio">${prioKnoepfe(a)}</div>
       </div>`}
       ${meins && !a.aufkl ? `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Draft <small>(only you see it)</small></span>
@@ -35099,6 +35435,7 @@ function areaDialog(id, e, neuGezogen){
     document.getElementById("ar-lbl").value = b.dataset.vor;
   }));
   farbVerdrahten("ar-farbe");
+  prioVerdrahten("ar-prio");
   document.getElementById("ar-op")?.addEventListener("click", ()=>opDialog(befehlKey("area", id)));
   document.getElementById("ar-kette-frei")?.addEventListener("click", ()=>{
     const liste = entwuerfeDerOp(a.op);
@@ -35114,6 +35451,8 @@ function areaDialog(id, e, neuGezogen){
     const v = {...a, label};
     if (soll) v.soll = soll; else delete v.soll;
     if (farbe) v.farbe = farbe; else delete v.farbe;
+    const prioEl = document.getElementById("ar-prio");
+    if (prioEl) v.prio = befehlPrio({prio: prioEl.value});
     /* draft <-> shared, the arrow's road. A shared area that steps back
        vanishes for the others and comes back here under a fresh key. */
     const entwEl = document.getElementById("ar-entwurf");
@@ -35173,6 +35512,11 @@ function lineDialog(id, e){
         <span style="font-size:12px;color:var(--dim);flex:1">Outline colour</span>
         <input type="hidden" id="l-farbe" value="${esc(l.farbe||"")}">
         <div class="pf-farben">${farbKnoepfe(l.farbe)}</div>
+      </div>
+      <div class="row" style="align-items:center">
+        <span style="font-size:12px;color:var(--dim);flex:1">Priority</span>
+        <input type="hidden" id="l-prio" value="${befehlPrio(l)}">
+        <div class="pf-prio">${prioKnoepfe(l)}</div>
       </div>`}
       ${e.by === S.me ? `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Draft <small>(only you see it)</small></span>
@@ -35192,6 +35536,7 @@ function lineDialog(id, e){
   document.getElementById("d-close").addEventListener("click", closeDlg);
   zustandVerdrahten();
   farbVerdrahten("l-farbe");
+  prioVerdrahten("l-prio");
   document.getElementById("l-op")?.addEventListener("click", ()=>opDialog(befehlKey("line", id)));
   document.getElementById("l-kette-frei")?.addEventListener("click", ()=>{
     const liste = entwuerfeDerOp(l.op);
@@ -35206,6 +35551,8 @@ function lineDialog(id, e){
     const v = {...l, label: document.getElementById("l-lbl").value.trim()};
     if (soll) v.soll = soll; else delete v.soll;
     if (farbe) v.farbe = farbe; else delete v.farbe;
+    const prioEl = document.getElementById("l-prio");
+    if (prioEl) v.prio = befehlPrio({prio: prioEl.value});
     /* draft <-> shared, the arrow's road. A shared line that steps back
        vanishes for the others and comes back here under a fresh key. */
     const entwEl = document.getElementById("l-entwurf");
@@ -46122,7 +46469,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 713415f6f5</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 24f701a022</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -46350,7 +46697,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "713415f6f5";
+const BAU = "24f701a022";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
