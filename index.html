@@ -4460,7 +4460,12 @@ function darfIchSchieben(bucket, id){
   const v = TOPFTAFEL[bucket];
   if (!v) return false;                 // unbekannt: der Server nimmt es ohnehin nicht
   if (v.recht === "anon") return id === anonKennung();
-  if (v.recht === "meta") return istLeader() || istAdmin();
+  /* meta:rang schreibt auch, wer befoerdern darf (Server: derselbe Zweig
+     vor meta:%); der Pinsel malt owner mit dem Recht pinsel (Server:
+     owner:% aufklaerung or pinsel). Beides 13.09.2026. */
+  if (v.recht === "meta") return istLeader() || istAdmin()
+    || (bucket === "meta" && id === "rang" && darf("befoerdern"));
+  if (bucket === "owner" && darf("pinsel")) return true;
   return v.recht ? darf(v.recht) : true;
 }
 function autorVon(bucket, id){
@@ -4811,11 +4816,26 @@ function markenZahl(art){
   return 0;
 }
 /* Die Stufe, die fuer mich gilt. Der Leiter zuerst, weil er das Recht
-   ohnehin hat und die hoehere Zahl bekommen soll. */
+   ohnehin hat und die hoehere Zahl bekommen soll.
+   SEIT 13.09.2026 AN ROLLE UND RANG (ENNO 07.09.2026: "Menge von
+   erstellbaren Befehlen an Rolle und Rang koppeln"): traegt eine meiner
+   Rollen grenze[art], gilt das Hoechste davon; 0 heisst wie in
+   markenGrenzen "keine Grenze". Ohne gesetzte Grenze wie bisher ueber das
+   Recht bestaetigen, und meta:regeln bleibt darunter der Rueckfall. */
 function markenGrenzeFuerMich(art){
   const g = markenGrenzen(art);
   if (!g) return 0;
-  return istLeader() ? g.leiter : darf("bestaetigen") ? g.fuehrung : g.grund;
+  if (istLeader()) return g.leiter;
+  let max = null;
+  for (const r of meineRollen()){
+    const w = r.grenze && r.grenze[art];
+    if (w === null || w === undefined || w === "") continue;
+    const n = Math.round(+w);
+    if (!Number.isFinite(n) || n < 0 || n > 999) continue;
+    max = max === null ? n : Math.max(max, n);
+  }
+  if (max !== null) return max;
+  return darf("bestaetigen") ? g.fuehrung : g.grund;
 }
 function darfIchNochMalen(art){
   /* OHNE ANSCHLUSS KEINE GRENZE. Sie schuetzt den geteilten Raum; im
@@ -4996,8 +5016,14 @@ function setLeader(player){ stamp("meta", "leader", player || null); save(); kop
    Der Leiter legt sie selbst an, weil kein Satz von mir zu jedem Clan passt.
    Was ein Rang darf, steht als Haekchenliste daran - und die Rechte sind
    bewusst die, bei denen Unfug teuer wird: Befehle geben, fremde Marken
-   loeschen, Hilfe rufen, die Fraktion umstellen. Wer eine Kampfeinheit hat,
-   braucht keinen Rang, der Grossoffensiven befiehlt. */
+   loeschen, Staedte anmalen, Raenge vergeben. Wer eine Kampfeinheit hat,
+   braucht keinen Rang, der Grossoffensiven befiehlt.
+   "hilfe" (Call for help) fiel am 13.09.2026 mit dem Reiter Requests
+   (ENNO 07.09.2026: "Nein Requests kann ganz raus als Unterreiter"); ein
+   alter Haken in meta:rollen bleibt stehen, niemand liest ihn mehr.
+   "pinsel" und "befoerdern" kamen am selben Tag (ENNO 01.09.2026:
+   "Pinseltool ... muss in rechtearchitektur des Clans integriert werden";
+   ENNO 07.09.2026: "Befoerderung durch Leader/autorisierte Offiziere"). */
 const RECHTE = [
   {k:"befehl",      n:"Give orders",
    d:"May set their own arrows, lines, areas and para blocks active or done."},
@@ -5005,16 +5031,18 @@ const RECHTE = [
    d:"May set any order of our side active, done or back to planned."},
   {k:"loeschen",    n:"Clear other people's marks",
    d:"Take anybody's arrow, line, area or board post off the map."},
-  {k:"hilfe",       n:"Call for help",
-   d:"Post a request that shows up clan-wide as a call for help."},
   {k:"anfordern",   n:"Request roles",
    d:"Ask the clan for roles or equipment in a running battle."},
   {k:"operationen", n:"Plan operations",
    d:"Link orders into operations, other people's orders included."},
+  {k:"befoerdern",  n:"Promote",
+   d:"Give and take ranks."},
   {k:"brett",       n:"Write on the board",
    d:"Leave written orders and notes for everyone."},
   {k:"aufklaerung", n:"File intel",
    d:"Record sightings and what the other side is holding."},
+  {k:"pinsel",      n:"Paint",
+   d:"Colour towns with the brush."},
 ];
 /* Was NICHT in dieser Liste steht, laesst sich auch nicht verteilen: wer der
    Leiter ist, welche Raenge es gibt, welche Seite der Clan spielt, und wann
@@ -5036,12 +5064,45 @@ const RECHTE = [
    Mitgliedertabelle (warmap_member.rolle = "leiter", geprueft von
    warmap_fuehrt), ausserhalb dessen, was sie regiert. */
 const RECHT_NAME = Object.fromEntries(RECHTE.map(r => [r.k, r.n]));
-/* Nur ein Anfang, damit die Liste nicht leer dasteht. Der Leiter schreibt sie um. */
+/* Nur ein Anfang, damit die Liste nicht leer dasteht. Der Leiter schreibt sie um.
+   SEIT 13.09.2026 SEIN MODELL (ENNO 07.09.2026): "Soldat nur ausfuehren von
+   Befehlen am Anfang / Offizier erstellen von Befehlen / General erstellen
+   von Operationen", "Mit rangaufstieg ... auch Aufklaerung der Karte".
+   Ein Eintrag je Rang: von = Gruppe, rang = Nummer (rangTitel haengt sie
+   roemisch an den Namen). grenze = Marken je Art fuer diese Rolle
+   (markenGrenzeFuerMich); ab = Punktschwelle, nur gespeichert, nichts
+   befoerdert von selbst. Die ids mem/sqd/off sind die alten - meta:rang
+   und der Server-Rueckfall 'mem' laufen weiter. Hoechste zuerst, weil
+   standardRang ohne Treffer den LETZTEN nimmt, und das muss Soldier I sein.
+   Grenzen: 10 ist sein "eher so 10" (ENNO 08.09.2026), 25 fuer den General
+   die FABLE-Vorgabe vom 11.09., ENNO 12.09.2026: "ja das passt so erstmal".
+   Der Server traegt dieselbe Liste als Rueckfall in warmap_darf. */
 const ROLLEN_VORGABE = [
-  {id:"off", name:"Officer", rechte:{befehl:1,bestaetigen:1,loeschen:1,hilfe:1,anfordern:1,operationen:1,brett:1,aufklaerung:1}},
-  {id:"sqd", name:"Squad lead", rechte:{hilfe:1,brett:1,aufklaerung:1}},
-  {id:"mem", name:"Member", rechte:{brett:1,aufklaerung:1}},
+  {id:"gen", name:"General", rechte:{befehl:1,bestaetigen:1,loeschen:1,anfordern:1,operationen:1,befoerdern:1,brett:1,aufklaerung:1,pinsel:1},
+   grenze:{arrow:25, line:25, area:20}},
+  {id:"off", name:"Officer", rechte:{befehl:1,bestaetigen:1,loeschen:1,anfordern:1,brett:1,aufklaerung:1,pinsel:1},
+   grenze:{arrow:10, line:15, area:10}},
+  {id:"sqd", name:"Soldier", von:"sol", rang:2, rechte:{brett:1,aufklaerung:1},
+   grenze:{arrow:10, line:15, area:10}},
+  {id:"mem", name:"Soldier", von:"sol", rang:1, rechte:{brett:1},
+   grenze:{arrow:10, line:15, area:10}},
 ];
+/* Eine Kopie fuer den Editor - die Vorgabe selbst bleibt unberuehrt. */
+const rollenVorgabe = () => ROLLEN_VORGABE.map(r => ({...r, rechte:{...r.rechte}, grenze:{...r.grenze}}));
+const roemischeZahl = n => {
+  n = Math.round(+n);
+  if (!(n > 0) || n > 3999) return "";
+  let aus = "";
+  for (const [w, z] of [[1000,"M"],[900,"CM"],[500,"D"],[400,"CD"],[100,"C"],[90,"XC"],
+                        [50,"L"],[40,"XL"],[10,"X"],[9,"IX"],[5,"V"],[4,"IV"],[1,"I"]])
+    while (n >= w){ aus += z; n -= w; }
+  return aus;
+};
+/* Der Name, wie er ueberall steht: mit Rangzahl ("Soldier I"), ohne rang nur der Name. */
+const rangTitel = r => {
+  const z = r && r.rang ? roemischeZahl(r.rang) : "";
+  return z ? `${r.name} ${z}` : (r && r.name) || "";
+};
 const rollenListe = () => {
   const e = S.meta.rollen && S.meta.rollen.v;
   return Array.isArray(e) && e.length ? e : ROLLEN_VORGABE;
@@ -5067,7 +5128,7 @@ const rangNamen = player => {
   /* Ohne benannten Leiter fuehrt der Verwalter - dann soll oben auch nicht
      "Member" stehen, waehrend man alles darf. */
   if (leaderId() ? player === leaderId() : (player === S.me && istLeader())) return ["Leader"];
-  return rollenVon(player).map(r => r.name);
+  return rollenVon(player).map(rangTitel);
 };
 /* Darf ich das? Der Leiter immer, sonst muss es an einem meiner Raenge
    haengen. Ohne Anschluss sitzt man allein am eigenen Rechner - da gibt es
@@ -5075,16 +5136,26 @@ const rangNamen = player => {
 function darf(recht){
   if (!CFG) return true;
   if (istLeader()) return true;
+  /* PAINT FOLLOWS FILE INTEL until the leader ticks it: a role list saved
+     before the right existed (13.09.2026) knows no "pinsel" field, and the
+     brush must not go leader-only overnight. FABLE 11.09.2026 to ENNO:
+     "bis du es dort setzt, startet Paint bei denselben Rollen wie
+     Aufklaerung". The moment any role in the list carries the field, the
+     tick decides. */
+  if (recht === "pinsel" && !rollenKennt("pinsel")) recht = "aufklaerung";
   for (const r of meineRollen()) if (r.rechte && r.rechte[recht]) return true;
   return false;
 }
+/* does any role of the clan's list mention this right at all (ticked or not)? */
+const rollenKennt = recht => rollenListe().some(r => r.rechte && Object.prototype.hasOwnProperty.call(r.rechte, recht));
 /* Ein ehrliches Wort dazu, wenn etwas nicht geht - "das darfst du nicht" ohne
    zu sagen, wer es darf, ist die nutzloseste Meldung von allen. */
 /* Der Satz steht hier und nur hier. Er wird an zwei Arten gebraucht: NACH
    einem Klick als Meldung (darfNicht), und VORHER als Beschriftung an einem
    gesperrten Knopf. Zweimal derselbe Text waere zweimal zu pflegen. */
 function rechtSatz(recht){
-  const wer = rollenListe().filter(r => r.rechte && r.rechte[recht]).map(r => r.name);
+  if (recht === "pinsel" && !rollenKennt("pinsel")) recht = "aufklaerung";   // see darf()
+  const wer = rollenListe().filter(r => r.rechte && r.rechte[recht]).map(rangTitel);
   /* Die Rechtenamen sind TAETIGKEITEN ("Give orders", "File intel"). Sie
      gehoeren ans Ende des Satzes und klein geschrieben - vorne ergaeben sie
      "Give orders is not yours to do", und das ist kein Englisch.
@@ -13086,11 +13157,10 @@ function paraZiele(gegen){
 const allPara = () => Object.keys(S.para).filter(i => imKrieg(S.para[i]) && S.para[i].v)
   .map(i => ({town:+i, ...S.para[i].v, t:S.para[i].t, by:S.para[i].n || S.para[i].by}));
 function addPost(text, town, prio, req){
-  /* Schreiben darf, wer einen Rang mit diesem Recht hat. Der Hilferuf ist
-     davon noch einmal getrennt: er geht dem ganzen Clan an, und wer eine
-     einzelne Kampfeinheit fuehrt, soll damit nicht die halbe Front rufen. */
+  /* Schreiben darf, wer einen Rang mit diesem Recht hat. Das Recht "hilfe"
+     fuer req fiel am 13.09.2026 mit dem Reiter Requests; req bleibt am Post
+     als Kennzeichen. */
   if (!darf("brett")){ darfNicht("brett"); return false; }
-  if (req && !darf("hilfe")){ darfNicht("hilfe"); return false; }
   const id = Math.random().toString(36).slice(2,10);
   const k = `${id}:${S.me}`;
   S.post[k] = {v: {text, town, prio, req: !!req}, t: jetzt(), by: S.me, n: S.name || ""};
@@ -14365,7 +14435,7 @@ document.addEventListener("keydown", e => {
    ab; sein Hinweistext sagt es dann auch. */
 const WERKZEUG_RECHT = {
   owner:  "aufklaerung",   // wem eine Stadt gehoert
-  brush:  "aufklaerung",   // dasselbe, nur viele auf einmal
+  brush:  "pinsel",        // ENNO 01.09.2026: der Pinsel gehoert in die Rechte des Clans
   battle: "aufklaerung",   // hier wird gekaempft
   spot:   "aufklaerung",   // Feindsichtung - ohne das Recht ohne Zweck
 };
@@ -24434,6 +24504,7 @@ async function kbSchwebeAuf(){
     <div class="kb-knoepfe">
       <button class="rd-schalter" id="kb-schwebe-sichtbar" title="Tick every line that stands in the part of the bar you see right now">\u2610 visible part</button>
       <button class="rd-schalter" id="kb-schwebe-bestaetigen" title="Lock name, owner and type of the line under the frame">\u2713 confirm</button>
+      <button class="rd-schalter" id="kb-schwebe-platz" title="Placeholders for the numbers below this unit">\u2026 placeholders</button>
       <button class="rd-schalter" id="kb-schwebe-vorrueckt" title="When on, stepping to the next card locks the line just left">advancing confirms</button>
       <button class="rd-schalter" id="kb-schwebe-abweg" hidden title="A unit left the bar and the tool cannot say which one. Nothing is read until this is cleared.">! unit left — understood</button>
     </div>`;
@@ -24443,6 +24514,7 @@ async function kbSchwebeAuf(){
     kbHakenAlle(KB.zeilen.filter(u => u.i >= von && u.i <= bis && !u.fort));
   });
   doc.getElementById("kb-schwebe-bestaetigen").addEventListener("click", ()=>{ const i = kbWahl(); if (i !== null && i !== undefined) kbBestaetigen(i); });
+  doc.getElementById("kb-schwebe-platz").addEventListener("click", ()=>{ const i = kbWahl(); if (i !== null && i !== undefined) kbPlatzhalter(i); });
   doc.getElementById("kb-schwebe-vorrueckt").addEventListener("click", ()=>{ kbVorruecktSetzen(!kbVorrueckt); });
   doc.getElementById("kb-schwebe-abweg").addEventListener("click", ()=>{
     if (!KB) return;
@@ -24519,6 +24591,7 @@ function kbSchwebeZeichnen(){
   if (jf.innerHTML !== soll) jf.innerHTML = soll;
   const vb = doc.getElementById("kb-schwebe-vorrueckt"); if (vb) vb.classList.toggle("an", kbVorrueckt);
   const bb = doc.getElementById("kb-schwebe-bestaetigen"); if (bb) bb.disabled = !z || z.status !== "erfasst" || z.eigen;
+  const pb = doc.getElementById("kb-schwebe-platz"); if (pb) pb.disabled = !z || z.status !== "erfasst" || z.eigen;
 }
 /* CONFIRM: name, owner and type of one line locked by hand - one line only,
    unlike kbFrieren, which spreads to every ticked line */
@@ -24529,10 +24602,56 @@ function kbBestaetigen(i){
   KB.status = `Line ${i + 1} confirmed - name, owner and type locked.`;
   kbZeichnen();
 }
+/* PLACEHOLDERS ON REQUEST. The numbering postulate in kbBehalten fills the
+   numbers below a TAG on its own; a number at the end of a NAME
+   ("XXL-Schnitzel 3") it never reads, because there the tool cannot tell a
+   numbering from a name. He can - ENNO 12.09.2026: "da der Nutzer selbst am
+   besten einschaetzen kann, ob die enthaltene Zahl nur Quatsch bzw. Teil
+   des namens ist, oder hier eine Nummernfolge erahnt werden kann." So this
+   runs only when asked: the fourth registered key (Alt+Down) or the button
+   in the floating strip, for the line under the frame. The number comes
+   from the tag, else from the name; every number below it that the owner's
+   book lacks gets a record as the postulate writes it - ung:1, verm:1,
+   infantry - through setFeindTeil: an assumption is no find. What is on
+   file already, real or placeholder, is never touched. The line itself is
+   not saved; that stays with Keep. Same limits as the postulate: nothing
+   above AT_NUMMER_MAX, no more than AT_LUECKEN_MAX gaps. FABLE 13.09.2026 */
+function kbPlatzhalter(i){
+  const z = KB && KB.zeilen[i];
+  if (!z || z.status !== "erfasst"){ toast("No unit read yet."); return; }
+  if (z.eigen){ toast("Own unit - no placeholders."); return; }
+  if (!z.besitzer){ toast("No owner on this line."); return; }
+  if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return; }
+  /* the tag as Keep files it - no blanks, upper case - or "ussr-003" would
+     miss the "USSR-001" on file and double it */
+  const tag = String(z.tag || "").replace(/\s+/g, "").toUpperCase();
+  const imTag = atNummer(tag), n = imTag || atNummer(z.name);
+  if (!n){ toast("No number in name or tag."); return; }
+  if (n.zahl < 2){ toast("Nothing before 1."); return; }
+  if (n.zahl > AT_NUMMER_MAX){ toast(`Above ${AT_NUMMER_MAX} - no placeholders.`); return; }
+  const key = spielerKey(z.besitzer), dep = feindDepot(key);
+  const da = new Set();
+  for (const d of dep){
+    /* both fields count: a number filed as a tag must not be filed again
+       as a name (Skeptiker HANDWERK, 13.09.2026) */
+    for (const q of [atNummer(d.tag), atNummer(d.name)])
+      if (q && q.stamm === n.stamm) da.add(q.zahl);
+  }
+  const fehlt = [];
+  for (let k = 1; k < n.zahl; k++)
+    if (!da.has(k)) fehlt.push(n.stamm + String(k).padStart(n.stellen, "0"));
+  if (!fehlt.length){ toast(`Nothing missing below ${imTag ? tag : String(z.name).trim()}.`); return; }
+  if (fehlt.length > AT_LUECKEN_MAX){ toast(`More than ${AT_LUECKEN_MAX} gaps - not filled.`); return; }
+  const neu = fehlt.map(t => Object.assign({id: Math.random().toString(36).slice(2,9), k: "infantry", ung: 1, verm: 1},
+                                           imTag ? {name: "", tag: t} : {name: t, tag: ""}));
+  setFeindTeil(key, {v: dep.concat(neu)});
+  toast(`${neu.length} placeholder${neu.length === 1 ? "" : "s"} added for ${n.stamm.trim()}`);
+}
 /* REGISTERED SHORTCUTS from the small browser extension (erweiterung/):
-   Ctrl+Shift+1 confirms the shown unit, 2 steps one unit back, 3 one
-   forward. The browser registers the keys and the extension forwards them
-   as a window message; nothing here reads keys, nothing reaches the game. */
+   Alt+Up confirms the shown unit, Alt+Left steps one unit back, Alt+Right
+   one forward, Alt+Down adds placeholders for the numbers below it. The
+   browser registers the keys and the extension forwards them as a window
+   message; nothing here reads keys, nothing reaches the game. */
 window.addEventListener("message", ev => {
   const m = ev.data;
   if (!m || m.hng !== "taste" || ev.source !== window) return;
@@ -24545,6 +24664,9 @@ window.addEventListener("message", ev => {
     kbHandSetzen(Math.max(0, (i === null ? 1 : i) - 1), true); kbZeichnen();
   } else if (m.was === "vor"){
     kbHandSetzen(Math.min(KB.N - 1, (i === null ? -1 : i) + 1), true); kbZeichnen();
+  } else if (m.was === "platzhalter"){
+    if (i === null) toast("No unit picked yet.");
+    else kbPlatzhalter(i);
   }
 });
 function kbVorruecktSetzen(an){
@@ -44961,8 +45083,20 @@ function leuteZeichnen(liste){
   const feld = document.getElementById("cl-people");
   if (!feld) return;
   const R = rollenListe(), darfRollen = istLeader(), verwalter = istAdmin();
+  /* Raenge vergeben darf neben dem Leiter, wer das Recht befoerdern traegt
+     (ENNO 07.09.2026: "Befoerderung durch Leader/autorisierte Offiziere").
+     Der Server laesst meta:rang fuer dieselben durch. 13.09.2026 */
+  const darfBefoerdern = darfRollen || darf("befoerdern");
   const mein = wunschVon(S.me) || {text:"", zweige:[]};
   const teamsVon = p => { const d = depotIdx.get(p); return d ? d.list.length : 0; };
+  /* Die Zahlenfelder einer Rolle (rank, arrows, lines, areas, promote at):
+     leer heisst kein Rang / Vorgabe / nur von Hand. */
+  const g  = r => r.grenze || {};
+  const rz = (r, k, w) => `<input type="number" class="mini" data-rz="${esc(r.id)}" data-rzk="${k}"
+      value="${w === null || w === undefined ? "" : esc(String(w))}" min="0" max="${k === "ab" ? 999999 : k === "rang" ? 99 : 999}"
+      style="width:${k === "ab" ? 64 : 44}px;font-size:11px">`;
+  const grenzeText = r => ["arrow", "line", "area"].filter(k => g(r)[k] !== undefined && g(r)[k] !== null)
+      .map(k => `${MARKEN_WORT[k]} ${esc(String(g(r)[k]))}`).join(" · ");
 
   feld.innerHTML = `
     <div class="sec">
@@ -45000,10 +45134,22 @@ function leuteZeichnen(liste){
               ${darfRollen
                 ? `<input type="text" class="mini" data-rname="${esc(r.id)}" value="${esc(r.name)}"
                      maxlength="24" style="font-size:12px;flex:1">`
-                : `<b style="flex:1;font-size:12.5px">${esc(r.name)}</b>`}
+                : `<b style="flex:1;font-size:12.5px">${esc(rangTitel(r))}</b>`}
               ${darfRollen ? `<button class="btn" data-rweg="${esc(r.id)}"
                   style="font-size:10.5px;padding:2px 7px">Remove</button>` : ""}
             </div>
+            ${darfRollen
+              ? `<div class="row" style="align-items:center;gap:5px;flex-wrap:wrap;margin-top:4px;
+                     font-size:11px;color:var(--dim)">
+                  rank ${rz(r, "rang", r.rang)} group <input type="text" class="mini" data-rz="${esc(r.id)}"
+                    data-rzk="von" value="${esc(r.von || "")}" maxlength="12" style="width:56px;font-size:11px">
+                  <span style="margin-left:6px">arrows ${rz(r, "arrow", g(r).arrow)} lines ${rz(r, "line", g(r).line)}
+                    areas ${rz(r, "area", g(r).area)}</span>
+                  <span style="margin-left:6px">promote at ${rz(r, "ab", r.ab)} points</span>
+                </div>`
+              : (grenzeText(r)
+                  ? `<div style="font-size:11px;color:var(--dim);margin-top:3px">${grenzeText(r)}</div>`
+                  : "")}
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));
                  gap:2px 10px;margin-top:5px">
               ${RECHTE.map(x => `
@@ -45019,7 +45165,10 @@ function leuteZeichnen(liste){
         <button class="btn" id="lp-neu-go">Add rank</button>
         <span style="font-size:11px;color:var(--dim);margin-left:8px">Everyone without a rank counts as</span>
         <select id="lp-std">${R.map(r=>`<option value="${esc(r.id)}"
-          ${r.id===(standardRang()||{}).id?"selected":""}>${esc(r.name)}</option>`).join("")}</select>
+          ${r.id===(standardRang()||{}).id?"selected":""}>${esc(rangTitel(r))}</option>`).join("")}</select>
+      </div>
+      <div class="row" style="align-items:center;margin-top:7px">
+        <button class="btn" id="lp-vorlage">Use the Soldier / Officer / General template</button>
       </div>` : ""}
     </div>
 
@@ -45036,11 +45185,11 @@ function leuteZeichnen(liste){
               ${m.approved===false?` <span style="color:var(--su);font-size:10px">locked</span>`:""}</td>
             <td style="text-align:left">${fuehrt
               ? `<b style="color:var(--accent)">Leader</b>`
-              : (darfRollen
+              : (darfBefoerdern
                  ? `<select data-rangfuer="${esc(m.player)}" style="font-size:11px">
-                      <option value="">— ${esc((standardRang()||{name:"none"}).name)} —</option>
+                      <option value="">— ${esc(standardRang() ? rangTitel(standardRang()) : "none")} —</option>
                       ${R.map(r=>`<option value="${esc(r.id)}" ${r.id===ist?"selected":""}
-                        >${esc(r.name)}</option>`).join("")}</select>`
+                        >${esc(rangTitel(r))}</option>`).join("")}</select>`
                  : esc(rangNamen(m.player).join(", ") || "—"))}</td>
             <td>${teamsVon(m.player) || "—"}</td>
             <td style="text-align:left;font-size:11.5px;color:var(--dim)">${
@@ -45078,6 +45227,35 @@ function leuteZeichnen(liste){
     r.name = i.value.trim().slice(0,24) || r.name;
     setRollen(L); leuteZeichnen();
   }));
+  /* rank / group / arrows / lines / areas / promote at - je Rolle ein Feld,
+     leer nimmt das Feld aus der Zeile. Grenzen 0..999 (0 = keine Grenze,
+     wie markenGrenzen), rank 1..99, promote at 1..999999. 13.09.2026 */
+  feld.querySelectorAll("[data-rz]").forEach(i => i.addEventListener("change", ()=>{
+    const L = rollenListe().map(r => ({...r}));
+    const r = L.find(x => x.id === i.dataset.rz);
+    if (!r) return;
+    r.grenze = {...(r.grenze || {})};         // only this role gets a copy
+    const k = i.dataset.rzk, w = i.value.trim();
+    if (k === "von"){ if (w) r.von = w.slice(0, 12); else delete r.von; }
+    else {
+      const n = w === "" ? null : Math.round(+w);
+      const ok = n !== null && Number.isFinite(n);
+      if (MARKEN_GRENZE[k]){ if (ok && n >= 0 && n <= 999) r.grenze[k] = n; else delete r.grenze[k]; }
+      else if (ok && n >= 1 && n <= (k === "ab" ? 999999 : 99)) r[k] = n;
+      else delete r[k];
+    }
+    if (!Object.keys(r.grenze).length) delete r.grenze;
+    setRollen(L); leuteZeichnen();
+  }));
+  /* Die Vorlage ersetzt nur die Liste. Wer einen Rang haelt, dessen id es
+     danach noch gibt (mem/sqd/off), behaelt ihn; meta:rang und
+     meta:standrang werden nicht angefasst. 13.09.2026 */
+  document.getElementById("lp-vorlage")?.addEventListener("click", ()=>{
+    if (!confirm("Replace the rank list with the template (Soldier I, Soldier II, Officer, General)?")) return;
+    setRollen(rollenVorgabe());
+    leuteZeichnen();
+    toast("Template in place");
+  });
   feld.querySelectorAll("[data-rweg]").forEach(b => b.addEventListener("click", ()=>{
     const id = b.dataset.rweg, L = rollenListe();
     if (L.length <= 1){ toast("There has to be one rank left."); return; }
@@ -46650,7 +46828,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0a24892bb8</span></p></div>
+         installation. <span style="color:var(--dim2)">· build f76ebd7349</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -46878,7 +47056,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0a24892bb8";
+const BAU = "f76ebd7349";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort

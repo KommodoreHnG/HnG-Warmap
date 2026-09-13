@@ -1,10 +1,10 @@
-index.html
-  Bau       0a24892bb8
-  SHA-256   908baa03779c97fe8a01cd17efa800b21aa635f62560d437f64391fed47578ab
-  Groesse   3479584 Bytes
+lagekarte.html
+  Bau       f76ebd7349
+  SHA-256   9b4f8e61086fa7a58db0251b5c2fec341bf3f15c3be704738b0ebcc1dac35b03
+  Groesse   3490619 Bytes
 
 Selbst nachbauen:  python karte_bauen.py
-Nachrechnen:       certutil -hashfile index.html SHA256
+Nachrechnen:       certutil -hashfile lagekarte.html SHA256
 
 Stimmen beide ueberein, ist die ausgelieferte Seite die aus
 dem Quelltext - und niemand hat unterwegs etwas eingebaut.
