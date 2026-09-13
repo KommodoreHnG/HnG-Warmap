@@ -4488,6 +4488,11 @@ function darfIchSchieben(bucket, id){
   /* meta:rang schreibt auch, wer befoerdern darf (Server: derselbe Zweig
      vor meta:%); der Pinsel malt owner mit dem Recht pinsel (Server:
      owner:% aufklaerung or pinsel). Beides 13.09.2026. */
+  /* meta:rangauto is the server's row alone (promoted by points,
+     13.09.2026): the page never pushes it - not even the leader's local
+     copy on the first connect (syncStart, !offenGeladen), which would turn
+     a promotion back to whatever the browser kept. */
+  if (bucket === "meta" && id === "rangauto") return false;
   if (v.recht === "meta") return istLeader() || istAdmin()
     || (bucket === "meta" && id === "rang" && darf("befoerdern"));
   if (bucket === "owner" && darf("pinsel")) return true;
@@ -5032,6 +5037,23 @@ function setClanBefehl(txt){
    gehoert. Solange niemand zum Leiter bestimmt wurde, fuehrt der Verwalter:
    sonst koennte den ersten Leiter niemand ernennen. */
 const istAdmin  = () => !CFG || !!CFG.admin;
+/* ---- A third office: the OPERATOR (Betreiber), 13.09.2026 (PKT-3 Teil B).
+   ENNO 05.09.2026: "die Standardrechte sollte ich als Admin idealerweise
+   im Tool selber setzen koennen, damit das nicht streng ueber den Code
+   laufen muss." is_admin is per room - a second clan would have an admin
+   of its own, and he must not rewrite what holds for every clan. So ONE
+   account, named on the server (row _vorgabe / meta:betreiber), sets the
+   default rank list for all. The server decides (warmap_ist_betreiber);
+   this flag only says whether War settings shows the section. Asked once
+   after sign-in, and only for an admin. FABLE assumption, question F1 on
+   the answer sheet. */
+const istBetreiber = () => !!(CFG && CFG.betreiber);
+async function betreiberPruefen(){
+  if (!CFG) return;
+  CFG.betreiber = false;
+  if (!CFG.admin || !CFG.code) return;
+  try { CFG.betreiber = (await rpc("warmap_ist_betreiber")) === true; } catch(e){}
+}
 const leaderId  = () => (S.meta.leader && S.meta.leader.v) || null;
 /* Wer fuehrt, sagt der SERVER - er traegt die Stellung an der Person.
    Frueher stand sie als Datenzeile in der Karte, und wenn dort nichts
@@ -5105,10 +5127,13 @@ const RECHT_NAME = Object.fromEntries(RECHTE.map(r => [r.k, r.n]));
    von Operationen", "Mit rangaufstieg ... auch Aufklaerung der Karte".
    Ein Eintrag je Rang: von = Gruppe, rang = Nummer (rangTitel haengt sie
    roemisch an den Namen). grenze = Marken je Art fuer diese Rolle
-   (markenGrenzeFuerMich); ab = Punktschwelle, nur gespeichert, nichts
-   befoerdert von selbst. Die ids mem/sqd/off sind die alten - meta:rang
-   und der Server-Rueckfall 'mem' laufen weiter. Hoechste zuerst, weil
-   standardRang ohne Treffer den LETZTEN nimmt, und das muss Soldier I sein.
+   (markenGrenzeFuerMich); ab = Punktschwelle - seit Teil B (13.09.2026)
+   befoerdert der SERVER danach von selbst (meta:rangauto, siehe rangAuto;
+   Ausloeser warmap_befoerdern auf warmap_punkte, nur aus der eigenen Liste
+   des Clans). Die ids mem/sqd/off sind die alten - meta:rang laeuft
+   weiter. Hoechste zuerst, weil standardRang ohne Treffer den LETZTEN
+   nimmt, und das muss Soldier I sein; der Server laeuft seit Teil B
+   dieselben Stufen (standrang, "mem", letzter - siehe standardIn).
    Grenzen: 10 ist sein "eher so 10" (ENNO 08.09.2026), 25 fuer den General
    die FABLE-Vorgabe vom 11.09., ENNO 12.09.2026: "ja das passt so erstmal".
    Der Server traegt dieselbe Liste als Rueckfall in warmap_darf. */
@@ -5122,8 +5147,43 @@ const ROLLEN_VORGABE = [
   {id:"mem", name:"Soldier", von:"sol", rang:1, rechte:{brett:1},
    grenze:{arrow:10, line:15, area:10}},
 ];
-/* Eine Kopie fuer den Editor - die Vorgabe selbst bleibt unberuehrt. */
-const rollenVorgabe = () => ROLLEN_VORGABE.map(r => ({...r, rechte:{...r.rechte}, grenze:{...r.grenze}}));
+/* ---- THE ADMIN'S DEFAULT FOR EVERY CLAN (PKT-3 Teil B, 13.09.2026) ----
+   ENNO 05.09.2026: "die Standardrechte sollte ich als Admin idealerweise im
+   Tool selber setzen koennen ... Aber jeder Clanleader kann das letztlich
+   selber entscheiden." The row _vorgabe / meta:rollen on the server, read
+   through warmap_vorgabe_rollen after sign-in and whenever the People tab
+   opens; null until the operator saves one. The chain: the clan's own
+   meta:rollen, then this, then ROLLEN_VORGABE in the code - the server
+   walks the same chain (warmap_rollen_liste). The page writes it only
+   through the operator's editor in War settings (warmap_vorgabe_setzen).
+   The sync never brings it: the pull reads the clan's room only, and
+   _vorgabe has no member. */
+let VORGABE_SERVER = null;
+const vorgabeGueltig = v => Array.isArray(v) && v.length > 0
+  && v.every(r => r && typeof r === "object" && typeof r.id === "string" && r.id !== ""
+                  && typeof r.name === "string");
+function vorgabeUebernehmen(neu){
+  neu = vorgabeGueltig(neu) ? neu : null;
+  if (JSON.stringify(neu) === JSON.stringify(VORGABE_SERVER)) return;
+  VORGABE_SERVER = neu;
+  /* a clan without a list of its own now reads a different one */
+  if (!(S.meta.rollen && Array.isArray(S.meta.rollen.v) && S.meta.rollen.v.length)){
+    try { werkzeugeAuffrischen(); kraftLeiste(); } catch(e){}
+  }
+}
+/* Silent on failure: what was read last stays - on a fresh page that is the
+   code. A dropped connection must not throw a default away. */
+async function vorgabeLaden(){
+  if (!CFG || !CFG.code) return;
+  try { vorgabeUebernehmen(await rpc("warmap_vorgabe_rollen")); } catch(e){}
+}
+/* A copy for the editor - the default itself stays untouched. Since
+   13.09.2026 the effective one: the operator's, else the list in the code. */
+const rollenVorgabe = () => (VORGABE_SERVER || ROLLEN_VORGABE).map(r => {
+  const k = {...r, rechte:{...(r.rechte || {})}};
+  if (r.grenze) k.grenze = {...r.grenze};
+  return k;
+});
 const roemischeZahl = n => {
   n = Math.round(+n);
   if (!(n > 0) || n > 3999) return "";
@@ -5140,9 +5200,31 @@ const rangTitel = r => {
 };
 const rollenListe = () => {
   const e = S.meta.rollen && S.meta.rollen.v;
-  return Array.isArray(e) && e.length ? e : ROLLEN_VORGABE;
+  if (Array.isArray(e) && e.length) return e;
+  return VORGABE_SERVER || ROLLEN_VORGABE;     // the operator's default, else the code (13.09.2026)
 };
 const rangKarte  = () => (S.meta.rang && S.meta.rang.v) || {};
+/* PROMOTED BY POINTS (PKT-14 Teil B, 13.09.2026). ENNO 07.09.2026:
+   "Raengeaufstieg entweder manuell durch Befoerderung durch Leader/
+   autorisierte Offiziere oder automatisch ueber unser Punktesystem."
+   The server does it, at the moment a point is booked (warmap_befoerdern):
+   whoever reaches "promote at N points" of a rank climbs to it, upward
+   only - and only from the clan's own list (FABLE: the leader sets the
+   thresholds). It writes its own row meta:rangauto ({player: id}) - never
+   meta:rang, which stays the hand's. Reading order: hand, then this, then
+   the default; so a rank set by hand stands, a demotion included, until the
+   leader clears it (question F4). This page never writes the row (see
+   darfIchSchieben). */
+const rangAuto   = () => (S.meta.rangauto && S.meta.rangauto.v) || {};
+/* where the rank on show comes from: "hand" (meta:rang), "auto"
+   (meta:rangauto) or "" (the default) */
+function rangQuelle(player){
+  const L = rollenListe(), ids = rangKarte()[player];
+  if (Array.isArray(ids) && ids.some(id => L.some(r => r.id === id))) return "hand";
+  return L.some(r => r.id === rangAuto()[player]) ? "auto" : "";
+}
+/* position of the effective rank in the list (0 = the top), -1 without */
+const rangStufe = player => { const r = rollenVon(player)[0]; return r ? rollenListe().indexOf(r) : -1; };
 /* THE SECOND AXIS (PKT-12). ENNO 07.09.2026: "Der Clanleader kann Spieler
    auch horizontal Raengen zuweisen, bspw. Ein Offizier, der den Schwerpunkt
    der Luftwaffenkoordination, Aufklaerung, Panzerwaffe, Fallschirmjaeger
@@ -5165,16 +5247,21 @@ const rangZeile = player => {
 };
 /* Wer keinen Rang zugeteilt bekommen hat, faellt auf diesen zurueck - sonst
    duerfte ein frisch Eingeladener gar nichts, nicht einmal aufs Brett. */
-const standardRang = () => {
-  const id = (S.meta.standrang && S.meta.standrang.v) || "mem";
-  const L = rollenListe();
-  return L.find(r => r.id === id) || L[L.length-1] || null;
-};
+/* The rank of everyone without one: meta:standrang, else "mem" - if the
+   list knows it; else the last entry. ONE rule for the clan (standardRang)
+   and for the operator's default (vorgabeDialog, no standrang row there);
+   the server walks the same steps (warmap_meine_raenge 6c/6d,
+   warmap_befoerdern). Word for word the rule since Teil A, 13.09.2026. */
+const standardIn = (L, id) => L.find(r => r.id === (id || "mem")) || L[L.length-1] || null;
+const standardRang = () => standardIn(rollenListe(), S.meta.standrang && S.meta.standrang.v);
 function rollenVon(player){
   const ids = rangKarte()[player];
   const L = rollenListe();
   const eigen = Array.isArray(ids) ? ids.map(id => L.find(r => r.id === id)).filter(Boolean) : [];
   if (eigen.length) return eigen;
+  /* promoted by points - an id the list does not know is read over */
+  const auto = L.find(r => r.id === rangAuto()[player]);
+  if (auto) return [auto];
   const s = standardRang();
   return s ? [s] : [];
 }
@@ -8559,9 +8646,11 @@ function rolleAnlegen(stadt, rolle, n, wunsch){
   /* anti-tank only where armour was reported (BEF-13); the dialog says it
      before, this holds for every other way in. A town nobody reported
      passes - unknown is not none (the assumption is marked at
-     panzerGemeldet). */
+     panzerGemeldet). The town goes in as a number, as the rest of this
+     function takes it - spotsAt compares strictly, and a string would read
+     as "not reported". */
   if (rolle === "at"){
-    const pz = panzerGemeldet(stadt);
+    const pz = panzerGemeldet(+stadt);
     if (pz && !pz.n){ toast(`No armour spotted at ${MAP.n[stadt][0]}.`); return false; }
   }
   /* a hand can ask for a few things, not for fifty: the same guard the
@@ -46719,7 +46808,9 @@ async function leuteFuellen(){
   if (!feld) return;
   let liste = null;
   if (CFG && CFG.code){
+    const vg = vorgabeLaden();           // the operator's default, alongside (13.09.2026)
     try { liste = await rpc("warmap_members"); } catch(e){ liste = null; }
+    await vg;
   }
   if (!document.getElementById("cl-people")) return;      // Fenster schon zu
   if (!liste){
@@ -46732,55 +46823,24 @@ async function leuteFuellen(){
                   || String(a.name||"").toLowerCase().localeCompare(String(b.name||"").toLowerCase()));
   leuteZeichnen(liste);
 }
-let leuteListe = [];
-function leuteZeichnen(liste){
-  leuteListe = liste || leuteListe;
-  const feld = document.getElementById("cl-people");
-  if (!feld) return;
-  const R = rollenListe(), darfRollen = istLeader(), verwalter = istAdmin();
-  /* Raenge vergeben darf neben dem Leiter, wer das Recht befoerdern traegt
-     (ENNO 07.09.2026: "Befoerderung durch Leader/autorisierte Offiziere").
-     Der Server laesst meta:rang fuer dieselben durch. 13.09.2026 */
-  const darfBefoerdern = darfRollen || darf("befoerdern");
-  const mein = wunschVon(S.me) || {text:"", zweige:[]};
-  const teamsVon = p => { const d = depotIdx.get(p); return d ? d.list.length : 0; };
-  /* Die Zahlenfelder einer Rolle (rank, arrows, lines, areas, promote at):
-     leer heisst kein Rang / Vorgabe / nur von Hand. */
+/* ---- THE RANK EDITOR, once for two windows (PKT-3 Teil B, 13.09.2026) ----
+   Clan -> People edits the clan's own list (meta:rollen, the leader's);
+   War settings edits the operator's default for every clan (a working
+   copy, sent to the server on Save). Same fields, same wiring, one place.
+   o = {liste(), schreibe(L), neu(), darf, std(id) | null, vorlage,
+        haelt(id) | undefined, rangWeg(id) | undefined}
+   Nothing in here writes for itself: schreibe decides where a change goes. */
+function rangEditorHtml(o){
+  const R = o.liste(), darfRollen = !!o.darf;
+  /* The number fields of a role (rank, arrows, lines, areas, promote at):
+     empty means no rank / the default / by hand only. */
   const g  = r => r.grenze || {};
   const rz = (r, k, w) => `<input type="number" class="mini" data-rz="${esc(r.id)}" data-rzk="${k}"
       value="${w === null || w === undefined ? "" : esc(String(w))}" min="0" max="${k === "ab" ? 999999 : k === "rang" ? 99 : 999}"
       style="width:${k === "ab" ? 64 : 44}px;font-size:11px">`;
   const grenzeText = r => ["arrow", "line", "area"].filter(k => g(r)[k] !== undefined && g(r)[k] !== null)
       .map(k => `${MARKEN_WORT[k]} ${esc(String(g(r)[k]))}`).join(" · ");
-
-  feld.innerHTML = `
-    <div class="sec">
-      <h3>Clan leader</h3>
-      ${leaderId()
-        ? `<div style="font-size:13px">Right now that is
-            <b style="color:var(--accent)">${esc((leuteListe.find(m=>m.player===leaderId())||{}).name
-              || leaderId())}</b>.</div>`
-        : `<div class="note" style="margin-top:0">Nobody has been named yet, so whoever runs the
-            map decides. Name a leader and that person decides instead.</div>`}
-      ${/* HIER STAND EINE AUSWAHL "Name the leader", die nichts bewirkte.
-           Sie schrieb nur eine Datenzeile, die der Server fuer kein
-           einziges Recht heranzieht - der Verwalter glaubte, den Clan
-           uebergeben zu haben, und behielt alle Fuehrungsrechte.
-           Der wirksame Weg ist "Make leader" im Mitgliederfenster: der
-           traegt die Fuehrung dort ein, wo der Server sie sucht.
-           Gemeldet am 01.09.: "Sinnlose Buttons brauchen wir grundsaetzlich
-           nicht. Den Leader setze ja ich wenn ich den Clanleader per Link
-           hinzufuege und dann seinen Antrag auf Clan bestaetige." */
-        verwalter && CFG && !leaderId()
-          ? `<div class="note" style="margin-top:6px">Nobody leads this clan yet. Open the member
-              list and use <b>Make leader</b> there.</div>`
-          : ""}
-    </div>
-
-    <div class="sec">
-      <h3>Ranks</h3>
-      ${darfRollen ? "" : `<div class="note" style="margin-top:0">Only the clan leader changes
-        these. Here is what they mean.</div>`}
+  return `
       <div style="display:flex;flex-direction:column;gap:6px">
         ${R.map(r => `
           <div style="background:var(--panel2);border-radius:2px;padding:7px 9px;
@@ -46818,13 +46878,142 @@ function leuteZeichnen(liste){
       ${darfRollen ? `<div class="row" style="align-items:center;margin-top:7px">
         <input type="text" id="lp-neu" placeholder="name of a new rank" style="flex:1" maxlength="24">
         <button class="btn" id="lp-neu-go">Add rank</button>
-        <span style="font-size:11px;color:var(--dim);margin-left:8px">Everyone without a rank counts as</span>
+        ${o.std ? `<span style="font-size:11px;color:var(--dim);margin-left:8px">Everyone without a rank counts as</span>
         <select id="lp-std">${R.map(r=>`<option value="${esc(r.id)}"
-          ${r.id===(standardRang()||{}).id?"selected":""}>${esc(rangTitel(r))}</option>`).join("")}</select>
+          ${r.id===(standardRang()||{}).id?"selected":""}>${esc(rangTitel(r))}</option>`).join("")}</select>` : ""}
       </div>
-      <div class="row" style="align-items:center;margin-top:7px">
-        <button class="btn" id="lp-vorlage">Use the Soldier / Officer / General template</button>
-      </div>` : ""}
+      ${o.vorlage ? `<div class="row" style="align-items:center;margin-top:7px">
+        <button class="btn" id="lp-vorlage">${VORGABE_SERVER
+          ? "Use the admin's template" : "Use the Soldier / Officer / General template"}</button>
+      </div>` : ""}` : ""}`;
+}
+function rangEditorVerdrahten(feld, o){
+  feld.querySelectorAll("[data-rid]").forEach(c => c.addEventListener("change", ()=>{
+    const L = o.liste().map(r => ({...r, rechte: {...(r.rechte||{})}}));
+    const r = L.find(x => x.id === c.dataset.rid);
+    if (!r) return;
+    if (c.checked) r.rechte[c.dataset.rk] = 1; else delete r.rechte[c.dataset.rk];
+    o.schreibe(L); o.neu();
+  }));
+  feld.querySelectorAll("[data-rname]").forEach(i => i.addEventListener("change", ()=>{
+    const L = o.liste().map(r => ({...r}));
+    const r = L.find(x => x.id === i.dataset.rname);
+    if (!r) return;
+    r.name = i.value.trim().slice(0,24) || r.name;
+    o.schreibe(L); o.neu();
+  }));
+  /* rank / group / arrows / lines / areas / promote at - one field per role;
+     empty takes the field out of the row. Limits 0..999 (0 = no limit, as
+     markenGrenzen), rank 1..99, promote at 1..999999. 13.09.2026 */
+  feld.querySelectorAll("[data-rz]").forEach(i => i.addEventListener("change", ()=>{
+    const L = o.liste().map(r => ({...r}));
+    const r = L.find(x => x.id === i.dataset.rz);
+    if (!r) return;
+    r.grenze = {...(r.grenze || {})};         // only this role gets a copy
+    const k = i.dataset.rzk, w = i.value.trim();
+    if (k === "von"){ if (w) r.von = w.slice(0, 12); else delete r.von; }
+    else {
+      const n = w === "" ? null : Math.round(+w);
+      const ok = n !== null && Number.isFinite(n);
+      if (MARKEN_GRENZE[k]){ if (ok && n >= 0 && n <= 999) r.grenze[k] = n; else delete r.grenze[k]; }
+      else if (ok && n >= 1 && n <= (k === "ab" ? 999999 : 99)) r[k] = n;
+      else delete r[k];
+    }
+    if (!Object.keys(r.grenze).length) delete r.grenze;
+    o.schreibe(L); o.neu();
+  }));
+  /* The template replaces the list only. Whoever holds a rank whose id still
+     exists afterwards (mem/sqd/off) keeps it; meta:rang and meta:standrang
+     are not touched. 13.09.2026. Since Teil B the template is the effective
+     default (the operator's, else the code), and the question names it. */
+  feld.querySelector("#lp-vorlage")?.addEventListener("click", ()=>{
+    const namen = rollenVorgabe().map(rangTitel).reverse().join(", ");
+    if (!confirm(`Replace the rank list with the template (${namen})?`)) return;
+    o.schreibe(rollenVorgabe());
+    o.neu();
+    toast("Template in place");
+  });
+  feld.querySelectorAll("[data-rweg]").forEach(b => b.addEventListener("click", ()=>{
+    const id = b.dataset.rweg, L = o.liste();
+    if (L.length <= 1){ toast("There has to be one rank left."); return; }
+    const wieviele = o.haelt ? o.haelt(id) : 0;
+    if (!confirm(`Remove this rank?${wieviele ? `\n\n${wieviele} ${wieviele===1
+      ? "person holds it and drops" : "people hold it and drop"} back to the default rank.` : ""}`)) return;
+    o.schreibe(L.filter(r => r.id !== id));
+    if (o.rangWeg) o.rangWeg(id);
+    o.neu();
+  }));
+  feld.querySelector("#lp-neu-go")?.addEventListener("click", ()=>{
+    const n = feld.querySelector("#lp-neu").value.trim();
+    if (n.length < 2){ toast("Give the rank a name first."); return; }
+    const id = "r" + Math.random().toString(36).slice(2,7);
+    o.schreibe(o.liste().concat([{id, name: n.slice(0,24), rechte:{brett:1,aufklaerung:1}}]));
+    o.neu();
+    toast(`${n} added — tick what it may do`);
+  });
+  if (o.std) feld.querySelector("#lp-std")?.addEventListener("change", ev => o.std(ev.target.value));
+}
+let leuteListe = [];
+function leuteZeichnen(liste){
+  leuteListe = liste || leuteListe;
+  const feld = document.getElementById("cl-people");
+  if (!feld) return;
+  const R = rollenListe(), darfRollen = istLeader(), verwalter = istAdmin();
+  /* Raenge vergeben darf neben dem Leiter, wer das Recht befoerdern traegt
+     (ENNO 07.09.2026: "Befoerderung durch Leader/autorisierte Offiziere").
+     Der Server laesst meta:rang fuer dieselben durch. 13.09.2026 */
+  const darfBefoerdern = darfRollen || darf("befoerdern");
+  const mein = wunschVon(S.me) || {text:"", zweige:[]};
+  const teamsVon = p => { const d = depotIdx.get(p); return d ? d.list.length : 0; };
+  /* the rank editor on the clan's own list (rangEditorHtml, 13.09.2026):
+     writes go to meta:rollen; removing a rank clears it from meta:rang
+     (the hand) only - a rangauto id nobody knows any more is read over.
+     "N people hold it" counts hand and points alike. */
+  const rangO = {
+    liste: rollenListe, schreibe: setRollen, neu: () => leuteZeichnen(),
+    darf: darfRollen, vorlage: true,
+    std: id => { stamp("meta", "standrang", id); save(); leuteZeichnen(); },
+    haelt: id => [...new Set([...Object.keys(rangKarte()), ...Object.keys(rangAuto())])]
+      .filter(p => rangQuelle(p) && rollenVon(p).some(r => r.id === id)).length,
+    rangWeg: id => {
+      const k = {};
+      for (const [p, ids] of Object.entries(rangKarte())){
+        const rest = (ids||[]).filter(x => x !== id);
+        if (rest.length) k[p] = rest;
+      }
+      stamp("meta", "rang", Object.keys(k).length ? k : null); save();
+    },
+  };
+
+  feld.innerHTML = `
+    <div class="sec">
+      <h3>Clan leader</h3>
+      ${leaderId()
+        ? `<div style="font-size:13px">Right now that is
+            <b style="color:var(--accent)">${esc((leuteListe.find(m=>m.player===leaderId())||{}).name
+              || leaderId())}</b>.</div>`
+        : `<div class="note" style="margin-top:0">Nobody has been named yet, so whoever runs the
+            map decides. Name a leader and that person decides instead.</div>`}
+      ${/* HIER STAND EINE AUSWAHL "Name the leader", die nichts bewirkte.
+           Sie schrieb nur eine Datenzeile, die der Server fuer kein
+           einziges Recht heranzieht - der Verwalter glaubte, den Clan
+           uebergeben zu haben, und behielt alle Fuehrungsrechte.
+           Der wirksame Weg ist "Make leader" im Mitgliederfenster: der
+           traegt die Fuehrung dort ein, wo der Server sie sucht.
+           Gemeldet am 01.09.: "Sinnlose Buttons brauchen wir grundsaetzlich
+           nicht. Den Leader setze ja ich wenn ich den Clanleader per Link
+           hinzufuege und dann seinen Antrag auf Clan bestaetige." */
+        verwalter && CFG && !leaderId()
+          ? `<div class="note" style="margin-top:6px">Nobody leads this clan yet. Open the member
+              list and use <b>Make leader</b> there.</div>`
+          : ""}
+    </div>
+
+    <div class="sec">
+      <h3>Ranks</h3>
+      ${darfRollen ? "" : `<div class="note" style="margin-top:0">Only the clan leader changes
+        these. Here is what they mean.</div>`}
+      ${rangEditorHtml(rangO)}
     </div>
 
     <div class="sec">
@@ -46833,7 +47022,10 @@ function leuteZeichnen(liste){
         <thead><tr><th>Name</th><th>Rank</th><th>Teams</th><th>Wants next war</th></tr></thead>
         <tbody>${leuteListe.map(m => {
           const w = wunschVon(m.player);
-          const ist = (rangKarte()[m.player] || [])[0] || "";
+          /* the EFFECTIVE rank: the hand's, else the one the points gave
+             (with a hint); the default stays the empty line (13.09.2026) */
+          const quelle = rangQuelle(m.player);
+          const ist = quelle ? rollenVon(m.player)[0].id : "";
           const fuehrt = m.player === leaderId();
           return `<tr${m.player===S.me?' class="me"':''}>
             <td>${statusPunkt(m.player)}${esc(m.name||m.player)}${m.player===S.me?" <em>you</em>":""}
@@ -46844,7 +47036,8 @@ function leuteZeichnen(liste){
                  ? `<select data-rangfuer="${esc(m.player)}" style="font-size:11px">
                       <option value="">— ${esc(standardRang() ? rangTitel(standardRang()) : "none")} —</option>
                       ${R.map(r=>`<option value="${esc(r.id)}" ${r.id===ist?"selected":""}
-                        >${esc(rangTitel(r))}</option>`).join("")}</select>${darfRollen
+                        >${esc(rangTitel(r))}</option>`).join("")}</select>${quelle === "auto"
+                    ? ` <span title="promoted by points" style="font-size:10px;color:var(--dim)">· points</span>` : ""}${darfRollen
                     ? ` <select data-fokusfuer="${esc(m.player)}" title="Focus" style="font-size:11px">
                         <option value="">— focus —</option>
                         ${ZWEIGWAHL.map(([k,n])=>`<option value="${k}" ${k===fokusVon(m.player)?"selected":""}>${esc(n)}</option>`).join("")}</select>`
@@ -46872,75 +47065,7 @@ function leuteZeichnen(liste){
     </div>`;
 
   /* ---- Verdrahtung ---- */
-  feld.querySelectorAll("[data-rid]").forEach(c => c.addEventListener("change", ()=>{
-    const L = rollenListe().map(r => ({...r, rechte: {...(r.rechte||{})}}));
-    const r = L.find(x => x.id === c.dataset.rid);
-    if (!r) return;
-    if (c.checked) r.rechte[c.dataset.rk] = 1; else delete r.rechte[c.dataset.rk];
-    setRollen(L); leuteZeichnen();
-  }));
-  feld.querySelectorAll("[data-rname]").forEach(i => i.addEventListener("change", ()=>{
-    const L = rollenListe().map(r => ({...r}));
-    const r = L.find(x => x.id === i.dataset.rname);
-    if (!r) return;
-    r.name = i.value.trim().slice(0,24) || r.name;
-    setRollen(L); leuteZeichnen();
-  }));
-  /* rank / group / arrows / lines / areas / promote at - je Rolle ein Feld,
-     leer nimmt das Feld aus der Zeile. Grenzen 0..999 (0 = keine Grenze,
-     wie markenGrenzen), rank 1..99, promote at 1..999999. 13.09.2026 */
-  feld.querySelectorAll("[data-rz]").forEach(i => i.addEventListener("change", ()=>{
-    const L = rollenListe().map(r => ({...r}));
-    const r = L.find(x => x.id === i.dataset.rz);
-    if (!r) return;
-    r.grenze = {...(r.grenze || {})};         // only this role gets a copy
-    const k = i.dataset.rzk, w = i.value.trim();
-    if (k === "von"){ if (w) r.von = w.slice(0, 12); else delete r.von; }
-    else {
-      const n = w === "" ? null : Math.round(+w);
-      const ok = n !== null && Number.isFinite(n);
-      if (MARKEN_GRENZE[k]){ if (ok && n >= 0 && n <= 999) r.grenze[k] = n; else delete r.grenze[k]; }
-      else if (ok && n >= 1 && n <= (k === "ab" ? 999999 : 99)) r[k] = n;
-      else delete r[k];
-    }
-    if (!Object.keys(r.grenze).length) delete r.grenze;
-    setRollen(L); leuteZeichnen();
-  }));
-  /* Die Vorlage ersetzt nur die Liste. Wer einen Rang haelt, dessen id es
-     danach noch gibt (mem/sqd/off), behaelt ihn; meta:rang und
-     meta:standrang werden nicht angefasst. 13.09.2026 */
-  document.getElementById("lp-vorlage")?.addEventListener("click", ()=>{
-    if (!confirm("Replace the rank list with the template (Soldier I, Soldier II, Officer, General)?")) return;
-    setRollen(rollenVorgabe());
-    leuteZeichnen();
-    toast("Template in place");
-  });
-  feld.querySelectorAll("[data-rweg]").forEach(b => b.addEventListener("click", ()=>{
-    const id = b.dataset.rweg, L = rollenListe();
-    if (L.length <= 1){ toast("There has to be one rank left."); return; }
-    const wieviele = Object.values(rangKarte()).filter(v => (v||[]).includes(id)).length;
-    if (!confirm(`Remove this rank?${wieviele ? `\n\n${wieviele} ${wieviele===1?"person":"people"} `
-      + `hold it and drop back to the default rank.` : ""}`)) return;
-    setRollen(L.filter(r => r.id !== id));
-    const k = {};
-    for (const [p, ids] of Object.entries(rangKarte())){
-      const rest = (ids||[]).filter(x => x !== id);
-      if (rest.length) k[p] = rest;
-    }
-    stamp("meta", "rang", Object.keys(k).length ? k : null); save();
-    leuteZeichnen();
-  }));
-  document.getElementById("lp-neu-go")?.addEventListener("click", ()=>{
-    const n = document.getElementById("lp-neu").value.trim();
-    if (n.length < 2){ toast("Give the rank a name first."); return; }
-    const id = "r" + Math.random().toString(36).slice(2,7);
-    setRollen(rollenListe().concat([{id, name: n.slice(0,24), rechte:{brett:1,aufklaerung:1}}]));
-    leuteZeichnen();
-    toast(`${n} added — tick what it may do`);
-  });
-  document.getElementById("lp-std")?.addEventListener("change", ev => {
-    stamp("meta", "standrang", ev.target.value); save(); leuteZeichnen();
-  });
+  rangEditorVerdrahten(feld, rangO);
   feld.querySelectorAll("[data-rangfuer]").forEach(s => s.addEventListener("change", ()=>{
     setRang(s.dataset.rangfuer, s.value ? [s.value] : null);
     leuteZeichnen(); kraftLeiste();
@@ -48189,6 +48314,73 @@ function frontAuf(){
 }
 document.getElementById("b-front").addEventListener("click", frontAuf);
 
+/* ---- DEFAULT RANKS FOR EVERY CLAN, the operator's window (PKT-3 Teil B,
+   13.09.2026). The same editor as in Clan -> People, on a working copy:
+   the saved default, else the list in the code. NOTHING IS SAVED UNTIL
+   SAVE - the copy is the starting point, not a record. Save sends the
+   whole list once (warmap_vorgabe_setzen); Reset drops the row, and the
+   code list holds again. Who counts as the rank of everyone without one
+   follows standardIn ("mem" if the list knows it, else the last entry) -
+   the line under the editor says which, and follows every edit (question
+   F7). Cancel, Save and Reset lead back to War settings, where the button
+   sits (as the pool window returns to the clan window). "promote at" in
+   the default is a template value: the server promotes from a clan's own
+   list only (FABLE: the leader sets the thresholds); a leader who takes
+   the template takes the threshold with it. */
+function vorgabeDialog(){
+  if (!istBetreiber()) return;
+  let kopie = rollenVorgabe();
+  const o = {liste: () => kopie, schreibe: L => { kopie = L; }, neu: () => zeichnen(),
+             darf: true, std: null, vorlage: false};
+  const zeichnen = () => {
+    const feld = document.getElementById("vg-feld");
+    if (!feld) return;
+    const std = standardIn(kopie);
+    feld.innerHTML = rangEditorHtml(o) + (std ? `<div class="note" style="font-size:11px;margin-top:9px">
+      Everyone without a rank counts as <b>${esc(rangTitel(std))}</b>.</div>` : "");
+    rangEditorVerdrahten(feld, o);
+  };
+  const zurueck = () => { closeDlg(); document.getElementById("b-war").click(); };
+  openDlg(`
+    <div class="dlg-h"><h2>Default ranks for every clan</h2>
+      <p>Holds for every clan that has not made its own list.</p></div>
+    <div class="dlg-b"><div id="vg-feld"></div></div>
+    <div class="dlg-f">
+      <button class="btn" id="vg-reset" style="font-size:11px">Reset to the built-in list</button>
+      <span style="flex:1"></span>
+      <button class="btn" id="vg-close">Cancel</button>
+      <button class="btn primary" id="vg-save">Save</button>
+    </div>`, true);
+  zeichnen();
+  document.getElementById("vg-close").addEventListener("click", zurueck);
+  /* a failure stays a toast and the window stays open - dialogFehler would
+     replace the window and the edits with it */
+  document.getElementById("vg-save").addEventListener("click", async function(){
+    const knopf = this;
+    knopf.disabled = true; knopf.textContent = "Saving …";
+    try {
+      await rpc("warmap_vorgabe_setzen", {p_v: kopie});
+      vorgabeUebernehmen(JSON.parse(JSON.stringify(kopie)));
+      zurueck(); toast("Saved for every clan");
+    } catch(e){
+      knopf.disabled = false; knopf.textContent = "Save";
+      toast(`Not saved — ${String(e.message || e)}`);
+    }
+  });
+  document.getElementById("vg-reset").addEventListener("click", async function(){
+    if (!confirm("Drop the saved default and use the built-in list for every clan?")) return;
+    const knopf = this;
+    knopf.disabled = true;
+    try {
+      await rpc("warmap_vorgabe_setzen", {p_v: null});
+      vorgabeUebernehmen(null);
+      zurueck(); toast("Back to the built-in list");
+    } catch(e){
+      knopf.disabled = false;
+      toast(`Not saved — ${String(e.message || e)}`);
+    }
+  });
+}
 document.getElementById("b-war").addEventListener("click", ()=>{
   /* Kriegsname und Startstadt gehoeren dem Verwalter. Clanname und Seite
      stehen beim Leiter, im Clanfenster auf dem Reiter "Card". Der Weg
@@ -48234,6 +48426,17 @@ document.getElementById("b-war").addEventListener("click", ()=>{
         ${versorgungTabelle(verw)}
         <span class="note" style="font-size:11px">Empty = game value.</span>
       </div>
+      ${/* the operator's default for every clan (PKT-3 Teil B, 13.09.2026):
+           only he sees the section, the server decides who that is */
+        istBetreiber() ? `
+      <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:12px;color:var(--dim)">Default ranks for every clan</span>
+        <div class="row" style="align-items:center;gap:9px">
+          <span class="note" style="font-size:11px;flex:1">Holds for every clan that has not made
+            its own list.</span>
+          <button class="btn" id="set-vorgabe">Edit …</button>
+        </div>
+      </div>` : ""}
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;gap:7px;flex-wrap:wrap">
         <button class="btn danger" id="d-newwar" ${verw ? "" :
           `disabled title="Starting a new war is the admin's call."`}>Start a new war</button>
@@ -48264,6 +48467,7 @@ document.getElementById("b-war").addEventListener("click", ()=>{
     return null;
   };
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  document.getElementById("set-vorgabe")?.addEventListener("click", vorgabeDialog);
 
   let startNeu = startStaedte();
   const startZeichnen = () => {
@@ -48491,7 +48695,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 63b93c34b4</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bd295ab790</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -48719,7 +48923,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "63b93c34b4";
+const BAU = "bd295ab790";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -48916,7 +49120,18 @@ function applyRemote(key, val){
   /* Every bucket, taken from the one list — a hand-kept copy here silently
      dropped areas, para-blocks, the enemy register and strength notes. */
   if (!BUCKETS.includes(bucket)) return false;
+  /* PROMOTED (B5, 13.09.2026): a rank row comes in and my own effective
+     rank moves UP the list - say so once. Not on the first pull (that is
+     no change, that is the state), not downward (a demotion is the
+     leader's word, he says it himself), not for the leader. */
+  const rangVorher = (bucket === "meta" && (id === "rang" || id === "rangauto")
+                      && CFG && ersterAbrufDurch && !istLeader()) ? rangStufe(S.me) : null;
   S[bucket][id] = val;
+  if (rangVorher !== null){
+    const nachher = rangStufe(S.me);
+    if (nachher >= 0 && (rangVorher < 0 || nachher < rangVorher))
+      toast(`Promoted to ${rangTitel(rollenVon(S.me)[0])}`);
+  }
   return true;
 }
 const SEITE = 1000;   /* PostgREST deckelt serverseitig, ueblich bei 1000 */
@@ -49305,6 +49520,9 @@ async function syncStart(){
      Wanderung whoami_nennt_die_rolle mit; aeltere Server liefern sie nicht,
      dann bleibt sie leer und der alte Weg greift. */
   CFG.rolle = ich.rolle || "";
+  /* the operator's flag and the default for every clan (13.09.2026): both
+     asked in the background, the page does not wait for them */
+  betreiberPruefen(); vorgabeLaden();
   /* Hat dieser Mensch schon einmal ein Passwort vergeben? Das entscheidet
      auf einem ZWEITEN Geraet darueber, ob nach dem alten gefragt wird oder
      ein neues vergeben werden darf - ein neues verriegelt alles, was unter
