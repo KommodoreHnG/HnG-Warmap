@@ -4781,6 +4781,16 @@ function pfeilFreigeben(a){
    nothing. Not for another side's arrow: there the window hides commitment,
    strength, chain and state, and would stand nearly empty. */
 const pfeilFrischZeigen = a => { if (a && !fremdeSeite(a)) arrowDialog(a, true); };
+/* THE FRESH DEFENCE LINE OPENS ITS WINDOW TOO (BEF-12). ENNO 07.09.2026:
+   "Bei Anlegen eines Befehls soll sich dieses Menue direkt oeffnen" - so
+   far only the single town did, the drawn or clicked line said "Click it
+   to label it". The row lies where lineSpeichern put it, shared pot or
+   draft pot; markeZeile finds both. Not for another side's line - there
+   the window hides strength, chain and state. FABLE 13.09.2026 */
+const lineFrischZeigen = k => {
+  const zeile = k ? markeZeile("line", k) : null;
+  if (zeile && !fremdeSeite(zeile.v)) lineDialog(k, zeile);
+};
 function pfeilAnlegen(von, bis){
   const a = {from:von, to:bis, f:faction, label:"", art:artNeu(), t:jetzt(), by:S.me, id:pfeilId()};
   if (entwurfModus){ a.entwurf = 1; ENTWUERFE.push(a); entwuerfeSpeichern(); save(); return a; }
@@ -11010,13 +11020,43 @@ function paraWahlSetzen(modus, typ){
   paraFlussAbbruch(); tips(); draw();
 }
 const paraFlussAktiv = () => !!(paraFluss && (paraFluss.start !== null || paraFluss.ziel !== null));
-/* the marks go; the caller redraws */
+/* the marks go; the caller redraws. The chain of drops made in this flow
+   closes here - the one place every way out passes: the last drop without
+   Ctrl, Escape, the right button, a tool change, a click on empty ground,
+   a mode change in the para menu (BEF-12, FABLE 13.09.2026) */
 function paraFlussAbbruch(){
   if (!paraFluss) return;
+  const kette = paraFluss.kette || [];
   paraFluss = null; tips();
+  ketteAbschliessen(kette);
+}
+/* THE CHAIN CLOSES (BEF-12). ENNO 12.09.2026: "es oeffnet sich am Ende
+   ein Fenster, in dem aber ein Ankreuzkaestchen fragt, ob man die
+   gesetzten Einstellungen fuer alle unterbefehle uebernehmen will ... Das
+   System sollte sich hier aber merken, dass es sich um einen Multi-Befehl
+   gehandelt hat".
+   One drop: its ordinary window, as a single arrow gets it - now also
+   when the chain ended with Escape (before: no window at all). Two or
+   more: every drop of the chain carries multi (the first drop's id) and
+   multiGem 1 (same settings), and ONE window opens, for the last drop;
+   arrowDialog shows the batch box from a.multi. The arrows are fetched by
+   id, so a drop deleted meanwhile is simply not there. The window waits
+   for the jump to land, as before. FABLE 13.09.2026 */
+function ketteAbschliessen(kette){
+  if (!kette || !kette.length) return;
+  const pfeile = kette.map(id => liveArrows().find(x => x.id === id)).filter(Boolean);
+  if (!pfeile.length) return;
+  if (pfeile.length >= 2){
+    for (const x of pfeile){ x.multi = pfeile[0].id; x.multiGem = 1; pfeilGeaendert(x); }
+    save();
+  }
+  /* by id, not as the object: a sync round in between (applyRemote puts a
+     fresh object in the list) would hand the window a stale twin */
+  const letzterId = pfeile[pfeile.length - 1].id;
+  setTimeout(() => pfeilFrischZeigen(liveArrows().find(x => x.id === letzterId)), LUFT_SPRUNG_MS + 60);
 }
 function paraFlussNeu(){
-  if (!paraFluss) paraFluss = {start: null, ziel: null, felder: new Set(), ring: null, drin: []};
+  if (!paraFluss) paraFluss = {start: null, ziel: null, felder: new Set(), ring: null, drin: [], kette: []};
   return paraFluss;
 }
 /* the marks breathe while they stand: a slow loop that stops itself as
@@ -11101,14 +11141,15 @@ function paraPfeilAnlegen(von, bis, mehr){
   a.luft = 1; a.sym = paraTyp();
   luftBoardAnfordern(a);
   pfeilGeaendert(a); save();
+  /* the drop joins the chain of this flow; the window comes when the flow
+     ends, from ketteAbschliessen - one for the whole chain (BEF-12) */
+  const F = paraFlussNeu();
+  F.kette.push(a.id);
   if (!mehr) paraFlussAbbruch();               // Ctrl held: airfield and ring stay for the next target
   luftSprungStart(a);
   const brett = a.boardId ? `. ${MAP.n[von][0]} is on the board to be taken first` : "";
   toast(`Drop planned${entwurfModus ? " (draft)" : ""}${brett}.`
     + (mehr ? " Ctrl-click the next target, Escape ends." : ""));
-  /* the window waits for the jump to land - and stays away entirely while
-     Ctrl is chaining targets, that flow is built for going on */
-  if (!mehr) setTimeout(() => pfeilFrischZeigen(a), LUFT_SPRUNG_MS + 60);
   paraVorratWarnung();                         // a second toast when drops outnumber the paras
   side(); tally();
 }
@@ -13425,7 +13466,7 @@ function lineSpeichern(pts, einzel){
   }
   save(); draw();
   toast((einzel ? `Defence of ${MAP.n[pts[0]][0]}`
-                : `Defence line over ${pts.length} towns. Click it to label it and set it active.`)
+                : `Defence line over ${pts.length} towns.`)
       + (entwurfModus ? " Draft — only you see it." : ""));
   return k;
 }
@@ -13453,8 +13494,7 @@ function lineEinzelAnlegen(i){
   /* frisch und von fremder Seite: kein Fenster. Dieselbe Zeile, die
      pfeilFrischZeigen zieht - es verbirgt Staerke, Kette und Zustand und
      stuende fast leer da. */
-  const zeile = k ? markeZeile("line", k) : null;
-  if (zeile && !fremdeSeite(zeile.v)) lineDialog(k, zeile);
+  lineFrischZeigen(k);
 }
 /* extra: fields merged into the area, {aufkl:1, orte?} for a recon request.
    A request is our side's ask whatever the left bar shows; one on towns
@@ -13483,9 +13523,11 @@ function areaSpeichern(pts, extra){
 }
 function lineFertig(){
   if (!lineDraft) return;
-  if (lineDraft.pts.length >= 2) lineSpeichern(lineDraft.pts);
+  let k = null;
+  if (lineDraft.pts.length >= 2) k = lineSpeichern(lineDraft.pts);
   else toast("A defence line needs at least two towns");
   lineDraft = null; draw();
+  lineFrischZeigen(k);                         // the window right after, as the single town has it (BEF-12)
 }
 function lineHit(sx, sy){
   for (const [id,e] of liveLines()){
@@ -14529,7 +14571,7 @@ window.addEventListener("mouseup", e => {
        mouse. Only when at least two towns were drawn, or the click chain
        (the only way to pick towns the pointer does not cross) would die
        with it. */
-    if (zieh.pts.length >= 2){ lineSpeichern(zieh.pts); dragged = true; }
+    if (zieh.pts.length >= 2){ lineFrischZeigen(lineSpeichern(zieh.pts)); dragged = true; }
   } else if (zieh.art === "area"){
     /* a drawn recon request: every corner must be within sight, else no
        entry and the tool stays for another try; a bare click with the
@@ -16545,6 +16587,69 @@ function flyTo(i){
    beiden anderen Aufrufe - Inspect auf einen liegenden Pfeil und die
    Rueckkehr aus der Zuordnung - lassen es weg, sonst stuende "Just drawn"
    an einem Pfeil von gestern. */
+/* ---- THE BATCH OF DROPS (BEF-12, FABLE 13.09.2026) ----
+   ENNO 12.09.2026: "ein Ankreuzkaestchen fragt, ob man die gesetzten
+   Einstellungen fuer alle unterbefehle uebernehmen will ... Wenn man
+   dieses abwaehlt, falten sich die Einzelbefehle auf und man kann mit
+   Angabe des Zielortes fuer jeden unterbefehl einzeln die Eingaben machen
+   ... sodass man auch im Nachhinein noch evtl. Korrekturen machen kann
+   (AT-Mengen doch wieder auf gemeinsam setzen)."
+   a.multi is the chain's key (the first drop's id), a.multiGem says the
+   settings are shared. The siblings are the live arrows of the same chain
+   but this one, without the done-and-hidden. None left: no box - a batch
+   of one is no batch (multi stays on the arrow, it does no harm).
+   Unchecked, the box lists every target with its request in short and an
+   "Edit" that saves this window first (the untick reaches every sibling,
+   what was typed stays) and then opens the sibling's own window - the
+   eighteen type fields three times in one window would not be readable.
+   The tick stands only for who may write the request (same rule as
+   anfTabelle) - otherwise the list is simply open. The Save handler in
+   arrowDialog does the copying: req, prio, farbe, sym to every sibling,
+   label only into empty names; never commitment, assignment, state,
+   chain, draft. Siblings by id, not by object: a sync round replaces
+   the objects in S.arrows. */
+const multiGeschwister = a => a && a.multi
+  ? liveArrows().filter(x => x.id !== a.id && x.multi === a.multi && !befehlVersteckt(x.id, x) && !fremdeSeite(x))
+  : [];
+function multiAnfKurz(x){
+  const {at, cls} = anfLesen(x);
+  const teile = [];
+  for (const z of ANF_KLASSEN) if (cls[z.k]) teile.push(`${cls[z.k]} ${esc(z.name.toLowerCase())}`);
+  for (const t of MAP.at) if (at[t.k]) teile.push(`${at[t.k]} ${esc(atName(t.k))}`);
+  return teile.length ? teile.join(", ") : "no request";
+}
+function multiKasten(a, frisch){
+  const g = multiGeschwister(a);
+  if (!g.length) return "";
+  const alle = [a].concat(g), n = alle.length;
+  const schreibt = !!a.entwurf || darfZustand(a.id, a, a);
+  const gem = schreibt && !!(a.multiGem || frisch);
+  const ziel = x => x === a ? `<b>${esc(MAP.n[x.to][0])}</b>` : esc(MAP.n[x.to][0]);
+  return `<div class="note" id="a-multi">
+    <div><b>Batch of ${n} drops</b> — ${alle.map(ziel).join(", ")}</div>
+    ${schreibt ? `<div class="row" style="align-items:center">
+      <span style="flex:1">Same settings for all ${n} drops</span>
+      <label class="toggle"><input type="checkbox" id="a-multi-gem"${gem ? " checked" : ""}><span></span></label>
+    </div>` : ""}
+    <div id="a-multi-liste"${gem ? ` style="display:none"` : ""}>${alle.map(x => `<div class="row" style="align-items:center">
+      <span style="flex:1">${ziel(x)} — ${multiAnfKurz(x)}</span>
+      ${x === a ? "" : `<button class="btn" data-multi-edit="${esc(x.id)}" style="font-size:11px">Edit …</button>`}
+    </div>`).join("")}</div>
+  </div>`;
+}
+function multiVerdrahten(){
+  if (!document.getElementById("a-multi")) return;
+  const gemEl = document.getElementById("a-multi-gem"), liste = document.getElementById("a-multi-liste");
+  if (gemEl) gemEl.addEventListener("change", () => { liste.style.display = gemEl.checked ? "none" : ""; });
+  document.querySelectorAll("#dlg [data-multi-edit]").forEach(b => b.addEventListener("click", () => {
+    /* save first: the untick goes to every sibling and what was typed
+       here stays - otherwise the next window came with the tick back on
+       and copied its numbers over the batch */
+    document.getElementById("a-join").click();
+    const x = liveArrows().find(y => y.id === b.dataset.multiEdit);
+    if (x) arrowDialog(x);
+  }));
+}
 function arrowDialog(a, frisch){
   const mit = joinOf(a.id);
   const gesamt = mit.reduce((s,j)=>s+j.n, 0);
@@ -16582,7 +16687,7 @@ function arrowDialog(a, frisch){
         <span style="font-size:12px;color:var(--dim);flex:1">Operation name</span>
         <input type="text" id="a-lbl" value="${esc(a.label||"")}" placeholder="e.g. Push to Berlin" maxlength="40" style="width:150px">
       </div>
-      ${fremd ? "" : anfTabelle(a)}
+      ${fremd ? "" : multiKasten(a, frisch) + anfTabelle(a)}
       <div class="row" style="align-items:center">
         <span style="flex:1"></span>
         <button class="btn primary" id="a-join">Save</button>
@@ -16656,6 +16761,7 @@ function arrowDialog(a, frisch){
   anfZuordVerdrahten(a);
   document.getElementById("a-op")?.addEventListener("click", ()=>opDialog(befehlKey("arrow", a.id)));
   prioVerdrahten("a-prio");
+  multiVerdrahten();
   document.querySelectorAll("#dlg .pf-farben button").forEach(b => b.addEventListener("click", ()=>{
     const farbeFeld = document.getElementById("a-farbe");
     if (farbeFeld) farbeFeld.value = b.dataset.farbe;
@@ -16667,6 +16773,12 @@ function arrowDialog(a, frisch){
     save(); closeDlg(); draw(); toast(`${liste.length} order${liste.length === 1 ? "" : "s"} published`);
   });
   document.getElementById("a-join").addEventListener("click", ()=>{
+    /* THE ARROW AS IT STANDS NOW. A sync round replaces the objects in
+       S.arrows (applyRemote); with the window open, Save would write onto
+       the replaced one and the change would vanish at the next draw.
+       Gone entirely (deleted, war cut): keep the old object rather than hit
+       a stranger. FABLE 13.09.2026 */
+    { const nun = liveArrows().find(x => x.id === a.id); if (nun) a = nun; }
     /* die achtzehn Felder, so wie sie stehen. Alle leer raeumt meine Zeile -
        so nimmt man eine Zusage zurueck. Ein Entwurf traegt die Liste gar
        nicht, dann wird auch nichts geschrieben (wie vorher bei a-n). */
@@ -16738,6 +16850,29 @@ function arrowDialog(a, frisch){
     const symEl = document.getElementById("a-sym");
     const sym = symEl ? symEl.value : (a.sym||"");
     if (sym !== (a.sym||"")){ a.sym = sym || undefined; neu = true; }
+    /* THE BATCH (BEF-12): with the tick, this arrow's settings go to every
+       sibling of the chain once this arrow's fields are set - request as a
+       deep copy (only where the request may be written, the rule of
+       anfTabelle), priority, colour, sign, the label only into empty names
+       - and every sibling is marked shared. Without the tick nothing is
+       copied and the siblings that were shared are marked single. The tick
+       stands only when siblings exist and the request may be written. This
+       arrow's own tick goes through pfeilGeaendert(a) below - a draft is
+       written there, so the tick must be set before. FABLE 13.09.2026 */
+    const gemEl = document.getElementById("a-multi-gem");
+    let multiNeu = false;
+    if (gemEl){
+      const gem = gemEl.checked ? 1 : 0;
+      if ((a.multiGem ? 1 : 0) !== gem){ a.multiGem = gem; neu = true; }
+      for (const x of multiGeschwister(a)){
+        if (gem){
+          if (x.entwurf || darfZustand(x.id, x, x)) x.req = a.req ? JSON.parse(JSON.stringify(a.req)) : undefined;
+          x.prio = a.prio; x.farbe = a.farbe; x.sym = a.sym;
+          if (!x.label && a.label) x.label = a.label;
+        } else if (!x.multiGem) continue;
+        x.multiGem = gem; pfeilGeaendert(x); multiNeu = true;
+      }
+    }
     if (neu) pfeilGeaendert(a);
     /* draft <-> shared: a shared arrow that becomes a draft vanishes for the
        others (tombstone) and gets a fresh id; a published draft joins S.arrows */
@@ -16754,7 +16889,7 @@ function arrowDialog(a, frisch){
        Entwurfswechsel ist durch - auf einen Entwurf geht nichts. Die
        Meldung nennt die Zahl statt "Saved". */
     const zuWort = (zautoAn && !a.entwurf && befehlZustand(a.id, a) !== "fertig" && anfFelder.length) ? anfAutoZuweisen(a) : "";
-    if (neu || entwEl) save();
+    if (neu || multiNeu || entwEl) save();
     closeDlg(); draw(); toast(zuWort || "Saved");
   });
   document.getElementById("a-del")?.addEventListener("click", ()=>{
@@ -47064,7 +47199,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 48b2927d14</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 77ec02a100</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -47292,7 +47427,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "48b2927d14";
+const BAU = "77ec02a100";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
