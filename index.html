@@ -904,6 +904,23 @@ body.meld-modus{cursor:help}
 /* a line that two models read differently - one click swaps the reading */
 .sp-tausch{cursor:pointer;color:#b98a2c;font-size:12px;padding:0 3px;border-radius:2px}
 .sp-tausch:hover{background:#3a2b12;color:#f0b13a}
+/* the strength table off the battle window (BAT-2): three blocks, eighteen
+   columns with the game's diamonds, one row per side */
+.sp-staerke{margin:0 0 12px;overflow-x:auto}
+.sp-tabelle{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.sp-tabelle th,.sp-tabelle td{padding:2px 4px;text-align:center;border-top:1px solid rgba(122,106,72,.28)}
+.sp-tabelle th{font-family:var(--schmal);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#7a6a48;font-weight:400}
+.sp-tabelle .sp-block{border-left:1px solid rgba(122,106,72,.5)}
+.sp-tabelle .sp-raute{width:16px;height:16px;display:block;margin:0 auto}
+.sp-tabelle th.sp-seite{text-align:left;color:#2b2416;font-size:12px;letter-spacing:0;text-transform:none;font-weight:700}
+.sp-tabelle tr.widerspruch th.sp-seite{color:#9b3b2e}
+.sp-tabelle td.sp-zelle{cursor:text;min-width:26px}
+.sp-tabelle td.sp-zelle:hover{background:rgba(255,255,255,.35)}
+.sp-tabelle td.sp-zelle.null{color:#a29370}
+.sp-tabelle td.sp-zelle.unsicher{color:#9b3b2e}
+.sp-tabelle td.sp-zelle.hand{font-style:italic}
+.sp-tabelle td.sp-zelle input{width:44px;font:inherit;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 3px;text-align:center}
+.sp-geteilt{font-family:var(--schmal);font-size:11px;color:#7a6a48;margin-top:4px}
 #kabine{position:fixed;inset:0;z-index:120;display:none;background:#0b0c10;
   grid-template-columns:auto 1fr auto;grid-template-rows:auto 1fr;
   grid-template-areas:"kopf kopf kopf" "links schirm pult";
@@ -3679,7 +3696,7 @@ const TOPFTAFEL = {
   vers:   {wer:0, recht:"aufklaerung", krieg:0},   // Nachschublinien
   star:   {wer:0, recht:"aufklaerung", krieg:0},   // Zielmarkierung
   notes:  {wer:0, recht:"aufklaerung", krieg:0},   // Freitext an einer Stadt
-  btl:    {wer:0, recht:"aufklaerung", krieg:0},   // Vorrat aus der Schlachtanalyse
+  btl:    {wer:0, recht:"aufklaerung", krieg:0},   // Staerke aus der Gefechtsansicht, Players-Raum seit 13.09.2026 (BAT-2)
 
   /* --- Eigenes: der Verfasser steht im Schluessel --- */
   depot:  {wer:1, recht:"", krieg:1},              // eigene Kampfeinheiten
@@ -27068,6 +27085,465 @@ const GF_BAHN = {y0: 1156, y1: 1648, mitte: 1097, links: 1085};
 const GF_ZBAND = [{y0: 965, y1: 1048}, {y0: 1052, y1: 1136}];
 const GF_MITTE = [107.5, 617.5, 1127.5];
 
+/* ================= THE STRENGTH TABLE OF THE BATTLE VIEW =============
+   ENNO 05.09.2026: "Der Battlereader oder wie wir das dann nennen soll
+   dann auch hierueber die aktuelle Truppenstaerke und vorallem die
+   aktuelle Lage der Kontrollpunkte uebertragen" - the strength half,
+   read here in the players' room (BAT-2, 13.09.2026); the control points
+   are BAT-17 and not here. The reader knows no PG: the battle reader
+   calls it later without anything being rebuilt (BAT-16 waits on 5.15).
+   Measured on twenty-one captures at 3840x2160 (Player Grabber/Beispiel
+   1..19, Bilder/Triple Fight with/no players), all of them to the point:
+     head band   y 482-567, ground 67, the client's words (not read)
+     symbols     y 569-740, ground 0, eighteen diamonds
+     rows        y 741 + 87k, digit ink in +41..+69 (two rows lower on
+                 some captures), one row per side in the order USSR, US,
+                 GE - the order of the counter row
+     blocks      ARMEE 202-898, PANZER 920-1422, LUFTWAFFE 1444-1784
+     cells       soldier columns 94-96 wide on ground 102, vehicle columns
+                 80 wide on ground 67 - NOT evenly divided (a note of
+                 02.09. put them at about 86 each; that was FABLE's guess,
+                 and it misses the borders by up to eight points)
+     digits      ink 217, 26-28 rows tall; widths at half the contrast
+                 (GF_ZEUGE.anteil): "1" 7-9, "." 4-5, "k" 13-14, the other
+                 digits 11-15; two digits of one number stand 2-4 apart,
+                 and they can touch ("74", one run of 29); a zero is dimmed
+                 to ground + 29 and shows no ink at half the contrast
+     emblems     x 113-192, centre y 793 + 87k, the counter row's colours
+   Thousands are cut short by the game ("1.3k"): the number behind it is
+   not in the picture, 1300 stands for 1250-1349 and is marked "ca".
+   A row of nothing but zeros has no ink at all (the table stands before
+   the battle starts, "KAMPF STARTET"): the row count comes from the
+   counter row (GF_ZBAND), never from the ink.
+   THE CELLS ARE READ OFF THE SOURCE, NOT OFF R.d. unitsRahmen lifts every
+   picture whose median brightness lies under 55, and the battle window's
+   ground is 26 - so every capture of this view arrives lifted, gain 6,63
+   on all twenty-one, in linear light and clipped: raw 67 becomes 164, 102
+   becomes 241, everything from about 104 up becomes 255, digits and
+   dimmed zeros alike. Measured on the lifted picture the digits are solid
+   blocks, the 0 keeps a slit two columns wide, and 0 against 8 stands at
+   0,088 against 0,088 - unreadable. So the reader draws the table's own
+   strips (GF_AUSSCHNITT: the witness bands four times smaller, the three
+   digit bands at full size) from the bitmap the beat already holds onto
+   two small standing surfaces and reads the raw points there: a
+   twentieth of the frame, no second pass over the picture. The emblems
+   stay on R.d, the way the counter row is read.
+   AND THE SOURCE IS NOT ALWAYS AS BRIGHT AS THE CAPTURES. The window share
+   on the HDR screen arrives about four times darker than a screenshot
+   (LOGBUCH 31.08.2026: share 29 against screenshot 128; the cure in
+   unitsRahmen is linear light divided by six). The skeptic replayed that
+   on the captures (linear light / 6, and gamma / 4,4): head band 24 and
+   15 instead of 67, the brightest ink 113 and 58 instead of 255 - fixed
+   numbers see no table there at all, and with the witness switched off
+   they read fifty-four zeros. So nothing here is a fixed brightness: the
+   witness judges ratios and steps (GF_ZEUGE), the ink threshold of a cell
+   is half the contrast between the cell's own ground and the cell's own
+   brightest point (capped by the witness - see GF_ZEUGE), and every glyph
+   is min-max normalised before it meets the templates. Measured
+   (Listen/MESSUNG-BAT-2.md): the dark twins read every cell the bright
+   captures read. THE LIMIT OF THE DARKENING (round 3, the Triple divided
+   by a gamma factor): up to 5,8 every cell is read; from 6,0 the head
+   band's median falls under 12 and the witness says no - the room shows
+   "No strength table in the picture.", nothing is guessed. The colours
+   give out earlier: from 5,0 the red star on the lifted picture counts as
+   gold (counter row and row emblem alike) - two rows of one side, held
+   back below. The numbers stand in Listen/MESSUNG-BAT-2.md.
+   Resolutions, replayed from the captures (scaled down, then up again the
+   way drawImage does it): see Listen/MESSUNG-BAT-2.md. */
+const GF_TABELLE = {
+  kopf: [482, 567], symbole: [569, 740], zeile0: 741, schritt: 87,
+  ziffern: [38, 72],           /* the digit band, rows relative to the row top */
+  emblem: {x: 153, y: 52},     /* the row's emblem centre, y relative to the row top */
+  zellen: [[204, 298], [300, 380.7], [380.7, 461.3], [461.3, 542], [544, 640], [640, 720], [722, 818], [818, 898],
+           [922, 1018], [1018, 1098.8], [1098.8, 1179.6], [1179.6, 1260.4], [1260.4, 1341.2], [1341.2, 1422],
+           [1446, 1540], [1542, 1622.7], [1622.7, 1703.3], [1703.3, 1784]],
+  rand: 2,                     /* points of the cell left out at either border */
+  breit: 20,                   /* a run wider than this is two touching digits */
+  laeufe: 5                    /* more runs than this in one cell is no number */
+};
+/* THE WITNESS AND THE INK, RELATIVE. Raw the captures show: symbol band 0,
+   head band 67, soldier grounds 102, vehicle grounds 67, ink 217 with
+   peaks at 255, the dimmed zero at ground + 29. The dark twins show the
+   same picture scaled: head 24 / 15, grounds 41 and 24 / 23 and 15,
+   brightest point 113 / 58. What holds on all of them: the symbol band is
+   near black, the head band stands well above it and equals the vehicle
+   ground, the soldier ground stands one step above the vehicle ground
+   (1,52 raw, 1,71 and 1,53 on the twins), and in every cell with digits
+   the brightest point stands four steps above THAT CELL's ground (4,2-4,4
+   on all three; 756 cells) while a dimmed zero stands under one (0,82-
+   0,88). Sixty-three pictures without a table (twenty-one strangers, raw
+   and as both twins) fail at least two of the rules each.
+   THE INK IS JUDGED PER CELL, NOT PER TABLE (FABLE 13.09.2026, round 3,
+   after the skeptic): a bright spot in the row bands - the pointer, a
+   tooltip, a marker; on the darkened share a single point over 93 is
+   enough - used to lift the table's brightest point for all fifty-four
+   cells, every cell fell under its threshold, and fifty-four zeros went
+   to the clan as fact. Now each cell takes its brightest point from its
+   own interior (never the block gaps 898-922 / 1422-1446, never a
+   neighbour), decides on its own whether that point is ink at all (two
+   steps over its ground), and the point is capped by the witness at
+   men + deckel * (men - veh), where the real ink stands (lin6: cap 143,
+   threshold 92 stays under the ink 113; gam44: cap 71, 47 under 58; raw:
+   cap 312, never reached). A spot then hits its own cell at most - that
+   cell reads "?" and is not written - never the table. */
+const GF_ZEUGE = {
+  symbole: 10,                 /* the symbol band's median, at most - a near-black stays near black at any darkening */
+  kopf: [12, 75],              /* the head band's median; under 12 the digits have no contrast left to read */
+  kopfUeber: 8,                /* the head band stands at least this much above the symbol band */
+  stufe: [1.3, 2.1],           /* soldier ground / vehicle ground */
+  spiel: {min: 3, anteil: 0.12},   /* a ground may differ from its step, and the vehicle ground from the head band, by this much */
+  anteil: 0.5,                 /* ink is anything above ground + anteil * (the cell's brightest point - ground); measured 0,4: gaps of one column, 0,5: two, 0,55: the dot shrinks to three */
+  tinte: 2,                    /* a cell's brightest point stands at least this many steps (men - veh) above the cell's ground - else the cell holds no ink and is a zero */
+  deckel: 6                    /* the cell's brightest point counts at most men + deckel * (men - veh): a stray spot cannot push the threshold over the real ink */
+};
+/* THE TWO STRIPS the reader draws off the source, at 3840 by 2160: the
+   head and symbol bands for the witness, four times smaller (a median
+   over block means - 0,1 MB instead of 1,7), and the three digit bands
+   of the rows at full size (1,3 MB). Measured: reading back the whole
+   table strip cost 2,3-4 ms alone, and with the "high" resampling of a
+   2560 or 1920 capture 12 ms; these two with "low" (bilinear, the way the
+   pre-probe scaled its pictures) stay under two. */
+const GF_AUSSCHNITT = {x: 202, w: 1583, zeuge: {y: 482, h: 259, teil: 4}, zeilen: {y: 779, h: 212}};
+/* THE EIGHTEEN COLUMNS IN THE GAME'S ORDER - which is neither MAP.res's
+   ord nor the diamond book's. The five bright columns are exactly the five
+   groups with kind "men" in MAP.res (the second witness). The six vehicle
+   columns marked "by eye" were matched to the diamond pictures by eye
+   (FABLE 13.09.2026) and stand on the answer sheet. */
+const GF_GRUPPEN = [
+  {teil: "Infantry",                  k: "infantryman",               men: true,  zweig: "infantry"},
+  {teil: "Terrain Vehicles",          k: "terrain_vehicle",           men: false, zweig: "infantry"},
+  {teil: "Motorcycles",               k: "motorcycle",                men: false, zweig: "infantry"},   /* by eye */
+  {teil: "Infantry Support Vehicles", k: "armored_personnel_carrier", men: false, zweig: "infantry"},   /* by eye */
+  {teil: "Recon",                     k: "recon",                     men: true,  zweig: "recon"},
+  {teil: "Armored Recon Vehicles",    k: "armoured_car",              men: false, zweig: "recon"},      /* by eye */
+  {teil: "Paratroopers",              k: "paratrooper",               men: true,  zweig: "airborne"},
+  {teil: "Transport Planes",          k: "transport_plane",           men: false, zweig: "airborne"},   /* by eye */
+  {teil: "Tank Crew",                 k: "tank_crew",                 men: true,  zweig: "armor"},
+  {teil: "Light Armor",               k: "light_armor",               men: false, zweig: "armor"},
+  {teil: "Medium Armor",              k: "medium_armor",              men: false, zweig: "armor"},
+  {teil: "Heavy Armor",               k: "heavy_armor",               men: false, zweig: "armor"},
+  {teil: "Tank Destroyers",           k: "tank_destroyer",            men: false, zweig: "armor"},
+  {teil: "Heavy Tank Destroyers",     k: "heavy_tank_destroyer",      men: false, zweig: "armor"},
+  {teil: "Fighter Pilots",            k: "fighter_pilot",             men: true,  zweig: "airforce"},
+  {teil: "Fighter Planes",            k: "fighter_plane",             men: false, zweig: "airforce"},
+  {teil: "Heavy Fighter Planes",      k: "heavy_fighter_plane",       men: false, zweig: "airforce"},   /* by eye */
+  {teil: "Reconnaissance Planes",     k: "recon_plane",               men: false, zweig: "airforce"},   /* by eye */
+];
+/* the three block heads of the game's table: the two that are a branch of
+   the page take the branch's own word (zweigName: "Armor", "Air Force" -
+   one spelling per branch, FABLE 13.09.2026); the first block holds three
+   branches (infantry, recon, airborne) and keeps the game's word */
+const GF_BLOECKE = [{name: "Army", n: 8}, {zweig: "armor", n: 6}, {zweig: "airforce", n: 4}];
+/* every key has to be a resource of the map; otherwise the reader stays
+   off rather than filing numbers under a wrong name */
+const GF_GRUPPEN_OK = (() => {
+  const fehlt = GF_GRUPPEN.filter(g => !RES[g.k]).map(g => g.k);
+  if (fehlt.length) console.warn("strength table: unknown resource keys, the reader stays off: " + fehlt.join(", "));
+  return !fehlt.length;
+})();
+/* THE TWELVE TEMPLATES ARE CUT OUT OF THE TWENTY-ONE CAPTURES THEMSELVES,
+   by this very reader (Messungen/messung_bat2_tabelle.py schablonen): 652
+   glyphs - "." 17, "0" 31, "1" 155, "2" 92, "3" 62, "4" 55, "5" 36, "6" 46,
+   "7" 37, "8" 60, "9" 42, "k" 19 - each cut at its ink rows, scaled to 14
+   by 30 with gefEndbildStauchen (area mean), min-max normalised and
+   averaged per character; stored as 8 bit, base64 (the rounding costs at
+   most 0,002 of a distance). Cut at half the contrast (GF_ZEUGE.anteil),
+   the way the reader cuts. Leave one picture out: 652 of 652 right; the
+   closest pair is 0 against 8 at 0,037, the median gap between best and
+   second-best 0,184 (Listen/MESSUNG-BAT-2.md). Native size on purpose: at
+   12 by 22 the middle bar of the 8 thinned to a gap of 0,005 against the
+   0. */
+const GF_ZIFFER_B = 14, GF_ZIFFER_H = 30;
+const GF_ZIFFERN = {
+  ".": "Cwshgo6ZqaSTiHoWAAALCyGCjpmppJOIehYAAAsLIYKOmamkk4h6FgAACwshgo6ZqaSTiHoWAAALCyGCjpmppJOIehYAAAsLIYKOmamkk4h6FgAACwshgo6ZqaSTiHoWAAAiIjmirrrMxrSomS4XFzk5UcHO2+7o1ci4Ri4uOTlRwc7b7ujVyLhGLi45OVHBztvu6NXIuEYuLjk5UcHO2+7o1ci4Ri4uOTlRwc7b7ujVyLhGLi45OVHBztvu6NXIuEYuLjk5UcHO2+7o1ci4Ri4uRkZg0t/s//nm2chSOTlGRmDS3+z/+ebZyFI5OUZGYNLf7P/55tnIUjk5RkZg0t/s//nm2chSOTlGRmDS3+z/+ebZyFI5OUZGYNLf7P/55tnIUjk5RkZg0t/s//nm2chSOTksLEOrt8PUz76yozYfHxERJoWQmqmllYt9GwYGEREmhZCaqaWVi30bBgYRESaFkJqppZWLfRsGBhERJoWQmqmllYt9GwYGEREmhZCaqaWVi30bBgYRESaFkJqppZWLfRsGBhERJoWQmqmllYt9GwYG",
+  "0": "BR1Hf7PS4d3IpnI9FwQZWpnI4/H39u3ewI9PGUKT0O/4+PX0+PfryIlCdcDr+/bn2Nfp9/rpvHWa2PX43q6GhrXi+PbZmK7i9/DBcDI0fcfx+eSpuej36KxPDA9etOn56bG/6vbjo0UFClSq5Pjqs8Dr9uKiQwUKU6nk+Oq0wOv24qJDBQpTqeT46rTA6/biokMFClOp5PjqtMDr9uKiQwUKU6nk+Oq0wOv24qJDBQpTqeT46rTA6/biokMFClOp5PjqtMDr9uKiQwUKU6nk+Oq0wOv24qJDBQpTqeT46rTA6/biokMFClOp5PjqtMDr9uKiQwUKU6nk+Oq0wOv24qJDBQpTqeT46rTA6/biokMFClOp5PjqtMDr9uKiQwUKU6nk+Oq0wOv24qJEBQpTqeT46rS+6vbjpEYGC1Wr5fjqs7Xm9+qwUw4RYbfr+OeupN328sd5OzyFzPP44KOJzvL55LuXl8Hn+fPSjWCw5Pn57eHg7/n65bNoL3/C6fb49vb49unDgDgQRoK12Ov09OrWtIFGFQIQM2qgwtPTwJtmMREC",
+  "1": "ChAiRWiiveDn7OjhuKY5THufu9rn9/r9+PDFsm+Gv9nr9vn9/v/68saznrLi7vTz8/n7/vryxrOwwOTe08TH5vH8+vLGs6Osv6qUg4zQ5fr58sazeXh2X0xOZMTe+vnyxrM9NyccFjJSwN36+fLGsxMRCgkLLVC/3Pr58sazAQEABAktUL/c+vnyxrMAAAAECS1Qv9z6+fLGswAAAAQJLVC/3Pr58sazAAAABAktUL/c+vnyxrMAAAAECS1Qv9z6+fLGswAAAAQJLVC/3Pr58sazAAAABAktUL/c+vnyxrMAAAAECS1Qv9z6+fLGswAAAAQJLVC/3Pr58sazAAAABAktUL/c+vnyxrMAAAAECS1Qv9z6+fLGswAAAAQJLVC/3Pr58sazAAAABAktUL/c+vnyxrMAAAAECS1Qv9z6+fLGswAAAAQJLVC/3Pr58sazAAAABAktUL/c+vnyxrMAAAAECS1Qv9z6+fLGswAAAAQJLVC/3Pr58sazAAAABAktUL/c+vnyxrMAAAAECSxPvdr39vDEsQAAAAMIJ0aowdva1K6d",
+  "2": "BBg9cqXG2t/QsHxFHQYVT46+3ez09vDjyJpbHkGKx+r3+ff2+Pjw0pVIeb3o+ffr3dzp9vvtwnyi2vT13a6Ihq/e9/XaoLjn9+u+bzIycsHu9+a1wOrz4apODAxRreb368Cv1NrHkkEGB0qm4vbtxHOLj4JfKQQIT63m9+zBND9BOysTBBNfvO3357gICgoKBwQILHzQ9fbdpQABAQEAAxNVouP78ciDAAAAAAEJKYfI8frjqVkAAAAABRhLteX48s2DMQAAAAENNXnX9vjgqVgSAAAABB9jsez77712MwYAAAMQO47Z9/fcl0kYAgAACShktvH867xsJgcAAAEUSpTV+vrSkEYTAQAABylywez88LFgJQgAAAIbUJ7g+PfViDcOAwAABzh9wvH66qteHAMAAAATXqzh+PXUdTUNAQAAADaJz/P35LBIGAUAAAAAZbHm+/XYoEkrJCMjIRuU0fP+9t22iHp4eHdwXLTl+f/56tnMycjIxrqaver7//359PHw8PDt37m96fn8/Pz8/Pz8/Pnrw6jP3eDg4ODg4ODg3tGu",
+  "3": "Bh5Lg7fW5ePSsnxDGgUgX6LP5/P5+PHkyZtYF0yZ1vP6+fb2+fnw0JBBfsfv+/fn19jn9/vrvHOg3/f12ql8fqrf+fXVlrLq+eq6bCwub8Tx9+Gruuv03aNMCwxQsur36Lio0de/iD0HBkeq5vfqvWqEiHhUJQQGRqnm9+q9LTg6MyQQAwlLrej36LgGBwgHBgUIGFy47fbhqwAAAQIJHDNSjtL08tCPAAAABBlNh6rM7PXgq2EAAAAGKHnO7Pb668J7LwAAAAcrgdr3/fvls2geAAAABSFlrdDn9vPUmEwAAAADETdhhbXl+e7FfgAAAAEEDhszdcfy9dqfAAAAAAEBAxBUtOv35LEOEhIQCwUBBkiq5/fpu0FSVEozFgIFRqjm9+q9fZygjmQsBQZHqeb36r2x3ePLkkIICEqt6PfqvL7w+eOqUg4SWbru+Oi4sur57cJ4OkGBz/X44auX2fX35L2an8Hp+vPRkWqz5Pn78ufp8vr44q5lMHa96Pf6+Pj49eO5di0PPnyy2e318OTPqXQ9DwIRNGqgwtHJs5FdKgwC",
+  "4": "AAAAAiGA1O7hnjYHAAAAAAAFNKHs++KNJAMAAAAAAAxNuvb60XAWAQAAAAABF2rQ+/W5UgwAAAAAAAMoieH97Z45BgAAAAAABz2n7fzfgCQDAAAAAAANVcH1+c1iEwEAAAAAARhw2PvytEcIAAAAAAADKY7n/OeXMAMAAAAAAAhAqvL713gfAQAAAAAAEF3F+PfCWBIBAQEAAAEcetn78KlEHhwbFQgBAy2Y6fzjkEVXbm9VJAQHQrP0+tJ3U5/R0aBFCBFfy/r1ul1XufPzuVAJIoDd/OycQlO9+fm+Ugo1n+v83n0sT735+b5SCky79PnLXhxOvfn5vlIKaNH58rJEE029+fm+UgqE5PzpnDgYVcD5+cBZEaLw/OOYUEB0y/r6yXMxs/X97L6Yk7Hh/fzeqm+79//67ubl7Pj+/vfirLz3/////v7///////S/oNPa2tra2+T1/v713KNceX5+fn6Cotz7/N+hYB4nKSkpKTJmxvn6yWwkCAsLCwsLFlTA+fnBWREAAAAAAAALTLv29rtRCQAAAAAAAApDotXVokYI",
+  "5": "hMTm7u7u7u7u7u7r27WN0fT+/v7+/v7+/vrpwY/S9fvz6OLh4eHh3c6rj9Lz89u5paOjo6OglXuP0vHrv3xWUFBQUE9JPY/S8OWsUh4WFhYWFRQRj9Lv46VCCQAAAAAAAACP0u/jpUIJAAAAAAAAAI/S7+OlRA4JCQcEAgAAj9Lw5a5eNz0/NycXCwKP0vHryKCYrLCigVguCY/S8/Xn29/s7ubQpWotj9L1/Pfw7/P3+vXcp2GO0fT88tfGytz0/fXRkH++3eHJlW91pN74+OGvRGZ3d2Q/JCtnv+746LwVHiMiGgsDCkis6PfqwQQGBwcFAgAIRanm9uvCAAAAAAAAAAhFqOb268IAAAAAAAAACEWo5vbrwgECAgIBAAAIRajm9uvCOURGQC8SAwhFqeb268KOqrCjdzEHCUer5/bqwbXb59mlSA8QUbTs9+e7s+L07cRzPkB5yfL34K6c1/T45bqcoL/n+fTSlnK66Pr67+Xp8vv657VtPIfE6fb49/j59unEgzgYSH6v0+bw8efTrnxGFgMPL2KXuMnJuZdhLQ8D",
+  "6": "AAAAAQw2gtnu68+NOwUAAAACGViq7vvuv3EoAwAAAAcse8r3++GgTxYBAAACD0Od4/v2zX0uCQAAAAYgYrvz/OmwWhkDAAAADzqG0/v51I49DQEAAAEaWKrl/fO5aCQGAAAABCp6yvL85pdDEAIAAAEPRJvh+PbMcygHAQAABCNlufD76qxVGAMBAAAIP4zT+Pnej0keDgcCABFer+b7+eOshWlRNBcEIX3L8/788+DTxayCShg+neH7/v79+/r36smORmS77/789vLx9/z77sZ8jdP2/OvJq6rN7fz535yo4fj0zo1ZWpfV9vvorLXn9+uwVhsgZ7nt+uuyuun35qRDBw1Tq+f57LS76vflokEGC06k5PjstLvq9+WhQQYLTaPj+Oy0u+r35aJBBgtNo+P47LS56ffnpUUIDE+l5Pjrs7Tn+O2yUxAQV67o+emtqOH49cp8Pzp6w+/44qGP0/T657+cl7zj9/PSime15vn68OXh7/n547FkNYHC6fb49/b39ee+ejMVR4Cz1efx8efSrnpAEwMQM2mbu8zNupZhLQ4C",
+  "7": "p9rs8PDw8PDw8PDu362w5vn9/f39/f39/fvrtrHo+fft49/g6PP7/Oy1sej26cutoqa/3vX76a+x6PPYoGhSYZbO8fjhnqne5sN9NRk2hcvy9NSGjrvBoF8dBjOR1vXuwmtXdXlkPBQLSavl+OSrUBwmJyATChZowe7115I5AQICAgEIJYbU9PHGeCYAAAAAAQ46pOP46bJcFQAAAAADFlK+7ffdnEQLAAAAAAYha9T09M6EMAUAAAABCzGH5fnuvGwgAgAAAAMUR6Lx+uSmVRQBAAAABiNkvvj51Y0+DAAAAAALNIDT+/XDdCoGAAAAARJHm+P87a9bGgIAAAADHFy07/vhmEUPAAAAAAcqc8r4+dGAMwgAAAAADz+O3PzyvGgkBAAAAAEbV6fo/emkURgCAAAABClxv/L93Yk7DwEAAAAIO4zT9/rLbSgIAAAAARBPpOP59LZVGgMAAAADHWe57vnqnEAQAQAAAAYvgMz2992CLgoAAAAADUaZ2/nzy2YhBgAAAAAWX6/l+Om0SxYDAAAAABtprdTey5AuDAIAAAAA",
+  "8": "BRdAea/R4uPSrnc+FgQYWpjH5PH4+PHjxpZSF0GV0fD5+PX1+fnuzYw9dMTu+/bm19Xn9vrrvG2c3Pf43KeAfqzd9/bXkbLm+fC+aDAvccHw+eSlu+r46KpHDQ9Truj667G+6/fkoj8IC0ql5Prutr3r9+SiPwgLSqXk+u61uOn35qZECw5Pqub67LKt5ffrs1UbHWC26/roqZfY9PLMgUpJic7y9tmTcLnm9eS0kY665vbnuGxBlNP09ufc2ur39NSPPy+M0fT+/fz8/f70z4QxSqXe9vXk09Hj8/bbnU13xu72366Df63d9evBeKDc9vDBcTw4dsLw9dubtOf36a5QGBhYsOn56K296/fkokAKDEum5Pnttb7r9+OhPggLSaTj+e62vuv35KE/CAtJpOT57ra96/flpEEJDEum5frttbfo+OqvTRAQVK7o+uuwqOL48sZ1PDt5w+/55KON0/T55bqbmb7k9/XVi2W15vn67uXl8vv66LZmM4HB6Pb49/f6+OzHgjUTRX2v1Ofy9OzYtoJFFAIMLmOYuszQwZ9qNBAC",
+  "9": "BhpGf7HP3t7MpnA6FQQfYJzJ5PD29u/ewI5OF0mc1PD5+PX1+fjsyIU7fMju+/bn2Njq+Pnntmij3/f226mCgrPh9/TTirrp+e28aDA0fMbw+OKfxe745aVDCxFds+j66azI7/ffmzgFDVOq5Prsssjv996aNwUNUqjj+u2zyO/33po3BQ1SqOP67bPI7/fgnDkGDVKp5Prtssfv+eaoRw4TWrDn+uuvwu3678FwODh8xO765qW46fr44bOLiLbh9/fblJ3c9/3469/c7Pj88Mh4Yq7e9fv6+Pn8/vvjqFMsbaTI2uHq+P3+9tCFMw0nSGiEmbvq+vzrt2EZAgoXKUFmo+n799mYQwsAAQIHHFKj8P3vwHYqBAAAAAcpdMT4/eKgURYBAAACEEKa3/z3zX4yCQAAAAYhYbzx/O2yXBoDAAAAET6I1vr62ZFADQAAAAEgYK7o/fO+bSoGAAAABjSCzfT96J1LFwIAAAITUKTm+vnUei4KAAAABit0wvT877dZGgMAAAAOSZbW9/fekTwOAQAAABJZncna1rViIgcAAAAA",
+  "k": "yvv32GoCAAAAAAAAAADK+/fYagIAAAAAAAAAAMr799hqAgAAAAAAAAAAyvv32GoCAAAAAAAAAADK+/fYagIAAAAAAAAAAMr799hqAgAAAAAAAAAAyvv32GoCAAADDA8PDQbK+/fYagIAAQ9AT09FIsr799hqAgAQNYqkn3s6yvv32GoCAS91x9/MfzbK+/fYagQJV7bv9dBhI8r799hqCCGD5/ndoS4Iyvv32GsVXLP3+LVeFQDK+/fYciuc3froiCIHAMr799iGVc328LdZCAIAyvv42a6b6PnacCoBAADK+/ne1Nj39Mg9CwAAAMr7/fLx9Pz5z0ANAAAAyvv//Pz9//zeayYBAADK+////fz7/OyjSgMAAMr7///37+nz99VvDQIAyvv//9++vNz88ZUvCgDK+/78uXV8vPz8u2UWAMr7/O6QND2Y9f7cmycDyvv53nQOEnXh+fLGRhLK+/jZbAMEVrrx+996MMr799hqAgA4iuX+8LFUyvv32GoCABpU0vv533fI+PTVaQIACTKy6PrznKfQzrVaAgAAGoC309Od",
+};
+/* below this gap between the best and the second-best template a character
+   is "?" (FABLE 13.09.2026) - measured: 1920 wide never under 0,032, the
+   dark twins never under 0,038, the 720p errors at 0,006 */
+const GF_ZIFFER_MIN = 0.02;
+/* the width witness's borders, in points at 3840 (measured: "." 3-5, "1"
+   6-9, "k" 13-14, the other digits 10-15 at 1920 wide and 9-15 at 720p);
+   einsMin keeps a stray line of one to four columns (a marker, a cursor
+   edge) from passing as a "1" - it is then "." at most, and "." alone or
+   behind digits is no number (Bauer, round 3) */
+const GF_BREITEN = {punkt: 6, k: 12, eins: 9, einsMin: 5, ziffer: 9};
+/* farther than this from every template is no digit at all (measured
+   maximum of a right reading: 0,12 native and on the dark twins, 0,19 at
+   1920 wide, 0,23 at 720p) */
+const GF_ZIFFER_MAX = 0.225;   /* real glyphs stay under 0.123 native, 0.187 at 1920, 0.219 at 1280; smears sit at 0.235-0.300 (FABLE 14.09.2026, third round) */
+let gfZiffernTabelleFertig = null;
+function gfZiffernVorlagenTabelle(){
+  if (gfZiffernTabelleFertig) return gfZiffernTabelleFertig;
+  const aus = [];
+  for (const [c, b64] of Object.entries(GF_ZIFFERN)){
+    const roh = atob(b64);
+    const v = new Float32Array(roh.length);
+    for (let i = 0; i < roh.length; i++) v[i] = roh.charCodeAt(i)/255;
+    aus.push([c, v]);
+  }
+  gfZiffernTabelleFertig = aus;
+  return aus;
+}
+/* the strips, drawn from the source bitmap onto two standing surfaces */
+let gfFlaechen = null;
+function gfAusschnitt(bm){
+  const A = GF_AUSSCHNITT;
+  if (!gfFlaechen){
+    const mach = (w, h) => {
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      const g = c.getContext("2d", {willReadFrequently: true});
+      g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "low";
+      return {c, g};
+    };
+    gfFlaechen = {zeuge: mach(Math.floor(A.w/A.zeuge.teil), Math.floor(A.zeuge.h/A.zeuge.teil)), zeilen: mach(A.w, A.zeilen.h)};
+  }
+  const sx = bm.width/UNITS_W, sy = bm.height/UNITS_H;
+  const z = gfFlaechen.zeuge, r = gfFlaechen.zeilen;
+  z.g.drawImage(bm, A.x*sx, A.zeuge.y*sy, A.w*sx, A.zeuge.h*sy, 0, 0, z.c.width, z.c.height);
+  r.g.drawImage(bm, A.x*sx, A.zeilen.y*sy, A.w*sx, A.zeilen.h*sy, 0, 0, r.c.width, r.c.height);
+  return {zeuge: z.g.getImageData(0, 0, z.c.width, z.c.height).data, zeugeW: z.c.width, zeugeH: z.c.height,
+          zeilen: r.g.getImageData(0, 0, r.c.width, r.c.height).data};
+}
+/* brightness of one point of the rows strip, in picture coordinates */
+const gfAHell = (a, x, y) => { const p = ((y - GF_AUSSCHNITT.zeilen.y)*GF_AUSSCHNITT.w + (x - GF_AUSSCHNITT.x))*4; return (a[p] + a[p+1] + a[p+2])/3; };
+/* THE TABLE WITNESS. gfRahmenDa answers to the two white uprights, and the
+   FPS end screen ("Niederlage Bildschirm") shows the war map with the
+   window frame behind it - 49 of 64 samples. The questions here are all
+   cheap and all relative (GF_ZEUGE): the symbol band is near black, the
+   head band stands above it, the eighteen cell grounds of row 0 lie in
+   two steps - the five soldier columns one step above the thirteen
+   vehicle columns, the vehicle step level with the head band. Answers
+   with everything it measured, and da says whether the table stands;
+   stufe is the step between the two grounds, deckel the cap on a cell's
+   brightest point (GF_ZEUGE.deckel). hellste and tinte are filled by the
+   cells afterwards (the brightest cell interior, and whether any cell
+   held ink - a table before the battle has none) and only tell. */
+function gfTabelleDa(S){
+  const T = GF_TABELLE, Z = GF_ZEUGE, A = GF_AUSSCHNITT, teil = A.zeuge.teil;
+  const med = (a, breite, x0, x1, y0, y1) => {
+    const h = new Uint32Array(256); let n = 0;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++){
+      const p = (y*breite + x)*4; h[((a[p] + a[p+1] + a[p+2])/3)|0]++; n++;
+    }
+    let s = 0;
+    for (let v = 0; v < 256; v++){ s += h[v]; if (s*2 >= n) return v; }
+    return 255;
+  };
+  const W = {da: false, warum: "", sym: 0, kopf: 0, men: 0, veh: 0, stufe: 0, deckel: 0, spiel: 0, hellste: 0, tinte: false};
+  /* the bands, in the small strip's rows */
+  const band = y => Math.min(S.zeugeH - 1, Math.floor((y - A.zeuge.y)/teil));
+  W.sym = med(S.zeuge, S.zeugeW, 0, S.zeugeW - 1, band(T.symbole[0]) + 1, band(T.symbole[1]) - 1);
+  W.kopf = med(S.zeuge, S.zeugeW, 0, S.zeugeW - 1, band(T.kopf[0]) + 1, band(T.kopf[1]) - 1);
+  const y0 = T.zeile0 + T.ziffern[0] - A.zeilen.y, y1 = T.zeile0 + T.ziffern[1] - A.zeilen.y;
+  const g = [], men = [], veh = [];
+  for (let i = 0; i < 18; i++){
+    const z = T.zellen[i];
+    const v = med(S.zeilen, A.w, Math.round(z[0]) + T.rand - A.x, Math.round(z[1]) - T.rand - A.x, y0, y1);
+    g.push(v); (GF_GRUPPEN[i].men ? men : veh).push(v);
+  }
+  const mitte = v => v.slice().sort((p, q) => p - q)[v.length >> 1];
+  W.men = mitte(men); W.veh = mitte(veh);
+  const spiel = Math.max(Z.spiel.min, Z.spiel.anteil*W.veh), stufe = W.men/Math.max(1, W.veh);
+  if (W.sym > Z.symbole) W.warum = "symbols " + W.sym;
+  else if (W.kopf < Z.kopf[0] || W.kopf > Z.kopf[1]) W.warum = "head " + W.kopf;
+  else if (W.kopf <= W.sym + Z.kopfUeber) W.warum = "head over symbols " + (W.kopf - W.sym);
+  else if (stufe < Z.stufe[0] || stufe > Z.stufe[1]) W.warum = "step " + Math.round(stufe*100)/100;
+  else if (Math.abs(W.veh - W.kopf) > spiel) W.warum = "vehicle ground against head " + (W.veh - W.kopf);
+  else for (let i = 0; i < 18; i++) if (Math.abs(g[i] - (GF_GRUPPEN[i].men ? W.men : W.veh)) > spiel){ W.warum = "cell " + i + " ground " + g[i]; break; }
+  if (W.warum) return W;
+  W.stufe = W.men - W.veh;
+  W.deckel = W.men + Z.deckel*W.stufe;
+  W.spiel = spiel;
+  W.da = true;
+  return W;
+}
+/* the number behind the text the game shows: "245" -> 245, "1.3k" -> 1300
+   marked ca (FABLE 13.09.2026, question 3 on the answer sheet), anything
+   else (a "?" among the characters) -> null */
+function gfZahl(text){
+  let m = /^(\d{1,3})(?:\.(\d))?k$/.exec(text);
+  if (m) return {n: Math.round((+m[1] + (m[2] ? +m[2]/10 : 0))*1000), ca: true};
+  m = /^\d{1,4}$/.exec(text);
+  if (m) return {n: +text, ca: false};
+  return null;
+}
+/* One cell of one row: the ground (the cell's median) and the brightest
+   point of the cell's own interior, capped by the witness (W.deckel); no
+   ink when that point stands under two steps over the ground (the dimmed
+   zero, GF_ZEUGE.tinte) - else the runs of columns with ink (anything
+   above the ground by half the contrast to that point, GF_ZEUGE.anteil),
+   one glyph per run against the templates. W.hellste and W.tinte are
+   told what was seen. The cell's buffers stand (fifty-four cells a
+   reading, four readings a second - nothing to throw away each time). */
+const gfZelleG = new Float32Array(100*40), gfZelleH = new Uint32Array(256), gfZelleSpalte = new Uint8Array(100);
+const GF_NULLZELLE = {text: "0", n: 0, ca: false, sicher: true, abstand: 1, fern: 0, laeufe: 0};
+const GF_FRAGEZELLE = {text: "?", n: null, ca: false, sicher: false, abstand: 0, fern: 1, laeufe: 0};   /* a covered cell */
+function gfZelleLesen(a, k, i, vorl, W){
+  const T = GF_TABELLE, z = T.zellen[i];
+  const x0 = Math.round(z[0]) + T.rand, x1 = Math.round(z[1]) - T.rand, B = x1 - x0 + 1;
+  const y0 = T.zeile0 + T.schritt*k + T.ziffern[0], y1 = T.zeile0 + T.schritt*k + T.ziffern[1], H = y1 - y0 + 1;
+  const g = gfZelleG, h = gfZelleH.fill(0);
+  let hell = 0;
+  for (let y = 0; y < H; y++){
+    let p = ((y0 + y - GF_AUSSCHNITT.zeilen.y)*GF_AUSSCHNITT.w + (x0 - GF_AUSSCHNITT.x))*4;
+    for (let x = 0; x < B; x++, p += 4){ const v = (a[p] + a[p+1] + a[p+2])/3; g[y*B + x] = v; h[v|0]++; if (v > hell) hell = v; }
+  }
+  let s = 0, grund = 255;
+  for (let v = 0; v < 256; v++){ s += h[v]; if (s*2 >= B*H){ grund = v; break; } }
+  if (hell > W.hellste) W.hellste = hell;
+  /* a cell whose ground is not its step's ground (a dark tooltip, a popup,
+     a shadow over row 1 or 2 - the witness only checks row 0) is not read:
+     a covered zero must not be written as a zero (FABLE 14.09.2026 after
+     the third round's skeptic; measured: real cells never differ from
+     their step, covered cells by 8 and more) */
+  if (Math.abs(grund - (GF_GRUPPEN[i].men ? W.men : W.veh)) > W.spiel) return GF_FRAGEZELLE;
+  /* the same for a cover over PART of the cell (a panel's edge over the
+     first digit): a real cell has nothing darker than its ground by the
+     witness's play - a covered part has; more than a twelfth of the cell
+     under that line is a cover */
+  let dunkel = 0;
+  for (let v = 0; v < grund - W.spiel; v++) dunkel += h[v];
+  if (dunkel*12 > B*H) return GF_FRAGEZELLE;
+  const hellste = Math.min(hell, W.deckel);
+  if (hellste - grund < GF_ZEUGE.tinte*W.stufe) return GF_NULLZELLE;
+  W.tinte = true;
+  const schwelle = grund + GF_ZEUGE.anteil*(hellste - grund);
+  const spalte = gfZelleSpalte.fill(0, 0, B);
+  for (let x = 0; x < B; x++) for (let y = 0; y < H; y++) if (g[y*B + x] > schwelle){ spalte[x] = 1; break; }
+  const laeufe = []; let st = -1;
+  for (let x = 0; x <= B; x++){
+    const an = x < B && spalte[x];
+    if (an && st < 0) st = x;
+    if (!an && st >= 0){ laeufe.push([st, x - 1]); st = -1; }
+  }
+  if (!laeufe.length) return GF_NULLZELLE;
+  /* TOUCHING DIGITS: a run wider than twenty is two glyphs, cut at the
+     thinnest column of its middle third ("74" in Beispiel 1 held) */
+  const teile = [];
+  for (const [a0, b0] of laeufe){
+    const w = b0 - a0 + 1;
+    if (w > T.breit){
+      const lo = Math.floor(w*0.33), hi = Math.floor(w*0.67);
+      let cut = lo, min = Infinity;
+      for (let x = lo; x < hi; x++){
+        let tinte = 0;
+        for (let y = 0; y < H; y++) if (g[y*B + a0 + x] > schwelle) tinte++;
+        if (tinte < min){ min = tinte; cut = x; }
+      }
+      teile.push([a0, a0 + cut - 1], [a0 + cut, b0]);
+    } else teile.push([a0, b0]);
+  }
+  const glyphen = teile;
+  if (glyphen.length > T.laeufe) return {text: "?", n: null, ca: false, sicher: false, abstand: 0, fern: 0, laeufe: glyphen.length};
+  let text = "", sicher = true, abstand = 1, fern = 0;
+  for (let j = 0; j < glyphen.length; j++){
+    const a0 = glyphen[j][0], b0 = glyphen[j][1], w = b0 - a0 + 1;
+    let ra = -1, re = -1;
+    for (let y = 0; y < H; y++){
+      let an = false;
+      for (let x = a0; x <= b0; x++) if (g[y*B + x] > schwelle){ an = true; break; }
+      if (an){ if (ra < 0) ra = y; re = y; }
+    }
+    const hh = re - ra + 1;
+    const m = new Float32Array(w*hh);
+    for (let y = 0; y < hh; y++) for (let x = 0; x < w; x++) m[y*w + x] = g[(ra + y)*B + a0 + x];
+    const v = gefEndbildStauchen(m, w, hh, GF_ZIFFER_B, GF_ZIFFER_H);
+    let mn = Infinity, mx = -Infinity, nan = false;
+    for (let q = 0; q < v.length; q++){ if (v[q] !== v[q]) nan = true; if (v[q] < mn) mn = v[q]; if (v[q] > mx) mx = v[q]; }
+    const sp = Math.max(1, mx - mn);
+    /* THE WIDTH WITNESS: a dot is narrow, a k is wide and stands last, a
+       one is narrower than every other digit (GF_BREITEN) */
+    const R_ = GF_BREITEN, dist = [];
+    if (!nan) for (const [c, t] of vorl){
+      if (c === "." ? w > R_.punkt : c === "k" ? (w < R_.k || j !== glyphen.length - 1) : c === "1" ? (w > R_.eins || w < R_.einsMin) : w < R_.ziffer) continue;
+      let su = 0;
+      for (let q = 0; q < v.length; q++) su += Math.abs((v[q] - mn)/sp - t[q]);
+      dist.push([su/v.length, c]);
+    }
+    dist.sort((p, q) => p[0] - q[0]);
+    const best = dist.length ? dist[0][1] : null, bestW = dist.length ? dist[0][0] : Infinity;
+    const zweit = dist.length > 1 ? dist[1][0] : Infinity;
+    const luft = Math.min(1, zweit - bestW);
+    if (best === null || bestW > GF_ZIFFER_MAX || luft < GF_ZIFFER_MIN){ text += "?"; sicher = false; }
+    else { text += best; if (bestW > fern) fern = bestW; }
+    if (luft < abstand) abstand = luft;
+  }
+  const zahl = sicher ? gfZahl(text) : null;
+  if (!zahl) return {text, n: null, ca: false, sicher: false, abstand, fern, laeufe: glyphen.length};
+  return {text, n: zahl.n, ca: zahl.ca, sicher: true, abstand, fern, laeufe: glyphen.length};
+}
+/* THE TABLE OUT OF ONE READING. Hangs on the R that gfLesen hands out -
+   the frame, the counter band, the sides, the emblems - and reads the
+   cells off the source bitmap (quelle: the beat's ImageBitmap, or a file
+   or blob, which is decoded here and closed again). Returns null when no
+   table stands in the picture; else one row per side in the table's
+   order with the eighteen values as the game shows them (text), the
+   numbers above zero under their resource keys (n; shortened thousands
+   as numbers, listed in ca), the cells that could not be read (unsicher),
+   the run count per cell (laeufe), whether the row's emblem contradicts
+   the counter row (widerspruch), the smallest gap between best and
+   second-best template (abstand) and the largest distance of a read
+   glyph to its template (fern), what the witness measured (zeuge), and
+   the cost of the reading (ms, the strip and the cells, without
+   decoding). */
+async function gfStaerke(R, quelle){
+  if (!R || !R.da || !R.d || !quelle || !GF_GRUPPEN_OK) return null;
+  const eigen = !(typeof ImageBitmap !== "undefined" && quelle instanceof ImageBitmap);
+  const bm = eigen ? await createImageBitmap(quelle) : quelle;
+  try { return gfStaerkeAus(R, bm); }
+  finally { if (eigen && bm.close) bm.close(); }
+}
+function gfStaerkeAus(R, bm){
+  const t0 = performance.now();
+  const S = gfAusschnitt(bm), a = S.zeilen;
+  const anzahl = R.band && R.band.y0 === GF_ZBAND[1].y0 ? 3 : 2;
+  const W = gfTabelleDa(S);
+  if (!W.da) return null;
+  const T = GF_TABELLE, d = R.d, vorl = gfZiffernVorlagenTabelle();
+  /* A CONTRADICTION NEEDS TWO WITNESSES. The row's own emblem is the
+     first; the counter row's places (R.seiten, in place order like the
+     rows) the second - but only when the counter row is complete. On a
+     2560 or 1920 capture gfSeiteVon misses a place on three of the
+     twenty-one pictures (its digit-ink range was measured at 3840), and
+     then the k-th entry is no longer the k-th row. A missing second
+     witness is no contradiction; an unreadable emblem or two different
+     colours is. Measured: the emblem was right in all 44 rows at every
+     resolution. */
+  const seiten = R.seiten || [], voll = seiten.length === anzahl;
+  const zeilen = []; let abstand = 1, fern = 0;
+  for (let k = 0; k < anzahl; k++){
+    const f = gfEmblemFarbe(d, T.emblem.x, T.zeile0 + T.schritt*k + T.emblem.y);
+    const z = {f, text: [], n: {}, ca: [], unsicher: [], laeufe: [], widerspruch: f === null || (voll && seiten[k].f !== f)};
+    for (let i = 0; i < 18; i++){
+      const c = gfZelleLesen(a, k, i, vorl, W);
+      z.text.push(c.text); z.laeufe.push(c.laeufe);
+      if (c.n === null) z.unsicher.push(i);
+      else if (c.n > 0){ z.n[GF_GRUPPEN[i].k] = c.n; if (c.ca) z.ca.push(GF_GRUPPEN[i].k); }
+      if (c.abstand < abstand) abstand = c.abstand;
+      if (c.fern > fern) fern = c.fern;
+    }
+    zeilen.push(z);
+  }
+  /* TWO ROWS OF ONE SIDE: no table of the game has that - the colour
+     witness failed. Measured (round 3, the Triple darkened by gamma):
+     from a factor of 5,0 the red star on the lifted picture counts as
+     gold, counter row and row emblem alike, so no contradiction shows
+     between them; every row of such a side is one, and nothing is shared. */
+  for (const z of zeilen) if (z.f !== null && zeilen.some(o => o !== z && o.f === z.f)) z.widerspruch = true;
+  return {zeilen, abstand, fern, zeuge: W, ms: Math.round((performance.now() - t0)*100)/100};
+}
+
 const gfHell = (d, x, y) => { const p = ((y|0)*UNITS_W + (x|0))*4; return (d[p] + d[p+1] + d[p+2])/3; };
 const gfBreit = (d, x, y) => Math.max(gfHell(d, x-1, y), gfHell(d, x, y), gfHell(d, x+1, y));
 
@@ -27116,7 +27592,12 @@ function gfZaehlerBand(d){
    still counts 2416 gold points. */
 function gfSeiteVon(d, mx, band, platz){
   if (!gfZifferDa(gfZifferTinte(d, platz, band.y0))) return null;
-  const cy = (band.y0 + band.y1)/2;
+  return gfEmblemFarbe(d, mx, (band.y0 + band.y1)/2);
+}
+/* the counting itself, so that the table's row emblems (BAT-2) are read
+   with the very same rule - measured there, row by row on the triple
+   battle: red 1905 / gold 445 / white 0, 0 / 2151 / 835, 0 / 0 / 1578 */
+function gfEmblemFarbe(d, mx, cy){
   let rot = 0, gold = 0, weiss = 0;
   for (let y = -42; y <= 42; y++) for (let x = -46; x <= 46; x++){
     const p = (((cy + y)|0)*UNITS_W + ((mx + x)|0))*4;
@@ -27299,7 +27780,12 @@ function pgNeu(){
           stadt: null, seiten: [], ende: {}, N: 0, erste: 0, anker: GF_FENSTER.y,
           sichtbar: 0, namen: new Map(), leer: new Set(), liest: null,
           fehl: new Map(), tippt: false,
-          frame: null, hell: null, gain: 1, status: "Waiting for the game window …"};
+          frame: null, hell: null, gain: 1, status: "Waiting for the game window …",
+          /* the strength table (BAT-2): the last reading, the R it came
+             from, its cost, its own status line, what was last written to
+             the pot and when, and the cells typed by hand (key side:column) */
+          staerke: null, staerkeR: null, staerkeMs: null, staerkeZeile: "",
+          staerkeGeschrieben: null, staerkeT: 0, staerkeHand: {}};
 }
 /* NO BAR, NO POSITION - AND NOTHING TO CONFUSE. A town with one or two
    units shows no card strip at all, only the floating box with the unit's
@@ -27403,6 +27889,8 @@ async function pgTick(){
       }
     }
     PG.vorige = R.kennung;
+    await pgStaerke(R, f);
+    if (!PG || !PG.live) return;
     /* one unread visible line that actually carries a name */
     let ziel = null;
     for (const s of R.seiten){
@@ -27475,6 +27963,7 @@ function pgLiveStop(auchFreigabe){
   /* the last reading and the standing surface go with the room - 33
      megabytes each, nothing to keep while nobody looks */
   PG.R = null; pgFlaeche.c = null; pgFlaeche.g = null;
+  PG.staerkeR = null;
   /* the share is the page's: it ends only when no room is watching */
   if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)
       && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()) bildFreigabeBeenden();
@@ -27487,6 +27976,8 @@ async function pgBild(datei){
   pgVerarbeiten(R);
   if (R.da){
     if (PG.stadt === null){ const st = await gfStadt(R.c); if (st) PG.stadt = st.i; }
+    await pgStaerke(R, datei);
+    if (!PG) return;
     for (const s of R.seiten){
       for (let k = 0; k < R.sichtbar; k++){
         const i = R.erste + k, key = pgKey(s.platz, i);
@@ -27502,6 +27993,175 @@ async function pgBild(datei){
   }
   pgZeichnen();
   return R;
+}
+/* THE TABLE, ONCE PER PICTURE. Hung on the reading the beat already has
+   and on the beat's own bitmap (quelle); a standing picture (the doorman
+   handing PG.R back) is not read again, only the share is looked at
+   again - the town arrives a beat later. The doorman (bildWache) watches
+   the list band only (GF_FENSTER, y 1155-1656), not the table (y 741-
+   1000): numbers that move under standing lists come through every
+   twentieth beat, five seconds - short of the fifteen-second write beat. */
+async function pgStaerke(R, quelle){
+  if (!PG || !R || !R.da) return;
+  if (PG.staerkeR !== R && quelle){
+    PG.staerkeR = R;
+    const T = await gfStaerke(R, quelle);
+    if (!PG || PG.staerkeR !== R) return;
+    PG.staerkeMs = T ? T.ms : null;
+    if (!T){ PG.staerke = null; PG.staerkeZeile = "No strength table in the picture."; return; }
+    PG.staerke = {zeilen: T.zeilen, t: jetzt(), kennung: R.kennung, abstand: T.abstand, fern: T.fern, zeuge: T.zeuge, q: PG.live ? "live" : "file"};
+    pgStaerkeHand();
+  }
+  if (PG.staerke) pgStaerkeTeilen();
+}
+/* one cell set from a text - the reader's or a typed one */
+function pgStaerkeZelle(z, i, text){
+  const k = GF_GRUPPEN[i].k, w = gfZahl(text);
+  z.text[i] = text;
+  z.unsicher = z.unsicher.filter(x => x !== i);
+  z.ca = z.ca.filter(x => x !== k);
+  delete z.n[k];
+  if (!w){ z.unsicher.push(i); return; }
+  if (w.n > 0){ z.n[k] = w.n; if (w.ca) z.ca.push(k); }
+}
+/* the typed cells lie over the reading until "New sheet" */
+function pgStaerkeHand(){
+  const St = PG.staerke;
+  if (!St) return;
+  for (const z of St.zeilen){
+    z.hand = [];
+    for (let i = 0; i < 18; i++){
+      const t = PG.staerkeHand[z.f + ":" + i];
+      if (t === undefined) continue;
+      pgStaerkeZelle(z, i, t); z.hand.push(i);
+    }
+  }
+}
+/* INTO THE POT btl. ENNO 05.09.2026: "Die Schlachtanalyse wird fuer alle
+   gespeichert, solange der Kampf aktiv laeuft." With the intel right and
+   a read town only; the first reading at once, after that only when a
+   value changed and the last write is fifteen seconds old - the beat of
+   the battle reader's gefecht:<town> row (FABLE 13.09.2026, question 2
+   on the answer sheet: of itself, not on "Keep the sheet"). Unsure cells
+   go in as missing, never as a guess; a row whose emblem contradicts the
+   counter row, or could not be read, holds everything back. The battle mark (fightAt) is neither set nor required:
+   setting it from a picture is question 5.17 and stays open, the table
+   stands before the start as well ("KAMPF STARTET"), and the time on the
+   row says how old it is. Two readers on one town: the last writer wins,
+   as with gefecht:<town>, typed cells included.
+   THE ROW IS THE CONTRACT WITH THE BATTLE WINDOW (BAT-11, FABLE
+   13.09.2026): seiten: [{f, n, ca, text, spieler, namen, hand?}], q, src -
+   namen the names the room's sheet lists for that side, in the sheet's
+   order, as read, without the register's label; spieler what the head
+   shows (the rows seen with ink, PG.ende). typ and seit (kind of battle,
+   running time) are not read here - the head strip is not read at all -
+   and may be missing. */
+const PG_TEILEN_TAKT = 15000;
+function pgStaerkeTeilen(){
+  const St = PG.staerke;
+  if (!St) return;
+  if (!darf("aufklaerung")){ PG.staerkeZeile = "Not shared — no intel right."; return; }
+  if (PG.stadt === null || PG.stadt === undefined){ PG.staerkeZeile = "Town not read yet — nothing shared."; return; }
+  if (St.zeilen.some(z => z.f === null)){ PG.staerkeZeile = "A row's emblem not read — nothing shared."; return; }
+  if (St.zeilen.some(z => z.widerspruch)){ PG.staerkeZeile = "Sides do not match — nothing shared."; return; }
+  /* the head's player count and the sheet's names for a side, at the time of writing - the sheet grows with every beat */
+  const blatt = f => {
+    const s = PG.seiten.find(x => x.f === f), n = s ? Math.max(PG.ende[s.platz] || 0, PG.N || 0) : 0, namen = [];
+    for (let i = 0; i < n; i++){ const v = s && PG.namen.get(pgKey(s.platz, i)); if (v) namen.push(v.name); }
+    return {spieler: s ? (PG.ende[s.platz] || 0) : 0, namen};
+  };
+  const seiten = St.zeilen.map(z => {
+    const b = blatt(z.f);
+    const e = {f: z.f, n: z.n, ca: z.ca, text: z.text, spieler: b.spieler, namen: b.namen};
+    if (z.hand && z.hand.length) e.hand = z.hand.map(i => GF_GRUPPEN[i].k);
+    return e;
+  });
+  const marke = JSON.stringify(seiten);
+  if (marke !== PG.staerkeGeschrieben && (PG.staerkeGeschrieben === null || jetzt() - PG.staerkeT >= PG_TEILEN_TAKT)){
+    if (setBattle(PG.stadt, {seiten, q: St.q, src: "battle-window"})){ PG.staerkeGeschrieben = marke; PG.staerkeT = jetzt(); }
+  }
+  const e = (S.btl || {})[PG.stadt];
+  PG.staerkeZeile = e && e.v && e.v.src === "battle-window"
+    ? `Shared with the clan ${alterText(e.t)}${e.by === S.me ? "" : " · by " + werWar(e)}` : "Not shared yet.";
+}
+/* the diamonds of the table's head row, drawn once out of MAP.rauten: the
+   dark points of the 32 by 32 templates as ink on the sheet, the rest
+   see-through (FABLE 13.09.2026, question 6 on the answer sheet - the
+   diamonds, the cell click and the sentence under "How it works") */
+let pgRautenBilder = null;
+function pgRauteBild(teil){
+  if (!pgRautenBilder) pgRautenBilder = {};
+  if (teil in pgRautenBilder) return pgRautenBilder[teil];
+  const str = (MAP.rauten || {})[teil];
+  let url = "";
+  if (str && str.length === 1024){
+    const c = document.createElement("canvas"); c.width = 32; c.height = 32;
+    const g = c.getContext("2d"), id = g.createImageData(32, 32), p = id.data;
+    for (let j = 0; j < 1024; j++){
+      const v = parseInt(str[j], 16);
+      p[j*4] = 43; p[j*4+1] = 36; p[j*4+2] = 22;
+      p[j*4+3] = v <= 6 ? Math.round(255*(7 - v)/7) : 0;
+    }
+    g.putImageData(id, 0, 0);
+    url = c.toDataURL();
+  }
+  return (pgRautenBilder[teil] = url);
+}
+/* the table as the game shows it: three blocks, eighteen columns, one row
+   per side; a dimmed zero dimmed, "?" where nothing could be read */
+function pgStaerkeHtml(){
+  const St = PG.staerke;
+  if (!St || !St.zeilen.length) return `<div class="sp-geteilt">${kbEsc(PG.staerkeZeile || "")}</div>`;
+  const halter = PG.stadt !== null && PG.stadt !== undefined ? ownerOf(PG.stadt) : -1;
+  const block = i => i === 0 || i === 8 || i === 14 ? "sp-block" : "";
+  const kopf1 = `<tr><th></th>${GF_BLOECKE.map(b => `<th colspan="${b.n}" class="sp-block">${kbEsc(b.zweig ? zweigName(b.zweig) : b.name)}</th>`).join("")}</tr>`;
+  const kopf2 = `<tr><th></th>${GF_GRUPPEN.map((g, i) => `<th class="${block(i)}" title="${kbEsc(g.teil)}">${
+    pgRauteBild(g.teil) ? `<img class="sp-raute" src="${pgRauteBild(g.teil)}" alt="">` : kbEsc(g.teil.slice(0, 3))}</th>`).join("")}</tr>`;
+  const zeilen = St.zeilen.map(z => `<tr${z.f === halter ? ` title="holds the town"` : ""}${z.widerspruch ? ` class="widerspruch"` : ""}>
+    <th class="sp-seite">${kbEsc(kbSeiteName(z.f))}</th>${
+    z.text.map((t, i) => {
+      const hand = !!(z.hand && z.hand.includes(i)), un = z.unsicher.includes(i);
+      /* a row without a side has nothing to hang a typed value on: no invitation to click */
+      const wink = z.f === null ? " — side not read" : hand ? " — " + AKT_HER.hand.kurz : un ? " — not read, click to type it" : " — click to correct";
+      return `<td class="sp-zelle ${t === "0" ? "null" : ""} ${un ? "unsicher" : ""} ${hand ? "hand" : ""} ${block(i)}" data-z="${z.f}:${i}" title="${
+        kbEsc(GF_GRUPPEN[i].teil)}${wink}">${kbEsc(t)}</td>`;
+    }).join("")}</tr>`).join("");
+  return `<div class="sp-staerke"><table class="sp-tabelle">${kopf1}${kopf2}${zeilen}</table>
+    <div class="sp-geteilt">${kbEsc(PG.staerkeZeile || "")}</div></div>`;
+}
+/* Correcting a cell by hand - ENNO 31.08.2026: "mit Korrekturfunktion".
+   A typed value carries hand, goes out with the next write and is not
+   overwritten by the reader until "New sheet". */
+function pgZelleBearbeiten(zelle){
+  if (zelle.querySelector("input") || !PG.staerke) return;
+  const teile = zelle.dataset.z.split(":"), f = +teile[0], i = +teile[1];
+  const z = PG.staerke.zeilen.find(x => x.f === f);
+  if (!z) return;
+  const alt = z.text[i] === "?" ? "" : z.text[i];
+  zelle.innerHTML = `<input type="text" value="${kbEsc(alt)}" spellcheck="false" maxlength="6">`;
+  const el = zelle.querySelector("input");
+  el.focus(); el.select();
+  PG.tippt = true;
+  const fertig = () => {
+    PG.tippt = false;
+    const neu = el.value.trim().toLowerCase().replace(/,/g, ".");
+    const key = f + ":" + i;
+    if (!neu) delete PG.staerkeHand[key];
+    else if (gfZahl(neu)) PG.staerkeHand[key] = neu;
+    else toast("A number, or short like 1.3k.");
+    pgStaerkeHand(); pgStaerkeTeilen(); pgZeichnen();
+  };
+  el.addEventListener("blur", fertig);
+  el.addEventListener("keydown", e => {
+    /* Enter finishes here, not through blur - a window without focus
+       (the bench) never fires it */
+    if (e.key === "Enter"){ e.preventDefault(); el.removeEventListener("blur", fertig); fertig(); }
+    if (e.key === "Escape"){
+      e.stopPropagation();
+      el.removeEventListener("blur", fertig);
+      PG.tippt = false; pgZeichnen();
+    }
+  });
 }
 /* Into the register. A name goes in with the side it fought on - that is
    the whole point of reading them here. */
@@ -27561,7 +28221,7 @@ function pgZeichnen(){
     <div class="rd-kf ${soll && gelesen >= soll ? "gut" : ""}"><div class="t">Names read</div>
       <div class="v">${gelesen}<small> of ${soll || "?"}</small></div>
       <div class="bar"><i style="width:${soll ? Math.round(100*Math.min(1, gelesen/soll)) : 0}%"></i></div></div>
-    <div class="rd-kf"><div class="t">Capture</div>
+    <div class="rd-kf"${PG.staerkeMs !== null ? ` title="strength table read in ${PG.staerkeMs} ms"` : ""}><div class="t">Capture</div>
       <div class="v"><small>${PG.frame ? `${PG.frame.w}×${PG.frame.h}, brightness ${PG.hell}${
         PG.gain > 1 ? `, ×${PG.gain.toFixed(1)}` : ""}` : "—"}</small></div></div>`;
   links.innerHTML = `
@@ -27573,10 +28233,11 @@ function pgZeichnen(){
     Open a battle on the war map — the window with both player lists. The room reads one
     name per beat. Roll the list down in the game and the rest follows; a name already on
     the sheet is not read twice. <b>Keep the sheet</b> writes every name into the register
-    with the side it fought on.`;
+    with the side it fought on. The strength table is read as well and shared with the clan
+    while the window stands.`;
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Battle"} · ${
     new Date().toLocaleDateString()}</div>
-    ${PG.seiten.length ? `<div class="sp-listen">${PG.seiten.map(s => {
+    ${PG.seiten.length ? `${pgStaerkeHtml()}<div class="sp-listen">${PG.seiten.map(s => {
       const n = Math.max(PG.ende[s.platz] || 0, PG.N || 0);
       const zeilen = [];
       for (let i = 0; i < n; i++){
@@ -27633,6 +28294,8 @@ function pgPult(){
 }
 /* Correcting a name by hand - the reader is good, not infallible. */
 function pgBearbeiten(ev){
+  const zelle = ev.target.closest(".sp-zelle[data-z]");
+  if (zelle){ ev.stopPropagation(); pgZelleBearbeiten(zelle); return; }
   const tausch = ev.target.closest(".sp-tausch[data-k]");
   if (tausch){ ev.stopPropagation(); pgSchriftTauschen(tausch.dataset.k); return; }
   const feld = ev.target.closest(".nm[data-k]");
@@ -39299,7 +39962,10 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
 /* The old battle calculator is gone - it was a stock ledger kept by hand.
    The battle analysis takes its place as a room of its own, reading the
    strengths and the players straight off the war map's battle view. The
-   pot btl and its two accessors stay: the room will fill them. */
+   pot btl and its two accessors stay: the players' room fills them since
+   13.09.2026 (BAT-2) with the strength table of the battle window - one
+   row per side, eighteen groups, see setBattle - and the town column
+   shows it (schlachtFenster). */
 
 /* ---- the text recogniser ---------------------------------------------
    Tesseract expects dark letters on a light ground and about 30 px of line
@@ -46551,10 +47217,27 @@ function beitrittDialog(){
    Infantryman, Recon 20 Recon. Das Minimum ueber alle benoetigten Ressourcen
    ist die Zahl - mehr geht nicht, auch wenn von einer anderen Ressource noch
    reichlich da ist. */
-const battleStand = i => (S.btl[i] && S.btl[i].v) || null;
+/* THE POT btl IS WRITTEN SINCE 13.09.2026 by the players' room (BAT-2).
+   THE CONTRACT WITH THE BATTLE WINDOW (BAT-11, FABLE 13.09.2026):
+     v = {seiten: [{f, n, ca, text, spieler, namen, hand?}], typ?, seit?, q, src}
+   per side f (0 US, 1 GE, 2 USSR), n {<res.k>: count} above zero only,
+   ca [keys the game shortened, "1.3k" filed as 1300], text [18 as shown],
+   spieler (the head's count), namen [the sheet's names of that side, in
+   sheet order, as read], hand [keys typed by hand] only when typed;
+   q "live" | "file", src "battle-window"; t, by, n (the name) from stamp.
+   typ and seit (kind of battle, running time in seconds) are NOT written:
+   the head strip is not read here - they may be missing, and BAT-11 must
+   do without them. battleStand hands out the whole row (t and by are
+   wanted), this war and within the replay moment, like gefechtStand.
+   NOTE FOR KLEIN-3 (BEF-13): panzerGemeldet may take a younger btl row's
+   enemy armour columns (light/medium/heavy_armor, tank_destroyer,
+   heavy_tank_destroyer) as the better witness; the row comes from here,
+   not v. */
+const battleStand = i => { const e = S.btl && S.btl[i]; return (imKrieg(e) && imZeit(e) && e.v) ? e : null; };
 function setBattle(i, v){
-  S.btl[i] = {v, t: jetzt(), by: S.me, n: S.name || ""};
-  dirty.add(`btl:${i}`); save();
+  if (!stamp("btl", i, v, {n: S.name || ""})) return false;
+  save();
+  return true;
 }
 function ausRessourcen(vorrat){
   const raus = [];
@@ -46625,8 +47308,43 @@ function schlachtUrteil(wir, sie){
    juengsten Meldung in der Kopfzeile.
 
    Einen Vorrat AM ORT, wie ihn ausRessourcen eigentlich meint, gibt es
-   nirgends: der Topf btl ist dafuer angelegt, aber niemand schreibt ihn,
-   battleStand(i) ist immer null. Er wird hier nicht geraten. */
+   nirgends. Since 13.09.2026 (BAT-2) the pot btl carries something else:
+   the strength table of the battle window, eighteen groups per side,
+   read in the players' room - troops in the battle, not a stock to form
+   squads from. So it does NOT go through ausRessourcen; it stands as its
+   own block "Battle window" (schlachtFenster), summed per branch like
+   the match-up beside it. */
+/* WHAT THE BATTLE WINDOW SHOWED - the row in the pot btl, summed per
+   branch the way the match-up line beside it speaks: the soldiers, their
+   vehicles in brackets. A shortened thousand ("1.3k") stays the game's
+   word - no number pretending to be exact - and a "~" marks a sum with
+   one in it (the "~" and the words planes / tanks / vehicles are the
+   builder's, question 4 on the answer sheet). Hangs on the battle mark
+   like the whole section (FABLE 13.09.2026, question 4). */
+function schlachtFenster(i){
+  const e = battleStand(i);
+  const v = e && e.v;
+  if (!v || !Array.isArray(v.seiten) || !v.seiten.length) return "";
+  const zeilen = v.seiten.map(s => {
+    const n = s.n || {}, ca = new Set(s.ca || []), text = s.text || [];
+    const wort = k => {
+      const j = GF_GRUPPEN.findIndex(g => g.k === k);
+      return ca.has(k) && j >= 0 && text[j] ? String(text[j]) : String(n[k] || 0);
+    };
+    const teile = ZWEIGE.filter(z => z.k !== "other").map(z => {
+      const men = GF_GRUPPEN.find(g => g.zweig === z.k && g.men);
+      let nv = 0, cav = false;
+      for (const g of GF_GRUPPEN) if (g.zweig === z.k && !g.men){ nv += +n[g.k] || 0; if (ca.has(g.k)) cav = true; }
+      const einheit = z.k === "armor" ? " crews" : z.k === "airforce" ? " pilots" : "";
+      const fz = z.k === "airborne" || z.k === "airforce" ? "planes" : z.k === "armor" ? "tanks" : "vehicles";
+      return `${esc(zweigName(z.k).toLowerCase())} <b>${men ? esc(wort(men.k)) : "0"}</b>${einheit}${nv ? ` (${cav ? "~" : ""}${nv} ${fz})` : ""}`;
+    });
+    return `<div class="hint">${esc(kbSeiteName(s.f))}: ${teile.join(" \u00b7 ")}</div>`;
+  });
+  return `<div class="hint" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><b>Battle window</b></div>
+      ${zeilen.join("")}
+      <div class="hint" style="color:var(--dim)">read from the battle window by ${esc(werWar(e))} ${esc(alterText(e.t))}</div>`;
+}
 function schlachtZweige(jeTyp){
   const m = new Map();
   for (const [k, n] of jeTyp){
@@ -46659,7 +47377,8 @@ function schlachtAbschnitt(i){
     ohneSeite = Math.max(ohneSeite, ohne);
   }
   const wir = schlachtZweige(meins), sie = schlachtZweige(feind);
-  if (!wir.length && !sie.length) return "";
+  const fenster = schlachtFenster(i);
+  if (!wir.length && !sie.length && !fenster) return "";
   const a = zweigStaerke(wir), b = zweigStaerke(sie);
   const best = (m, z) => (m.get(z) || {best: 0}).best;
   /* Die Ordnung des Spiels zuerst, alles Unbekannte hinterher - ein Zweig,
@@ -46689,12 +47408,13 @@ function schlachtAbschnitt(i){
   return `<div class="sec">
       <h3>Match-up${sie.length ? ` <span class="sub">yours : theirs${
         tSicht ? ` \u00b7 spotted ${alterText(tSicht)}` : ""}</span>` : ""}</h3>
-      <div class="hint">${zeile.join(" \u00b7 ")}</div>
+      ${zeile.length ? `<div class="hint">${zeile.join(" \u00b7 ")}</div>` : ""}
       ${urteil ? urteil.fehlt.map(t => satz(t, "var(--su)")).join("") : ""}
       ${urteil ? urteil.droht.map(t => satz(t, "var(--accent)")).join("") : ""}
       ${urteil ? urteil.stark.map(t => satz(t, "var(--us)")).join("") : ""}
-      ${sie.length || ohneSeite ? "" : `<span class="empty">Nothing spotted here.</span>`}
+      ${sie.length || ohneSeite || fenster ? "" : `<span class="empty">Nothing spotted here.</span>`}
       ${ohneSeite ? `<div class="hint" style="color:var(--dim)">${ohneSeite} without a side.</div>` : ""}
+      ${fenster}
       ${poolZeile}
     </div>`;
 }
@@ -49412,7 +50132,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build e35481f5ea</span></p></div>
+         installation. <span style="color:var(--dim2)">· build d22e9a98d6</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -49640,7 +50360,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "e35481f5ea";
+const BAU = "d22e9a98d6";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
