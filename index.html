@@ -334,6 +334,50 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
 #zoombox button:hover{background:var(--panel2)}
 #tip{bottom:10px;right:10px;padding:5px 9px;font-size:10.5px;color:var(--dim);max-width:340px}
 #tip b{color:var(--text);font-weight:600}
+/* KAR-6: THE UNIT BAR at the bottom of the map (ENNO 12.09.2026), the strip
+   the game opens under a stack. While it is open the zoom box, the watch
+   and the tip move up by its height (--leiste-auf, set when it is built).
+   The later battle window (BAT-11) must not cover it - his word. */
+#leiste{left:10px;right:10px;bottom:10px;z-index:11;padding:6px 9px;display:flex;flex-direction:column;gap:5px;
+  max-height:46%;min-width:0}
+#leiste[hidden]{display:none}
+#mapwrap.leiste-auf #zoombox,#mapwrap.leiste-auf #wache,#mapwrap.leiste-auf #tip{bottom:calc(10px + var(--leiste-auf,0px))}
+#leiste .lk{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--dim);min-width:0;white-space:nowrap}
+#leiste .lk b{font-family:var(--schmal);text-transform:uppercase;letter-spacing:.06em;font-size:12.5px;color:var(--text);
+  cursor:pointer;overflow:hidden;text-overflow:ellipsis}
+#leiste .lk b:hover{color:var(--accent)}
+#leiste .lk .n{color:var(--text);font-weight:600;flex:none}
+#leiste .lk .g{overflow:hidden;text-overflow:ellipsis;min-width:0}
+#leiste .lk .x{margin-left:auto;background:transparent;border:0;color:var(--dim2);font-size:17px;cursor:pointer;
+  line-height:1;padding:0 3px;flex:none}
+#leiste .lk .x:hover{color:var(--text)}
+#leiste .lk,#leiste .sp-filter,#leiste .ls{flex:none}
+#leiste .sp-filter{margin:0}
+#leiste .lr{display:flex;flex-wrap:wrap;gap:6px 8px;overflow-y:auto;max-height:196px;min-width:0;min-height:0;flex:1 1 auto;padding:2px 0}
+#leiste .lz{display:flex;flex-direction:column;align-items:center;gap:1px;width:78px;font-size:10px;color:var(--dim2);
+  text-align:center;flex:none;font-variant-numeric:tabular-nums}
+#leiste .lz .kb-k{cursor:default;color:#dce4ee}
+#leiste .lz .kb-k svg{width:32px;height:22px}
+#leiste .lz .kb-k i{position:absolute;left:-1px;top:-1px;font-style:normal;font-size:9px;line-height:1;padding:1px 3px;
+  background:#f0b13a;color:#1a1204;border-radius:2px 0 2px 0}
+#leiste .lz b{font-size:11px;color:var(--text);max-width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#leiste .lz span{max-width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#leiste .ls{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:11px;color:var(--dim);padding-top:4px;
+  border-top:1px solid var(--line)}
+#leiste .ls span{display:flex;align-items:center;gap:4px;font-variant-numeric:tabular-nums}
+#leiste .ls svg{width:22px;height:15px}
+@media (max-width: 760px){
+  #leiste{left:6px;right:6px;bottom:6px;max-height:60%;padding:5px 6px}
+  #leiste .lr{max-height:150px}
+  /* the depot handle floats at the screen's edge (fixed, unzoomed) and
+     would sit on the bar's number row: it steps up by the bar's height,
+     which the bar writes to :root as well (zoomed by --ui, the handle not) */
+  body #blattgriff{bottom:calc(env(safe-area-inset-bottom,0px) + var(--leiste-h,96px) + 8px + var(--leiste-auf,0px) * var(--ui,1))}
+  #leiste .lz{width:64px}
+  #leiste .lz b,#leiste .lz span{max-width:64px}
+  #leiste .lz .kb-k{width:40px;height:30px}
+  #leiste .lz .kb-k svg{width:28px;height:19px}
+}
 /* Achtzehn Zeilen statt zehn: der Kasten bekommt eine Obergrenze und darf
    notfalls scrollen. Gemessen wird am Kartenfeld, nicht am Fenster - die
    Kopfzeile waechst ja mit. Und geteilt durch --ui, weil der Kasten selbst
@@ -2241,6 +2285,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       </div>
       <div id="tip" class="float"></div>
       <div id="wache" class="float" data-fest></div>
+      <div id="leiste" class="float" hidden></div>
     </div>
 
     <div id="rechts">
@@ -3758,8 +3803,28 @@ let hebe = null, hebeName = "";
    both as strings; they live outside side() because side() is rebuilt by
    dozens of callers */
 let sichtTyp = null, sichtWem = null;
+/* KAR-6: the side as a third filter, and ONE state for the column and the
+   unit bar - whoever filters in one sees the same in the other. */
+let sichtSeite = null;
 const sichtWemVon = u => u.owner ? spielerKey(u.owner) : "?";
-const sichtZeigt = u => (!sichtTyp || String(u.k) === sichtTyp) && (!sichtWem || sichtWemVon(u) === sichtWem);
+const sichtSeiteVon = u => (u.f === 0 || u.f === 1 || u.f === 2) ? u.f : 3;
+const sichtZeigt = u => (!sichtTyp || String(u.k) === sichtTyp) && (!sichtWem || sichtWemVon(u) === sichtWem)
+                     && (sichtSeite === null || sichtSeiteVon(u) === sichtSeite);
+function sichtFilterKlick(v){
+  if (!v){ sichtTyp = null; sichtWem = null; sichtSeite = null; }
+  else if (v.startsWith("t:")){ const t = v.slice(2); sichtTyp = sichtTyp === t ? null : t; }
+  else if (v.startsWith("s:")){ const f = +v.slice(2); sichtSeite = sichtSeite === f ? null : f; }
+  else { const w = v.slice(2); sichtWem = sichtWem === w ? null : w; }
+  side();
+  if (leisteZust.offen !== null) leisteZeichnen();
+}
+/* the bar: which town it shows, and the state it was built for */
+const leisteZust = {offen: null, stand: -1, zeit: null};
+/* the box of every drawn stack, for the click (like schildVon) */
+const stapelVon = new Map();
+/* the top edge of a town's plate chain (para threat, battle, clock, roles),
+   left by the town loop so the stack can step over all of them */
+const plattenKante = new Map();
 /* Die Flugplatzbrille. Aus, solange niemand sie einschaltet - sie legt 117
    zusaetzliche Ringe auf die Karte und waere staendig an im Weg. */
 let showFlug = false;
@@ -4993,6 +5058,217 @@ function aufmarschKarte(){
     d.gesamt = d.je[0] + d.je[1] + d.je[2] + d.je[3];
   }
   return m;
+}
+/* ---- KAR-6: THE UNIT STACK AT A TOWN (ENNO 12.09.2026) -----------------
+   What stands in a town, per side, as the stack on the map and the cards of
+   the bar. NOT the sighting total of the column: that pot is a running sum
+   over the war (see aufklStand), a town read twice stands at 6 instead of 3.
+     1. S.edep, one card per enemy record last seen in this town (u.o), not
+        verm (never seen, only assumed from the numbering), from the war
+        line to zeitReise; side from S.roster[key].v.f, else bucket 3.
+        Records of OUR OWN side (f === clanFaktion()) and of accounts that
+        came over to us (uebergelaufen) are no enemy stack - the rule of
+        aufklSichtKarte and paraBedrohungKarte; own teams stay the count
+        above the disc. Their towns still go into hatKarte first.
+     2. S.spot rows whose OWNER has no record card here (hand reports,
+        readings without an owner line) and is not one of ours - came
+        over, or own side by the roster; the units room writes one
+        sighting row per reading WITH the owner and counts it up, so
+        without this rule the row would rise where the card fell, with
+        the running sum: per (type, side, owner) the LARGEST report over
+        the reporters, not the sum (the rule of paraBedrohungKarte). A
+        hand report with our side but NO owner still counts, as the
+        column shows it. A reading without any owner line still carries
+        the running sum - known, not solved here (the units room is not
+        touched).
+     3. Radar rows (estAt, auto:1 or the machine pattern): a stack with an
+        EMPTY plate where nothing has been read yet.
+   Computed ONCE per state (zustandLauf, zeitReise, epoche, S) - draw()
+   only reads the map; the lesson of 5.71. */
+let stapelCache = null, stapelLauf = -1, stapelZeit = null, stapelEpoche = -1, stapelS = null, stapelRechnungen = 0;
+const STAPEL_MASCHINE = /^(US|GE|USSR|Unknown side) .*assault team/;
+const stapelSeiteAusText = tx => /^US\b/.test(tx) ? 0 : /^GE\b/.test(tx) ? 1 : /^USSR\b/.test(tx) ? 2 : 3;
+function stapelKarteRechnen(){
+  const m = new Map();
+  const fach = f => (f === 0 || f === 1 || f === 2) ? f : 3;
+  const eintrag = (town, f) => {
+    let d = m.get(town); if (!d){ d = {je: new Map(), clans: new Map()}; m.set(town, d); }
+    let st = d.je.get(f); if (!st){ st = {f, n: 0, t: 0, nurRadar: false, karten: []}; d.je.set(f, st); }
+    return st;
+  };
+  const clanZu = (town, owner, n) => {
+    const c = owner ? clanVon(owner) : null;
+    if (c){ const d = m.get(town); d.clans.set(c, (d.clans.get(c) || 0) + n); }
+  };
+  const ep = epoche(), hatKarte = new Set(), meine = clanFaktion();
+  /* one of ours by the roster key: came over to us, or our own side */
+  const stapelUnsrer = wk => { const r = (S.roster || {})[wk]; return uebergelaufen(wk) || fach(r && r.v ? r.v.f : null) === meine; };
+  for (const [key, e] of Object.entries(S.edep || {})){
+    if (!e || !Array.isArray(e.v)) continue;
+    const r = (S.roster || {})[key], f = fach(r && r.v ? r.v.f : null), owner = (r && r.v && r.v.name) || "";
+    const unsrer = uebergelaufen(key) || f === meine;      /* our own side is no enemy stack */
+    for (const u of e.v){
+      if (!u || u.verm || u.o === undefined || u.o === null || !u.t || !MAP.n[u.o]) continue;
+      const t = u.t * 1000;                                  /* seconds -> ms */
+      if (t < ep || (zeitReise && t > zeitReise)) continue;
+      if (owner) hatKarte.add(u.o + "|" + spielerKey(owner));   /* noted BEFORE the card falls */
+      if (unsrer) continue;
+      const st = eintrag(u.o, f);
+      st.n++; st.t = Math.max(st.t, t);
+      st.karten.push({k: u.k, tag: u.tag, name: u.name, owner, key, f, t, n: 1, st: u.st, l: u.l,
+                      unlesbar: u.unlesbar, cut: u.cut, kurz: u.kurz, unvoll: u.unvoll, ung: u.ung});
+      clanZu(u.o, owner, 1);
+    }
+  }
+  const orte = new Set();
+  for (const k of Object.keys(S.spot || {})){ const town = +k.slice(0, k.indexOf(":")); if (MAP.n[town]) orte.add(town); }
+  for (const town of orte){
+    const best = new Map();
+    for (const g of spotsAt(town)) for (const u of g.list){
+      if (!u || !(u.n > 0)) continue;
+      const wk = u.owner ? spielerKey(u.owner) : "";
+      /* the owner has a card here, or is one of ours (at every town, the
+         old ones too where the card moved on): no row of his */
+      if (wk && (hatKarte.has(town + "|" + wk) || stapelUnsrer(wk))) continue;
+      const f = fach(u.f), sk = String(u.k) + "|" + f + "|" + wk, b = best.get(sk);
+      if (!b || u.n > b.n || (u.n === b.n && g.t > b.t))
+        best.set(sk, {k: u.k, n: u.n, f, owner: u.owner || "", melder: g.mine ? "you" : (g.name || ""), t: g.t || 0, sicht: true});
+    }
+    for (const b of best.values()){
+      const st = eintrag(town, b.f);
+      st.n += b.n; st.t = Math.max(st.t, b.t); st.karten.push(b);
+      clanZu(town, b.owner, b.n);
+    }
+  }
+  const radar = new Set();
+  for (const k of Object.keys(S.est || {})){ const town = +k.slice(0, k.indexOf(":")); if (MAP.n[town]) radar.add(town); }
+  for (const town of radar){
+    for (const e of estAt(town)){
+      if (!e || !(e.auto || STAPEL_MASCHINE.test(e.text || ""))) continue;
+      if (zeitReise && (e.t || 0) > zeitReise) continue;
+      const st = eintrag(town, stapelSeiteAusText(e.text || ""));
+      if (!st.n){ st.nurRadar = true; st.t = Math.max(st.t, e.t || 0); }
+    }
+  }
+  const raus = new Map();
+  for (const [town, d] of m){
+    const stapel = [...d.je.values()].filter(st => st.n || st.nurRadar).sort((a, b) => a.f - b.f);
+    if (!stapel.length) continue;
+    raus.set(town, {stapel, clans: [...d.clans.entries()].map(([name, n]) => ({name, n}))});
+  }
+  return raus;
+}
+function stapelKarte(){
+  const ep = epoche();
+  if (stapelCache && stapelLauf === zustandLauf && stapelZeit === zeitReise && stapelEpoche === ep && stapelS === S)
+    return stapelCache;
+  stapelCache = stapelKarteRechnen();
+  stapelLauf = zustandLauf; stapelZeit = zeitReise; stapelEpoche = ep; stapelS = S; stapelRechnungen++;
+  return stapelCache;
+}
+/* the stack under the pointer, in screen points - the boxes draw() left.
+   Drawn in insertion order, so the last one lies on top: it wins the click */
+function stapelTreffer(sx, sy){
+  for (const [town, k] of [...stapelVon].reverse())
+    if (sx >= k.x0 && sx <= k.x1 && sy >= k.y0 && sy <= k.y1) return town;
+  return null;
+}
+/* ---- THE UNIT BAR ------------------------------------------------------
+   Opened by a click on the stack (or "bar" in the column). Rebuilt when the
+   state changes (draw() compares zustandLauf and zeitReise), not per frame.
+   Closed by x, Escape, the war line; a click on another stack switches the
+   town; a click on a plain disc leaves it standing. */
+function leisteOeffnen(i){ leisteZust.offen = i; leisteZeichnen(); }
+function leisteSchliessen(){
+  if (leisteZust.offen === null) return;
+  leisteZust.offen = null;
+  const el = document.getElementById("leiste"), wrap = document.getElementById("mapwrap");
+  el.hidden = true; el.innerHTML = "";
+  wrap.classList.remove("leiste-auf"); wrap.style.removeProperty("--leiste-auf");
+  document.documentElement.style.removeProperty("--leiste-auf");
+}
+function leisteZeichnen(){
+  const i = leisteZust.offen;
+  if (i === null || !MAP.n[i]) return;
+  const el = document.getElementById("leiste"), wrap = document.getElementById("mapwrap");
+  leisteZust.stand = zustandLauf; leisteZust.zeit = zeitReise;
+  const d = stapelKarte().get(i);
+  /* the stack is gone (time travel before the cards, register cleared):
+     the bar goes with it instead of standing there with "0 units" */
+  if (!d){ leisteSchliessen(); return; }
+  const stapel = d.stapel;
+  const karten = stapel.flatMap(st => st.karten);
+  const n = karten.reduce((a, u) => a + (u.n || 1), 0);
+  const nurRadar = !n && stapel.some(st => st.nurRadar);
+  const tJ = Math.max(0, ...stapel.map(st => st.t));
+  const spo = spotsAt(i).slice().sort((a, b) => (b.t || 0) - (a.t || 0));
+  const gelesen = spo.length ? `read ${alterText(spo[0].t)} by ${spo.map(g => g.mine ? "you" : esc(g.name || "?")).join(", ")}`
+                : nurRadar ? `seen by radar ${alterText(tJ)} \u00b7 nothing read yet`
+                : tJ ? `read ${alterText(tJ)}` : "";
+  /* the card tiles keep their own dark ground (.kb-k), the branch row below
+     sits on the bar itself - in the light theme it needs the dark ink, as
+     side() does */
+  const c = "#dce4ee", cz = light() ? "#1a2029" : "#dce4ee", rand = ["us", "ge", "su"];
+  /* the filter row: all, every type, every owner, every side - with counts */
+  const typen = new Map(), wem = new Map(), seiten = new Map();
+  for (const u of karten){
+    /* the key stays String(u.k) - that is what sichtZeigt compares; a record
+       without a type (no k) gets the "?" of its tile, not "undefined" */
+    const k = String(u.k), nn = u.n || 1, ty = typen.get(k) || {n: 0, echt: !!u.k}; ty.n += nn; typen.set(k, ty);
+    const wk = sichtWemVon(u), w = wem.get(wk) || {name: u.owner || "unknown owner", n: 0}; w.n += nn; wem.set(wk, w);
+    const f = sichtSeiteVon(u); seiten.set(f, (seiten.get(f) || 0) + nn);
+  }
+  const filter = karten.length ? `<div class="sp-filter">
+      <button data-sf="" aria-pressed="${!sichtTyp && !sichtWem && sichtSeite === null}">all</button>
+      ${[...typen.entries()].map(([k, ty]) => `<button data-sf="t:${esc(k)}" aria-pressed="${sichtTyp === k}"${ty.echt ? `
+        title="${esc(atName(k))}"` : ""}>${ty.echt ? esc(atKurz(k)) : "?"}<b>${ty.n}</b></button>`).join("")}
+      ${[...wem.entries()].map(([k, w]) => `<button data-sf="w:${esc(k)}" aria-pressed="${sichtWem === k}">${esc(w.name)}<b>${w.n}</b></button>`).join("")}
+      ${[...seiten.entries()].sort((a, b) => a[0] - b[0]).map(([f, nn]) => `<button data-sf="s:${f}" aria-pressed="${sichtSeite === f}"
+        style="--f:${f < 3 ? col(FACTIONS[f]) : "#e8b04a"}">${f < 3 ? FACTIONS[f].tag : "?"}<b>${nn}</b></button>`).join("")}
+    </div>` : "";
+  const stText = u => {
+    if (!Array.isArray(u.st)) return "";
+    let ist = 0, max = 0, hat = false;
+    for (const h of u.st) if (Array.isArray(h)){ ist += +h[0] || 0; max += +h[1] || 0; hat = true; }
+    return hat ? `${ist}/${max}` : "";
+  };
+  const sichtbar = karten.filter(sichtZeigt);
+  const kacheln = sichtbar.map(u => {
+    const zeichen = (u.ung || !u.k || !SYM[u.k]) ? "?" : symbolSVG(u.k, c, 32, 22);
+    const st = stText(u), titel = [u.tag, u.name, u.owner ? "owner: " + u.owner : "", u.sicht && u.melder ? "reported by " + u.melder : ""]
+      .filter(Boolean).join(" \u00b7 ");
+    return `<div class="lz" title="${esc(titel)}">
+      <span class="kb-k ${rand[u.f] || ""}">${u.sicht && u.n > 1 ? `<i>${u.n}\u00d7</i>` : ""}${zeichen}</span>
+      <b dir="auto">${u.sicht ? esc(u.melder || atKurz(u.k)) : esc(u.tag || "")}</b>
+      <span dir="auto">${u.sicht ? esc(atKurz(u.k)) : (u.unlesbar ? "" : esc(u.name || "")) + feindCutMarke(u)}</span>
+      ${u.owner ? `<span>${nameMitClan(u.owner)}</span>` : ""}
+      ${st || u.l ? `<span>${st}${u.l ? `${st ? " \u00b7 " : ""}line ${esc(u.l)}` : ""}</span>` : ""}
+      <span>${u.t ? alterText(u.t) : ""}</span>
+    </div>`;
+  }).join("");
+  const je = {};
+  /* a row without a type is unknown, not "Other" - the tile and the button say "?" (FABLE, Runde 3) */
+  for (const u of sichtbar){ const zw = u.k ? zweigVon(u.k) : "?"; je[zw] = (je[zw] || 0) + (u.n || 1); }
+  const reihe = ZWEIGE.filter(zw => je[zw.k]).map(zw => {
+    const sym = anfKlasseSym(zw.k);
+    return `<span title="${esc(zw.name)}">${sym && SYM[sym] ? symbolSVG(sym, cz, 22, 15) : esc(zw.name)}${je[zw.k]}</span>`;
+  }).join("") + (je["?"] ? `<span>?${je["?"]}</span>` : "");
+  /* radar only: the stack says "something stands there", so no "0 units" */
+  el.innerHTML = `<div class="lk">
+      <b data-leiste-stadt>${esc(MAP.n[i][0])}</b>
+      ${nurRadar ? "" : `<span class="n">${n} unit${n === 1 ? "" : "s"}</span>`}
+      <span class="g">${gelesen}</span>
+      <button class="x" data-leiste-zu title="Close">\u00d7</button>
+    </div>${filter}
+    <div class="lr">${kacheln || (karten.length ? `<span class="empty">Nothing matches the filter.</span>` : nurRadar ? "" : `<span class="empty">Nothing recorded here.</span>`)}</div>
+    ${reihe ? `<div class="ls">${reihe}</div>` : ""}`;
+  el.querySelector("[data-leiste-zu]").addEventListener("click", leisteSchliessen);
+  el.querySelector("[data-leiste-stadt]").addEventListener("click", () => { sel = i; side(); draw(); tally(); });
+  el.querySelectorAll("[data-sf]").forEach(b => b.addEventListener("click", () => sichtFilterKlick(b.dataset.sf)));
+  el.hidden = false;
+  wrap.classList.add("leiste-auf");
+  wrap.style.setProperty("--leiste-auf", el.offsetHeight + "px");
+  document.documentElement.style.setProperty("--leiste-auf", el.offsetHeight + "px");   // for the phone's depot handle
 }
 const allSpots = () => {
   const m = new Map();
@@ -9787,6 +10063,9 @@ const col = f => { const g = f || FAK_UNBEKANNT; return light() ? g.light : g.co
 function draw(){
   const w = cv.width, h = cv.height;
   pfadVon.clear(); mitteVon.clear(); schildVon.clear();   // was nicht gezeichnet wird, ist nicht treffbar
+  stapelVon.clear(); plattenKante.clear();
+  /* KAR-6: the unit bar follows the state, not the frame */
+  if (leisteZust.offen !== null && (leisteZust.stand !== zustandLauf || leisteZust.zeit !== zeitReise)) leisteZeichnen();
   ctx.setTransform(1,0,0,1,0,0);
   ctx.fillStyle = light() ? "#d5d9de" : "#080b0f";
   ctx.fillRect(0,0,w,h);
@@ -10243,8 +10522,11 @@ function draw(){
         const rz = rolleOrteZahl().get(i);
         if (rz) oben -= rolleEtikett(x, oben, rz) + 2;
         const dz = rolleDrinZahl().get(i);
-        if (dz) rolleDrinEtikett(x, oben, dz);
+        if (dz) oben -= rolleDrinEtikett(x, oben, dz) + 2;
       }
+      /* KAR-6: the unit stack steps over the whole chain (drawn after the
+         town loop) - it needs to know how high the plates reach */
+      plattenKante.set(i, oben);
     }
     if (showFlug && istFlugplatz(i)){
       const zielCap = (sel != null && isCap(sel)) ? sel : null;
@@ -10362,42 +10644,87 @@ function draw(){
      bleibt. */
   startPunktZeichnen();
 
-  /* --- enemy sightings, drawn above everything so they cannot be missed --- */
-  for (const d of allSpots()){
-    const n = MAP.n[d.town];
+  /* --- KAR-6: THE UNIT STACK, drawn above everything so it cannot be missed.
+     ENNO 12.09.2026: "Die Stapel sind daher in Ordnung, hier kannst du statt
+     den bloeden roemischen Ziffern auch einfach in denselben bereich, wo
+     diese Ziffer staende eine normale arabische Zahl schreiben mit der
+     Anzahl der ATs."
+     The game's sign (measured by OPUS in the game, head of
+     flick_units_stapel.py: plate 55 x 19, three cards 43 x 25 stepped 6;
+     the disc's radius of about 84 next to it measured by FABLE 13.09.2026
+     at Kartenstapel.png, Bamberg): a black plate with the count, under it three cards in cream
+     with the side's rim, each stepped right and down. One stack per side,
+     side by side. It stands where the warning triangle stood - above the
+     disc on rAussen, not inside it as in the game: the disc is eight points
+     at z 4, the stack needs sixteen. Where the town carries its own teams'
+     count or plates (para threat, battle score, clock, roles - the chain in
+     the town loop, its top left in plattenKante) the stack steps over all of
+     them. Only the number, nothing else; radar only: an empty plate with a
+     thin light rim, so it reads as a plate on the dark map. Opacity by the
+     age classes of 05.09. (aufmStufe). The numbers come from stapelKarte(),
+     cached per state - nothing is counted here. Every stack's box goes into
+     stapelVon for the click. The warning triangle (allSpots per frame, no
+     war-line check) is gone; allSpots stays for the board and the intel
+     window. */
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const [town, d] of stapelKarte()){
+    const n = MAP.n[town];
     if (!n) continue;
     const [x,y] = toScr(n[1], n[2]);
-    if (x < -30 || y < -30 || x > WW+30 || y > HH+30) continue;
-    const a = alter(d.t);
-    const frisch = a < FRISCH;
-    ctx.globalAlpha = a > ALT ? .42 : (frisch ? 1 : .72);
-    const gr = Math.max(9, 7.5*Math.sqrt(z))*uiScale, oy = -rAussen(d.town) - gr - 4;
-    const farbe = d.f != null ? col(FACTIONS[d.f]) : "#e8b04a";
-    ctx.beginPath();                                   // warning triangle
-    ctx.moveTo(x, y+oy-gr); ctx.lineTo(x+gr*.95, y+oy+gr*.72); ctx.lineTo(x-gr*.95, y+oy+gr*.72);
-    ctx.closePath();
-    ctx.fillStyle = farbe; ctx.fill();
-    ctx.strokeStyle = "rgba(5,8,12,.9)"; ctx.lineWidth = 1.6; ctx.stroke();
-    ctx.fillStyle = "rgba(8,11,16,.92)";
-    ctx.font = `700 ${gr*0.95}px "Segoe UI",system-ui,sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(d.n > 99 ? "!" : d.n, x, y+oy+gr*0.18);
-    if (frisch && z > 1){                              // fresh: halo
-      ctx.strokeStyle = farbe; ctx.globalAlpha = .5; ctx.lineWidth = 1.4;
-      ctx.beginPath(); ctx.arc(x, y+oy, gr*1.5, 0, 6.284); ctx.stroke();
+    if (x < -80 || y < -80 || x > WW+80 || y > HH+80) continue;
+    const g = Math.max(9, 7.5*Math.sqrt(z))*uiScale;
+    const th = g, kw = 1.4*g, kh = 0.85*g, vs = 0.2*g, rim = Math.max(1.2, 0.12*g), luecke = 0.25*g;
+    ctx.font = `700 ${g*0.9}px ${SCHMAL}`;
+    const breiten = d.stapel.map(st => Math.max(kw + 2*vs, st.nurRadar ? 0 : ctx.measureText(String(st.n)).width + 0.5*g));
+    const gesamt = breiten.reduce((a, b) => a + b, 0) + luecke*(breiten.length - 1);
+    const hoehe = th + kh + 2*vs;
+    /* the own teams' count sits on the rim (teamsAt, drawn in the town
+       loop) and the plates stack above it; the stack steps over whichever
+       reaches higher instead of covering it */
+    const eigen = (z > .8 && teamsAt(town)) ? Math.max(9, 8*Math.sqrt(z))*uiScale + 2 : 0;
+    const decke = plattenKante.get(town);
+    const unten = Math.min(y - rAussen(town) - 4 - eigen, decke === undefined ? Infinity : decke - 1);
+    const oben = unten - hoehe;
+    let sx = x - gesamt/2, farbe0 = null;
+    for (let q = 0; q < d.stapel.length; q++){
+      const st = d.stapel[q], bw = breiten[q];
+      const farbe = st.f < 3 ? col(FACTIONS[st.f]) : "#e8b04a";
+      if (farbe0 === null) farbe0 = farbe;
+      const stufe = aufmStufe(st.t);
+      ctx.globalAlpha = st.nurRadar ? Math.min(stufe.a, .72) : stufe.a;
+      const kx = sx + (bw - kw - 2*vs)/2, ky = oben + th;
+      for (let j = 2; j >= 0; j--){                       // three cards, back to front
+        const cx = kx + j*vs, cy = ky + j*vs;
+        ctx.fillStyle = "#0a0806"; ctx.fillRect(cx - 1, cy - 1, kw + 2, kh + 2);
+        ctx.fillStyle = farbe;     ctx.fillRect(cx, cy, kw, kh);
+        ctx.fillStyle = "#f3ecd8"; ctx.fillRect(cx + rim, cy + rim, kw - 2*rim, kh - 2*rim);
+      }
+      ctx.fillStyle = "#0a0806"; ctx.fillRect(sx - 1, oben - 1, bw + 2, th + 2);   // the plate
+      ctx.fillStyle = "#14100a"; ctx.fillRect(sx, oben, bw, th);
+      if (!st.nurRadar){ ctx.fillStyle = "#f4ead9"; ctx.fillText(String(st.n), sx + bw/2, oben + th/2 + 0.5); }
+      else {                                               // empty plate: a thin light rim, or it drowns in the map
+        const rr = Math.max(1, 0.08*g);
+        ctx.strokeStyle = "#f3ecd8"; ctx.lineWidth = rr;
+        ctx.strokeRect(sx + rr/2, oben + rr/2, bw - rr, th - rr);
+      }
+      if (stufe === AUFM_STUFEN[0] && z > 1){              // fresh: halo
+        ctx.strokeStyle = farbe; ctx.globalAlpha = .5; ctx.lineWidth = 1.4;
+        ctx.strokeRect(sx - 3, oben - 3, bw + 6, hoehe + 6);
+      }
+      sx += bw + luecke;
     }
     ctx.globalAlpha = 1;
+    stapelVon.set(town, {x0: x - gesamt/2 - 4, y0: oben - 4, x1: x + gesamt/2 + 4, y1: oben + hoehe + 4});
 
-    /* A clan tag turns "some enemies" into "an organised operation" — worth
-       its own banner next to the warning. */
-    const cl = clansAt(d.town);
-    if (cl.length && z > 0.9){
-      const txt = cl.map(c=>c.name).join(" / ");
-      const fh = gr*1.15;
+    /* A clan tag turns "some enemies" into "an organised operation" - worth
+       its own banner next to the stack; from the owners of the cards. */
+    if (d.clans.length && z > 0.9){
+      const txt = d.clans.map(c=>c.name).join(" / ");
+      const fh = g*1.15;
       ctx.font = `600 ${fh*0.86}px ${SCHMAL}`;
       const bw = ctx.measureText(txt).width + fh*0.9;
-      const bx = x + gr*1.1, by2 = y + oy - fh*0.5;
-      ctx.fillStyle = farbe;
+      const bx = x + gesamt/2 + g*0.35, by2 = oben + hoehe/2 - fh*0.5;
+      ctx.fillStyle = farbe0;
       ctx.beginPath();
       ctx.moveTo(bx, by2); ctx.lineTo(bx+bw, by2);
       ctx.lineTo(bx+bw-fh*0.34, by2+fh*0.5); ctx.lineTo(bx+bw, by2+fh);
@@ -14047,6 +14374,7 @@ const KRIEG_BLEIBT = Object.entries(TOPFTAFEL)
    Die Abholmarke muss mit zurueck - sonst holt der naechste Abgleich nur,
    was seither NEU ist, und die Karte bliebe leer. */
 function kriegsstandWegwerfen(){
+  leisteSchliessen();                      // KAR-6: the bar belongs to the old war
   for (const b of BUCKETS) if (!KRIEG_BLEIBT.includes(b)) S[b] = {};
   S.arrows = []; S.gone = {};
   for (const k of [...dirty]){
@@ -14281,6 +14609,7 @@ function neuerKrieg(){
      der Serveruhr. Eine nachgehende eigene Uhr haette den Strich sonst zu
      frueh gezogen, und Eintraege aus dem alten Krieg haetten ueberlebt. */
   setMeta("epoch", neuester + 1);
+  leisteSchliessen();                      // KAR-6: the bar belongs to the old war
   /* Die Startstaedte gehoeren von Anfang an ihrer Seite. Sie werden NICHT
      erst geleert und dann neu gesetzt: beides traegt denselben Zeitstempel,
      und bei Gleichstand entschiede der Zufall, ob bei den anderen im Clan die
@@ -14998,6 +15327,14 @@ window.addEventListener("mouseup", e => {
 });
 cv.addEventListener("click", e => {
   if (dragged) return;
+  /* KAR-6: the stack hangs above the disc; where it reaches over the rim
+     it wins, and it opens the bar as well as the column (ENNO 12.09.2026:
+     "Beim Anklicken des Stapel wuerde sich dann eine Leiste wie im Spiel
+     unten oeffnen"). A click on the disc itself stays what it was. */
+  if (tool === "inspect"){
+    const st = stapelTreffer(e.offsetX, e.offsetY);
+    if (st !== null){ leisteOeffnen(st); sel = st; side(); draw(); tally(); return; }
+  }
   if (tool === "inspect" && hitTest(e.offsetX, e.offsetY) === null){
     /* Liegt eine Stadt unter dem Zeiger, gewinnt sie - sonst verschluckt ein
        darueberliegender Pfeil den Klick. Liegt keine da, darf es grosszuegig
@@ -15107,6 +15444,7 @@ document.addEventListener("keydown", e => {
     /* the half-drawn defence line, before the catch-all below clears the
        selection instead and leaves the rubber band hanging */
     else if (lineDraft){ lineDraft = null; toast("Defence line cancelled"); draw(); }
+    else if (leisteZust.offen !== null){ leisteSchliessen(); }   // KAR-6: the bar first, then the selection
     else { sel = null; side(); draw(); }
   }
   if (k === "/"){ e.preventDefault(); document.getElementById("search").focus(); }
@@ -16655,7 +16993,8 @@ function side(){
       })()}
     </div>` : ""}
     <div class="sec">
-      <h3>Enemy sightings ${spo.length?`<span class="sub">${spo.reduce((s,g)=>s+g.list.reduce((t,u)=>t+u.n,0),0)} reported</span>`:""}</h3>
+      <h3>Enemy sightings ${spo.length?`<span class="sub">${spo.reduce((s,g)=>s+g.list.reduce((t,u)=>t+u.n,0),0)} reported</span>`:""}
+        ${stapelKarte().has(i) ? `<button class="mini" data-leiste>bar</button>` : ""}</h3>
       ${spo.length ? (() => {
         /* filter row: the types that occur, and the owners if there are
            several; only shown once there is something to choose from */
@@ -16665,16 +17004,18 @@ function side(){
           const wk = sichtWemVon(u), w = wem.get(wk) || {name: u.owner || "unknown owner", n: 0};
           w.n += u.n || 0; wem.set(wk, w);
         }
-        if (typen.size < 2 && wem.size < 2 && !sichtTyp && !sichtWem) return "";
+        if (typen.size < 2 && wem.size < 2 && !sichtTyp && !sichtWem && sichtSeite === null) return "";
         return `<div class="sp-filter">
-            <button data-sf="" aria-pressed="${!sichtTyp && !sichtWem}">all</button>
+            <button data-sf="" aria-pressed="${!sichtTyp && !sichtWem && sichtSeite === null}">all</button>
             ${[...typen.entries()].map(([k,n]) => `<button data-sf="t:${k}" aria-pressed="${sichtTyp === k}"
               title="${esc(atName(k))}">${esc(atKurz(k))}<b>${n}</b></button>`).join("")}
           </div>${wem.size > 1 ? `<div class="sp-filter">
             ${[...wem.entries()].map(([k,w]) => `<button data-sf="w:${k}" aria-pressed="${sichtWem === k}">${esc(w.name)}<b>${w.n}</b></button>`).join("")}
           </div>` : ""}`;
       })() : ""}
-      ${spo.length ? spo.map(g=> !g.list.some(sichtZeigt) ? "" : `
+      ${!spo.length ? `<span class="empty">Nothing reported here.</span>`
+        : !spo.some(g => g.list.some(sichtZeigt)) ? `<span class="empty">Nothing matches the filter.</span>`   /* KAR-6: as the bar says it */
+        : spo.map(g=> !g.list.some(sichtZeigt) ? "" : `
         <div class="grp">
           <div class="grp-h">${g.mine ? "Your report" : esc(g.name || "Another player")}
             <span class="${alter(g.t)<FRISCH?"":"stale"}">${alterText(g.t)}</span></div>
@@ -16685,7 +17026,7 @@ function side(){
                 <em>${FACTIONS[u.f!=null?u.f:faction].tag}${u.owner?` · ${regionSVG(regionVon(u.owner), 13)}${nameMitClan(u.owner)}`:""}</em></span>
               ${g.mine ? `<button class="x" data-sprm="${k}" title="Remove">×</button>` : `<span class="lock">🔒</span>`}
             </div>`).join("")}
-        </div>`).join("") : `<span class="empty">Nothing reported here.</span>`}
+        </div>`).join("")}
       <div class="row">
         <div id="sp-type"></div>
         <input type="number" id="sp-n" value="1" min="1" max="99" title="How many" style="width:52px">
@@ -16803,13 +17144,8 @@ function side(){
   el.querySelector("#ot-clear")?.addEventListener("click", ()=>{
     if (overtimeClear(i)){ side(); draw(); }
   });
-  el.querySelectorAll("[data-sf]").forEach(b => b.addEventListener("click", ()=>{
-    const v = b.dataset.sf;
-    if (!v){ sichtTyp = null; sichtWem = null; }
-    else if (v.startsWith("t:")){ const t = v.slice(2); sichtTyp = sichtTyp === t ? null : t; }
-    else { const w = v.slice(2); sichtWem = sichtWem === w ? null : w; }
-    side();
-  }));
+  el.querySelectorAll("[data-sf]").forEach(b => b.addEventListener("click", ()=> sichtFilterKlick(b.dataset.sf)));
+  el.querySelector("[data-leiste]")?.addEventListener("click", ()=> leisteOeffnen(i));
   el.querySelectorAll("[data-pb]").forEach(b => b.addEventListener("click", ()=>{
     const v = b.dataset.pb;
     setPara(i, v === "" ? null : +v, pb ? pb.plan : false);
@@ -48976,7 +49312,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 54946ba9a9</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 1626699b02</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -49204,7 +49540,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "54946ba9a9";
+const BAU = "1626699b02";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
