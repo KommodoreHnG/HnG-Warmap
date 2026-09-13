@@ -1108,6 +1108,12 @@ body.kb-zieht{user-select:none}
 .kb-schwebe .kb-knoepfe{display:flex;gap:8px;flex-wrap:wrap}
 .kb-schwebe .kb-knoepfe .rd-schalter{width:auto;padding:7px 12px}
 .kb-schwebe .kb-knoepfe .rd-schalter:disabled{opacity:.4;cursor:not-allowed}
+/* BAT-12: THE OVERLAY over the game - a Document Picture-in-Picture window
+   like the strip above (.kb-schwebe: same ground, same type), holding nothing
+   but the confirmation box of the battle desk while it stands (gefEndeSatz;
+   border, ground and colour come from there, the same as in the desk). */
+.gf-schwebe{margin:0;padding:8px 10px;background:#0b0c10;color:#a9b0b8;font-family:var(--schmal);font-size:13px;line-height:1.45;overflow:hidden;user-select:none}
+.gf-schwebe .gf-satz{padding:7px 9px;border:1px solid;border-radius:3px}
 /* the sheet */
 .kb-blatt{background:#e9dfc6;color:#2b2416;border-radius:2px;padding:14px 18px 18px;
   box-shadow:0 8px 30px rgba(0,0,0,.5), inset 0 0 0 1px #d7ccb0;
@@ -29519,7 +29525,7 @@ function gefEndbildMelden(){
      fresh window. It only recomputes the age and moves classes, so a late
      shot cannot do any harm: if a newer confirmation stands by then, it stays
      standing. */
-  setTimeout(() => { if (GEF) gefZeichnen(); else gefEndeRahmen(); }, GEF_ENDBILD_FRISCH + 300);
+  setTimeout(() => { if (GEF) gefZeichnen(); else { gefEndeRahmen(); gefSchwebeZeichnen(); } }, GEF_ENDBILD_FRISCH + 300);
 }
 /* FIRST THE TRANSFER, THEN THE CONFIRMATION (PUNKTE-D / BAT-4, 13.09.2026).
    ENNO 08.09.2026: "Es geht nur um die Bestaetigung, dass man das Fenster
@@ -29828,14 +29834,101 @@ async function gefTick(){
     if (GEF) GEF.laeuft = false;
   }
 }
+/* THE ONE SENTENCE OF THE CONFIRMATION, chosen here for both places that
+   show it: the box in the desk (gefPult) and the overlay over the game
+   (gefSchwebeZeichnen). Null while no fresh confirmation stands - the gate is
+   gefEndeFrisch() and nothing else (BAT-12 B.4). Each of the four sentences
+   says "the game window can be closed": since PUNKTE-D / BAT-4 the green one
+   is the transfer's (the clan has the row); amber while the row is on its way
+   or nothing went out (with the reason), red when the clan refused it - the
+   reading is over in every one of them and the window may go (D.13). The
+   outcome of the battle is not in here. ENNO 08.09.2026: "Es geht nur um die
+   Bestaetigung, dass man das Fenster schliessen kann." (BAT-12, Nachtrag 1,
+   FABLE 13.09.2026) */
+function gefEndeSatz(){
+  const E = gefEndeFrisch();
+  if (!E) return null;
+  if (E.uebertragen) return {rand: "#4a6b3a", grund: "rgba(74,107,58,.18)", farbe: "#9ec98a", text: "End screen read and sent - the game window can be closed."};
+  if (E.uebertrag === "abgewiesen") return {rand: "#8a3a30", grund: "rgba(200,80,64,.16)", farbe: "#e07a6a", text: `End screen read - the clan did not take it (${esc(E.grund || "refused")}) - the game window can be closed.`};
+  if (E.uebertrag === "keiner") return {rand: "#8a6820", grund: "rgba(226,172,72,.16)", farbe: "#e2ac48", text: `End screen read - nothing sent: ${esc(E.grund || "")} - the game window can be closed.`};
+  return {rand: "#8a6820", grund: "rgba(226,172,72,.16)", farbe: "#e2ac48", text: "End screen read - sending to the clan - the game window can be closed."};
+}
+/* ---- the overlay over the game (BAT-12, Document Picture-in-Picture) -----
+   ENNO 12.09.2026 (BAT-12): "Insofern ist ein Overlay sinnvoll, welches dem
+   User die erfolgreiche Erfassung einmal bestaetigt. Wenn wir dies einblenden
+   koennten, sodass es bei Vollbild und Vollbildfenster sichtbar ist, waere
+   das schonmal ein Anfang."
+   The same window as the cabin's floating strip (kbSchwebeAuf): Chrome/Edge
+   116+, always on top of ordinary and borderless windows - not of an
+   exclusive full screen, which no page can change - with an empty same-origin
+   document and the page's stylesheet copied in. It shows ONE thing: the
+   confirmation box of the desk (gefEndeSatz) while gefEndeFrisch stands, and
+   nothing otherwise. No state line, no "waiting", no outcome: the standing
+   status is his "koennte", and 5.23 is open.
+   ONE such window per tab (FABLE 13.09.2026, not measured: a second
+   requestWindow closes the first or is refused). The rooms shut each other
+   (raeumeSchliessen), kabineZu closes the strip, gefstandZu closes this one;
+   gefLiveStop does not - the confirmation survives a stop, the window with it.
+   OPENING NEEDS ITS OWN GESTURE (browser rule, not ours): the button in the
+   desk, on pointerdown like gf-klang - the desk is rewritten every tick, and
+   a click needs press and release on the same node. The button is an on/off
+   switch and nothing more: nothing is remembered, and "Capture the game"
+   never opens it - requestWindow and getDisplayMedia both need a fresh user
+   gesture and both consume it, so one click cannot do both (FABLE
+   13.09.2026, BAT-12 Runde 2). Open the desk and share, then press the
+   button once; the window lives until the desk closes. */
+let gefSchwebe = null, gefSchwebeSatz = null;
+async function gefSchwebeAuf(){
+  if (gefSchwebe || !GEF || !("documentPictureInPicture" in window)) return false;
+  let w;
+  /* 340 x 96: three lines of the box fit - the longest server reason
+     (pushGrund keeps 80 characters) takes three, every other sentence two
+     (measured 13.09.2026, see the flick). Chrome puts it bottom right, the
+     player moves it - ENNO 12.09.2026 (BAT-12): "Den genauen Look und die
+     Position koennen wir dann noch feinjustieren." */
+  try { w = await window.documentPictureInPicture.requestWindow({width: 340, height: 96}); }   /* must be the first await after the gesture */
+  catch(e){ GEF.status = "The floating window could not be opened - " + ((e && e.message) || e); gefZeichnen(); return false; }
+  if (!GEF){ try { w.close(); } catch(e){} return false; }     // the desk closed while the browser was asked
+  gefSchwebe = w; gefSchwebeSatz = null;
+  const doc = w.document;
+  for (const sh of document.styleSheets){
+    try { const st = doc.createElement("style"); st.textContent = [...sh.cssRules].map(r => r.cssText).join("\n"); doc.head.appendChild(st); }
+    catch(e){ if (sh.href){ const l = doc.createElement("link"); l.rel = "stylesheet"; l.href = sh.href; doc.head.appendChild(l); } }
+  }
+  if (document.documentElement.dataset.theme) doc.documentElement.dataset.theme = document.documentElement.dataset.theme;
+  doc.body.className = "gf-schwebe";
+  doc.body.innerHTML = "";
+  /* closed from its own corner or by the browser: forget it, relabel the desk */
+  w.addEventListener("pagehide", () => { if (gefSchwebe === w){ gefSchwebe = null; gefSchwebeSatz = null; gefPult(); } });
+  gefSchwebeZeichnen();
+  gefPult();
+  return true;
+}
+function gefSchwebeZu(){
+  const w = gefSchwebe; gefSchwebe = null; gefSchwebeSatz = null;
+  if (w){ try { w.close(); } catch(e){} }
+}
+/* the box while it stands, nothing otherwise; written anew only when it
+   changed - this runs at every tick of the desk. The memo of what stands is
+   taken only after the write went through: a failed write is tried again
+   at the next tick, not remembered as done. */
+function gefSchwebeZeichnen(){
+  if (!gefSchwebe) return;
+  const K = gefEndeSatz();
+  const html = K ? `<div class="gf-satz" style="border-color:${K.rand};background:${K.grund};color:${K.farbe}">${K.text}</div>` : "";
+  if (html === gefSchwebeSatz) return;
+  try { gefSchwebe.document.body.innerHTML = html; gefSchwebeSatz = html; } catch(e){}
+}
 function gefPult(){
   const pult = document.getElementById("gf-pult");
   if (!pult || !GEF) return;
   const live = !!GEF.live;
+  const pipDa = ("documentPictureInPicture" in window);
   pult.innerHTML = `
     <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="gf-kraft">${ICO_CAPTURE}${
       live ? "Capture running" : "Capture the game"}</button>
     ${live ? `<button class="rd-schalter" id="gf-teilen" style="font-size:10.5px;padding:6px 0">Share again</button>` : ""}
+    <button class="rd-schalter ${gefSchwebe ? "an" : ""}" id="gf-schweben" ${pipDa ? "" : "disabled"} title="${pipDa ? "A small window that stays over the game and shows the confirmation once the end screen was read" : "Needs Chrome or Edge 116 or newer"}">${gefSchwebe ? "Floating - close it" : "Float over the game"}</button>
     ${(() => {
       /* WAS STEHT GERADE AN - und nichts Dazuerfundenes. Gefragt wird die
          gegebene Bestaetigung durch ihr Frischefenster, NICHT der Befund
@@ -29851,12 +29944,9 @@ function gefPult(){
          While the row is still on its way the window may go as well: the
          row lives in the queue (offenSichern), the game window is not
          needed for it any more (Runde 3). */
-      const E = gefEndeFrisch();
+      const K = gefEndeSatz();                  // one choice for desk and overlay (BAT-12)
       const kasten = (rand, grund, farbe, text) => `<div style="margin-top:8px;padding:7px 9px;border:1px solid ${rand};border-radius:3px;background:${grund};color:${farbe};font-size:12px;line-height:1.45">${text}</div>`;
-      if (E && E.uebertragen) return kasten("#4a6b3a", "rgba(74,107,58,.18)", "#9ec98a", "End screen read and sent - the game window can be closed.");
-      if (E && E.uebertrag === "abgewiesen") return kasten("#8a3a30", "rgba(200,80,64,.16)", "#e07a6a", `End screen read - the clan did not take it (${esc(E.grund || "refused")}) - the game window can be closed.`);
-      if (E && E.uebertrag === "keiner") return kasten("#8a6820", "rgba(226,172,72,.16)", "#e2ac48", `End screen read - nothing sent: ${esc(E.grund || "")} - the game window can be closed.`);
-      if (E) return kasten("#8a6820", "rgba(226,172,72,.16)", "#e2ac48", "End screen read - sending to the clan - the game window can be closed.");
+      if (K) return kasten(K.rand, K.grund, K.farbe, K.text);
       if (live) return `<div style="margin-top:8px;padding:7px 9px;border:1px solid #8a6820;border-radius:3px;background:rgba(226,172,72,.16);color:#e2ac48;font-size:12px;line-height:1.45">Waiting for the end screen.</div>`;
       return "";
     })()}
@@ -29891,6 +29981,14 @@ function gefPult(){
   document.getElementById("gf-klang").addEventListener("pointerdown", ev => {
     ev.preventDefault();
     kbTon = !kbTon; if (!kbTon) kbRauschenAus(); gefPult(); });
+  /* the overlay (BAT-12): on pointerdown for the same reason as gf-klang, and
+     pointerdown with the mouse counts as the gesture requestWindow needs.
+     Open or close, nothing else. */
+  const schw = document.getElementById("gf-schweben");
+  if (schw && !schw.disabled) schw.addEventListener("pointerdown", ev => {
+    ev.preventDefault();
+    if (gefSchwebe){ gefSchwebeZu(); gefPult(); } else gefSchwebeAuf();
+  });
 }
 function gefZeichnen(){
   if (!GEF) return;
@@ -29913,6 +30011,7 @@ function gefZeichnen(){
       <div class="bar"></div></div>
     ${gefEndeKasten()}`;
   gefEndeRahmen();
+  gefSchwebeZeichnen();                       // the overlay follows the same gate (BAT-12)
   const orte = gefOrte();
   const schl = orte.join(",");
   if (links.dataset.gebaut !== "1" || GEF.orteSchluessel !== schl){
@@ -30085,6 +30184,7 @@ function gefstandZu(){
   gefOffen = false;
   gefLiveStop(true);
   document.getElementById("gefstand").classList.remove("an", "gf-ende", "gf-puls");
+  gefSchwebeZu();                             // the overlay goes with the desk (BAT-12), as the strip with the cabin
   GEF = null;
 }
 document.getElementById("b-gefstand").addEventListener("click", gefstandAuf);
@@ -49312,7 +49412,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 1626699b02</span></p></div>
+         installation. <span style="color:var(--dim2)">· build e35481f5ea</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -49540,7 +49640,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "1626699b02";
+const BAU = "e35481f5ea";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
