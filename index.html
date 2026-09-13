@@ -8007,7 +8007,8 @@ const PUNKTE_KONTEN = [
 ];
 /* the first-find kinds keep their names from the register (AUFK_NAME) */
 const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
-  fight: "Battles marked", map: "Map kept", unit: "Units kept", done: "Orders done"});
+  fight: "Battles marked", map: "Map kept", unit: "Units kept", done: "Orders done",
+  attr: "Notes confirmed"});
 /* 'done' wird zweimal gebucht, fuer denselben Befehl: auf order fuer jeden,
    der ihn erfuellt hat, auf leader fuer den, der ihn erteilt hat. Gleiche
    Aktion, zwei Bedeutungen - also entscheidet das Konto ueber den Namen.
@@ -8049,6 +8050,15 @@ function punkteSacheName(z){
     const name = (b && b.name) || schl;
     const werName = (depotIdx.get(wer) || {}).name || wer;
     return name + " \u00b7 " + werName;
+  }
+  /* a note about an enemy that a clan mate confirmed (SPI-2):
+     <player key>|<note>|<confirming member> - the note may carry a bar
+     itself, the key never does, the member stands last */
+  if (z.aktion === "attr"){
+    if (teil.length < 3) return roh;
+    const wer = teil[teil.length - 1];
+    return erstfundWer(teil[0]) + " \u00b7 " + teil.slice(1, -1).join("|")
+         + " \u00b7 confirmed by " + ((depotIdx.get(wer) || {}).name || wer);
   }
   /* a first find: the row it came from carries the words since 13.09.2026
      (gutschrift, field was); older rows keep showing their hash */
@@ -43029,6 +43039,11 @@ const PUNKTE_REGEL_FELDER = [
    d:"To every player whose teams were assigned to it."},
   {k:"leader_fremd", n:"Extra when others fulfilled it",  std:0,
    d:"On top of the first line, once, when somebody other than the issuer had teams on it."},
+  /* SPI-2, 13.09.2026: paid by warmap_punkte_buchen, branch edep, once
+     2026-09-13_attribute.sql has been run. Default 1 is the FABLE proposal
+     he agreed to on 12.09.2026. */
+  {k:"attr_ok",      n:"A note about an enemy that a clan mate confirms", std:1,
+   d:"To whoever wrote the note, once per confirming member."},
 ];
 function regelnDialog(tab){
   if (!istLeader()){ toast("Only the clan leader sets these."); return; }
@@ -44900,6 +44915,14 @@ const feindRollen = key => {
   const r = S.edep[key] && S.edep[key].rollen;
   return Array.isArray(r) ? r : [];
 };
+/* who noted each of those words and who confirmed it: {<text>: {by, ok: []}}.
+   rollen stays the list everybody reads; this rides beside it (SPI-2,
+   13.09.2026). A note from before that day has no entry here - it can be
+   confirmed, but nobody is paid for it. */
+const feindRob = key => {
+  const r = S.edep[key] && S.edep[key].rob;
+  return (r && typeof r === "object" && !Array.isArray(r)) ? r : {};
+};
 /* Der Fraktionscode der Spieldateien ist 1-basiert, 0 heisst "fuer alle". */
 const fuerSeite = (eintrag, f) => !eintrag.f || eintrag.f === f + 1;
 /* Vorschlaege fuer Rollen: was im Clan schon vergeben wurde, dazu ein paar
@@ -44940,6 +44963,8 @@ function feindDialog(key, name){
   const arsF = (feindDialog.seite != null) ? feindDialog.seite : (f != null ? f : clanFaktion());
   const ars = feindArsenal(key, arsF);
   const rollen = feindRollen(key);
+  const rob = feindRob(key);
+  const mitglied = k => (depotIdx.get(k) || {}).name || k;
   const waffen = MAP.arms.filter(a => fuerSeite(a, arsF));
   const fahrz  = MAP.veh.filter(v => fuerSeite(v, arsF));
   const upgName = k => (MAP.upg.find(u=>u.k===k) || {}).name || k;
@@ -45029,9 +45054,19 @@ function feindDialog(key, name){
       </div>
 
       <div class="tabp" data-ftab="role">
-        ${rollen.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${rollen.map((r,i)=>
-          `<span class="chip" style="border-color:var(--accent);color:var(--accent)">${esc(r)}<b
-            data-rrm="${i}" style="cursor:pointer;padding:0 0 0 5px;font-size:12px">×</b></span>`).join("")}</div>`
+        ${rollen.length ? `<div style="display:flex;flex-direction:column;gap:4px">${rollen.map((r,i)=>{
+          /* the note, then: "yours" for the one who wrote it, the Confirm
+             box for everybody else, and how many confirmed it so far */
+          const o = rob[r] || {}, ok = Array.isArray(o.ok) ? o.ok : [];
+          const meins = !!o.by && o.by === S.me;
+          return `<div class="row" style="align-items:center;gap:8px">
+            <span class="chip" style="border-color:var(--accent);color:var(--accent)">${esc(r)}<b
+              data-rrm="${i}" style="cursor:pointer;padding:0 0 0 5px;font-size:12px">×</b></span>
+            ${meins ? `<span style="font-size:11px;color:var(--dim2)">yours</span>`
+              : `<label class="toggle" style="font-size:11px"><input type="checkbox" data-rok="${i}"${
+                  ok.includes(S.me) ? " checked" : ""}><span>Confirm</span></label>`}
+            ${ok.length ? `<span style="font-size:11px;color:var(--dim)" title="${esc(ok.map(mitglied).join(", "))}">${ok.length} confirmed</span>` : ""}
+          </div>`;}).join("")}</div>`
           : `<div style="font-size:11px;color:var(--dim2)">Nothing noted about how this one plays.</div>`}
         <div class="row" style="margin-top:8px">
           <input type="text" id="fr-neu" placeholder="what stands out about this player"
@@ -45094,20 +45129,36 @@ function feindDialog(key, name){
     }));
   }
   {
-    const setz = liste2 => { setFeindTeil(key, {rollen: liste2}); feindDialog.reiter = "role"; feindDialog(key, name); };
+    /* rollen stays the list of words; rob carries who noted each one and
+       who confirmed it - both go in one write (SPI-2, 13.09.2026) */
+    const setz = (liste2, rob2) => { setFeindTeil(key, {rollen: liste2, rob: rob2}); feindDialog.reiter = "role"; feindDialog(key, name); };
+    const notiert = s => setz(rollen.concat([s]), Object.assign({}, rob, {[s]: {by: S.me, ok: []}}));
     const nf = document.getElementById("fr-neu");
     const dazu = () => {
       const s = (nf.value || "").trim();
       if (!s || rollen.includes(s)) { nf.value = ""; return; }
-      setz(rollen.concat([s]));
+      notiert(s);
     };
     const ab = document.getElementById("fr-add");
     if (ab) ab.addEventListener("click", dazu);
     if (nf) nf.addEventListener("keydown", ev => { if (ev.key === "Enter"){ ev.preventDefault(); dazu(); } });
     document.querySelectorAll("#dlg [data-rset]").forEach(b => b.addEventListener("click", ()=>
-      setz(rollen.concat([b.dataset.rset]))));
+      notiert(b.dataset.rset)));
     document.querySelectorAll("#dlg [data-rrm]").forEach(b => b.addEventListener("click", ()=>{
-      const l = rollen.slice(); l.splice(+b.dataset.rrm, 1); setz(l);
+      const l = rollen.slice(), weg = l.splice(+b.dataset.rrm, 1)[0];
+      const o = Object.assign({}, rob); delete o[weg];
+      setz(l, o);
+    }));
+    /* Confirm on, confirm off: me in or out of ok. The server pays the
+       author once per confirming member; taking it back leaves that point
+       where it is (the first one wins, as with every point). An old note
+       without an author keeps its count, and pays nobody. */
+    document.querySelectorAll("#dlg [data-rok]").forEach(b => b.addEventListener("change", ()=>{
+      const r = rollen[+b.dataset.rok], o = Object.assign({}, rob), e = o[r] || {};
+      const ok = (Array.isArray(e.ok) ? e.ok : []).filter(x => x !== S.me);
+      if (b.checked) ok.push(S.me);
+      o[r] = Object.assign({}, e, {ok});
+      setz(rollen, o);
     }));
   }
   /* Nach einem Neuaufbau denselben Reiter wieder zeigen. */
@@ -47368,7 +47419,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b3e65b3d13</span></p></div>
+         installation. <span style="color:var(--dim2)">· build ce2d81a1ff</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -47596,7 +47647,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b3e65b3d13";
+const BAU = "ce2d81a1ff";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
