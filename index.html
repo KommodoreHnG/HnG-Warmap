@@ -3992,7 +3992,7 @@ function merkeSpieler(name, f, clan, fp, region){
                     aehnlich: (av && av.aehnlich && av.aehnlich.length) ? av.aehnlich : undefined},
                  t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`roster:${k}`);
-  if (!av) gutschrift("pl", k);        // nur der erste Eintrag zaehlt
+  if (!av) gutschrift("pl", k, name);  // nur der erste Eintrag zaehlt
   save();
   return k;
 }
@@ -4366,12 +4366,23 @@ function fnv(s){
    und weil die Gutschrift bei JEDER gestellten Einheit mitlaeuft, bekam
    jemand ohne das Recht bei jeder vollkommen ERLAUBTEN Handlung eine
    Fehlermeldung. Das Stellen selbst bleibt offen, es braucht kein Recht. */
-function gutschrift(art, sache){
+/* the name behind a player key - the register first, our own depot list
+   next, else the key itself */
+const erstfundWer = key => {
+  const r = S.roster && S.roster[key];
+  return (r && r.v && r.v.name) || (depotIdx.get(key) || {}).name || String(key || "");
+};
+/* was: what was found, in words, for the ledger. ENNO 08.09.2026: "Es
+   sollte schon nachvollziehbar sein, was derjenige aufgeklaert hat. Die
+   Kennung ist ja fuer den User voellig irrelevant." The hash stays the key
+   and the count; the words ride along in the row (PKT-1, FABLE 13.09.2026). */
+function gutschrift(art, sache, was){
   if (!darf("aufklaerung")) return;
   if (!S.me) return;
   const id = `${art}${fnv(String(sache))}:${S.me}`;
   if (S.first[id] && S.first[id].v) return;           // steht schon auf mich
-  S.first[id] = {v: 1, t: jetzt(), by: S.me, n: S.name || ""};
+  const wort = String(was || "").trim().slice(0, 80);
+  S.first[id] = {v: 1, was: wort || undefined, t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`first:${id}`); save();
 }
 /* Was eine feindliche Kampfeinheit ausmacht, ist ihr Name im Spiel - nicht
@@ -4448,7 +4459,8 @@ function setFeindDepot(key, list){
   const kenn = new Set(alt.map(u => u && u.id).filter(Boolean));
   for (const u of list){
     const m = atMarke(u);
-    if (m && !vorher.has(m) && !(u.id && kenn.has(u.id))) gutschrift("at", `${key}|${m}`);
+    if (m && !vorher.has(m) && !(u.id && kenn.has(u.id)))
+      gutschrift("at", `${key}|${m}`, `${erstfundWer(key)} \u00b7 ${String(u.tag || u.name || atName(u.k) || "").trim()}`);
   }
   /* Ueber setFeindTeil, nicht als ganze neue Zeile: sonst faellt beim
      Eintragen einer Kampfeinheit das aufgenommene Arsenal, die Rollen und
@@ -8017,6 +8029,13 @@ function punkteSacheName(z){
     const name = (b && b.name) || schl;
     const werName = (depotIdx.get(wer) || {}).name || wer;
     return name + " \u00b7 " + werName;
+  }
+  /* a first find: the row it came from carries the words since 13.09.2026
+     (gutschrift, field was); older rows keep showing their hash */
+  if (z.aktion === "pl" || z.aktion === "at" || z.aktion === "wp" || z.aktion === "sp" || z.aktion === "ow"){
+    const q = String(z.quelle || "");
+    const e = q.startsWith("first:") ? S.first[q.slice(6)] : null;
+    if (e && e.was) return String(e.was);
   }
   return roh;                          // ein Erstfund traegt seinen Hash
 }
@@ -13040,7 +13059,8 @@ function setMyUnits(i, list){
      nicht als "stand schon da". Sonst gaebe es fuer eine Einheit, die man
      nach dem Schnitt an dieselbe Stelle setzt, keine Gutschrift mehr. */
   const alt = new Set((myUnits(i) || []).map(u => u.id || u.k));
-  for (const u of list) if (!alt.has(u.id || u.k)) gutschrift("ow", `${i}|${u.id || u.k}`);
+  for (const u of list) if (!alt.has(u.id || u.k))
+    gutschrift("ow", `${i}|${u.id || u.k}`, `${MAP.n[i] ? MAP.n[i][0] : i} \u00b7 ${atName(u.k)}`);
   S.units[`${i}:${S.me}`] = {v: list.length ? list : null, t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`units:${i}:${S.me}`); rebuildUnits(); save(); kraftLeiste();
 }
@@ -13178,7 +13198,8 @@ function setSpot(town, list){
     .map(u => `${u.k}|${(u.owner||"").toLowerCase()}`));
   for (const u of list){
     const m = `${u.k}|${(u.owner||"").toLowerCase()}`;
-    if (!alt.has(m)) gutschrift("sp", `${town}|${m}`);
+    if (!alt.has(m)) gutschrift("sp", `${town}|${m}`,
+      `${MAP.n[town] ? MAP.n[town][0] : town} \u00b7 ${atName(u.k)}${u.owner ? " \u00b7 " + String(u.owner).trim() : ""}`);
   }
   S.spot[k] = {v: list.length ? list : null, t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`spot:${k}`); save();
@@ -44845,10 +44866,10 @@ function setFeindArsenal(key, f, wert){
   const hatte = new Set(vor.w.map(x => "w|" + x)
                  .concat(vor.v.map(x => "v|" + (x && x.k ? x.k : x))));
   for (const w of (wert.w || []))
-    if (!hatte.has("w|" + w)) gutschrift("wp", `${key}|${f}|w|${w}`);
+    if (!hatte.has("w|" + w)) gutschrift("wp", `${key}|${f}|w|${w}`, `${erstfundWer(key)} \u00b7 ${(ARM[w] && ARM[w].name) || w}`);
   for (const v of (wert.v || [])){
     const kk = v && v.k ? v.k : v;
-    if (!hatte.has("v|" + kk)) gutschrift("wp", `${key}|${f}|v|${kk}`);
+    if (!hatte.has("v|" + kk)) gutschrift("wp", `${key}|${f}|v|${kk}`, `${erstfundWer(key)} \u00b7 ${(VEH[kk] && VEH[kk].name) || kk}`);
   }
   setFeindTeil(key, {ars: Object.assign({}, alt, {[f]: wert})});
 }
@@ -47319,7 +47340,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 24faa3ee2a</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 352c74e25d</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -47547,7 +47568,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "24faa3ee2a";
+const BAU = "352c74e25d";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
