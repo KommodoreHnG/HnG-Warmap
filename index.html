@@ -20811,7 +20811,30 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
      first - whatever else was expected */
   const zwilling = unitsZwillingsverdacht(t);
   if (zwilling && !bevorzugt) bevorzugt = "rus";
-  if (!zwilling && ((beste.zuv >= 70 && lateinAnteil >= 0.8)
+  /* AND DIGITS ARE NO PROOF OF LATIN (UNI-7). The share above counts
+     digits, dashes and dots as Latin, and with the multilingual set a
+     Chinese name came back as "68521 - / 8 E115/m3437k68..." at 63 -
+     eighteen of twenty characters "Latin", three letters among eleven
+     digits - and the shortcut fired, no foreign model was asked, and the
+     jumble went on the sheet where English alone had let chi_sim win with
+     83. So the shortcut asks for letters: at least three of them in the
+     name part, and no more digits than letters. Every real Latin name in
+     the Kommodore's captures has them (RDM.1 with exactly three, PARA-002
+     - PERU314 with eight against six). A line without them is read by the
+     foreign models as well, at their cost, and Latin still wins unless
+     one of them beats it by its hurdle.
+     NOT ON THE OWNER'S LINE. There the game's own label stands in front,
+     and a player's name is often mostly digits (F450919, BOB111223) -
+     asking five foreign models there cost half a second per box and put
+     the key of the whole row at risk (chi_sim read "BESITZER: F450919"
+     at 88 against Latin's 87; only the hurdle kept it out). The jumble
+     this rule is for was read on the NAME line; the owner's line keeps
+     the shortcut it had. Letters are counted as Latin script, so a Ł or
+     a Ş - the very letters this set is for - is a letter too. */
+  const restBuchstaben = (zaehl.match(/\p{Script=Latin}/gu) || []).length;
+  const restZiffern = (zaehl.match(/[0-9]/g) || []).length;
+  const lateinBeleg = ohneAuf !== null || (restBuchstaben >= 3 && restZiffern <= restBuchstaben);
+  if (!zwilling && lateinBeleg && ((beste.zuv >= 70 && lateinAnteil >= 0.8)
       || (beste.zuv >= 60 && lateinAnteil >= 0.8 && t.length >= 6))) return beste;
   /* BOTH PREPARATIONS FOR THE FOREIGN MODELS TOO. Every field is put
      through a plain threshold before the reader sees it - black and white
@@ -20873,9 +20896,16 @@ async function unitsTextSchriften(c, x, y, w, h, beste, melde, bevorzugt){
          foreign model was ahead, and so Japanese - which read the line
          rightly with seventy-nine - lost to Arabic's seventy-nonsense,
          because it would have needed eighty. */
+      /* AND THE WINNER BRINGS ITS OWN SYMBOLS AND FIELD (UNI-7). Without
+         them the witnesses to unreadability that look at boxes and
+         per-character confidence were silent whenever a foreign model
+         won, and the jumble went onto the sheet as a name. Same shape as
+         ocrMitZuvEinzeln gives; the field is the one this reading ran on. */
       if (text && zuv >= beste.zuv + huerde && zuv > (top.schrift ? top.zuv : -1))
         top = {text, zuv, schrift: sp, latein: beste.text,
-               lateinZuv: beste.zuv, lateinSymbole: beste.symbole || null, lateinFeld: beste.feld || null};
+               lateinZuv: beste.zuv, lateinSymbole: beste.symbole || null, lateinFeld: beste.feld || null,
+               symbole: (((r.data && r.data.symbols) || []).map(y => ({t: y.text, c: Math.round(y.confidence || 0), b: y.bbox}))),
+               feld: zB > zA ? feldRoh : feld};
       /* a model that reads the line WELL is the model - but eighty-five,
          not seventy-five: a middling one must not end the search before a
          better one has had its turn */
@@ -21121,7 +21151,26 @@ function bildAbstand(a, b){
    delivered: the tool can name it, and what it names is exactly what the
    player sees on the screen. */
 const UNITS_LESBAR = /[\p{L}\p{N} .,\-_'"()\[\]:;!?&+*\/#@¤]/u;
-function unitsUnlesbar(text, symbole, feld){
+/* WHAT EACH FOREIGN MODEL'S OWN SCRIPT LOOKS LIKE - for the fourth witness */
+const UNITS_SCHRIFT_ZEICHEN = {
+  kor: /\p{Script=Hangul}/u, rus: /\p{Script=Cyrillic}/u, ara: /\p{Script=Arabic}/u,
+  chi_sim: /\p{Script=Han}/u, jpn: /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u
+};
+/* the share of a model's own script among the letters of a text - digits
+   belong to no script - or, asked for, among letters and digits */
+function unitsSchriftAnteil(text, schrift, mitZiffern){
+  const re = UNITS_SCHRIFT_ZEICHEN[schrift];
+  if (!re) return null;
+  const zaehlt = mitZiffern ? /[\p{L}\p{N}]/u : /\p{L}/u;
+  let n = 0, eigen = 0;
+  for (const ch of String(text || "")){
+    if (!zaehlt.test(ch)) continue;
+    n++;
+    if (re.test(ch)) eigen++;
+  }
+  return n ? eigen / n : 0;
+}
+function unitsUnlesbar(text, symbole, feld, schrift){
   const t = String(text || "").trim();
   if (t.length < 2) return false;
   /* 1 what stands there is largely made of marks no name is made of */
@@ -21132,6 +21181,33 @@ function unitsUnlesbar(text, symbole, feld){
     if (!UNITS_LESBAR.test(ch)) schlecht++;
   }
   if (alle >= 2 && schlecht >= 2 && schlecht/alle >= 0.4) return true;
+  /* 4 A FOREIGN MODEL THAT WON WITHOUT ITS OWN SCRIPT (UNI-7). A model
+     for Arabic that hands back "” 5 7", or one for Japanese that hands
+     back "“ ア X X X T ① バ", has read nothing the Latin model could not
+     have read - it has only delivered a higher number. Measured on the
+     Kommodore's captures, the share of the model's own script among the
+     LETTERS of the name part (behind the dash; the whole line where there
+     is none) - digits belong to no script, a real Chinese name carries
+     "115" and "343" in the middle of its characters:
+       real Korean, Chinese x4, Cyrillic    4 of 4, 3 of 3, 11 of 11, 7 of 7, 7 of 7, 6 of 6, 13 of 13
+       the smiley, Arabic won                0 of 0
+       the small x's, Arabic won             0 of 0
+       the question marks, Japanese won      2 of 6
+     Under half is no reading. AND the whole line is asked as well: the
+     Arabic model puts the line in its own order - the Latin tag came out
+     BEHIND the dash ("** 1 1 ل ء ” - 50-0042 -") - so a real Arabic name
+     could stand in front of the dash and leave the name part empty. Over
+     the whole line the digits DO count, else the two Arabic letters of
+     the small x's would be two of two and the guard would let them by:
+     with digits the three jumbles reach 0 of 7, 2 of 10 and 2 of 13. */
+  if (schrift && UNITS_SCHRIFT_ZEICHEN[schrift]){
+    /* the separator as the other readers see it: a dark capture turns
+       " - " into "=" or "==" (four of 134 foreign readings did) */
+    const tn = t.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ");
+    const tr = tn.search(AT_TRENNER);
+    const rest = tr >= 0 ? tn.slice(tr).replace(AT_TRENNER, "").trim() : "";
+    if (unitsSchriftAnteil(rest || t, schrift) < 0.5 && unitsSchriftAnteil(t, schrift, true) < 0.5) return true;
+  }
   if (!symbole || symbole.length < 3) return false;
   /* 2 A BOX FOUR TIMES THE LINE'S OWN HEIGHT HOLDS NO CHARACTER. This is
      the witness the real case needed, and it took two tries to get right.
@@ -21149,15 +21225,55 @@ function unitsUnlesbar(text, symbole, feld){
        Chinese                    1,32   0,64
        the clowns                 4,31   3,81
      The threshold is two: three times above the widest real sign, and half
-     of what the clowns reach. */
+     of what the clowns reach.
+     MEASURED AGAIN 13.09. (UNI-7), twenty-five captures, the winning
+     reading of each. Real Latin names: BLKWTR 0,65, Danish 0,35, odd font
+     0,48, MCR 0,99 (its R-like sign), mouse-over 0,35, Polish 0,68,
+     Turkish 0,40 - none over one. The special-character capture, read by
+     the multilingual set as "MMI. NT...": 1,41 (an "M" of 192 points on a
+     line of 136). So for Latin the bar now stands at 1,2 - AND ONLY THE
+     NAME PART IS MEASURED. "֎RATS!֎ - LITTLE BOGGLERS" is a real name,
+     read right, and the R of its tag came back in a box of 1,26 line
+     heights with the ֎ grown into it. The tag has its own guard
+     (unitsTagUnsicher); this witness looks behind the separator, where the
+     "M" of the jumble stands (624..816) and the "—" of the Latin-Arabic
+     line (933..1147, 1,57). Where no separator was read, the whole line as
+     before. The symbols come without spaces and stand in step with the
+     characters, so the name's first symbol is the one after the count of
+     non-space characters up to and including the dash.
+     A FOREIGN WINNER IS MEASURED DIFFERENTLY. Those models lay the box of
+     a word's FIRST character over the whole word: the real Korean line
+     came back with "제" at 2,12 line heights covering "제 9 소 대", a
+     real Chinese one with "杨" at 3,41 - and the jumbles show the same
+     (the tag's "2" at 2,54 over the small x's). A box that other boxes
+     begin inside of is not a wide sign; so for a foreign winner a box
+     only counts as far as the next box starts, and the bar stays at two.
+     Cut like that the real lines reach 0,95, 1,00 and 1,33 (a second
+     Korean line, the widest real one), the jumbles 0,79 and 0,64 - this
+     witness then catches none of them, and the fourth witness above
+     carries those. */
   const H = (feld && feld.height) || 0;
   if (H){
     let breiteste = 0;
-    for (const y of symbole){
-      const w = (y.b && y.b.x1 - y.b.x0) || 0;
-      if (w > breiteste) breiteste = w;
+    if (schrift){
+      const bx = symbole.map(y => y.b).filter(b => b && b.x1 > b.x0).sort((p, q) => p.x0 - q.x0);
+      for (let i = 0; i < bx.length; i++){
+        let x1 = bx[i].x1;
+        for (let j = i + 1; j < bx.length; j++) if (bx[j].x0 > bx[i].x0){ x1 = Math.min(x1, bx[j].x0); break; }
+        if (x1 - bx[i].x0 > breiteste) breiteste = x1 - bx[i].x0;
+      }
+    } else {
+      let ab = 0;
+      const l = t.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ");
+      const m = AT_TRENNER.exec(l);
+      if (m) ab = l.slice(0, m.index + m[0].length).replace(/\s/g, "").length;
+      if (ab >= symbole.length) ab = 0;
+      for (const y of symbole.slice(ab)){
+        const w = (y.b && y.b.x1 - y.b.x0) || 0;
+        if (w > breiteste) breiteste = w;
+      }
     }
-    if (breiteste / H > 2) return true;
+    if (breiteste / H > (schrift ? 2 : 1.2)) return true;
   }
   /* 3 the characters were read with barely any confidence at all */
   let sum = 0;
@@ -21250,6 +21366,64 @@ async function unitsFremdLesen(c, x, y, w, h, schrift){
     return {text: ((r.data && r.data.text) || "").trim().replace(/\s+/g, " "),
             zuv: Math.round((r.data && r.data.confidence) || 0), schrift};
   } catch(e){ return null; }
+}
+/* THE UNDERSCORE THE MODEL READ AS A GAP (UNI-7). The owner's line is
+   the key by which a unit is filed, and "ESREF_TEK" came back from the
+   multilingual set as "EŞREF TEK" - the Ş right, the underscore gone,
+   read as a space. The ink is still there: between the F's box (right
+   edge 872) and the T's (left edge 922) the field holds a dark run from
+   877 to 924 at rows 83 to 91 of 101, well under the letters' baseline
+   at 77. Where a space in the reading has ink in the gap between the two
+   boxes it separates, below the baseline, at least three columns of it,
+   the space was an underscore. Only with that proof - no rule about what
+   player names may contain. The baseline is the bottom edge most boxes
+   share; the search begins three rows under it, and never above the
+   lowest quarter of the line, so a letter's own foot cannot count.
+   The symbols come without spaces and stand in step with the characters,
+   and they are paired BY POSITION, not by text: the font book's doorman
+   may have swapped a character just before, and the symbol still holds
+   the box of the one that was read. Where the counts do not agree the
+   line stays as read. */
+function unitsUnterstrich(text, symbole, feld){
+  const t = String(text || "");
+  if (!/\s/.test(t) || !symbole || !symbole.length) return t;
+  if (!feld || !feld.width || !feld.height || !feld.getContext) return t;
+  let nz = 0;
+  for (const ch of t) if (!/\s/.test(ch)) nz++;
+  if (nz !== symbole.length) return t;
+  const W = feld.width, H = feld.height;
+  const unten = symbole.map(y => y.b && y.b.y1).filter(v => typeof v === "number").sort((a, b) => a - b);
+  if (!unten.length) return t;
+  const basis = unten[unten.length >> 1];
+  const von = Math.max(Math.floor(H * 0.75), basis + 3);
+  if (von >= H - 1) return t;
+  let px = null;
+  const tinte = (x0, x1) => {
+    x0 = Math.max(0, Math.ceil(x0)); x1 = Math.min(W, Math.floor(x1));
+    if (x1 - x0 < 3) return false;
+    if (!px){
+      try { px = feld.getContext("2d", {willReadFrequently:true}).getImageData(0, von, W, H - von).data; }
+      catch(e){ return false; }
+    }
+    let n = 0;
+    for (let x = x0; x < x1; x++){
+      for (let y = 0, i = x*4; y < H - von; y++, i += W*4){
+        if (px[i] + px[i+1] + px[i+2] < 384){ n++; break; }
+      }
+    }
+    return n >= 3;
+  };
+  let aus = "", si = 0, links = null, offen = false;
+  for (const ch of t){
+    if (/\s/.test(ch)){ offen = true; continue; }
+    const y = symbole[si++];
+    if (offen){
+      aus += (links && links.b && y && y.b && tinte(links.b.x1, y.b.x0)) ? "_" : " ";
+      offen = false;
+    }
+    aus += ch; links = y;
+  }
+  return aus;
 }
 /* THE TAG'S OWN CONFIDENCE. The symbols come without spaces and stand in
    step with the characters, so the tag is the first k of them - k the
@@ -21817,12 +21991,20 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
     const name = await besser(UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h, (hand && hand.schrift) || besVor);
     /* first learn from what was read surely, then let the doorman look at
        what was not - a G that came back as a 6 is caught here */
-    ocrSchriftLernen(name.feld, name.symbole);
-    ocrSchriftLernen(bes.feld, bes.symbole);
-    if (name.feld && name.symbole)
+    /* ONLY A LATIN READING FEEDS THE BOOK OR FACES ITS DOORMAN. A foreign
+       winner carries its field and symbols now too (UNI-7), but the book
+       is calibrated on the Latin model: a Cyrillic А has the very shape of
+       a Latin A, and the doorman would swap it. So a line another script
+       won passes both by. */
+    if (!name.schrift) ocrSchriftLernen(name.feld, name.symbole);
+    if (!bes.schrift) ocrSchriftLernen(bes.feld, bes.symbole);
+    if (!name.schrift && name.feld && name.symbole)
       name.text = ocrSchriftPruefen(name.feld, name.text, name.symbole);
-    if (bes.feld && bes.symbole)
+    if (!bes.schrift && bes.feld && bes.symbole)
       bes.text = ocrSchriftPruefen(bes.feld, bes.text, bes.symbole);
+    /* the underscore the model read as a gap - put back from the ink (UNI-7) */
+    if (!bes.schrift && bes.feld && bes.symbole)
+      bes.text = unitsUnterstrich(bes.text, bes.symbole, bes.feld);
     /* THE NAME LINE IS MIXED - tag in Latin, name in any script there is -
        and the tag alone carried the Latin share of the whole line to one,
        so the other models were never asked. The owner's line has no such
@@ -21943,7 +22125,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
     }
     /* the print of the name line, and whether its letters can be trusted */
     bildKennFeld = name.feld || null;
-    const unlesbar = unitsUnlesbar(name.text, name.symbole, name.feld);
+    const unlesbar = unitsUnlesbar(name.text, name.symbole, name.feld, name.schrift || null);
     /* the tag from the Latin reading, whatever model won the line */
     let tagRoh = t.length > 1 ? t[0].replace(/^[^\p{L}\p{N}]+/u, "").trim() : "";
     /* A TAG ALWAYS STANDS FIRST - the Kommodore's rule. Where no separator
@@ -21972,6 +22154,30 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
         if (kand.length >= 2) tagRoh = kand;
       }
     }
+    /* AN UNREADABLE LINE KEEPS THE LATIN TAG (UNI-7). The tag is Latin by
+       build, and it is the row's key. Where a foreign model won a line the
+       witnesses call unreadable, its tag is jumble as well - "1 1 ل ء ”"
+       for SU-0042, the Arabic model having put the line in its own order.
+       The Latin reading of the same line holds the tag: in front of its
+       separator or, where none was read, as the first word with a digit or
+       a dash in it (the Kommodore's rule above: a tag always stands
+       first). That tag stands, and the foreign model is not asked for it
+       again below. Only for an unreadable line - a real foreign name keeps
+       its own way to the tag. */
+    let tagLatein = false;
+    if (unlesbar && name.schrift && name.latein){
+      const lr = name.latein.replace(/\s*={1,3}\s*/g, " - ").replace(/\s+[\u2013\u2014]\s+/g, " - ")
+                            .replace(/^[^\p{L}\p{N}]+/u, "");
+      const lt = lr.split(AT_TRENNER);
+      let kand = "";
+      if (lt.length > 1) kand = lt[0].replace(/^[^\p{L}\p{N}]+/u, "").trim();
+      else {
+        const m = /^(\S{2,14})\s+(\S.*)$/u.exec(lr);
+        if (m && /[\p{N}\-\u2010-\u2015]/u.test(m[1]))
+          kand = m[1].replace(/^[^\p{L}\p{N}]+/u, "").replace(/[.,;:\uff0e]+$/u, "").trim();
+      }
+      if (kand.length >= 2){ tagRoh = atStrichZuI(kand); tagLatein = true; }
+    }
     /* THE TAG IS NOT LATIN BY BUILD EVERYWHERE. "杨靖宇-001 - 东北抗联第一…": the
        Chinese model read the name right and the Latin model made
        "1#7iEF-001" of the tag - and the rule above then took the Latin tag,
@@ -21984,7 +22190,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
        stays: the Korean model made "0#-03" of it. */
     const tagSchrift = (hand && hand.schrift) || name.schrift || (fremd && fremd.schrift) || bes.schrift || null;
     let tagInfo = {schrift: tagSchrift, teile: t.length, latein: name.latein || null, vorher: tagRoh};
-    if (tagSchrift && t.length > 1){
+    if (tagSchrift && t.length > 1 && !tagLatein){
       const tagZuv = unitsTagZuv(name.latein || name.text, name.lateinSymbole || name.symbole || null);
       tagInfo.zuv = tagZuv; tagInfo.unsicher = unitsTagUnsicher(tagRoh, tagZuv);
       if (unitsTagUnsicher(tagRoh, tagZuv)){
@@ -22002,11 +22208,18 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
     }
     R.einheit = {
       unlesbar: unlesbar || undefined,
-      bild: unlesbar ? bildKennung(name.feld) : undefined,
+      /* THE PRINT IS TAKEN OFF THE LATIN FIELD, WHICHEVER MODEL WON. A
+         foreign winner has a field of its own now (UNI-7), but the print
+         is an identity: the same name must give the same print whether
+         Arabic took the line this time and Latin the next. The Latin
+         preparation is the one that is always there. */
+      bild: unlesbar ? bildKennung(name.lateinFeld || name.feld) : undefined,
       /* and the picture itself, for the sheet - the print is an identity, not a view */
-      nameBild: unlesbar ? nameBildKlein(name.feld || name.lateinFeld, name.feld ? name.text : name.latein,
-                                         name.feld ? name.symbole : name.lateinSymbole) : undefined,
-      schrift: name.schrift || bes.schrift || null,
+      nameBild: unlesbar ? nameBildKlein(name.lateinFeld || name.feld, name.lateinFeld ? name.latein : name.text,
+                                         name.lateinFeld ? name.lateinSymbole : name.symbole) : undefined,
+      /* a model that won an unreadable line read jumble, not a script -
+         it is no hint for the owner's next box (unitsSchriftVon) */
+      schrift: (unlesbar ? null : name.schrift) || bes.schrift || null,
       tag: unitsCjkEng(tagRoh, tagSchrift), tagInfo,
       name: unitsCjkEng(nameText, name.schrift || (fremd && fremd.schrift) || null),
       nameZuv: name.zuv,
@@ -22906,6 +23119,19 @@ function kbGuteLesung(z, e){
       && zuv + 8 < (z.nameZuv || 0) && k.n < 2)
     return {schreiben: false, kandidat: k,
             grund: `Line ${z.i + 1} keeps its name — the new reading is weaker (${zuv} against ${Math.round(z.nameZuv)}).`};
+  /* AN UNREADABLE LINE IS NOT A POOR READING (UNI-7). The witnesses have
+     already said that no reader can hold these letters; the confidence
+     number says nothing about that (a jumble is read at 87 to 99 per
+     character). Such a line goes the clown way - the row stands, marked,
+     with its picture, "unreadable — click and describe it" - and is not
+     sent back with "pan or zoom", which would be a wrong instruction on
+     a sharp capture. The doorman has already refused the case without a
+     card behind it.
+     WITH A FLOOR. The clown way is for the jumble, not for the blur: a
+     line that only the third witness calls unreadable - characters read
+     with hardly any confidence, the unsharp capture - comes with a low
+     number too, and that one is still sent back for a better look. */
+  if (e.unlesbar && zuv >= KB_BRAUCHBAR) return {schreiben: true};
   if (zuv >= KB_GUT) return {schreiben: true};
   /* ordered afresh: a usable reading is taken, the line is meant to change */
   if (z.neuLesen && zuv >= KB_BRAUCHBAR) return {schreiben: true, schwach: true};
@@ -33057,20 +33283,23 @@ function ortZeugeNoetig(){
     if (v && v.classList.contains("on")) return false;
   } catch(e){}
   /* Der Erkenner liegt seit dem 07.09.2026 NEBEN DER SEITE (TESS_ORT), nicht
-     mehr auf einem CDN. Beim ersten Mal kommen rund 15 MB herunter:
-     tesseract.min.js 65 KB, worker.min.js 121 KB, der LSTM-Kern 3,8 MB und
-     lang/eng.traineddata.gz 10,4 MB.
+     mehr auf einem CDN. Beim ersten Mal kommen rund 45 MB herunter:
+     tesseract.min.js 65 KB, worker.min.js 121 KB, der LSTM-Kern 3,9 MB und
+     die Sprachdateien des Satzes OCR_SPRACHEN (eng+deu+pol+ces+tur, seit
+     dem 13.09.2026, UNI-7) mit 41,6 MB gepackt - bis dahin eng allein mit
+     10,9 MB, und die Ansage hiess 15 MB.
      HIER STAND 3 MB. Das war die Bibliothek allein zur CDN-Zeit - die
      Sprachdatei kam damals von tessdata.projectnaptha.com und wurde nie
-     mitgezaehlt. ocrBereit sagt an derselben Sache seit jeher 15 MB, und
+     mitgezaehlt. ocrBereit sagt an derselben Sache dieselbe Zahl, und
      der Nutzer sieht BEIDE Ansagen: wache.meldung steht im Radarraum vor
-     ihm. Zwei Zahlen fuer denselben Ladevorgang sind eine Zusage zuviel.
+     ihm. Zwei Zahlen fuer denselben Ladevorgang sind eine Zusage zuviel -
+     das Hinweisblatt nennt die Zahl als dritte Stelle, auch dort 45.
      Ein stiller Hintergrundtakt darf das nicht unbemerkt ausloesen - also
      einmal ansagen und dann laden. */
   if (!ocrWorker && !wache.ortGesagt){
     wache.ortGesagt = true;
     if (!wache.meldung)
-      wache.meldung = "reading a town name to find the map — loading the text recogniser once (about 15 MB)";
+      wache.meldung = "reading a town name to find the map — loading the text recogniser once (about 45 MB)";
   }
   return true;
 }
@@ -38322,14 +38551,57 @@ async function ocrLaden(){
    auf dem Blatt, wo vorher nichts stand.
    Die Umlaute kommen wieder - aber erst, wenn der Tuersteher dagegen neu
    geeicht ist, und nicht als Nebenwirkung. */
-const OCR_SPRACHEN = "eng";
+/* BACK ON, 13.09. - AND THE DOORMAN RECALIBRATED FIRST (UNI-7). Measured
+   on twenty-five of the Kommodore's captures with a box, English against
+   this set. Real names: Polish "tACHMYTY" 88 became "ŁACHMYTY" 91,
+   Turkish "ESREF_TEK" came back as "EŞREF TEK" - the Ş right, the
+   underscore read as a space and now put back from the ink under the
+   baseline (unitsUnterstrich). The other names equal or better (two
+   tags change from wrong to wrong: "HI9ACH" to "AI CH", "PAIBED" to
+   "PA3LEB"). The one umlaut in the captures, the owner's second line
+   "TRICKBETRÜGER", reads "TRICKBETRUGER" with English and with this set
+   alike - the German model has not shown its worth on his pictures yet.
+   WHAT THIS SET DOES, AND WHAT IT DID NOT DO. Measured 13.09. with this
+   set: it lifts two jumble captures over the sheet's bar (the special
+   characters 41 -> 66, the question marks 52 -> 86) - the same effect
+   the six-language set of 06.09. had, and that is what the Kommodore
+   saw. It reads noise more confidently as well. And it let a Chinese name through as
+   Latin jumble ("68521 - / 8 E115/m3437k68..." at 63), because the
+   shortcut that keeps the foreign models out counted digits as Latin.
+   But the foreign winners - Arabic on the smiley ("” 5 7"), Japanese on
+   the question marks, Arabic on the small x's - stood on the sheet with
+   English alone, because a foreign winner carried no symbols and two of
+   the three witnesses to unreadability were silent. Now the winner brings
+   its symbols and its field, a fourth witness asks whether a foreign
+   model read its own script at all, the widest-box witness stands at 1,2
+   line heights for Latin (name part only), and the shortcut asks for
+   letters, not digits.
+   STILL OPEN, written as names by this set: the smiley as "75 7" (86,
+   narrow confident boxes, nothing any witness can hold against); the
+   question marks as "X X I I“" with the tag 'SU-0032-"X' (one X stuck in
+   the tag); the circle as "XV I..." at 59 with 'SU-0067-""L'; the arrows
+   as "L XXX I.." (spacing). Danish Å comes back as A (dan is not in the
+   set); the Japanese line loses a tie between chi_sim and jpn. The tag is
+   the row's key: reading again gives the same, only the hand corrects
+   these (click to correct).
+   THIS WORKER SERVES MORE THAN THE BOX: the town reader, the totals under
+   the diamonds and the player-name reader at the battle run on the same
+   set now. Measured by the sceptic 13.09.: town names 27 of 27 as before;
+   the totals under the diamonds change their errors (English 8 wrong on
+   six pictures, this set 4 wrong and 1 missing - end digits fall off);
+   town pass 118 -> 252 ms median. Not solved here.
+   The Kommodore named Polish, Czech and Turkish (05.09.2026); German for
+   the umlauts (his "Oes werden garnicht erfasst.", date not recorded);
+   Danish not. First load about 45 MB instead of 15, once, then held by
+   the browser. */
+const OCR_SPRACHEN = "eng+deu+pol+ces+tur";
 /* THE SET THE WORKER IS BUILT WITH: the default above, or what the test
    bench put in place for a run (ocrSprachenSetzen, at the end of the units
    room). The live path never changes it. */
 let ocrSprachenAktiv = OCR_SPRACHEN;
 async function ocrBereit(psm, weiss, melde){
   ocrMelder = melde || (()=>{});
-  if (!window.Tesseract) ocrMelder("Loading the text recogniser (about 15 MB, first time only) …");
+  if (!window.Tesseract) ocrMelder("Loading the text recogniser (about 45 MB, first time only) …");
   await ocrLaden();
   if (!ocrWorker){
     ocrMelder("Starting the recogniser …");
@@ -48159,7 +48431,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build bb0e718006</span></p></div>
+         installation. <span style="color:var(--dim2)">· build a8b150b58e</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -48250,7 +48522,7 @@ function hilfeDialog(){
             : "Its address is the project URL you enter under live sync."} Nothing goes to the
           game, to Reto-Moto or to a third party. The text recogniser is no exception: it sits in a
           folder beside this page, is fetched only when text is actually read, and costs about
-          15 MB the first time.</div>
+          45 MB the first time.</div>
         <div class="note"><b>What it does not do.</b> It does not read your keyboard — the three
           shortcuts above are the browser's, registered by the extension, not by this page. It
           installs nothing and runs nothing in the background: there is no service worker, and once
@@ -48387,7 +48659,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "bb0e718006";
+const BAU = "a8b150b58e";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
