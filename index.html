@@ -8522,6 +8522,33 @@ function rolleOrteZahl(){
 }
 const rolleFrisch = () => { rolleOrteStand = 0; rolleDrinStand = 0; };
 
+/* ARMOUR REPORTED AT A TOWN, for the anti-tank role (BEF-13). ENNO
+   12.09.2026: "es muss halt nur vorher geguckt werden, ob ueberhaupt
+   Panzer verfuegbar sind, sonst macht die Vergabe der Rolle an sich ja
+   auch keinen Sinn." Counted over every sighting at the town (spotsAt):
+   units whose branch is armor - the game's own grouping, light to heavy
+   armour and both tank destroyers (zweigVon). Not of the clan's own side;
+   a row without a side counts - own units are noted on purpose at times
+   and are not hunted (his word says none of this: reading of the builder,
+   13.09.2026, put to him). null where nobody has reported the town at
+   all, and the caller lets that pass: not scouted is not "no armour"
+   (FABLE 13.09.2026, an assumption - to be confirmed; the other way would
+   be to shut the role until somebody has reported the town). {n, t}: the
+   count and the youngest report that carried armour.
+   Partial success and the kill of every tank - the completion of a hunt -
+   are the battle reader's (BAT-1), not this check's. */
+function panzerGemeldet(i){
+  const gruppen = spotsAt(i);
+  if (!gruppen.length) return null;
+  const eigene = clanFaktion();
+  let n = 0, t = 0;
+  for (const g of gruppen) for (const u of g.list){
+    if (!u || zweigVon(u.k) !== "armor" || u.f === eigene) continue;
+    n += Math.max(0, +u.n || 0);
+    if (g.t > t) t = g.t;
+  }
+  return {n, t};
+}
 /* ask for a role at a town that is fighting. wunsch = {veh, ammo, art} from
    the two picks; nothing typed any more (BEF-8) */
 function rolleAnlegen(stadt, rolle, n, wunsch){
@@ -8529,6 +8556,14 @@ function rolleAnlegen(stadt, rolle, n, wunsch){
   if (!darf("anfordern")) return darfNicht("anfordern");
   if (!MAP.n[stadt] || !fightAt(stadt)){ toast("No battle at that town."); return false; }
   if (!kampfRolle(rolle)){ toast("Unknown role."); return false; }
+  /* anti-tank only where armour was reported (BEF-13); the dialog says it
+     before, this holds for every other way in. A town nobody reported
+     passes - unknown is not none (the assumption is marked at
+     panzerGemeldet). */
+  if (rolle === "at"){
+    const pz = panzerGemeldet(stadt);
+    if (pz && !pz.n){ toast(`No armour spotted at ${MAP.n[stadt][0]}.`); return false; }
+  }
   /* a hand can ask for a few things, not for fifty: the same guard the
      map marks have, and the same role twice at one town says nothing new */
   const meine = rolleOffen().filter(r => r.mine);
@@ -8850,6 +8885,18 @@ function rolleDialog(i){
     const z = document.getElementById("rr-kann");
     if (!z) return;
     try { z.textContent = rolleErfuellbarText(rSel.value, wunsch()); } catch (e){ z.textContent = ""; }
+    /* the anti-tank role asks the sightings first (BEF-13): no armour
+       reported, no hunt - the button is shut; an unscouted town is a
+       question, not a no (the assumption is marked at panzerGemeldet) */
+    const pz = rSel.value === "at" ? panzerGemeldet(i) : undefined;
+    if (pz !== undefined){
+      const ort = MAP.n[i][0];
+      z.textContent = pz === null ? `${ort} is not scouted — armour unknown. ${z.textContent}`
+        : !pz.n ? `No armour spotted at ${ort} — nothing to hunt.`
+        : `${pz.n} armour spotted ${alterText(pz.t)}. ${z.textContent}`;
+    }
+    const ok = document.getElementById("rr-ok");
+    if (ok) ok.disabled = !!(pz && !pz.n);
   };
   vFuellen(); aFuellen();
   rSel.addEventListener("change", () => { vFuellen(); aFuellen(); kannZeile(); });
@@ -35917,8 +35964,15 @@ function wacheStop(vonAussen){
   /* the desk too: SHARE AGAIN is drawn only with a running watch, and
      radarFrisch alone leaves the old desk standing (FABLE 12.09.2026) */
   if (radarOffen){ radarFrisch(); radarPult(); }
-  toast(`${vonAussen ? "Sharing ended" : "Stopped watching"} — ${gesehen} of ${MAP.n.length} `
-      + `towns were seen, ${geaendert} changed.`);
+  /* AND NO TOAST WITH THE ROOM SHUT (RAD-2, 13.09.2026). radarZu sets
+     radarOffen to false before it stops the watch, and his word stands
+     there (ENNO 30.08.2026, quoted in radarZu): with the room closed the
+     radar is to be silent altogether. The count of towns goes to whoever
+     sits in front of the open room - a stop by hand, or a share that ended
+     from outside. */
+  if (radarOffen)
+    toast(`${vonAussen ? "Sharing ended" : "Stopped watching"} — ${gesehen} of ${MAP.n.length} `
+        + `towns were seen, ${geaendert} changed.`);
 }
 function wacheTick(){
   /* Gemessen wird UM den Takt herum: er springt an neun Stellen zurueck,
@@ -44049,8 +44103,14 @@ const PUNKTE_REGEL_FELDER = [
    d:"To whoever wrote the order."},
   {k:"order_done",   n:"Fulfilling somebody's order",     std:1,
    d:"To every player whose teams were assigned to it."},
-  {k:"leader_fremd", n:"Extra when others fulfilled it",  std:0,
-   d:"On top of the first line, once, when somebody other than the issuer had teams on it."},
+  /* leader_fremd ("Extra when others fulfilled it", default 0) stood here
+     from 08.09. to 13.09.2026 and is out again - ENNO 12.09.2026 (PKT-16):
+     "Man sollte nicht bestraft werden dafuer, sinnvolle Befehle zu
+     erstellen und zu diesen auch beizusteuern." The server never
+     read the field (warmap_punkte_abschluss knows leader/done and
+     order/done; 2026-09-08_punktesaetze.sql is not run and stays so). A
+     meta:punkte row that still carries the old value is left alone - the
+     room shows no box for it, and Save writes only the boxes it shows. */
   /* SPI-2, 13.09.2026: paid by warmap_punkte_buchen, branch edep, once
      2026-09-13_attribute.sql has been run. Default 1 is the FABLE proposal
      he agreed to on 12.09.2026. */
@@ -48431,7 +48491,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build a8b150b58e</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 63b93c34b4</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -48659,7 +48719,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "a8b150b58e";
+const BAU = "63b93c34b4";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
