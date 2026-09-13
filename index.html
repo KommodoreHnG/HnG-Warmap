@@ -903,6 +903,9 @@ body.meld-modus{cursor:help}
 @media (prefers-reduced-motion:reduce){#gefstand.gf-ende.gf-puls::after{animation:none}}
 /* der Kopfkasten der Bestaetigung: stehend, ohne Animation, eine Farbe */
 #gefstand .rd-kf.gf-ende-kf .v{font-weight:700;letter-spacing:.10em;color:#8fe6a2}
+/* the transfer on its way, or nothing sent: amber; refused by the clan: red (PUNKTE-D) */
+#gefstand .rd-kf.gf-ende-kf.wartet .v{color:#e2ac48}
+#gefstand .rd-kf.gf-ende-kf.nein .v{color:#e07a6a}
 /* the two score bars, drawn as they stand in the game's head strip */
 .gf-balken{display:grid;grid-template-columns:64px 1fr 56px;gap:8px;align-items:center;
   margin:6px 0;font-size:13px}
@@ -7463,7 +7466,11 @@ function aufklPunkte(a){
    aus aufklStand, aufklStandZeile und streckeStand, nie aus draw().
    Eine Stadt ohne Kampfeinheiten schreibt keine edep-Zeile und wird hier
    darum nie fertig - ob "leer gesehen" zaehlt, ist offen (ENNO
-   11.09.2026: "nicht pauschal durchgewunken"). FABLE 12.09.2026 */
+   11.09.2026: "nicht pauschal durchgewunken"). FABLE 12.09.2026
+   FUER DEN SERVER schreibt eine gezeichnete Anfrage dieselbe Liste als
+   v.im mit (areaSpeichern, areaDialog; PUNKTE-D 13.09.2026) - der Server
+   kennt keine Stadtkoordinaten. Die Seite liest im nirgends; a.orte bleibt
+   ungeschrieben, alles oben gilt weiter. */
 function aufklZielliste(a){
   if (!a) return [];
   if (Array.isArray(a.orte) && a.orte.length) return a.orte.filter(i => MAP.n[i]);
@@ -7914,12 +7921,17 @@ function overtimeFallen(i){ return gefechtWeg(i, false); }
    battle - then the reading goes with the clock, or the next battle for the
    same town would carry the score of the last one for a quarter of an hour.
    Only setFight asks for that. */
-function gefechtWeg(i, auchStand){
+/* neuesGefecht (PUNKTE-D, 13.09.2026): only a mark SET anew is a new battle
+   - then the end of the last one goes too. A mark cleared leaves the end
+   standing, so the clan can still read how it went (gefEndeZeile) - with its
+   own age, frozen before this row is stamped anew. */
+function gefechtWeg(i, auchStand, neuesGefecht){
   const e = S.gefecht[i];
   if (!e || !e.v || !darf("aufklaerung")) return false;
   const rest = gefechtRest(i);
   delete rest.ot; delete rest.hud; delete rest.otby; delete rest.otn;
   if (auchStand) delete rest.bat; else gefAlterHalten(rest, e);
+  if (neuesGefecht) delete rest.ende; else gefEndeAlterHalten(rest, e);
   return stamp("gefecht", i, Object.keys(rest).length ? rest : null);
 }
 /* THE AGE OF THE READING BELONGS TO THE READING, not to the row. The reading
@@ -7938,6 +7950,19 @@ function gefAlterHalten(rest, e){
      row's author is that hand */
   if (rest && rest.bat && (rest.bat.li !== undefined || rest.bat.rest || rest.bat.kp) && rest.bat.t === undefined && e && e.t)
     rest.bat = Object.assign({}, rest.bat, {t: e.t, by: e.by, n: e.n});
+  return gefEndeAlterHalten(rest, e);
+}
+/* THE END OF THE BATTLE KEEPS ITS AGE THE SAME WAY (PUNKTE-D, 13.09.2026).
+   ende.t is the reader's own clock and the server's once-per-reading key -
+   it must never change, or the same reader clearing the mark after the
+   battle would hand the server a "new" end and be paid twice. So the server
+   time of the row that first carried the end is frozen beside it, as rt,
+   by whoever stamps this row for another reason (the clock, the mark, a
+   later reading), and gefEndeZeile asks rt before the row's t. A fresh end
+   carries none - it is as old as its row. The server reads rt nowhere. */
+function gefEndeAlterHalten(rest, e){
+  if (rest && rest.ende && typeof rest.ende === "object" && rest.ende.rt === undefined && e && e.t)
+    rest.ende = Object.assign({}, rest.ende, {rt: e.t});
   return rest;
 }
 /* the side panel line under the battle switch */
@@ -8104,7 +8129,9 @@ const PUNKTE_KONTEN = [
 /* the first-find kinds keep their names from the register (AUFK_NAME) */
 const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
   fight: "Battles marked", map: "Map kept", unit: "Units kept", done: "Orders done",
-  attr: "Notes confirmed"});
+  attr: "Notes confirmed",
+  /* PUNKTE-D, 13.09.2026: order/battle, leader/aufkl, logistic/soldier */
+  battle: "Battles fought", aufkl: "Battles in a recon request", soldier: "Soldiers kept"});
 /* 'done' wird zweimal gebucht, fuer denselben Befehl: auf order fuer jeden,
    der ihn erfuellt hat, auf leader fuer den, der ihn erteilt hat. Gleiche
    Aktion, zwei Bedeutungen - also entscheidet das Konto ueber den Namen.
@@ -8123,6 +8150,30 @@ function punkteSacheName(z){
   if (!roh) return "";
   const teil = roh.split("|");
   const tag = t => /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
+  /* PUNKTE-D (13.09.2026), three more shapes:
+     battle  <town>|<day>|<player>   - the player is the account, not repeated
+     aufkl   <area id>|<town>|<day>  - the request's name while it lives, else its id
+     soldier <player>|<hash>|<day>   - the hash says nothing to a person and stays out */
+  if (z.aktion === "battle"){
+    const i = +teil[0], n = MAP.n[i];
+    if (!n || !/^\d+$/.test(teil[0])) return roh;
+    return n[0] + (tag(teil[1]) ? " \u00b7 " + teil[1] : "");
+  }
+  if (z.aktion === "aufkl"){
+    if (teil.length < 2) return roh;
+    const i = +teil[1], n = MAP.n[i];
+    if (!n || !/^\d+$/.test(teil[1])) return roh;
+    const b = z.spieler ? befehlVonSchluessel(teil[0] + ":" + z.spieler) : null;
+    const v = b && b.v;
+    const name = (v && v.label) ? String(v.label)
+               : (v && v.orte && v.orte.length) ? aufklZiele(v)
+               : teil[0];
+    return n[0] + " \u00b7 recon " + name + (tag(teil[2]) ? " \u00b7 " + teil[2] : "");
+  }
+  if (z.aktion === "soldier"){
+    const wer = (depotIdx.get(teil[0]) || {}).name || teil[0];
+    return wer + " \u00b7 soldier" + (tag(teil[teil.length-1]) ? " \u00b7 " + teil[teil.length-1] : "");
+  }
   if (z.aktion === "fight" || z.aktion === "map"){
     const i = +teil[0], n = MAP.n[i];
     if (!n || !/^\d+$/.test(teil[0])) return roh;
@@ -13097,6 +13148,32 @@ function griffLoslassen(x, y){
    und keiner Sicherungsdatei auf. */
 const GIFTIGE_KENNUNG = new Set(["__proto__", "constructor", "prototype"]);
 const dirty = new Set();
+/* THE ANSWER PER KEY (PUNKTE-D / BAT-4, 13.09.2026): key -> {ok, t, grund,
+   seit}. ok true with the t of the row that went out (abhaken), ok false
+   when the server refused the row (the single-row retry); seit is the time
+   the answer was set. Nothing else reads or writes it; the war cut keeps
+   asking dirty.has as before. A LID (Runde 3, 13.09.2026): every time an
+   answer is set, answers older than an hour go - the map would otherwise
+   grow by one entry per key ever pushed (a day of radar and fight marks
+   is hundreds). The battle desk reads its own key's answer within seconds of
+   the push and remembers it on GEF (zeileErgebnis), so the lid takes
+   nothing it still needs. */
+const pushErgebnis = new Map();
+const PUSH_ERGEBNIS_ALT = 3600000;
+const pushErgebnisSetzen = (k, wert) => {
+  const nun = jetzt();
+  for (const [key, r] of pushErgebnis) if (nun - (r.seit || 0) > PUSH_ERGEBNIS_ALT) pushErgebnis.delete(key);
+  pushErgebnis.set(k, Object.assign({seit: nun}, wert));
+};
+/* the reason in a few words: the HTTP status and the message field of the
+   body, not the raw body - a person reads "403 permission denied for table
+   warmap", not the JSON around it */
+const pushGrund = e => {
+  const roh = String((e && e.message) || "").replace(/^\d+\s*/, "");
+  let satz = roh;
+  try { const j = JSON.parse(roh); if (j && typeof j === "object" && j.message) satz = String(j.message); } catch(x){}
+  return (((e && e.status) ? e.status + " " : "") + (satz || "refused")).slice(0, 80);
+};
 /* Die Merkliste ueberlebt einen Neustart. Ohne das wusste die Seite nach dem
    Neuladen nicht mehr, was noch nicht gesendet war, und schob beim naechsten
    Verbinden sicherheitshalber ALLES hoch - gemessen 894 von 903 Zeilen.
@@ -13228,7 +13305,7 @@ addEventListener("pagehide", ()=>{ if (sparOffen) saveSofort(); });
 function setOwner(i, f){ stamp("owner", i, f); save(); }
 function setFight(i, an){
   stamp("fight", i, an ? 1 : null);
-  gefechtWeg(i, true);                   // a mark set or cleared is a new battle: clock and reading go, see OVERTIME CLOCK
+  gefechtWeg(i, true, !!an);             // a mark set or cleared is a new battle: clock and reading go, see OVERTIME CLOCK; the end only with a mark SET (PUNKTE-D)
   save();
 }
 function dropArrow(id){
@@ -13830,6 +13907,12 @@ function areaSpeichern(pts, extra){
   const rund = pts.map(p => [Math.round(p[0]*10)/10, Math.round(p[1]*10)/10]);
   const aufkl = !!(extra && extra.aufkl);
   const v = Object.assign({pts: rund, f: aufkl ? clanFaktion() : faction, label: "", art: artNeu()}, extra || {});
+  /* a request drawn on open ground writes the towns inside its polygon as
+     v.im - FOR THE SERVER ONLY (PUNKTE-D / AUF-4, 13.09.2026): it knows no
+     town coordinates and reads orte, else im, to pay the request's issuer
+     for a battle inside it. The page reads im nowhere; orte stays unwritten
+     (see aufklZielliste). Towns do not move, so once at writing is enough. */
+  if (aufkl && !(Array.isArray(v.orte) && v.orte.length)) v.im = aufklZielliste(v);
   /* A RECON REQUEST IS THE ASK ITSELF, so it is never a draft: one only I
      can see asks nobody. Everything else drawn here is held back. */
   const entw = entwurfModus && !aufkl;
@@ -16460,6 +16543,7 @@ function side(){
         <span>Fighting here right now</span></label>
       ${fightAt(i) ? overtimeZeile(i) : ""}
       ${fightAt(i) ? gefZeile(i) : ""}
+      ${gefEndeZeile(i)}
       <label class="toggle"><input type="checkbox" id="star-cb" ${starAt(i)?"checked":""}>
         <span>Key objective — highlight for everyone</span></label>
     </div>
@@ -28865,6 +28949,27 @@ function gefZeile(i){
   return `<div class="ot-zeile" id="gef-zeile"><span style="color:${GEF_FARBE}">${esc(teile.join(" · "))}</span>
         <div class="note">read from a game window ${esc(alterText(b.t))} by ${esc(wer)}</div></div>`;
 }
+/* THE END OF THE BATTLE, for the clan (PUNKTE-D / BAT-4, 13.09.2026): one
+   line in the town window, fifteen minutes long (GEF_FRISCH), whether the
+   mark still stands or not - the reader who saw the end screen plays on our
+   side, so victory is "won for our side". Only this line; the battle window
+   (BAT-11) is its own package. THE AGE COMES FROM THE ROW'S SERVER TIME, as
+   gefStand says and for the same reason: a reader whose clock runs twenty
+   minutes slow would never be seen, one twenty minutes fast would be "just
+   now" for half an hour. ende.t is that reader's clock and the server's key,
+   never an age; the frozen rt first (gefEndeAlterHalten), else the row's t. */
+function gefEndeZeile(i){
+  const e = S.gefecht[i];
+  const E = (e && imKrieg(e) && imZeit(e) && e.v && e.v.ende && typeof e.v.ende === "object") ? e.v.ende : null;
+  if (!E) return "";
+  const wie = E.a === "victory" ? "won" : E.a === "defeat" ? "lost" : null;
+  if (!wie) return "";
+  const t = +E.rt || e.t || 0;
+  if (!t || (zeitReise || jetzt()) - t > GEF_FRISCH) return "";
+  const wer = werWar({by: E.by, n: E.n});
+  return `<div class="ot-zeile" id="gef-ende-zeile"><span style="color:${GEF_FARBE}">Battle over \u2014 ${wie} for our side</span>
+        <div class="note">read by ${esc(wer)} ${esc(alterText(t))}</div></div>`;
+}
 /* THE SAME ROW THE OVERTIME CLOCK USES, under its own key. "hud" is taken:
    the clock writes {ot, hud} with hud as the 0/1 mark saying that ot is a
    real moment ("e.v.hud ? e.v.ot : e.t"), and an object there would have
@@ -28887,12 +28992,22 @@ function gefZeile(i){
    A clock left over from an older war is a different matter: it is not shown
    today, but the fresh stamp would pull the whole row into this war and wake
    it. It goes. */
-function gefSchreiben(i, neu){
+/* ende (PUNKTE-D / BAT-4, 13.09.2026): {a: "victory"|"defeat", t, by, n} -
+   the end of the battle as this reader saw it. Set when handed in, and left
+   alone otherwise: the row keeps what stands until a NEW battle mark clears
+   it (gefechtWeg). by inside ende is the reader - the server stamps only
+   by at the top and v.by, never v.ende.by - and the server books the end to
+   the account that writes the row only when the two are the same. ende.t is
+   the reader's own clock at the reading and the server's once-per-reading
+   key; it is never rewritten. A row stamped anew for another reason keeps
+   the end's server age in ende.rt first, see gefEndeAlterHalten. */
+function gefSchreiben(i, neu, ende){
   if (!darf("aufklaerung")) return darfNicht("aufklaerung");
   if (!fightAt(i)) return false;
   const e = S.gefecht[i];
   const v = gefechtRest(i);
   if (neu) v.bat = neu; else delete v.bat;      // no reading: the reading goes off the row (gefLageEnde), the clock stays
+  if (ende) v.ende = ende; else gefEndeAlterHalten(v, e);
   if (v.ot > 0){
     if (!imKrieg(e) || !e.t){ delete v.ot; delete v.hud; delete v.otby; delete v.otn; }
     else if (!v.hud){ v.ot = e.t; v.hud = 1; }
@@ -28908,7 +29023,9 @@ function gefSchreiben(i, neu){
   if (v.ot > 0 && v.otn === undefined){ v.otby = e.by || ""; v.otn = e.n || ""; }
   if (!stamp("gefecht", i, Object.keys(v).length ? v : null, {n: S.name || ""})) return false;
   save();
-  if (GEF){ GEF.geschrieben = neu; GEF.gesendet = jetzt(); }
+  /* zeileT: the t this write gave the row, so the desk can ask pushErgebnis
+     whether THIS write went through (PUNKTE-D) */
+  if (GEF){ GEF.geschrieben = neu; GEF.gesendet = jetzt(); GEF.zeileT = (S.gefecht[i] && S.gefecht[i].t) || 0; }
   draw(); if (sel === i) side();
   return true;
 }
@@ -28993,7 +29110,8 @@ function gefKlang(){
 function gefEndeRahmen(neu){
   const el = document.getElementById("gefstand");
   if (!el) return;
-  if (!gefEndeFrisch()){ el.classList.remove("gf-ende", "gf-puls"); return; }
+  const E = gefEndeFrisch();
+  if (!E || !E.uebertragen){ el.classList.remove("gf-ende", "gf-puls"); return; }   // green only once the clan has it (PUNKTE-D)
   el.classList.add("gf-ende");
   if (neu){ el.classList.remove("gf-puls"); void el.offsetWidth; el.classList.add("gf-puls"); }
 }
@@ -29008,8 +29126,16 @@ function gefEndeRahmen(neu){
 function gefEndeKasten(){
   const E = gefEndeFrisch();
   if (!E) return "";
-  return `<div class="rd-kf gf-ende-kf"><div class="t">End screen</div>
-      <div class="v">READ <small>${esc(alterText(E.zeit))}</small></div>
+  /* the state of the transfer beside the reading (PUNKTE-D): green once the
+     clan has the row, amber while it is on its way or nothing went out, red
+     when the clan refused it */
+  const stand = E.uebertragen ? `SENT <small>${esc(alterText(E.uebertragen))}</small>`
+              : E.uebertrag === "abgewiesen" ? "not sent"
+              : E.uebertrag === "keiner" ? "not sent"
+              : "sending";
+  const ton = E.uebertragen ? "" : E.uebertrag === "abgewiesen" ? " nein" : " wartet";
+  return `<div class="rd-kf gf-ende-kf${ton}"><div class="t">End screen</div>
+      <div class="v">READ \u00b7 ${stand}</div>
       <div class="bar"><i style="width:100%"></i></div></div>`;
 }
 /* ONCE PER END SCREEN, not at every look, and AGAIN for the next one.
@@ -29027,8 +29153,12 @@ function gefEndeKasten(){
    "if (!R.balken) return", and the end screen carries no bars - the battle is
    over. A finding behind that gate would never be announced in exactly the
    case it was built for.
-   NOTHING IS WRITTEN TO THE CLAN HERE. What is to become of gefecht:<town>
-   when a battle ends is a server question and is decided in no sheet. */
+   NOTHING WAS WRITTEN TO THE CLAN HERE until 13.09.2026. Since PUNKTE-D /
+   BAT-4 the end goes into gefecht:<town> as v.ende (gefLageEnde), and the
+   confirmation - chime, frame, floating line - comes only after the server
+   has taken the row (gefUebertragPruefen). ENNO 08.09.2026: "... sondern dem
+   User den erfolgreichen Uebertrag vermitteln." Before, the chime confirmed
+   a transfer that did not exist. */
 function gefEndbildMelden(){
   if (!GEF || !GEF.live) return;
   gefEndbildVerfall(GEF);
@@ -29042,13 +29172,11 @@ function gefEndbildMelden(){
   GEF.ende = {ausgang: B.ausgang, zeit: jetzt(), ort: B.ort,
               sprache: B.sprache || "", guete: (typeof B.guete === "number") ? B.guete : null,
               nr: B.nr};
-  gefLageEnde();                              // the countdown and the row end with the battle (HUD-LAGE)
-  gefKlang();
-  gefEndeRahmen(true);
-  /* The floating line sits at z-index 130 and the rooms at 120 - measured with
-     elementFromPoint, see the comment above #toast. It comes once and goes by
-     itself; there is nothing to click away. */
-  toast("End screen read - the game window can be closed.");
+  gefLageEnde();                              // the countdown and the row end with the battle (HUD-LAGE); the end goes into the row (PUNKTE-D)
+  /* chime, frame and floating line come from gefUebertragPruefen, once the
+     clan has taken the row - or the desk says why nothing went out */
+  gefUebertragPruefen();
+  gefZeichnen();
   /* ONE ALARM CLOCK. The tick can stand still - the player stops the capture,
      or the shared window dies with the game - and then nothing draws again,
      and the frame would stay up for good. This wakes once at the end of the
@@ -29056,6 +29184,67 @@ function gefEndbildMelden(){
      shot cannot do any harm: if a newer confirmation stands by then, it stays
      standing. */
   setTimeout(() => { if (GEF) gefZeichnen(); else gefEndeRahmen(); }, GEF_ENDBILD_FRISCH + 300);
+}
+/* FIRST THE TRANSFER, THEN THE CONFIRMATION (PUNKTE-D / BAT-4, 13.09.2026).
+   ENNO 08.09.2026: "Es geht nur um die Bestaetigung, dass man das Fenster
+   schliessen kann." and "... dem User den erfolgreichen Uebertrag
+   vermitteln." So the chime, the frame and the floating line come here, and
+   only once the server has taken the row gefecht:<town> with the end in it.
+   (a) Nothing to send - no town picked, no right, no battle mark, no clan
+       connection: GEF.ende.uebertrag = "keiner" with the reason. No chime,
+       no green frame; the desk says it in amber. (Frage D.13.)
+   (b) Otherwise, the first time: wait for a running exchange (six seconds
+       at most, as the war cut does), push, then read pushErgebnis for the
+       key. ok with a t at or after the row's own t: confirmed. ok false: the
+       clan did not take it - red, no chime. No answer yet (the line is
+       down, the row is queued): "sending", and a wake-up every second reads
+       the answer until it is there - the sync loop pushes on its own, this
+       does not push again, or a dead line would bring "No connection" every
+       second. The queue survives a stop of the capture (offenSichern); the
+       chime keeps its own gate (gefKlang: capture running, room open), frame
+       and floating line come regardless. */
+async function gefUebertragPruefen(){
+  const E = GEF && GEF.ende;
+  if (!E || E.uebertragen || E.uebertrag === "keiner" || E.uebertrag === "abgewiesen" || E.pruefe || E.wecker) return;
+  const i = E.ort;
+  let grund = null;
+  if (i === null || i === undefined) grund = "no town picked";
+  else if (!darf("aufklaerung")) grund = "no right to write for the clan";
+  else if (!fightAt(i)) grund = "no battle mark on the town";
+  else if (!E.schluessel) grund = "the row was not written";
+  else if (!CFG) grund = "no clan connection";
+  if (grund){ E.uebertrag = "keiner"; E.grund = grund; gefZeichnen(); return; }
+  if (!E.geschoben){
+    E.geschoben = 1; E.pruefe = true;
+    try {
+      for (let k = 0; k < 60 && (tauschLaeuft || pushing); k++) await new Promise(ok => setTimeout(ok, 100));
+      await syncPush();
+    } catch(e){}
+    finally { E.pruefe = false; }
+    if (!GEF || GEF.ende !== E) return;       // a new battle meanwhile
+  }
+  const r = pushErgebnis.get(E.schluessel);
+  if (r && (r.t || 0) >= (E.zeileT || 0)){
+    if (GEF.ort === i) GEF.zeileErgebnis = r;      // remembered past the map's lid (Runde 3), see the HUD line
+    if (r.ok){
+      E.uebertragen = jetzt(); E.uebertrag = "ok";
+      gefKlang();
+      gefEndeRahmen(true);
+      /* The floating line sits at z-index 130 and the rooms at 120 - measured
+         with elementFromPoint, see the comment above #toast. It comes once
+         and goes by itself; there is nothing to click away. */
+      toast("End screen read and sent to the clan - the game window can be closed.");
+    } else {
+      E.uebertrag = "abgewiesen"; E.grund = r.grund || "refused";
+    }
+  } else if (!dirty.has(E.schluessel)){
+    /* left the queue without an answer: too large, or not this account's row */
+    E.uebertrag = "abgewiesen"; E.grund = "the row left the queue unsent";
+  } else {
+    E.uebertrag = "sendet";
+    E.wecker = setTimeout(() => { E.wecker = null; if (GEF && GEF.ende === E) gefUebertragPruefen(); }, 1000);
+  }
+  gefZeichnen();
 }
 /* THE CLAN'S CLOCK STARTS ITSELF (BAT-9). ENNO 08.09.2026: "Wenn wir
    jemanden im Gefecht haben, der das runterlaufen auf 0 miterlebt und daher
@@ -29093,12 +29282,37 @@ function gefUhrStarten(){
    the end screen, and the row is written once more without countdown and
    objectives; the score of a hold-and-take battle stays as it was last
    written. The clock in the row is not touched. */
+/* AND THE END ITSELF GOES TO THE CLAN (PUNKTE-D / BAT-4, 13.09.2026). Written
+   whenever a town is picked, not only when a countdown or the objective row
+   had been written before: the row carries v.ende, and the server books it
+   to the reader (branch 10). The score stays - this reader's last one, or
+   the one another reader wrote into the row, and then with that reader's
+   name and age (gefAlterHalten: nothing is silently rewritten); countdown
+   and objectives go with the end screen as before. The key and the row's t
+   are kept on GEF.ende so the transfer can be asked for (gefUebertragPruefen).
+   The time in ende is this machine's clock and the server's once-per-reading
+   key; the age the clan sees comes from the row's server time (gefEndeZeile).
+   Without the intel right nothing is written and nothing is said here - the
+   desk says it once (gefUebertragPruefen). */
 function gefLageEnde(){
   if (!GEF) return;
   const alt = GEF.geschrieben, i = GEF.ort;
   gefLageWeg(GEF);
-  if (i === null || i === undefined || !alt || (!alt.rest && !alt.kp)) return;
-  gefSchreiben(i, alt.li !== undefined ? {li: alt.li, re: alt.re} : null);
+  if (i === null || i === undefined || !darf("aufklaerung")) return;
+  const E = GEF.ende;
+  const ende = E ? {a: E.ausgang, t: E.zeit, by: S.me, n: S.name || ""} : undefined;
+  const rest = gefechtRest(i);
+  let bat = null;
+  if (alt && alt.li !== undefined) bat = {li: alt.li, re: alt.re};
+  else if (rest.bat && rest.bat.li !== undefined){
+    const f = gefAlterHalten({bat: rest.bat}, S.gefecht[i]).bat;    // another reader's score keeps its reader and age
+    bat = {li: f.li, re: f.re};
+    if (f.t !== undefined){ bat.t = f.t; bat.by = f.by; bat.n = f.n; }
+  }
+  if (gefSchreiben(i, bat, ende) && E){
+    E.schluessel = `gefecht:${i}`;
+    E.zeileT = (S.gefecht[i] && S.gefecht[i].t) || 0;
+  }
 }
 /* THE TOWN CHANGES, THE READING DOES NOT FOLLOW IT. The desk's town picker
    comes here: the reading of one battle is not the next town's, so it falls
@@ -29260,6 +29474,7 @@ async function gefTick(){
     gefMelden();
     gefUhrStarten();
     gefEndbildMelden();
+    if (GEF.ende && !GEF.ende.uebertragen && GEF.ende.schluessel) gefUebertragPruefen();   // asks again while the row is queued (PUNKTE-D)
     gefZeichnen();
   } catch(e){
     if (GEF){
@@ -29292,14 +29507,27 @@ function gefPult(){
          waere von gruen auf bernstein zurueckgesprungen, waehrend der
          Schriftzug noch steht. Gemessen sind solche Luecken, bis 13,5 s.
          Ein Fall, ein Satz. Der Ausgang kommt hier nicht vor. */
-      if (gefEndeFrisch()) return `<div style="margin-top:8px;padding:7px 9px;border:1px solid #4a6b3a;border-radius:3px;background:rgba(74,107,58,.18);color:#9ec98a;font-size:12px;line-height:1.45">End screen read - the game window can be closed.</div>`;
+      /* Since PUNKTE-D (13.09.2026) the green line is the transfer's: it
+         comes once the clan has the row. Before that amber (on its way, or
+         nothing sent - with the reason), red when the clan refused it. When
+         nothing went out or the clan refused it, the reading is still over
+         and the window may go - said in the box, without the chime (D.13).
+         While the row is still on its way the window may go as well: the
+         row lives in the queue (offenSichern), the game window is not
+         needed for it any more (Runde 3). */
+      const E = gefEndeFrisch();
+      const kasten = (rand, grund, farbe, text) => `<div style="margin-top:8px;padding:7px 9px;border:1px solid ${rand};border-radius:3px;background:${grund};color:${farbe};font-size:12px;line-height:1.45">${text}</div>`;
+      if (E && E.uebertragen) return kasten("#4a6b3a", "rgba(74,107,58,.18)", "#9ec98a", "End screen read and sent - the game window can be closed.");
+      if (E && E.uebertrag === "abgewiesen") return kasten("#8a3a30", "rgba(200,80,64,.16)", "#e07a6a", `End screen read - the clan did not take it (${esc(E.grund || "refused")}) - the game window can be closed.`);
+      if (E && E.uebertrag === "keiner") return kasten("#8a6820", "rgba(226,172,72,.16)", "#e2ac48", `End screen read - nothing sent: ${esc(E.grund || "")} - the game window can be closed.`);
+      if (E) return kasten("#8a6820", "rgba(226,172,72,.16)", "#e2ac48", "End screen read - sending to the clan - the game window can be closed.");
       if (live) return `<div style="margin-top:8px;padding:7px 9px;border:1px solid #8a6820;border-radius:3px;background:rgba(226,172,72,.16);color:#e2ac48;font-size:12px;line-height:1.45">Waiting for the end screen.</div>`;
       return "";
     })()}
-    <div style="margin-top:8px;color:#cbb27a;font-size:11.5px;line-height:1.55;border-left:2px solid #8a6a2a;padding:0 2px 0 8px">Keep the
-      game window open and shared until the end screen has been read here: the box in the head
+    ${GEF.ende ? "" : `<div style="margin-top:8px;color:#cbb27a;font-size:11.5px;line-height:1.55;border-left:2px solid #8a6a2a;padding:0 2px 0 8px">Keep the
+      game window open and shared until the end screen has been read and sent here: the box in the head
       strip, and a chime while Sound is on. Once the window is gone, the end of the battle cannot
-      be read at all.</div>
+      be read at all.</div>`}
     <div class="kb-abstand"></div>
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="gf-klang">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
@@ -29367,7 +29595,7 @@ function gefZeichnen(){
     <div class="note">Over the recorded assault the countdown was read 1014 times, all of them right, and two wrong single readings were thrown out; over the two other recordings it read no countdown at all. The objective boxes were read in 2590 of 2676 looks of the assault, the same as the measurement in 2583 of them. A display drawn at double size is not read.</div>
     <div class="note">Over a recorded assault, which carries no bars at all, the reader said nothing in 2677 looks a second apart. Over the one recorded hold-and-take battle it read 69 times; at the ten points where a stored measurement of the same battle also holds, it stood between 1,2 points under and 1,2 points over it. That is the whole comparison there is. A display drawn at double size is not read at all - the pair of boxes is then wider than the strip cut out here, and half a box is not measured.</div>
     <h3 style="margin-top:14px">The end of the battle</h3>
-    <div class="note">The end of a battle is read from the writing in the head strip, held against twenty-four words for won and lost in the game's twelve languages; no language has to be picked. Over eleven end screens at five sizes it read 51 right, none wrong, and stayed silent four times. The five rating stars are not waited for - they come about fourteen seconds after the writing, and the game's own close button comes with them. Nothing of it goes to the clan.</div>`;
+    <div class="note">The end of a battle is read from the writing in the head strip, held against twenty-four words for won and lost in the game's twelve languages; no language has to be picked. Over eleven end screens at five sizes it read 51 right, none wrong, and stayed silent four times. The five rating stars are not waited for - they come about fourteen seconds after the writing, and the game's own close button comes with them. The end goes to the clan; the confirmation here comes once the clan has taken it.</div>`;
     links.dataset.gebaut = "1";
     const of = links.querySelector("#gf-ort");
     if (of) of.addEventListener("change", ev => {
@@ -29421,11 +29649,33 @@ function gefZeichnen(){
       const wo = (E.ort !== null && E.ort !== undefined && MAP.n[E.ort]) ? MAP.n[E.ort][0] : null;
       return `<div class="ot-zeile" style="margin-top:16px">
         <span style="color:#8fe6a2">End screen read${wo ? ` at ${esc(wo)}` : ""}, ${esc(alterText(E.seit))}.</span>
-        <div class="note">The writing in the head block was held against twenty-four words for won and lost in twelve languages. It fits one of them at ${E.guete.toFixed(2).replace(".", ",")} against ${E.zweit.toFixed(2).replace(".", ",")} for the other outcome, over ${E.blicke} look${E.blicke === 1 ? "" : "s"}. Nothing is sent to the clan from it.</div></div>`;
+        <div class="note">The writing in the head block was held against twenty-four words for won and lost in twelve languages. It fits one of them at ${E.guete.toFixed(2).replace(".", ",")} against ${E.zweit.toFixed(2).replace(".", ",")} for the other outcome, over ${E.blicke} look${E.blicke === 1 ? "" : "s"}. ${(() => {
+          /* the state of the transfer, not the outcome (PUNKTE-D) */
+          const U = gefEndeFrisch();
+          if (!U) return "";
+          if (U.uebertragen) return `Sent to the clan ${esc(alterText(U.uebertragen))}.`;
+          if (U.uebertrag === "abgewiesen") return `Not taken by the clan (${esc(U.grund || "refused")}).`;
+          if (U.uebertrag === "keiner") return `Nothing sent: ${esc(U.grund || "")}.`;
+          return "Sending to the clan ...";
+        })()}</div></div>`;
     })()}
     ${!darf("aufklaerung") ? `<div class="note" style="margin-top:16px">${esc(rechtSatz("aufklaerung"))} Nothing is sent.</div>`
       : GEF.ort === null || GEF.ort === undefined ? `<div class="note" style="margin-top:16px">Pick a town on the left, or nothing is sent to the clan.</div>`
-      : GEF.gesendet ? `<div class="note" style="margin-top:16px">Last sent to the clan ${esc(alterText(GEF.gesendet))}.</div>`
+      : GEF.gesendet ? (() => {
+          /* "sent" means the clan has it (PUNKTE-D): pushErgebnis for this
+             town's row, at or after the t of the last write (GEF.zeileT).
+             Before the answer the row is only written, and it says so. The
+             answer is kept on GEF once seen (zeileErgebnis): the map drops
+             answers older than an hour (Runde 3), and an idle desk must not
+             fall back from "sent" to "not sent yet" because of that. */
+          const passt = r => r && (r.t || 0) >= (GEF.zeileT || 0);
+          const r0 = pushErgebnis.get(`gefecht:${GEF.ort}`);
+          const r = passt(r0) ? r0 : passt(GEF.zeileErgebnis) ? GEF.zeileErgebnis : null;
+          if (r) GEF.zeileErgebnis = r;
+          if (r && r.ok) return `<div class="note" style="margin-top:16px">Last sent to the clan ${esc(alterText(GEF.gesendet))}.</div>`;
+          if (r) return `<div class="note" style="margin-top:16px">Last row not taken by the clan (${esc(r.grund || "refused")}).</div>`;
+          return `<div class="note" style="margin-top:16px">Last written for the clan ${esc(alterText(GEF.gesendet))}, not sent yet.</div>`;
+        })()
       : `<div class="note" style="margin-top:16px">Nothing sent yet.</div>`}
     ${(() => {
       /* THE PROPOSAL, AND IT STAYS A PROPOSAL. The row gefecht:<town> is read
@@ -37381,6 +37631,7 @@ function areaDialog(id, e, neuGezogen){
     const farbeEl = document.getElementById("ar-farbe");
     const farbe = farbeEl ? farbeEl.value : (a.farbe||"");
     const v = {...a, label};
+    if (v.aufkl && !(Array.isArray(v.orte) && v.orte.length)) v.im = aufklZielliste(v);   // the towns for the server (PUNKTE-D / AUF-4), see areaSpeichern
     if (soll) v.soll = soll; else delete v.soll;
     if (farbe) v.farbe = farbe; else delete v.farbe;
     const prioEl = document.getElementById("ar-prio");
@@ -44160,9 +44411,16 @@ function meldungSenden(art, text, wo){
      Orders  wirkt sofort. Die Seite haelt die Sperre selbst
              (zustandSetzen).
      Points  schreibt nur die Zeile meta:punkte. AUSGEZAHLT WIRD AM SERVER.
-             Ohne die Wanderung warmap/sql/2026-09-08_punktesaetze.sql
-             steht hier eine Zahl, an die sich niemand haelt - und genau das
-             sagt das Fach auch, an Ort und Stelle.
+             Welche Wanderung welches Feld liest:
+               2026-09-13_attribute.sql (eingespielt 13.09.2026): attr_ok.
+               2026-09-13_punkte_d.sql (PUNKTE-D, 13.09.2026): leader_done,
+                 order_done, gefecht_pflicht, battle_done, aufkl_fight,
+                 aufkl_fight_own, soldier_kept - alles, was das Fach zeigt.
+               2026-09-08_punktesaetze.sql wurde nie eingespielt und ist
+                 durch punkte_d ueberholt.
+             Die Wanderung punkte_d ging zugleich mit diesem Bau live; der
+             fruehere Hinweis "Until ... has been run there" im Fach ist
+             darum weg (FABLE 13.09.2026, Runde 2).
 
    KEIN FELD IST VORAUSGEFUELLT. Die Vorgabe steht blass als Platzhalter
    daneben; leer bedeutet "nicht gesetzt". Save schreibt nur, was wirklich
@@ -44173,10 +44431,12 @@ const MARKEN_STUFEN = [
   {k:"fuehrung", n:"Confirm orders", d:"Whoever may set orders active — see Roles."},
   {k:"leiter",   n:"Leader",         d:"You."},
 ];
-/* Die Datei, in der die Saetze unten am Server ankommen. Steht hier, weil
-   das Fach Points sie nennen muss - eine Zahl ohne die Wanderung wirkt
-   nicht, und wer sie sucht, soll den Namen lesen koennen. */
-const REGEL_PUNKTE_DATEI = "warmap/sql/2026-09-08_punktesaetze.sql";
+/* Die Datei, in der die Saetze am Server ankommen, stand hier bis zum
+   13.09.2026 als REGEL_PUNKTE_DATEI und im Fach Points ("Until ... has been
+   run there, what you set here is only written down"). Seit PUNKTE-D liest
+   der Server jedes Feld des Fachs (warmap/sql/2026-09-13_punkte_d.sql,
+   eingespielt zugleich mit diesem Bau) - Satz und Konstante sind weg
+   (FABLE 13.09.2026, Runde 2). */
 /* WAS DER SERVER AUSZAHLT, Feld fuer Feld.
    std ist NICHT mein Vorschlag, sondern der Betrag, den der Server HEUTE
    bucht: warmap_punkte.betrag steht auf "not null default 1", und
@@ -44186,7 +44446,11 @@ const REGEL_PUNKTE_DATEI = "warmap/sql/2026-09-08_punktesaetze.sql";
    Depot werden im grossen Ausloeser gebucht, das Ortsgewicht 3/2/1 in
    warmap_ort_gewicht. Die in den Raum zu holen heisst,
    warmap_punkte_buchen zu ersetzen - eine eigene Wanderung, siehe Kopf der
-   Datei oben. */
+   Datei oben.
+   PUNKTE-D (13.09.2026) hat genau das getan - fuer das Arsenal
+   (soldier_kept), das Gefechtsende (battle_done) und den AUF-4-Bonus
+   (aufkl_fight, aufkl_fight_own). Das Depot bleibt draussen (Frage D.10);
+   Erstfund, Kampfmarke, Besitzwechsel ebenso. */
 const PUNKTE_REGEL_FELDER = [
   {k:"leader_done",  n:"Issuing an order that gets done", std:1,
    d:"To whoever wrote the order."},
@@ -44205,7 +44469,23 @@ const PUNKTE_REGEL_FELDER = [
      he agreed to on 12.09.2026. */
   {k:"attr_ok",      n:"A note about an enemy that a clan mate confirms", std:1,
    d:"To whoever wrote the note, once per confirming member."},
+  /* PUNKTE-D, 13.09.2026: the four below are paid by warmap_punkte_buchen
+     (branches 2, 9, 10) once 2026-09-13_punkte_d.sql has been run. The
+     defaults 1 are the OPUS/FABLE proposal of 05.09.2026 ("erst alles 1
+     Punkt"), never his word; the defaults 0 are the room's own "Vorgabe 0". */
+  {k:"battle_done",  n:"A battle whose end the Battlereader read and sent", std:1,
+   d:"To everyone whose Battlereader read the end screen and sent it, once per battle and town."},
+  {k:"aufkl_fight",  n:"A battle inside a recon request", std:0,
+   d:"To whoever asked for the recon, once per town and day."},
+  {k:"aufkl_fight_own", n:"... and our side fights there", std:0,
+   d:"On top of the line above, when the town is ours or one of our attacks aims at it."},
+  {k:"soldier_kept", n:"A soldier changed in the arsenal", std:1,
+   d:"One per changed soldier and day, like the depot. The list itself stays anonymous."},
 ];
+/* the battle requirement is ON unless the leader wrote a 0 (PUNKTE-D):
+   a missing field is the default, and the default is on */
+const gefechtPflichtAn = p => !(p && p.gefecht_pflicht !== undefined && p.gefecht_pflicht !== null
+                                && +p.gefecht_pflicht === 0);
 function regelnDialog(tab){
   if (!istLeader()){ toast("Only the clan leader sets these."); return; }
   const r = clanRegeln(), p = punkteRegeln();
@@ -44282,17 +44562,16 @@ function regelnDialog(tab){
           </tr>`).join("")}</tbody>
         </table></div>
         <div class="row" style="align-items:center;gap:8px">
-          <span style="font-size:12px;color:var(--dim);flex:1">An order only pays out if a
-            battle was played on one of its towns</span>
+          <span style="font-size:12px;color:var(--dim);flex:1">An attack or a defence only pays
+            out when a clan member's Battlereader read the end of a battle on one of its towns.
+            Recon requests, chains and para-blocks are exempt.</span>
           <label class="toggle"><input type="checkbox" id="rg-p-gefecht"${
-            +p.gefecht_pflicht === 1 ? " checked" : ""}><span></span></label>
+            gefechtPflichtAn(p) ? " checked" : ""}><span></span></label>
         </div>
         <div class="note">Leave a box empty and the grey number holds — that is what the
           server pays today. Nobody chose those amounts either. <b>0</b> means nothing is
           booked at all, and raising it later still books.</div>
-        <div class="note">The server pays these out, not this page. Until
-          <b>${esc(REGEL_PUNKTE_DATEI)}</b> has been run there, what you set here is only
-          written down.</div>
+        <div class="note">The server pays these out, not this page.</div>
       </div>
 
     </div>
@@ -44353,7 +44632,9 @@ function regelnSpeichern(){
     const w = lies(`rg-p-${f.k}`, 99);
     if (w !== null) punkte[f.k] = w;
   }
-  if (document.getElementById("rg-p-gefecht")?.checked) punkte.gefecht_pflicht = 1;
+  /* both ways written out (PUNKTE-D, 13.09.2026): the server's default is
+     ON, so only an explicit 0 turns the requirement off */
+  punkte.gefecht_pflicht = document.getElementById("rg-p-gefecht")?.checked ? 1 : 0;
   if (schlecht){ toast(schlecht); return false; }
 
   /* Zwei Zeilen, zwei Stempel. Leer heisst leer: ein Grabstein, und
@@ -48695,7 +48976,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build bd295ab790</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 54946ba9a9</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -48923,7 +49204,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "bd295ab790";
+const BAU = "54946ba9a9";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -49349,6 +49630,7 @@ async function syncPushInner(){
     const [k, bucket, id, t] = merk[i];
     const jetztWert = wertVon(bucket, id);
     if (!jetztWert || (jetztWert.t || 0) === t) dirty.delete(k);
+    pushErgebnisSetzen(k, {ok: true, t});
   };
   /* Zwei sehr verschiedene Fehlschlaege sahen frueher gleich aus: "die
      Datenbank will diese Zeile nicht" und "es kam ueberhaupt keine Antwort".
@@ -49410,6 +49692,7 @@ async function syncPushInner(){
            Weitermachen waere sinnlos: die Leitung ist fuer alle dieselbe. */
         if (e2 && e2.leitung){ leitungWeg = true; break; }
         dirty.delete(merk[i][0]); weg++; abgelehnt.push(merk[i][1]);
+        pushErgebnisSetzen(merk[i][0], {ok: false, t: merk[i][3], grund: pushGrund(e2)});
       }
     }
     if (leitungWeg){
