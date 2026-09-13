@@ -2464,6 +2464,7 @@ const SYM = {
   medium_tank_destroyer:"A T w1", heavy_tank_destroyer:"A T w2",
   paratroopers:"X P", paratroopers_on_ground:"X P", pathfinders:"R P", pathfinders_on_ground:"R P",
   fighter_squadron:"F", heavy_fighter_squadron:"F H", fighter_recon:"F R2",
+  transport_planes:"TP",     // kein Typ: die Transportflugzeuge der Paras auf dem Pfeilschild (FABLE 13.09.2026)
 };
 function symbolSVG(key, farbe, w=26, h=18){
   const teile = (SYM[key] || "X").split(" "), hat = t => teile.includes(t);
@@ -2520,6 +2521,14 @@ function symbolSVG(key, farbe, w=26, h=18){
          + `<path d="M40 36L50 56L60 36"/>`
          + `<path d="M${L} 34Q24 17 36 25"/>`
          + `<path d="M${Re} 34Q76 17 64 25"/>`);
+  }
+  if (hat("TP")){
+    /* Transportflugzeug von oben: Rumpf, Tragflaechen, Leitwerk - massiv,
+       damit es neben dem Parasymbol auf dem Pfeilschild bei 9 Punkt noch
+       ein Flugzeug bleibt (FABLE 13.09.2026) */
+    voll.push(`<path d="M50 11L54.5 20V50L58 56H42L45.5 50V20Z"/>`
+            + `<path d="M14 33L45.5 28V41L14 45Z"/><path d="M86 33L54.5 28V41L86 45Z"/>`
+            + `<path d="M35 55L45.5 51V58L35 60Z"/><path d="M65 55L54.5 51V58L65 60Z"/>`);
   }
   if (g.length) p.push(`<g stroke="${farbe}" stroke-width="${I}" fill="none"
     stroke-linecap="butt" stroke-linejoin="miter">${g.join("")}</g>`);
@@ -3712,6 +3721,10 @@ const BUCKETS = Object.keys(TOPFTAFEL);
 const neu = () => Object.assign({me:"", name:"", arrows:[], gone:{}, blick:{}, nachschau:{}, widerspruch:{}},
                                 ...BUCKETS.map(b => ({[b]:{}})));
 let S = neu();
+/* DER LAUF DES ZUSTANDS: steigt bei jeder eigenen (save) und jeder
+   hereinkommenden (applyRemote) Aenderung. Wer sich etwas aus S merkt,
+   vergleicht diese Zahl statt den Zustand - schildGruppen. FABLE 13.09.2026 */
+let zustandLauf = 0;
 /* Die Zeichenfraktion beginnt bei der Seite, die der Clan spielt. Fest auf
    Deutschland gestellt war sie fuer jeden, der etwas anderes spielt, jedes
    Mal ein Griff daneben - und ein falsch gefaerbter Pfeil faellt spaet auf.
@@ -10623,28 +10636,198 @@ const pfeilFarbe = k => { const p = PFEIL_FARBEN.find(x => x.k === k && x.d); re
    strength as a bar, committed against planned. Horizontal always; a name
    that runs along a curve is a name one has to tilt the head for.
    Returns the plate's box for hit tests. */
+/* ---- DIE FUENF GRUPPEN AUF DEM PFEILSCHILD (FABLE 13.09.2026) ----
+   ENNO 08.09.2026: "Infanterie mit Fahrzeugen, Panzer (nur Fahrzeuge),
+   Flugzeuge (nur Fahrzeuge), Aufklaerer (Fahrzeuge nur IFVs, Motorraeder
+   bei Infanterie draufrechnen), Fallschirmjaeger (mit Flugzeugen dahinter).
+   Vor den Symbolen dann jeweils 'aktuelle Zahl'/'geplante Zahl'."
+   ENNO 12.09.2026: "Die Paras brauchen einmal die eigene Anzahl und direkt
+   dahinter komplett gesondert ihre Transportflugzeuge."
+
+   GEZAEHLT WERDEN TEAMS, wie in der Anforderungstafel. Die Typen kommen
+   ueber ihren Zweig (branch) in die Gruppe; nur motorized_recon (die
+   Motorraeder) wandert von Recon zu Infantry - sein Wort. Einen Typ mit
+   branch other gibt es nicht; kaeme einer, fiele er zu Infantry.
+   soll: die Regel von anfStand (Klassenzeile ist die Gesamtzahl, Typzeilen
+   ein Mindestanteil), danach die Motorrad-Verschiebung - die Summe bleibt
+   die der Tafel. ist: angenommene Zuordnungen vor den Zusagen, wie staerke
+   in drawArrow; der Typ eines zugeordneten Teams steht im Depot seines
+   Schreibers. Was keinen Typ traegt, zaehlt in die Summe, in keine Gruppe.
+   Flugzeuge: crew[1] der Para-Typen (18 / 9) mal Teams; der Rest einer
+   Klassenzeile ohne Typ mit dem ersten Typ der Klasse.
+   NICHT JE BILD: schildGruppen merkt sich das Ergebnis je Pfeil, solange
+   zustandLauf, S, der Pfeil und a.req dieselben sind. */
+const SCHILD_GRUPPEN = ["infantry", "armor", "airforce", "recon", "airborne"];
+const schildGruppeVon = k => {
+  if (k === "motorized_recon") return "infantry";
+  const z = anfKlasseVon(k);
+  return SCHILD_GRUPPEN.includes(z) ? z : "infantry";
+};
+function schildGruppenRechnen(a){
+  const {at, cls} = anfLesen(a);
+  const g = {};
+  for (const k of SCHILD_GRUPPEN) g[k] = {k, sym: anfKlasseSym(k), ist: 0, soll: 0, istFlug: 0, sollFlug: 0};
+  const genau = {};
+  for (const k of Object.keys(at)){ const z = anfKlasseVon(k); genau[z] = (genau[z] || 0) + at[k]; }
+  for (const z of ANF_KLASSEN){
+    const n = Math.max(cls[z.k] || 0, genau[z.k] || 0);
+    if (n) (g[z.k] || g.infantry).soll += n;
+  }
+  const moto = at.motorized_recon || 0;
+  if (moto){ g.recon.soll -= moto; g.infantry.soll += moto; }
+  let soll = 0;
+  for (const k of SCHILD_GRUPPEN) soll += g[k].soll;
+  if (!soll) return null;
+  let flugTyp = 0;
+  for (const k of Object.keys(at)) if (anfKlasseVon(k) === "airborne"){ g.airborne.sollFlug += at[k]*atVeh(k); flugTyp += at[k]; }
+  g.airborne.sollFlug += Math.max(0, g.airborne.soll - flugTyp)*atVeh(anfKlasseSym("airborne"));
+  let ist = 0, grob = 0;
+  const zaehl = (k, n) => {
+    const e = g[schildGruppeVon(k)];
+    e.ist += n; ist += n;
+    if (e.k === "airborne") e.istFlug += n*atVeh(k);
+  };
+  const zu = zuordVon({art: "arrow", id: a.id}).filter(z => z.st === 1);
+  if (zu.length){
+    for (const z of zu){
+      const liste = paraDepotVon(z.who);
+      for (const id of z.ats){
+        const d = liste && liste.find(x => x.id === id);
+        if (d && AT[d.k]) zaehl(d.k, 1); else { grob++; ist++; }
+      }
+    }
+  } else {
+    for (const m of zusageArten(a.id)){
+      if (!m.at){ grob += +m.n || 0; ist += +m.n || 0; continue; }
+      for (const k of Object.keys(m.at)){ const n = +m.at[k] || 0; if (n && AT[k]) zaehl(k, n); }
+    }
+  }
+  const reihe = SCHILD_GRUPPEN.filter(k => g[k].soll || g[k].ist).map(k => g[k]);
+  /* "missing:" nur, solange die Summe nicht reicht - Teams ohne Typ (grob)
+     zaehlen in die Summe, in keine Gruppe, und stehen als "+N" daneben;
+     sonst hiesse es "100 % missing" (Skeptiker 13.09.2026) */
+  const fehlt = ist < soll ? SCHILD_GRUPPEN.filter(k => g[k].ist < g[k].soll).map(k => g[k].sym) : [];
+  return {reihe, fehlt, ist, soll, grob, prozent: Math.round(100*ist/soll)};
+}
+const schildGruppenVon = new Map();
+function schildGruppen(a){
+  let e = schildGruppenVon.get(a.id);
+  if (e && e.lauf === zustandLauf && e.S === S && e.a === a && e.req === a.req) return e.wert;
+  e = {lauf: zustandLauf, S, a, req: a.req, wert: schildGruppenRechnen(a)};
+  schildGruppenVon.set(a.id, e);
+  return e.wert;
+}
+/* DIE PROZENTPLATTE beim Rauszoomen (0.55 < view.z <= 1.1): die Gesamtzahl
+   in Prozent und, wenn Gruppen fehlen, "missing:" mit deren Symbolen.
+   ENNO 08.09.2026: "Beim Rauszoomen sollen diese Detailangaben dann
+   verschwinden und stattdessen nur eine Gesamtprozentangabe uebrigbleiben,
+   mit 'missing:' und den Typensymbolen dahinter." Platte und Farbrand wie
+   befehlSchild; Rueckgabe der Kasten fuer den Hit-Test. FABLE 13.09.2026 */
+function befehlProzent(x, y, o){
+  const gr = Math.max(9, Math.min(11, 7.8*Math.sqrt(view.z)))*uiScale;
+  const hell = light(), farbe = hell ? "#1a1409" : "#f4ead9";
+  const fehlt = (o.fehlt || []).map(k => pfeilSymbolBild(k, farbe));
+  ctx.save();
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.font = `700 ${gr}px ${SCHMAL}`;
+  const t1 = `${o.prozent} %`, w1 = ctx.measureText(t1).width;
+  ctx.font = `600 ${gr*0.86}px ${SCHMAL}`;
+  const t2 = fehlt.length ? "missing:" : "", w2 = t2 ? ctx.measureText(t2).width : 0;
+  const t3 = o.grob ? `+${o.grob}` : "", w3 = t3 ? ctx.measureText(t3).width : 0;   /* Teams ohne Typ */
+  const sw = gr*1.3, sh = gr*0.87, luecke = gr*0.4, pad = gr*0.5;
+  const innen = w1 + (t2 ? luecke + w2 + fehlt.length*(luecke*0.6 + sw) : 0) + (t3 ? luecke + w3 : 0);
+  const w = innen + pad*2 + gr*0.35, h = gr*1.0 + pad*1.0;
+  const x0 = Math.round(x - w/2), y0 = Math.round(y - h/2), r = Math.min(6*uiScale, h/2);
+  const kante = o.farbe || o.seite || farbe;
+  const platte = () => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0, y0, w, h, r); else ctx.rect(x0, y0, w, h); };
+  platte();
+  ctx.fillStyle = hell ? "rgba(255,252,244,.90)" : "rgba(10,8,5,.84)";
+  ctx.fill();
+  ctx.lineWidth = Math.max(1, 1.1*uiScale); ctx.strokeStyle = hell ? "rgba(20,18,12,.55)" : "rgba(255,245,220,.28)"; ctx.stroke();
+  ctx.save(); platte(); ctx.clip();
+  ctx.fillStyle = kante; ctx.fillRect(x0, y0, gr*0.35, h);
+  ctx.restore();
+  let tx = x0 + gr*0.35 + pad;
+  const ty = y0 + h/2;
+  ctx.font = `700 ${gr}px ${SCHMAL}`; ctx.fillStyle = farbe;
+  ctx.fillText(t1, tx, ty); tx += w1;
+  if (t2){
+    tx += luecke;
+    ctx.font = `600 ${gr*0.86}px ${SCHMAL}`; ctx.fillStyle = hell ? "#4a4133" : "#cbb98a";
+    ctx.fillText(t2, tx, ty); tx += w2;
+    for (const b of fehlt){
+      tx += luecke*0.6;
+      if (b) ctx.drawImage(b, tx, ty - sh/2, sw, sh);
+      tx += sw;
+    }
+  }
+  if (t3){
+    tx += luecke;
+    ctx.font = `600 ${gr*0.86}px ${SCHMAL}`; ctx.fillStyle = hell ? "#4a4133" : "#cbb98a";
+    ctx.fillText(t3, tx, ty);
+  }
+  ctx.restore();
+  return {x0, y0, x1: x0 + w, y1: y0 + h};
+}
 function befehlSchild(x, y, o){
   const z = view.z, gr = Math.min(13, 7.8*Math.sqrt(z))*uiScale;
   const name = o.name ? String(o.name).toUpperCase() : "";
-  const soll = +o.soll || 0, ist = +o.ist || 0, nurPlan = o.ist === undefined;
+  /* o.gruppen: die Gruppenreihe eines Pfeils mit Anforderung (schildGruppen);
+     dann tragen ist und soll die Summe ueber alle Gruppen, und statt der
+     einen Zahl steht die Reihe (FABLE 13.09.2026) */
+  const gp = o.gruppen || null;
+  const soll = gp ? gp.soll : (+o.soll || 0), ist = gp ? gp.ist : (+o.ist || 0), nurPlan = !gp && o.ist === undefined;
   const balken = !!soll && !nurPlan && !o.ohneBalken;   // a done order shows no bar
-  const zahl = soll ? (nurPlan ? `${soll} planned` : `${ist}/${soll}`) : (ist ? String(ist) : "");
+  const zahl = gp ? "" : (soll ? (nurPlan ? `${soll} planned` : `${ist}/${soll}`) : (ist ? String(ist) : ""));
   const prozent = soll && !nurPlan ? Math.round(100*ist/soll) : null;
-  if (!name && !zahl && !o.bild) return null;
+  if (!name && !zahl && !o.bild && !gp) return null;
   ctx.save();
   ctx.font = `700 ${gr}px ${SCHMAL}`;
   ctx.textAlign = "left"; ctx.textBaseline = "middle";
   const bw = o.bild ? gr*1.5 : 0, bh = o.bild ? gr : 0;
   const tn = name ? ctx.measureText(name).width : 0;
   ctx.font = `600 ${gr*0.86}px ${SCHMAL}`;
-  const zt = zahl ? zahl + (prozent !== null ? `  ${prozent} %` : "") : "";
-  const tz = zt ? ctx.measureText(zt).width : 0;
-  const pad = gr*0.55, luecke = gr*0.45;
-  const innen = Math.max(tn, tz) + (bw ? bw + luecke : 0);
-  const w = innen + pad*2 + gr*0.35, h = (name ? gr*1.25 : 0) + (zt ? gr*1.0 : 0) + (balken ? gr*0.45 : 0) + pad*1.1;
-  const x0 = Math.round(x - w/2), y0 = Math.round(y - h/2), r = Math.min(6*uiScale, h/2);
   const hell = light();
-  const kante = o.farbe || o.seite || (hell ? "#1a1409" : "#f4ead9");
+  const farbe = hell ? "#1a1409" : "#f4ead9";
+  const pad = gr*0.55, luecke = gr*0.45;
+  /* DIE GRUPPENREIHE: "ist/soll" und das Gruppensymbol je Gruppe; die Paras
+     mit ihren Flugzeugen als ein Block ("optisch gruppiert", ENNO
+     12.09.2026) auf eigenem Untergrund; dahinter die Prozentzahl. Hier nur
+     gemessen, gemalt weiter unten. */
+  const sw = gr*1.35, sh = gr*0.9;
+  let reihe = null, tz = 0, zt = "";
+  if (gp){
+    reihe = []; let rx = 0;
+    for (const e of gp.reihe){
+      const para = e.k === "airborne";
+      const t = `${e.ist}/${e.soll}`, tw = ctx.measureText(t).width;
+      reihe.push({t, tw, x: rx, bild: pfeilSymbolBild(e.sym, farbe), block: para ? rx - gr*0.2 : -1});
+      rx += tw + gr*0.2 + sw;
+      if (para){
+        rx += luecke*0.6;
+        const tf = `${e.istFlug}/${e.sollFlug}`, twf = ctx.measureText(tf).width;
+        reihe.push({t: tf, tw: twf, x: rx, bild: pfeilSymbolBild("transport_planes", farbe), block: -1});
+        rx += twf + gr*0.2 + sw;
+        reihe[reihe.length - 2].blockBis = rx + gr*0.2;
+      }
+      rx += luecke*1.2;
+    }
+    if (gp.grob){                              /* Teams ohne Typ: "+N", kein Symbol */
+      const tg = `+${gp.grob}`, twg = ctx.measureText(tg).width;
+      reihe.push({t: tg, tw: twg, x: rx, bild: null, block: -1});
+      rx += twg + luecke*1.2;
+    }
+    zt = prozent !== null ? `${prozent} %` : "";
+    reihe.push({t: zt, tw: 0, x: rx, bild: null, block: -1});
+    tz = rx + (zt ? ctx.measureText(zt).width : 0);
+  } else {
+    zt = zahl ? zahl + (prozent !== null ? `  ${prozent} %` : "") : "";
+    tz = zt ? ctx.measureText(zt).width : 0;
+  }
+  const innen = Math.max(tn, tz) + (bw ? bw + luecke : 0);
+  const w = innen + pad*2 + gr*0.35, h = (name ? gr*1.25 : 0) + (zt || reihe ? gr*1.0 : 0) + (balken ? gr*0.45 : 0) + pad*1.1;
+  const x0 = Math.round(x - w/2), y0 = Math.round(y - h/2), r = Math.min(6*uiScale, h/2);
+  const kante = o.farbe || o.seite || farbe;
   /* the plate (roundRect where the browser has it, plain corners elsewhere) */
   const platte = () => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0, y0, w, h, r); else ctx.rect(x0, y0, w, h); };
   platte();
@@ -10660,12 +10843,26 @@ function befehlSchild(x, y, o){
     ctx.drawImage(o.bild, tx, y0 + (h - bh)/2, bw, bh);
     tx += bw + luecke;
   }
-  const farbe = hell ? "#1a1409" : "#f4ead9";
   if (name){
     ctx.font = `700 ${gr}px ${SCHMAL}`; ctx.fillStyle = farbe;
     ctx.fillText(name, tx, ty + gr*0.62); ty += gr*1.25;
   }
-  if (zt){
+  if (reihe){
+    /* erst der Untergrund des Para-Blocks, dann Zahlen und Symbole */
+    for (const e of reihe) if (e.block >= 0){
+      ctx.fillStyle = hell ? "rgba(0,0,0,.09)" : "rgba(255,255,255,.11)";
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(tx + e.block, ty + gr*0.02, e.blockBis - e.block, gr*0.96, gr*0.25);
+      else ctx.rect(tx + e.block, ty + gr*0.02, e.blockBis - e.block, gr*0.96);
+      ctx.fill();
+    }
+    ctx.font = `600 ${gr*0.86}px ${SCHMAL}`; ctx.fillStyle = hell ? "#4a4133" : "#cbb98a";
+    for (const e of reihe){
+      if (e.t) ctx.fillText(e.t, tx + e.x, ty + gr*0.5);
+      if (e.bild) ctx.drawImage(e.bild, tx + e.x + e.tw + gr*0.2, ty + gr*0.5 - sh/2, sw, sh);
+    }
+    ty += gr*1.0;
+  } else if (zt){
     ctx.font = `600 ${gr*0.86}px ${SCHMAL}`; ctx.fillStyle = hell ? "#4a4133" : "#cbb98a";
     ctx.fillText(zt, tx, ty + gr*0.5); ty += gr*1.0;
   }
@@ -10699,13 +10896,24 @@ function befehlAbzeichen(x, y, text, farbe, hohl){
    asks for a redraw when it is there. */
 const PFEIL_BILDER = new Map();
 function pfeilSymbolBild(k, farbe){
-  if (!AT[k]) return null;
+  if (!AT[k] && !SYM[k]) return null;      // ein Typ, oder transport_planes (FABLE 13.09.2026)
   const key = k + "|" + farbe;
   let b = PFEIL_BILDER.get(key);
-  if (b) return b.complete && b.naturalWidth ? b : null;
+  if (b) return b.tagName === "CANVAS" ? b : null;
   b = new Image();
   const svg = symbolSVG(k, farbe, 48, 32).replace(/<svg /, '<svg xmlns="http://www.w3.org/2000/svg" ');
-  b.onload = () => requestAnimationFrame(draw);
+  /* GERASTERT, NICHT ALS SVG-BILD GEMALT. ctx.drawImage eines SVG-Bilds
+     kostete rund 20 µs je Aufruf, das eines Rasterbilds unter 1 µs
+     (gemessen FABLE 13.09.2026, Chrome); mit sechs Zeichen je Pfeilschild
+     war das der Preis des ganzen Schilds. Einmal geladen wird das Zeichen
+     in 96x64 gerastert - das Doppelte der groessten Zeichnung - und die
+     Tafel haelt von da an das Raster. */
+  b.onload = () => {
+    const c = document.createElement("canvas"); c.width = 96; c.height = 64;
+    c.getContext("2d").drawImage(b, 0, 0, 96, 64);
+    PFEIL_BILDER.set(key, c);
+    requestAnimationFrame(draw);
+  };
   b.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
   PFEIL_BILDER.set(key, b);
   return null;
@@ -11263,15 +11471,28 @@ function drawArrow(a){
      strength is set, "12/20 (60 %)". */
   /* THE SHIELD sits on the middle of the curve, horizontal - name, sign,
      strength against plan as a bar. Its box is kept for the hit test. */
-  if (sprung >= 1 && view.z > 1.1 && (staerke || a.label || a.sym)){
+  /* DIE GRUPPEN DES SCHILDS (ist/soll je Gruppe, aus dem Zwischenspeicher
+     je Pfeil - schildGruppen): nur ein eigener Pfeil mit Anforderung, und
+     nur, wo eine Platte stehen kann (view.z > 0.55). FABLE 13.09.2026 */
+  const gp = (!fremd && sprung >= 1 && view.z > 0.55) ? schildGruppen(a) : null;
+  if (sprung >= 1 && view.z > 1.1 && (staerke || a.label || a.sym || gp)){
     const mx = .25*x1 + .5*cx + .25*x2, my = .25*y1 + .5*cy + .25*y2;
     const bild = a.sym ? pfeilSymbolBild(a.sym, light() ? "#1a1409" : "#f4ead9") : null;
     ctx.save(); ctx.globalAlpha = vor ? .72 : (fertig ? .55 : 1);
     const kasten = befehlSchild(mx, my, fremd ? {name: a.label, bild, farbe: fb || null, seite: f}
-      : {name: a.label, ist: staerke, bild, farbe: fb || null, seite: f, ohneBalken: fertig});
+      : {name: a.label, ist: staerke, bild, farbe: fb || null, seite: f, ohneBalken: fertig, gruppen: gp});
     if (kasten && fertig) befehlAbzeichen(kasten.x1, kasten.y0, "\u2713", fb || f, true);
     ctx.restore();
     if (kasten) schildVon.set(a.id, kasten);
+  } else if (gp && !fertig){
+    /* RAUSGEZOOMT (0.55 < view.z <= 1.1): statt der Gruppen nur die Prozentzahl
+       und "missing:" mit den fehlenden Gruppen; ein fertiger Pfeil traegt
+       hier nichts, wie er auch keinen Balken traegt. FABLE 13.09.2026 */
+    const mx = .25*x1 + .5*cx + .25*x2, my = .25*y1 + .5*cy + .25*y2;
+    ctx.save(); ctx.globalAlpha = vor ? .72 : 1;
+    const kasten = befehlProzent(mx, my, {prozent: gp.prozent, fehlt: gp.fehlt, grob: gp.grob, farbe: fb || null, seite: f});
+    ctx.restore();
+    if (kasten) schildVon.set(a.id, kasten); else schildVon.delete(a.id);
   } else schildVon.delete(a.id);
   /* THE CANOPY OVER THE DROP POINT. An arc alone is still an arrow; what
      says "these men come out of the sky" is the parachute, and it stands
@@ -12633,6 +12854,7 @@ function saveSofort(){
   }
 }
 function save(){
+  zustandLauf++;                           // was sich aus S gemerkt wurde, gilt nicht mehr (schildGruppen)
   sparOffen = true;
   if (sparUhr) return;
   sparUhr = setTimeout(()=>{ sparUhr = null; if (sparOffen) saveSofort(); }, 250);
@@ -46828,7 +47050,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f76ebd7349</span></p></div>
+         installation. <span style="color:var(--dim2)">· build f9649d651c</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -47056,7 +47278,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f76ebd7349";
+const BAU = "f9649d651c";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -47168,6 +47390,7 @@ function stempelZaehmen(wert){
    weg. Vorher gewann eine Zeile mit dem Jahr 2100 fuer immer, und fuer die
    meisten Toepfe gibt es keinen Loeschweg. */
 function applyRemote(key, val){
+  zustandLauf++;                           // was sich aus S gemerkt wurde, gilt nicht mehr (schildGruppen)
   /* Der Server schickt den Zeugen nie zurueck - er steht in einer gesperrten
      Spalte. Sollte doch einer im Wert stehen (alte Zeile, eigener Nachhall),
      hat er im Speicher nichts verloren. */
