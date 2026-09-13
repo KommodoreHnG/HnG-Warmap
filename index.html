@@ -6291,7 +6291,7 @@ function streckeText(b){
   const marken = o => {
     const t = [];
     if (o.ot) t.push(overtimeKurz(o.ot));
-    if (o.gef) t.push(gefKurz(o.gef));
+    if (o.gef) t.push(...gefKurzAlle(o.gef, o.i));
     return t;
   };
   const kaempfe = st.orte.filter(o => o.kampf).map(o => {
@@ -7846,8 +7846,11 @@ function gefechtWeg(i, auchStand){
    freezes the reading's own time into it first, and gefStand asks that time
    before the row's. A fresh reading carries none - it is as old as its row. */
 function gefAlterHalten(rest, e){
-  if (rest && rest.bat && rest.bat.li !== undefined && rest.bat.t === undefined && e && e.t)
-    rest.bat = Object.assign({}, rest.bat, {t: e.t});
+  /* and the reader's name goes with the time (HUD-LAGE): the side panel
+     says "read from a game window ... by", and after a hand on the clock the
+     row's author is that hand */
+  if (rest && rest.bat && (rest.bat.li !== undefined || rest.bat.rest || rest.bat.kp) && rest.bat.t === undefined && e && e.t)
+    rest.bat = Object.assign({}, rest.bat, {t: e.t, by: e.by, n: e.n});
   return rest;
 }
 /* the side panel line under the battle switch */
@@ -7916,8 +7919,9 @@ function overtimeLaeuftImBild(){
   if (view.z <= 1.2 || zeitReise) return false;
   const WW = cv.width/dpr, HH = cv.height/dpr;
   for (const k of Object.keys(S.gefecht)){
-    const i = +k, e = MAP.n[i] && overtimeAn(i);
-    if (!e || otMs(e) >= OT_DAUER) continue;
+    const i = +k, e = MAP.n[i] && overtimeAn(i), g = MAP.n[i] && gefAn(i);
+    const laeuft = (e && otMs(e) < OT_DAUER) || (g && g.rest && g.rest.s !== undefined && gefRestSek(g.rest.s, g.t) > 0);
+    if (!laeuft) continue;
     const [x, y] = toScr(MAP.n[i][1], MAP.n[i][2]);
     if (x >= -30 && y >= -30 && x <= WW+30 && y <= HH+30) return true;
   }
@@ -7935,6 +7939,11 @@ function otTaktStarten(){
       /* the hover card's chip keeps pace with the plate */
       const c = document.getElementById("h-ot"), he = hoverIdx != null && overtimeAn(hoverIdx);
       if (c && he) c.textContent = overtimeKurz(he);
+      /* and the countdown's chip and the side panel's sentence */
+      const cr = document.getElementById("h-rest"), hg = hoverIdx != null && gefAn(hoverIdx);
+      if (cr && hg) cr.textContent = gefRestZeigen(hg, hoverIdx) || cr.textContent;
+      const gz = document.getElementById("gef-zeile");
+      if (gz && sel !== null && sel !== undefined && fightAt(sel)) gz.outerHTML = gefZeile(sel);
       if (!overtimeLaeuftImBild()){ clearInterval(otTakt); otTakt = null; }
     } catch (e){ clearInterval(otTakt); otTakt = null; }
   }, 1000);
@@ -10029,7 +10038,16 @@ function draw(){
          stack grows upwards. No tick of its own - this plate does not count
          by itself, it changes when somebody reads and writes. */
       const gb = gefAn(i);
-      if (gb) oben -= gefEtikett(x, oben, gb) + 2;
+      if (gb){
+        const sc = gefKurz(gb);
+        if (sc) oben -= gefEtikett(x, oben, sc) + 2;
+        /* the countdown counts by itself: the overtime tick redraws once a
+           second while a running plate is on screen, and this is one */
+        const rt = gefRestZeigen(gb, i);
+        if (rt){ oben -= gefEtikett(x, oben, rt) + 2; if (!zeitReise && gefRestSek(gb.rest.s, gb.t) > 0) otTaktStarten(); }
+        const kk = gefKpKurz(gb);
+        if (kk) oben -= gefEtikett(x, oben, kk) + 2;
+      }
       /* the overtime clock, only with the battle mark, see OVERTIME CLOCK */
       const ot = overtimeAn(i);
       if (ot){ oben -= overtimeEtikett(x, oben, ot) + 2; if (!zeitReise && otMs(ot) < OT_DAUER) otTaktStarten(); }
@@ -14615,7 +14633,10 @@ function hoverZeigen(i, mx, my){
       ${starAt(i)?'<span class="chip">key</span>':""}
       ${fightAt(i)?'<span class="chip fight">⚔ contested</span>':""}
       ${(e => e ? `<span class="chip" id="h-ot" style="border-color:#f0a030;color:#f0a030">${overtimeKurz(e)}</span>` : "")(overtimeAn(i))}
-      ${(g => g ? `<span class="chip" style="border-color:${GEF_FARBE};color:${GEF_FARBE}">${esc(gefKurz(g))}</span>` : "")(gefAn(i))}
+      ${(g => { if (!g) return ""; const sc = gefKurz(g), rt = gefRestZeigen(g, i);
+        return (sc ? `<span class="chip" style="border-color:${GEF_FARBE};color:${GEF_FARBE}">${esc(sc)}</span>` : "")
+             + (rt ? `<span class="chip" id="h-rest" style="border-color:${GEF_FARBE};color:${GEF_FARBE}">${esc(rt)}</span>` : "")
+             + gefKpChip(g); })(gefAn(i))}
       ${pb?`<span class="chip" style="border-color:var(--accent);color:var(--accent)">para ${
         pb.plan?"planned":"blocked"}${fremdeSeite(pb) ? "" : " · " + ZUSTAND_NAME[befehlZustand(`para:${i}`, pb)]}</span>`:""}
     </div>`:""}
@@ -27214,6 +27235,7 @@ function gefBalken(px, bw, bh, W, z){
   const fund = gefPaarSuchen(px, bw, bh, W, z.kastenY);
   if (!fund) return null;
   z.kastenY = fund.fund;
+  z.paarGesehen = true;      // the pair of boxes was in this picture, whatever the filling says (the HUD guard in gefLesen asks it)
   if (!dasselbeBild){
     if (z.proben && z.proben.length && gefGleich(z.proben[z.proben.length - 1], fund)){
       z.proben.push(fund);
@@ -27375,6 +27397,138 @@ function gefUhrLinie(px, bw, bh){
    front of the middle */
 const gefBannerZeile = L => !!L && L.spanne >= GEF_BANNER[0] && L.hell >= GEF_BANNER[1]
                           && L.rot >= GEF_UHR_ROT && L.rotMitte >= 0 && L.rotMitte < L.mitte;
+/* ---- THE DIGITS THEMSELVES  (BAT-9, HUD-LAGE) ---------------------------
+   ENNO 05.09.2026: "Da es einen Timer oben am Bildschirm gibt, kann man
+   hier auch direkt auf die Kriegskarte uebertragen, wie lange das Gefecht
+   noch laeuft, diese Info hat das Spiel naemlich sonst garnicht."
+   The paragraph above says why the digits were not read: a number nobody
+   needs is a number that can be wrong. Now somebody needs it. So the same
+   template reader that was measured - Messungen\messung_gefechtsuhr.py,
+   1066 readings, 2 wrong, four invented over a battle without a clock -
+   reads here, with two bolts against exactly those cases:
+   1. IT ONLY READS WHEN gefUhrLinie SAYS THE BOX IS THERE (L.kasten). That
+      test found the box 1074 times in the assault and NOT ONCE in the
+      hold-and-take battle or on the display drawn at double size, where the
+      measuring reader invented "92:94" out of the emblem between the score
+      boxes.
+   2. NO SINGLE READING IS BELIEVED. A reading counts only when it fits the
+      raw reading of the look before: the old number minus the seconds that
+      passed, give or take GEF_REST_TOLERANZ, the two looks no further apart
+      than GEF_UHR_LUECKE. The two wrong readings of the measurement (07:28
+      as "07:20", 07:27 as "09:19", a snowflake through the strip) fit
+      nothing and fall. The time bonus - the clock jumping UP by 34, 66, 57
+      and 119 seconds in that one battle - fits its own next look, so it is
+      believed from the second look after the jump on. A reading rejected
+      costs the next look as well, because that one is held against the
+      wrong number; counted, not argued, in Flicks\flick_hud_lage.py.
+   THE DIGITS ARE CUT THE WAY THE MEASUREMENT CUT THEM: the five bright runs
+   in the middle of the line, rows 14..44 (the glyphs stand in rows 21..40,
+   measured), the narrow middle run being the colon; each digit scaled to
+   12 by 22 with gefEndbildStauchen (area mean, the way the measurement's
+   INTER_AREA does it), min-max normalised, and held against ten templates
+   by the mean absolute difference. The templates are the measurement's own
+   (Battlereader/uhr/schablonen.npz, means over 120 seconds of the Erfurt
+   recording), stored here as 8 bit, base64: ten times 352 characters. The
+   rounding to 8 bit costs at most 0,002 of a distance that lies at 0,077
+   in the median between the best and the second-best digit.
+   Seconds over 59 are not a clock and are thrown away. (FABLE 13.09.2026) */
+const GEF_UHR_ZIFFERN_Y = [14, 44];    // the rows the measurement looked at
+const GEF_ZIFFER_B = 12, GEF_ZIFFER_H = 22, GEF_ZIFFER_HOCH = 14;
+const GEF_ZIFFERN = {
+  "0": "Eho/gtXf4NiANxENHny+4+nu8fLku3UUbr7p8uji5vXz6rxott3x8XJVV3nw8dyyzeXw7yAREyTv8ebNz+Xw7wgKDQ/y8+fQz+bw8AYKDQ709OfP0Obw8AYKDA719ObN0Obw7wYJDQ/19ObMzuXw7wcJDA/18+bMzeTv7gcJDA/08+bNz+Xw7gkKDBD28+bP0Obw7QkKDA/28ePN0ufx8AkLDQ/17t/J1ev29ggLDQ728eDF0+v39wgKDA318+PIz+n18QkKCw719efMwuTy6yYWFyv29+XAndTv7XtcXoL089SXXLPl9ePZ2+rv47BVGHK14eTl6e/dvXgQDxA0etDb3NR9MgsH",
+  "1": "GBhWfpXk5+jo6ObmmJjE3+X09PX29fPz3t7s9PX39/b19PLy6+vCpq/h4/L29fPzi4taOVTO1O729fPzKioUBivIz+329fPzCQkHBi3J0O329fPzBwcICC/K0e329fPzBwcJCjHN1O729fPzCQkKCjHN1O719fPzCgoKCjHN1O719PPzCgoKCjHN1e319PLyCgoKCjHN1O309PLyCgoKCjHM0+308/LyCgoKCjDL0+308/LyCQkJCTDL0u308/LyCQkJCTDL0u309PLyCQkJCS/K0u319PPzCQkJCS/L0u319PLyCAgJCTDL0+308/LyCQkJCTDL0uz08/HxCAgJCi/Iz+fu7Ovr",
+  "2": "Dxs+e7HExrZtNBUQHnCu2ODk5ePPpGQQZq/d7+bj5Orv26lWqNbt7YBmaIfz7s+XyOPt5ycUFi3z8961xNne1AgICg/29ePAfImKggMIDxn39OLCFxYVFAMIHkbz8NmuERAODQ0PPpjv68BxEBAPDhEtct3r35wjDw8PDxNpsu7orGIIDw8PDz2y7/HsYBUJDg4OD5jX9fKONwoJDQ4dOerz8uYsFQoLDRA9k/Py0pYMCwoMDChu3e3lpzYICQsNDWGu8+27bwgHCwwNMKDf7eN6MAQKDg8OgMru7dVzQDxFRUE6weDu7eLUz9HZ0sOr0Onx6+Lj5OTv6tzHxt3s8+jp6u7t693D",
+  "3": "Ghw3a4+RkpNdLxcXGluTwd7g4d+3jVgZUaHV7ebl5ejv1J1Lksjn8JaGhpf16siQutfm6DMgIjnt8d+5uc7Z3A8LDBLv8uPCg5ObmgcMDQrx8+PDKiwsKQQMEhbt7t26FhQUFRQhNEru7tWjERETGEV5pMf18MBlEBEREWiz4fPvuHQkEBAVIGqx2+j125w2DxEVHSY2S2bt58eNDhIWGhEOFCPy7tu7DRIVFg8PERPx7dzAZGxxcxAPEBLx6tvEv9La1xIQERXx6tm/wd/p4CYbHi/t6tq8n9Hp5nNUV3ro6NKlWa/j8+XS0+nn365UF3W65+Po7vXcs3EXFRU1eMna2stmLAwG",
+  "4": "HhseKIHB4N9tOyMlJBMSIsvg6+0oJCMlIBIXL+Tj39YfISQmHhguYejs1aUfISQmHRtEle7vvlweISMnGx5VwfPgnSobHyQoGitt3vHEexcdIiUoGkmO6eihWhMdISQlHG6y6N57QC4lLSwiII/R59VcPnyMjWomPKXc46tGU9P/76cncbzj5ng4UsXf6Kojotfp2TgoVcDn66ge0+XgxBcPSMTp6aIU6OfNnBcWTLrs5pwM7u3Yrn+Bmcjq5L965ejgzdDQ09nn49vP3t7c2dzZ2uDi4+Hbop+en52br9nd4c6jDg8OChAUTr7c2ZcTCQsLCxsVS7/f15EMFBUYHhgZUcPm2I8M",
+  "5": "4uTm5uns6+ro5tG84+nw6Onr6+zt5dC83uTq3cm1rK+yqJuP6ufkzII4NTc5NTIu7urmxmcHCQoMCwoJ7OvqxmYGCwsMCwoJ6OjpxWQEDA0OCwsL5OTkyXkqS0dDHxcO5+bm1rmc4dXJZz8Y6ers5+Xj7vDy4JNF5unr5ePh4Obt9sSR0tfdxW4XRJTj7dK3JiIfGxMKFX/q6NbEEw8MCQkJDn3t7da/ExIRDQ0MD4Dx7NbAHRkVEQ8NEIDx7NfCg4GAbj4NEIDx79vG2uLq0nUYJIvx79jAwdft46BecLHy6MShiLrs7OTc3+n04aRoJ3XD4eTn5uXju2gWDhwplbXV1KyEFRAK",
+  "6": "GBscGh+HyODmmlQTJSIfHDqr5evibCYQKCUiH37F6u2sRRAOJyYnKcbh7+9jLBAQJCUyTe3v6twpGRITIyRGivXx1qQSEhMWIiVcxvLvu1cSEhQXHzV46fDinR8TEhQXIGKo8+/QlT46LSIZJZDV8+/k3+POl14lQrPv9O/p6e7u5rVZkdLz8/Dm5vDy8NakwuLx71c2OmLy796/yOLt6xwWGSXv7d7ByOLu7goQFhzy7t7CzeXw7ggNFBzy7d7F0Ofw7AwPFR3w7eDJyOLt6SocHzTx79/Bptft6n9fX4Dz7tKeZb7v9+7d3O3x5LJcI4bH5e7t7O3fwH0VFCNHgMXb39FoLxMT",
+  "7": "yNfh5ubi4ODg3dbL1Obz+vHt7O3u7ubW0ePs68C3t8Dp7eXPzuHq6D49SF7p7tuwzuLq6AkMJFPs7sl9d4GFgQgMN4ru77U/FxgXFQgQTsPx6aAVExQUEw4hauv00oULFBQUFRREjvHyrl8IExMUFRZqs/HqhTkGExQUExeO2PPkWhIKExMTEji19PPLRgcMFBUVE2/J9PGVNQgOFBQUFabZ8O1ZIwoPFBQXHtnp7eUhFA4PExQiP/Hx5cwJDA4PExM0dfTy1JkHCw4OEhNHrvDwv10LDQ4OERpd2vDtrCsMDg8PDjF98vLgkgoODxAQEFei8vG9cAkPEBAQGH7E6uGZUgoOEBES",
+  "8": "GyNGhNDg4tWARCQiKniz2ubo5+bes3QhbrPf8efg4Ojx4rVosdjs7mdUV27v69Spx+Hu7RkUGSnt69vAxt/u8QYQGB7u6tzCx+Dv8gwPFR7w7NzAw9/u7jAaGzLw7tmznM7p64JZV3zu6MaHO6Te6+3k4+ro250uOKDd8OHh5Oro1pMeldLs445RTobn5seLw+Ht5iIVFB/l6tu4yeDr6Q4PERXn5ti6yt/r7gYNERHm4tS6yODu8gMOFBTp5ti/x+Ht7QcPFh3r7d7Av9zp5ikfJTjs8d2ync7n6X1maILv7cyNX7Dg79/V1uLy36lRHnS13+rl5uzdungXGRYybMPY3dN1MhAO",
+  "9": "DBU6fM7c39mBOhMOGXK14eTn6evlvXYOa7Th9Oje3+rw57RXsdXo7HFTU3Hv7tesyN3o6B4NDR3u7d/Fyd7q7AcGBgju693DyeDu8wYGBwjv6tzEyOHv8wgICQrv7N7HxuHu7BMNDRXw7+DDudzs6UEnJ0Hw8Nmrp9Xu8M+3t9Lt5r94SLXu8+Lh5ezr5KMnFEJ3tcPC0fDoxnsFDRUdJyqFx/HkkkgGDQwKBieb4PToZRsLDAwND3PC6+22RQwMCwsPFsDc6uhmKgwMCwoYNOfo49glFQ0MCwoud+/r06YJCwwLCRVRvvfvulkLCgoLBjmH7/TlmxgKCAgLDWeu4+e3bw8EBwkM",
+};
+let gefZiffernFertig = null;
+function gefZiffernVorlagen(){
+  if (gefZiffernFertig) return gefZiffernFertig;
+  const aus = [];
+  for (let d = 0; d <= 9; d++){
+    const roh = atob(GEF_ZIFFERN[String(d)]);
+    const v = new Float32Array(roh.length);
+    for (let i = 0; i < roh.length; i++) v[i] = roh.charCodeAt(i)/255;
+    aus.push(v);
+  }
+  gefZiffernFertig = aus;
+  return aus;
+}
+/* one reading of mm:ss out of the strip's buffer, or null; text, seconds
+   and the smallest distance to the second-best digit */
+function gefUhrZiffern(px, bw, bh){
+  const y0 = GEF_UHR_ZIFFERN_Y[0], y1 = Math.min(GEF_UHR_ZIFFERN_Y[1], bh);
+  if (y1 - y0 < GEF_ZIFFER_HOCH || bw < 200) return null;
+  const mitte = bw >> 1;
+  const xa = Math.max(0, mitte - GEF_UHR_BREIT), xe = Math.min(bw, mitte + GEF_UHR_BREIT), n = xe - xa, hz = y1 - y0;
+  const g = new Float32Array(n*hz);
+  const spalte = new Uint8Array(n), zeile = new Uint8Array(hz);
+  for (let y = y0; y < y1; y++){
+    const zz = y*bw, r0 = (y - y0)*n;
+    for (let x = xa; x < xe; x++){
+      const o = (zz + x)*4, v = 0.299*px[o] + 0.587*px[o+1] + 0.114*px[o+2];
+      g[r0 + x - xa] = v;
+      if (v > GEF_UHR_HELL){ spalte[x - xa] = 1; zeile[y - y0] = 1; }
+    }
+  }
+  const laeufe = []; let st = -1;
+  for (let x = 0; x < n; x++){
+    if (spalte[x]){ if (st < 0) st = x; }
+    else if (st >= 0){ laeufe.push([st, x]); st = -1; }
+  }
+  if (st >= 0 || laeufe.length !== 5) return null;
+  const br = laeufe.map(l => l[1] - l[0]);
+  if (br[2] > GEF_UHR_PUNKT || br[2] !== Math.min(br[0], br[1], br[2], br[3], br[4])) return null;
+  let ra = -1, re = -1;
+  for (let y = 0; y < hz; y++) if (zeile[y]){ if (ra < 0) ra = y; re = y + 1; }
+  if (ra < 0 || re - ra < GEF_ZIFFER_HOCH) return null;
+  const vorl = gefZiffernVorlagen();
+  let text = "", sicher = 1e9;
+  for (const k of [0, 1, 3, 4]){
+    const a = laeufe[k][0], B = laeufe[k][1] - a, H = re - ra;
+    const z = new Float32Array(B*H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < B; x++) z[y*B + x] = g[(ra + y)*n + a + x];
+    const d = gefEndbildStauchen(z, B, H, GEF_ZIFFER_B, GEF_ZIFFER_H);
+    let mn = Infinity, mx = -Infinity;
+    for (let i = 0; i < d.length; i++){ if (d[i] < mn) mn = d[i]; if (d[i] > mx) mx = d[i]; }
+    const sp = Math.max(1, mx - mn);
+    let best = -1, bestW = Infinity, zweit = Infinity;
+    for (let c = 0; c < 10; c++){
+      const t = vorl[c]; let w = 0;
+      for (let i = 0; i < d.length; i++) w += Math.abs((d[i] - mn)/sp - t[i]);
+      w /= d.length;
+      if (w < bestW){ zweit = bestW; bestW = w; best = c; } else if (w < zweit) zweit = w;
+    }
+    text += best;
+    if (zweit - bestW < sicher) sicher = zweit - bestW;
+  }
+  const ss = +text.slice(2);
+  if (ss > 59) return null;
+  return {text: text, s: (+text.slice(0, 2))*60 + ss, abstand: sicher};
+}
+/* the seconds a reading may be off the look before it, and the jump that
+   is written to the clan at once instead of with the next quarter minute */
+const GEF_REST_TOLERANZ = 2, GEF_REST_SPRUNG = 30;
+/* the chain of two looks: z.uhrLesung is the raw reading before, z.rest the
+   credible one {s, t}. A look without the box does not break the chain by
+   itself - the gap does, through GEF_UHR_LUECKE. */
+function gefRestPruefen(px, bw, bh, L, z, nun){
+  if (!L || !L.kasten) return;
+  const N = gefUhrZiffern(px, bw, bh);
+  if (!N) return;
+  const vor = z.uhrLesung;
+  if (vor && nun - vor.t <= GEF_UHR_LUECKE){
+    const erwartet = vor.s - (nun - vor.t)/1000;
+    if (Math.abs(N.s - erwartet) <= GEF_REST_TOLERANZ) z.rest = {s: N.s, t: nun, abstand: N.abstand};
+    else z.restVerworfen = (z.restVerworfen || 0) + 1;
+  }
+  z.uhrLesung = {s: N.s, t: nun};
+}
 /* NO PICTURE MARK HERE, unlike the bars' anchor. This one fires on a
    DIFFERENCE between two looks; a standing window delivers the same picture
    twice and so no change at all. The case that broke the anchor - the same
@@ -27383,6 +27537,15 @@ function gefUhrPruefen(px, bw, bh, z){
   const L = gefUhrLinie(px, bw, bh);
   const nun = jetzt(), vor = z.uhrZeile, vorT = z.uhrZeit || 0;
   z.uhrZeile = L; z.uhrZeit = nun;
+  gefRestPruefen(px, bw, bh, L, z, nun);            // the digits, only with the box (HUD-LAGE)
+  /* A NEW COUNTDOWN IS A NEW BATTLE. "The first change is the one" held the
+     proposal for up to an hour, and a second battle in the same capture was
+     never seen: its own change found the old proposal standing and left it
+     there (shown by a second reader, 13.09.2026). A countdown read credibly
+     after the change - two looks with the box, agreeing - cannot belong to
+     the battle whose countdown ended, so the proposal falls and the next
+     change is found afresh. The clock that was started stays in its row. */
+  if (z.uhrVorschlag && z.rest && z.rest.t === nun && nun - z.uhrVorschlag.t > GEF_UHR_LUECKE) z.uhrVorschlag = null;
   if (z.uhrVorschlag) return;                       // the first change is the one
   if (!L || !vor || !vor.kasten || L.kasten) return;
   if (!gefBannerZeile(L)) return;
@@ -27811,6 +27974,388 @@ function gefEndbildPruefen(bild, W, H, z){
                nr: ++gefEndbildNr};
   return E;
 }
+/* ---- THE OBJECTIVE ROW: BOXES AND CAPTURE CIRCLES  (BAT-3 / BAT-10) ------
+   ENNO 05.09.2026: "Bei aktivem Einnehmen eines Kontrollpunktes durch einen
+   selbst oder den Gegner fuellt sich oben ein aufploppender Kreis in blau
+   (Verbuendete) oder rot (Gegner) um das in der Farbe der jeweils haltenden
+   Fraktion gehaltene Kaestchen des Kontrollpunktes." And 12.09.2026: "Nur
+   drei Zustaende pro kontrollpunkt existieren: Blau, rot und grau, was
+   jeweils die besitzende Seite meint (Verbuendete, Feinde, neutral)."
+   ENNO 12.09.2026: "Gerne erstmal messen, wie oft wir das ueberhaupt
+   schaffen. Ein Performance einbruch waere natuerlich bloed." Measured
+   first (Listen/MESSUNG-BAT-10.md, Messungen/messung_bat10_kreise.py and
+   messung_bat10_js_kosten.py): 0,18 to 0,38 ms a picture in the browser,
+   36 of 36 hand-labelled pictures right, the boxes found in 2661 pictures
+   with 12 seconds of dropouts, the scoreboard, the loading screen, the map
+   and the end screen giving nothing. The reader below is that measured
+   reader word for word; every number in GEF_KP comes out of the
+   measurement's head and none is set here.
+   WHAT THE CIRCLE SHOWS, seen and not assumed: the hold in the holder's
+   colour. With the enemy in the point it runs from full to empty (the
+   drain), then the badge goes grey and the circle fills in the taker's
+   colour from empty to full; full, and the badge takes that colour. The
+   game's own team fills a drained circle back up. Between 276 and 342
+   degrees the circle lies under the badge and the star's tip, so 0,78 to
+   1,0 cannot be read - "full" here is 0,78 or more or the badge changing.
+   It blinks, so the reading is smoothed over three looks (the maximum).
+   THE GUARD, while BAT-14 is not built: the row is read only when the
+   picture carried the HUD in this look or within GEF_HUD_HALTEN - the
+   digit box, the banner line, the score bars or their pair of boxes. The
+   war map never shows any of those. The 15 s of holding are there because
+   the bars are read in a part of the looks only: with 5 s the row went
+   unread in 35 of the 165 HUD looks of the recorded hold-and-take battle.
+   THE SIZE OF THE INTERFACE does not scale with the resolution: the window
+   is Bildmitte +-220 by rows 44..96 in HUD points, and a live window
+   delivers HUD points (kpFaktor 1). A display drawn at double size is not
+   read at all, as the bars next door are not - it is not read wrongly.
+   WHAT THIS DOES NOT READ: the label in the box (a place is named by its
+   position against the middle, gefKpName), and the symbol in the badge that tells the two enemies of
+   a triple battle apart (both are red). (FABLE 13.09.2026) */
+const GEF_KP = {FENSTER_HALB: 220, FENSTER_Y0: 44, FENSTER_Y1: 96, KOERPER_Y0: 60, KOERPER_Y1: 81,
+                ZIFFER_Y0: 69, ZIFFER_Y1: 77, ZIFFER_BREITE: 18, ZIFFER_MIN: 18, WEISS_MIN: 140, WEISS_MAX: 190,
+                RAND_Y0: 80, RAND_Y1: 82, RAND_HELL: 120, RAND_ABSTAND: 30, RAND_MIN: 16, RAND_MAX: 30,
+                RAHMEN_UNRUHE: 0.25, RAHMEN_ABW: 35, ABSTAND: 60, ABSTAND_TOL: 5, MITTE_Y: 70,
+                RADIEN: [16, 18, 20], GEGEN_R: 24, WINKEL_SCHRITT: 6, RAUTE_DX: -14, RAUTE_DY: -14,
+                TAFEL_ANTEIL: 0.45, TAFEL_ZEILEN: 6, TAFEL_BLAU: [45, 85, 120, 85, 131, 164], TAFEL_ROT: [128, 24, 31, 168, 64, 71]};
+const GEF_HUD_HALTEN = 15000;         // the HUD seen this recently: the row may be read (counted below: 5 s lost 35 of 165 HUD looks of the hold-and-take recording)
+const GEF_KP_VERGESSEN = 30000;       // a place not seen for this long falls away
+/* the event thresholds. The sheet proposed 0,7 for the drain; counted on the
+   Erfurt readings a FULL ring reads 0,68 for seconds at a time (132..138 s:
+   its pale phase loses the last degrees before the hidden part), while a
+   real drain goes to 0,58 and below within a few looks - so 0,6. */
+const GEF_KP_ABFLUSS = 0.6, GEF_KP_VOLL = 0.78, GEF_KP_FUELLEN = 0.1;
+/* a ring reading older than this does not count towards the maximum - the
+   scoreboard stands open for half a minute at a time, and the readings from
+   before it must not carry a ring into the picture after it (seen: a drain
+   announced at 416 s over a box that showed no ring at all) */
+const GEF_KP_RING_ALTER = 6000;
+/* no drain announced this soon after the badge changed: the taker's ring
+   keeps filling through its hidden part for up to 16 s after the change
+   (Ringzeit 34 s against 18 s to the change, measured) and reads 0,05..0,1
+   or nothing meanwhile */
+const GEF_KP_RUHE = 20000;
+const GEF_KP_HOECHSTENS = 5;          // places written to the clan, at most
+/* a place missing from more than this many read rows starts over when it
+   comes back: the side objectives come and go, and what appears at the same
+   place is another one. Counted on the Erfurt readings: A3 (blue) left place
+   L1 at 590 s, C2 (grey badge, blue ring from nought) stood there from
+   611 s; carried on as blue, that ring read as a drain of a holder that was
+   gone. Gaps of one to three read rows are the reader blinking (Erfurt R1:
+   gaps of 1, 3 and 5 rows, the badge the same on both sides). */
+const GEF_KP_FEHLT = 3;
+const GEF_KP_RAUTEN = 5, GEF_KP_RAUTEN_EINIG = 4;   // the holder changes when 4 of the last 5 badge readings say so
+/* AND A POINT DOES NOT GO NEUTRAL BY ITSELF: somebody takes it out of the
+   holder's hand, and that shows - the box wears the taker's colour, or a
+   capture ring stands around it. The badge alone reads grey for four looks in
+   a row over a box that stays red with no ring anywhere (hold-and-take
+   recording, 188..191 s; the badge is a 5 by 5 sample and the JPEG is soft),
+   and 4 of 5 alone turned that into "neutral" and "taken by red" thirteen
+   seconds apart, two lines to the clan. So a change to grey needs, among the
+   five badge readings, GEF_KP_RAUTEN_FREMD with the box in another colour
+   than the holder's or a ring in sight; a change to a colour needs the box
+   in that colour in the deciding look. Counted on the three recordings
+   (Flicks\flick_hud_lage.py, MESSUNG): the two false changes fall, every
+   other change stays. */
+const GEF_KP_RAUTEN_FREMD = 2;
+/* the ring is the largest of the last five readings: it blinks, and in its
+   pale phase the reader sees only its first few degrees - counted on the
+   Erfurt readings, a full ring read 0,07 / 0,05 / 0,10 three looks in a row
+   (488..490 s), so three looks were not enough and a drain was announced
+   that never was */
+const GEF_KP_RINGE = 5;
+const GEF_KP_FARBEN = {b: "#4a7fd0", r: "#c8403a", g: "#8a8a8a"};
+function gefKpKasten(r, g, b){
+  if (r - (g > b ? g : b) >= 40) return "R";
+  if (b - r >= 25 && b - g >= 12) return "B";
+  return "G";
+}
+function gefKpRing(r, g, b){
+  if (r >= 95 && g <= 75 && b <= 85 && r - g >= 50 && r - b >= 40) return "R";
+  if (b >= 95 && b <= 160 && g <= 110 && r <= 100 && b - r >= 30 && b - g >= 15) return "B";
+  return ".";
+}
+function gefKpWeiss(r, g, b){
+  let mn = r < g ? r : g; if (b < mn) mn = b;
+  let mx = r > g ? r : g; if (b > mx) mx = b;
+  return mn >= GEF_KP.WEISS_MIN && mx >= GEF_KP.WEISS_MAX;
+}
+function gefKpTafel(r, g, b){
+  let t = GEF_KP.TAFEL_BLAU;
+  if (t[0] <= r && r <= t[3] && t[1] <= g && g <= t[4] && t[2] <= b && b <= t[5]) return true;
+  t = GEF_KP.TAFEL_ROT;
+  return t[0] <= r && r <= t[3] && t[1] <= g && g <= t[4] && t[2] <= b && b <= t[5];
+}
+function gefKpUebersprungen(w){
+  if (w >= 276 && w <= 342) return true;
+  if (w === 0) return true;
+  for (const d of [45, 135, 225]) if (Math.abs(w - d) <= 9) return true;
+  for (const d of [147, 213]) if (Math.abs(w - d) <= 6) return true;
+  return false;
+}
+function gefKpMinKanal(px, i){ let m = px[i] < px[i+1] ? px[i] : px[i+1]; if (px[i+2] < m) m = px[i+2]; return m; }
+/* the measured reader, word for word (messung_bat10_js_kosten.py). px is
+   RGBA of the window fb by fh, whose origin lies at (ox, oy) in HUD points.
+   Returns {grund: "ok"|"tafel"|"keine", kaestchen: [[cx, farbe, raute,
+   ring, fuell], ...]}. */
+function gefKpLesen(px, fb, fh, ox, oy){
+  const K = GEF_KP;
+  let balken = 0;
+  for (let x = 0; x < fb; x++){
+    let n = 0;
+    for (let y = 0; y <= K.KOERPER_Y1 - oy; y++){
+      const i = (y*fb + x)*4;
+      if (gefKpTafel(px[i], px[i+1], px[i+2])) n++;
+    }
+    if (n >= K.TAFEL_ZEILEN) balken++;
+  }
+  if (balken > K.TAFEL_ANTEIL * fb) return {grund: "tafel", kaestchen: []};
+  const w = new Int32Array(fb);
+  for (let x = 0; x < fb; x++){
+    for (let y = K.ZIFFER_Y0 - oy; y <= K.ZIFFER_Y1 - oy; y++){
+      const i = (y*fb + x)*4;
+      if (gefKpWeiss(px[i], px[i+1], px[i+2])) w[x]++;
+    }
+  }
+  const S = new Int32Array(fb);
+  let lauf = 0;
+  for (let x = 0; x < fb; x++){
+    lauf += w[x];
+    if (x >= K.ZIFFER_BREITE) lauf -= w[x - K.ZIFFER_BREITE];
+    if (x >= K.ZIFFER_BREITE - 1) S[x - K.ZIFFER_BREITE + 1] = lauf;
+  }
+  const kand = [];
+  const nS = fb - K.ZIFFER_BREITE + 1;
+  for (let x = 0; x < nS; x++){
+    if (S[x] < K.ZIFFER_MIN) continue;
+    let istMax = true;
+    for (let d = -14; d <= 14; d++){
+      if (d === 0 || x + d < 0 || x + d >= nS) continue;
+      if (S[x+d] > S[x] || (d < 0 && S[x+d] === S[x])){ istMax = false; break; }
+    }
+    if (!istMax) continue;
+    const gc = ox + x + (K.ZIFFER_BREITE - 1)/2;
+    const x0 = Math.trunc(gc) - 24; let lf = 0, laufStart = 0, best = 0, bestStart = 0, luecke = 0;
+    let aussen = 0;
+    for (const xx of [Math.trunc(gc) - 30, Math.trunc(gc) + 30]){
+      const X = xx - ox;
+      if (X >= 0 && X < fb){ const m = gefKpMinKanal(px, ((81 - oy)*fb + X)*4); if (m > aussen) aussen = m; }
+    }
+    for (let xx = x0; xx < x0 + 49; xx++){
+      const X = xx - ox; let hell = false;
+      if (X >= 0 && X < fb){
+        let v = 0;
+        for (let yy = K.RAND_Y0 - oy; yy <= K.RAND_Y1 - oy; yy++){ const m = gefKpMinKanal(px, (yy*fb + X)*4); if (m > v) v = m; }
+        const u = gefKpMinKanal(px, ((78 - oy)*fb + X)*4);
+        hell = v >= K.RAND_HELL && (v - u >= K.RAND_ABSTAND || v - aussen >= K.RAND_ABSTAND);
+      }
+      if (hell){
+        if (lf === 0) laufStart = xx;
+        lf += 1 + luecke; luecke = 0;
+        if (lf > best){ best = lf; bestStart = laufStart; }
+      } else {
+        if (lf > 0 && luecke < 2) luecke++;
+        else { lf = 0; luecke = 0; }
+      }
+    }
+    if (best < K.RAND_MIN || best > K.RAND_MAX) continue;
+    const cx = bestStart + (best - 1)/2;
+    const fl = [];
+    for (let yy = K.KOERPER_Y0; yy < K.KOERPER_Y0 + 4; yy++){
+      for (let xx = Math.trunc(cx) - 2; xx < Math.trunc(cx) + 11; xx++){
+        const X = xx - ox, Y = yy - oy;
+        if (X >= 0 && X < fb && Y >= 0 && Y < fh){ const i = (Y*fb + X)*4; fl.push([px[i], px[i+1], px[i+2]]); }
+      }
+    }
+    let nR = 0, nB = 0, nG = 0, ruhig = false;
+    if (fl.length){
+      let sr = 0, sg = 0, sb = 0;
+      for (const p of fl){ sr += p[0]; sg += p[1]; sb += p[2]; }
+      const mr = sr/fl.length, mg = sg/fl.length, mb = sb/fl.length;
+      let unruhe = 0;
+      for (const p of fl) if (Math.abs(p[0]-mr) > K.RAHMEN_ABW || Math.abs(p[1]-mg) > K.RAHMEN_ABW || Math.abs(p[2]-mb) > K.RAHMEN_ABW) unruhe++;
+      ruhig = unruhe <= K.RAHMEN_UNRUHE * fl.length;
+      if (ruhig){
+        const k = gefKpKasten(Math.trunc(mr), Math.trunc(mg), Math.trunc(mb));
+        if (k === "R") nR += fl.length; else if (k === "B") nB += fl.length; else nG += fl.length;
+      }
+    }
+    if (!ruhig) continue;
+    const farbe = (nR > nB && nR > nG) ? "R" : (nB > nG ? "B" : "G");
+    kand.push({x: cx, farbe: farbe});
+  }
+  let beste = [];
+  for (const a of kand){
+    if (a.farbe === "G") continue;
+    const reihe = []; let farbig = 0;
+    for (const c of kand){
+      const dx = c.x - a.x; const n = Math.round(dx / K.ABSTAND);
+      if (Math.abs(dx - n*K.ABSTAND) <= K.ABSTAND_TOL){ reihe.push(c); if (c.farbe !== "G") farbig++; }
+    }
+    if (farbig >= 2 && reihe.length > beste.length) beste = reihe;
+  }
+  if (beste.length < 2) return {grund: "keine", kaestchen: []};
+  const aus = [];
+  for (const c of beste){
+    const cx = c.x;
+    let nR = 0, nB = 0;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++){
+      const xx = Math.round(cx + K.RAUTE_DX + dx) - ox, yy = K.MITTE_Y + K.RAUTE_DY + dy - oy;
+      if (xx >= 0 && xx < fb && yy >= 0 && yy < fh){
+        const i = (yy*fb + xx)*4;
+        if (gefKpWeiss(px[i], px[i+1], px[i+2])) continue;
+        const k = gefKpKasten(px[i], px[i+1], px[i+2]);
+        if (k === "R") nR++; else if (k === "B") nB++;
+      }
+    }
+    const raute = (nR >= 6 && nR > nB) ? "R" : (nB >= 6 ? "B" : "G");
+    const proben = [];
+    for (let w_ = 0; w_ < 360; w_ += K.WINKEL_SCHRITT){
+      let kR = false, kB = false;
+      const sn = Math.sin(w_*Math.PI/180), cs = Math.cos(w_*Math.PI/180);
+      for (const r of K.RADIEN){
+        const xx = Math.round(cx + r*sn) - ox, yy = Math.round(K.MITTE_Y - r*cs) - oy;
+        if (xx >= 0 && xx < fb && yy >= 0 && yy < fh){
+          const k = gefKpRing(px[(yy*fb + xx)*4], px[(yy*fb + xx)*4+1], px[(yy*fb + xx)*4+2]);
+          if (k === "R") kR = true; else if (k === "B") kB = true;
+        }
+      }
+      const xx = Math.round(cx + K.GEGEN_R*sn) - ox, yy = Math.round(K.MITTE_Y - K.GEGEN_R*cs) - oy;
+      if (xx >= 0 && xx < fb && yy >= 0 && yy < fh){
+        const k = gefKpRing(px[(yy*fb + xx)*4], px[(yy*fb + xx)*4+1], px[(yy*fb + xx)*4+2]);
+        if (k === "R") kR = false; else if (k === "B") kB = false;
+      }
+      proben.push([w_, kR, kB]);
+    }
+    let ring = "-", fuell = 0, bester = -1;
+    for (const farbe of ["R", "B"]){
+      let letzter = -1, luecke = 0;
+      for (const [w_, kR, kB] of proben){
+        const voll = farbe === "R" ? kR : kB;
+        if (gefKpUebersprungen(w_)) continue;
+        if (voll){ letzter = w_; luecke = 0; }
+        else { luecke++; if (luecke >= 4) break; }
+      }
+      if (letzter > bester){ bester = letzter; ring = farbe; }
+    }
+    if (bester >= 0){
+      fuell = Math.min(1, (bester + K.WINKEL_SCHRITT)/360);
+      if (bester >= 270){
+        let hinten = false;
+        for (const [w_, kR, kB] of proben) if (w_ >= 348 && (ring === "R" ? kR : kB)) hinten = true;
+        fuell = hinten ? 1 : Math.max(fuell, 0.78);
+      }
+    }
+    aus.push([cx, c.farbe, raute, ring, Math.round(fuell*100)/100]);
+  }
+  return {grund: "ok", kaestchen: aus};
+}
+/* the window out of the picture: only the 440 by 52 HUD points the reader
+   looks at, drawn once, at the picture's HUD factor */
+function gefKpBlick(bild, W, z){
+  const K = GEF_KP, fk = z.kpFaktor || 1, Wh = W/fk;
+  const ox = Math.trunc(Wh/2) - K.FENSTER_HALB, oy = K.FENSTER_Y0;
+  const fb = 2*K.FENSTER_HALB, fh = K.FENSTER_Y1 - K.FENSTER_Y0;
+  if (ox < 0) return null;
+  const f = gefFlaeche("kp", fb, fh);
+  f.g.drawImage(bild, ox*fk, oy*fk, fb*fk, fh*fk, 0, 0, fb, fh);
+  let px = null;
+  try { px = f.g.getImageData(0, 0, fb, fh).data; } catch(e){ return null; }
+  const erg = gefKpLesen(px, fb, fh, ox, oy);
+  erg.mitte = Wh/2;
+  return erg;
+}
+/* THE STATE PER PLACE, and the events. A place is its position in the row
+   (the row sits around Bildmitte-8, one place every 60 points). "tafel" and
+   "keine" change nothing - the scoreboard is open 16 % of the time and the
+   last state stands through it. The holder changes only when four of the
+   last five looks read another badge; the ring is the largest of the last
+   five readings because it blinks (GEF_KP_RINGE). Events, from the measurement sheet: the
+   holder's ring falls under 0,7 - "draining"; the badge goes grey -
+   "neutral"; a ring in the other colour passes 0,1 - "taking"; the badge
+   changes colour - "taken"; the holder's ring comes back to 0,78 - "held".
+   A place missing from more than GEF_KP_FEHLT read rows, or not seen for
+   GEF_KP_VERGESSEN, falls away without a word and starts over when a box
+   stands there again. */
+function gefKpStand(z, erg, nun){
+  if (!erg || erg.grund !== "ok") return;
+  if (!z.kpPlaetze) z.kpPlaetze = {};
+  const wort = h => h === "b" ? "blue" : h === "r" ? "red" : "neutral";
+  const neu = [], gesehen = new Set();
+  for (const k of erg.kaestchen){
+    const key = Math.round((k[0] - (erg.mitte - 8))/GEF_KP.ABSTAND);
+    if (gesehen.has(key)) continue;          // two boxes rounding to one place (seen once, 434 s): the first one counts
+    gesehen.add(key);
+    const koerper = k[1].toLowerCase(), raute = k[2].toLowerCase(), ring = k[3] === "-" ? "" : k[3].toLowerCase();
+    let p = z.kpPlaetze[key];
+    if (!p) p = z.kpPlaetze[key] = {key: key, h: raute, r: "", f: 0, rauten: [], ringe: [], phase: "still", seit: nun, fehlt: 0};
+    p.zuletzt = nun; p.fehlt = 0;
+    p.rauten.push({r: raute, k: koerper, ring: !!ring}); if (p.rauten.length > GEF_KP_RAUTEN) p.rauten.shift();
+    p.ringe.push({r: ring, f: ring ? k[4] : 0, t: nun}); if (p.ringe.length > GEF_KP_RINGE) p.ringe.shift();
+    let best = {r: "", f: 0};
+    for (const q of p.ringe) if (q.f > best.f && nun - q.t <= GEF_KP_RING_ALTER) best = q;
+    p.r = best.r; p.f = best.f;
+    /* the badge flickers - counted on the Python readings of the three
+       recordings: runs of one to four readings in another colour inside
+       long runs of the holder's, and stretches of strictly alternating
+       readings. So the holder changes only when GEF_KP_RAUTEN_EINIG of the
+       last GEF_KP_RAUTEN readings agree on another colour, and the box or a
+       ring bears it out (GEF_KP_RAUTEN_FREMD, see there). */
+    let halter = p.h;
+    if (p.rauten.length >= GEF_KP_RAUTEN) for (const c of ["b", "r", "g"]){
+      if (c === p.h || p.rauten.filter(x => x.r === c).length < GEF_KP_RAUTEN_EINIG) continue;
+      if (c === "g"){ if (p.rauten.filter(x => x.k !== p.h || x.ring).length < GEF_KP_RAUTEN_FREMD) continue; }
+      else if (koerper !== c) continue;
+      halter = c;
+    }
+    if (halter !== p.h){
+      p.h = halter; p.phase = "still"; p.wechsel = nun; p.rauten = [];
+      neu.push([p, halter === "g" ? "neutral" : "taken by " + wort(halter)]);
+    } else if (p.r && p.r === p.h){
+      p.tief = p.f < GEF_KP_ABFLUSS ? (p.tief || 0) + 1 : 0;      // two looks under the mark, not one dip
+      if (p.tief >= 2 && p.phase !== "draining" && !(p.wechsel && nun - p.wechsel < GEF_KP_RUHE)){ p.phase = "draining"; neu.push([p, "draining"]); }
+      else if (p.f >= GEF_KP_VOLL && p.phase === "draining"){ p.phase = "still"; neu.push([p, "held"]); }
+    } else if (p.r && p.r !== p.h){
+      if (p.f > GEF_KP_FUELLEN && p.phase !== "taking"){ p.phase = "taking"; neu.push([p, "taking (" + wort(p.r) + ")"]); }
+    } else if (!p.r && p.phase === "taking") p.phase = "still";   // the taker's ring gone: over, said by nothing; a drain stays a drain until the badge changes or the ring is back to full
+  }
+  for (const key of Object.keys(z.kpPlaetze)){
+    const p = z.kpPlaetze[key];
+    if (gesehen.has(p.key)) continue;
+    p.fehlt = (p.fehlt || 0) + 1;
+    if (p.fehlt > GEF_KP_FEHLT || nun - p.zuletzt > GEF_KP_VERGESSEN) delete z.kpPlaetze[key];
+  }
+  const reihe = Object.values(z.kpPlaetze).sort((a, b) => a.key - b.key);
+  z.kp = reihe.map(p => ({h: p.h, r: p.r, f: p.f, k: p.key}));
+  if (neu.length){
+    if (!z.kpLog) z.kpLog = [];
+    for (const [p, text] of neu) z.kpLog.push({t: nun, text: gefKpName(p.key) + " " + text});
+    if (z.kpLog.length > 40) z.kpLog.splice(0, z.kpLog.length - 40);
+  }
+}
+/* THE NAME OF A PLACE IS ITS PLACE. The label in the box ("02", "A3") is
+   not read, and a number counted from the left shifts whenever a side
+   objective appears or goes - seen on the Erfurt recording: the row is
+   02 01 A3 C3 at 420 s and A3 02 01 at 760 s, the main boxes standing still
+   and the side ones coming and going around them. So a box is named by its
+   place against the middle of the strip, which holds: M for the box at the
+   middle, L1/L2 to the left, R1/R2/R3 to the right. */
+const gefKpName = k => "Box " + (k === 0 ? "M" : (k < 0 ? "L" : "R") + Math.abs(k));
+/* the local time of an event line */
+const gefUhrzeit = t => new Date(t).toTimeString().slice(0, 8);
+/* THE READING OF ONE BATTLE ENDS WITH IT. The countdown, the raw digit
+   reading, the last bars, the guard's time and the objective row are what
+   the reader knows about the battle in the window - and they live as long as
+   the capture, the row only forgetting a box when other boxes are read. Shown
+   by a second reader (13.09.2026): the player picked the next town while the
+   window showed the loading screen, and the first tick wrote "00:00 left,
+   0 of 2 objectives ours" from the battle before into the new town's row.
+   So the state falls with the tick (gefLiveStop), with the town (gefOrtSetzen)
+   and with the end screen (gefLageEnde). The event lines stay: they record
+   what was seen, with the time. */
+function gefLageWeg(z){
+  z.uhrLesung = null; z.rest = null; z.restVerworfen = 0; z.balkenZuletzt = null;
+  z.hudZeit = 0; z.paarGesehen = false; z.kp = null; z.kpPlaetze = null;
+}
 /* ONE LOOK. One window out of the shared picture, at its own size - no
    scaling, because everything measured here is measured in points. */
 function gefLesen(bild, z){
@@ -27827,17 +28372,32 @@ function gefLesen(bild, z){
   f.g.drawImage(bild, bx, 0, bw, bh, 0, 0, bw, bh);
   let px = null;
   try { px = f.g.getImageData(0, 0, bw, bh).data; } catch(e){ px = null; }
+  z.paarGesehen = false;
   if (px) balken = gefBalken(px, bw, bh, W, z);
   /* the same buffer once more, for the text line above the bars. gefBalken
      first: it may return early, and this must run at every look. */
   if (px) gefUhrPruefen(px, bw, bh, z);
+  /* THE OBJECTIVE ROW, behind the guard: only when this look or one of the
+     last few seconds carried the HUD - bars, their pair of boxes, the digit
+     box or the banner line. Its own window, its own catch: the score and the
+     clock stand whatever happens here. */
+  let kp = null;
+  if (px){
+    const nun = jetzt(), L = z.uhrZeile;
+    if (balken) z.balkenZuletzt = {li: balken.li, re: balken.re, t: nun};
+    if (balken || z.paarGesehen || (L && (L.kasten || gefBannerZeile(L)))) z.hudZeit = nun;
+    if (z.hudZeit && nun - z.hudZeit <= GEF_HUD_HALTEN){
+      try { kp = gefKpBlick(bild, W, z); } catch(e){ kp = null; }
+      if (kp) gefKpStand(z, kp, nun);
+    }
+  }
   /* AND THE HEAD BLOCK, for the end of the battle - last, out of its own
      window, and in its own catch. Nothing above is touched by it: not px,
      not bw, not bh, not the band. If the word reader falls over, the score
      and the clock still stand. */
   let endbild = null;
   try { endbild = gefEndbildPruefen(bild, W, H, z); } catch(e){ endbild = null; }
-  return {w: W, h: H, balken: balken, endbild: endbild};
+  return {w: W, h: H, balken: balken, endbild: endbild, kp: kp};
 }
 /* ---- what the clan is told ---------------------------------------------
    HOW OFTEN. Not with every look. Over four minutes the bar moved about two
@@ -27856,22 +28416,53 @@ const GEF_FRISCH = 15*60000;
    slow would otherwise never be seen, or never fall out of the window. */
 function gefStand(i){
   const e = S.gefecht[i];
-  const b = (imKrieg(e) && imZeit(e) && e.v && e.v.bat && e.v.bat.li !== undefined) ? e.v.bat : null;
+  /* a reading is a score (li), a countdown (rest) or the objective row (kp) - an assault carries no bars at all */
+  const b = (imKrieg(e) && imZeit(e) && e.v && e.v.bat && (e.v.bat.li !== undefined || e.v.bat.rest || e.v.bat.kp)) ? e.v.bat : null;
   if (!b || !e.t) return null;
   const t = b.t || e.t;                                 // frozen time first, see gefAlterHalten
   return ((zeitReise || jetzt()) - t <= GEF_FRISCH) ? Object.assign({}, b, {t: t}) : null;
 }
 const gefAn = i => (fightAt(i) && gefStand(i)) || null;
 /* the plate over the town and the chip on the hover card */
-const gefKurz = b => b.li + ":" + b.re;
+const gefKurz = b => b.li !== undefined ? b.li + ":" + b.re : "";
 const gefSatz = b => "Score " + b.li + " to " + b.re + " (left bar to right bar)";
-/* one reading, one colour: the plate never says anything but a score */
+/* THE COUNTDOWN ON THE MAP (BAT-9). ENNO 08.09.2026: "Der Timer im Gefecht
+   muss doch fuer alle gleich sein, da er ja die vom Spielserver vorgegebene
+   Zeit darstellt." So the row carries the seconds that were left at the
+   moment it was written, and every screen counts them down from the row's
+   own time - the server time, or the frozen bat.t, exactly as gefStand
+   reads the age. Two machines with different clocks show the same number.
+   Under zero the plate says 00:00 until the clan's clock is there, and
+   then nothing at all - the overtime plate has taken over. */
+const gefRestSek = (s, t) => s - ((zeitReise || jetzt()) - t)/1000;
+const gefRestKurz = sek => otMmSs(Math.max(0, sek)*1000);
+function gefRestZeigen(b, i){
+  if (!b || !b.rest || b.rest.s === undefined) return "";
+  const sek = gefRestSek(b.rest.s, b.t);
+  if (sek <= 0 && overtimeAn(i)) return "";
+  return gefRestKurz(sek);
+}
+/* the objective row, short: boxes in OUR colour over all. Blue is ours -
+   ENNO 05.09.2026: "blau (Verbuendete)". */
+const gefKpKurz = b => (b && b.kp && b.kp.length) ? b.kp.filter(p => p.h === "b").length + "/" + b.kp.length : "";
+/* all three short texts of a reading, for the route text and the hover card */
+const gefKurzAlle = (b, i) => [gefKurz(b), gefRestZeigen(b, i), gefKpKurz(b)].filter(Boolean);
+/* the hover card's chip for the row: one coloured box per place, and the
+   ring's fill in percent where a ring is */
+function gefKpChip(b){
+  if (!b || !b.kp || !b.kp.length) return "";
+  const farbe = h => GEF_KP_FARBEN[h] || GEF_KP_FARBEN.g;
+  return `<span class="chip" style="border-color:${GEF_FARBE};color:${GEF_FARBE}">${b.kp.map(p =>
+    `<i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${farbe(p.h)};vertical-align:-1px"></i>${
+      p.r ? `<small style="color:${farbe(p.r)}">${Math.round(p.f*100)}%</small>` : ""}`).join(" ")}</span>`;
+}
+/* one reading, one colour: the plate never says anything but what was read */
 const GEF_FARBE = "#3f7fa8";
 /* the plate above the town, next to the overtime clock: y is the bottom
-   edge, the height comes back. Same shape as overtimeEtikett. */
-function gefEtikett(x, y, b){
+   edge, the height comes back. Same shape as overtimeEtikett. One plate per
+   text - score, countdown, objectives - stacked by the caller. */
+function gefEtikett(x, y, text){
   const gr = Math.max(8, Math.min(11, 6.5*Math.sqrt(view.z)))*uiScale;
-  const text = gefKurz(b);
   ctx.save();
   ctx.font = `700 ${gr}px ${SCHMAL}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   const bb = ctx.measureText(text).width + gr*0.9, h = gr*1.4;
@@ -27883,12 +28474,34 @@ function gefEtikett(x, y, b){
   ctx.restore();
   return h;
 }
-/* the line under the overtime clock in the side panel */
+/* the line under the overtime clock in the side panel: ONE sentence out
+   of what is there, and nothing guessed (BAT-3). ENNO 05.09.2026: "das Tool
+   ja bereits wissen sollte, ob man Angreifer oder Verteidiger ist" - the
+   battle mark stands on a town, and the town has an owner: theirs, we
+   attack; ours, we defend; an open town gets no word. Then the countdown,
+   the objectives in our colour, the score. Who wins is not said here - the
+   overtime line says it already: defenders at 60:00, attackers as soon as
+   they hold all three. */
 function gefZeile(i){
   const b = gefStand(i);
   if (!b) return "";
-  return `<div class="ot-zeile"><span style="color:${GEF_FARBE}">${esc(gefSatz(b))}</span>
-        <div class="note">read from a game window ${esc(alterText(b.t))}</div></div>`;
+  const e = S.gefecht[i], o = ownerOf(i), f = clanFaktion();
+  const teile = [];
+  /* attacker or defender only in an assault: a hold-and-take battle on a
+     supply line has no defender, both sides take points (round 3) */
+  if (b.li === undefined && o >= 0 && f !== undefined && f !== null) teile.push(o === f ? "Defending" : "Attacking");
+  const rt = gefRestZeigen(b, i);
+  if (rt) teile.push(rt + " left");
+  if (b.kp && b.kp.length) teile.push(b.kp.filter(p => p.h === "b").length + " of " + b.kp.length + " objectives ours");
+  if (b.li !== undefined) teile.push(gefSatz(b));
+  /* the reader's name, not the row's author: whoever starts or clears the
+     clock by hand stamps this row anew and becomes its author, and the
+     reading would then be "read ... by" that hand. The reading keeps its own
+     name the way it keeps its own time, see gefAlterHalten; a fresh reading
+     carries none and is the row's author's. */
+  const wer = b.by !== undefined ? werWar({by: b.by, n: b.n}) : werWar(e);
+  return `<div class="ot-zeile" id="gef-zeile"><span style="color:${GEF_FARBE}">${esc(teile.join(" · "))}</span>
+        <div class="note">read from a game window ${esc(alterText(b.t))} by ${esc(wer)}</div></div>`;
 }
 /* THE SAME ROW THE OVERTIME CLOCK USES, under its own key. "hud" is taken:
    the clock writes {ot, hud} with hud as the 0/1 mark saying that ot is a
@@ -27916,7 +28529,8 @@ function gefSchreiben(i, neu){
   if (!darf("aufklaerung")) return darfNicht("aufklaerung");
   if (!fightAt(i)) return false;
   const e = S.gefecht[i];
-  const v = Object.assign(gefechtRest(i), {bat: neu});
+  const v = gefechtRest(i);
+  if (neu) v.bat = neu; else delete v.bat;      // no reading: the reading goes off the row (gefLageEnde), the clock stays
   if (v.ot > 0){
     if (!imKrieg(e) || !e.t){ delete v.ot; delete v.hud; delete v.otby; delete v.otn; }
     else if (!v.hud){ v.ot = e.t; v.hud = 1; }
@@ -27930,7 +28544,7 @@ function gefSchreiben(i, neu){
      and overtimeSatz reads it from there. The row's author stays true: it is
      whoever wrote last, which is what it says everywhere else in this tool. */
   if (v.ot > 0 && v.otn === undefined){ v.otby = e.by || ""; v.otn = e.n || ""; }
-  if (!stamp("gefecht", i, v, {n: S.name || ""})) return false;
+  if (!stamp("gefecht", i, Object.keys(v).length ? v : null, {n: S.name || ""})) return false;
   save();
   if (GEF){ GEF.geschrieben = neu; GEF.gesendet = jetzt(); }
   draw(); if (sel === i) side();
@@ -28066,6 +28680,7 @@ function gefEndbildMelden(){
   GEF.ende = {ausgang: B.ausgang, zeit: jetzt(), ort: B.ort,
               sprache: B.sprache || "", guete: (typeof B.guete === "number") ? B.guete : null,
               nr: B.nr};
+  gefLageEnde();                              // the countdown and the row end with the battle (HUD-LAGE)
   gefKlang();
   gefEndeRahmen(true);
   /* The floating line sits at z-index 130 and the rooms at 120 - measured with
@@ -28080,19 +28695,110 @@ function gefEndbildMelden(){
      standing. */
   setTimeout(() => { if (GEF) gefZeichnen(); else gefEndeRahmen(); }, GEF_ENDBILD_FRISCH + 300);
 }
+/* THE CLAN'S CLOCK STARTS ITSELF (BAT-9). ENNO 08.09.2026: "Wenn wir
+   jemanden im Gefecht haben, der das runterlaufen auf 0 miterlebt und daher
+   miterfasst hat, dann koennen wir den Timer ja ueber unser Tool sofort
+   starten und anzeigen. Darum ging es mir." So the change that used to be
+   offered as a button is started here, once, at the look that found it -
+   under exactly the conditions the button had: a town picked and the
+   reading made for it, the battle mark standing, no clock standing yet, not
+   in the replay, the moment younger than the whole overtime, the intel
+   right. Where those do not hold the button stays as it was, and the sheet
+   says why. V.versucht marks the one attempt, V.gestartet the success.
+   NO MOMENT IS HANDED IN. The button hands in V.t, and otMs takes a handed-in
+   moment "as it is" - off this one machine's clock, for the whole clan. ENNO
+   08.09.2026: "Der Timer im Gefecht muss doch fuer alle gleich sein, da er
+   ja die vom Spielserver vorgegebene Zeit darstellt." A clock started
+   without a moment counts from the row's own time, which the server sets on
+   writing - the same for every screen, as the countdown plate does it. The
+   look that found the change is the one that starts it, so the row is at
+   most a look and the way to the server late. */
+function gefUhrStarten(){
+  const V = GEF && GEF.uhrVorschlag;
+  if (!V || V.versucht) return;
+  V.versucht = 1;
+  const i = GEF.ort;
+  if (i === null || i === undefined || zeitReise || !darf("aufklaerung")) return;
+  if (V.ort !== null && V.ort !== undefined && V.ort !== i) return;
+  if (!fightAt(i) || gefechtStand(i) || jetzt() - V.t >= OT_DAUER) return;
+  if (overtimeStart(i)){ V.gestartet = 1; side(); draw(); }
+}
+/* THE END SCREEN ENDS THE COUNTDOWN. The game takes its clock off the screen
+   with the battle; a row that keeps its last "rest" would count down on
+   every map for a quarter of an hour after the attackers took the last
+   objective, and the reader would write it every fifteen seconds until it
+   reached 00:00 - a number the game never showed. So the reading falls with
+   the end screen, and the row is written once more without countdown and
+   objectives; the score of a hold-and-take battle stays as it was last
+   written. The clock in the row is not touched. */
+function gefLageEnde(){
+  if (!GEF) return;
+  const alt = GEF.geschrieben, i = GEF.ort;
+  gefLageWeg(GEF);
+  if (i === null || i === undefined || !alt || (!alt.rest && !alt.kp)) return;
+  gefSchreiben(i, alt.li !== undefined ? {li: alt.li, re: alt.re} : null);
+}
+/* THE TOWN CHANGES, THE READING DOES NOT FOLLOW IT. The desk's town picker
+   comes here: the reading of one battle is not the next town's, so it falls
+   (gefLageWeg, see there), and a proposal that was made for another town
+   falls with it - its attempt was made there. One made without a town stays,
+   so the button can start the clock on the town picked now. */
+function gefOrtSetzen(i){
+  if (!GEF) return;
+  GEF.ort = i;
+  GEF.geschrieben = null; GEF.gesendet = 0;
+  gefLageWeg(GEF);
+  const V = GEF.uhrVorschlag;
+  if (V && V.ort !== null && V.ort !== undefined && V.ort !== i) GEF.uhrVorschlag = null;
+}
 function gefMelden(){
   if (!GEF || !GEF.stand) return;
   const i = GEF.ort;
   if (i === null || i === undefined) return;
   if (!darf("aufklaerung") || !fightAt(i)) return;
-  const R = GEF.stand;
-  if (!R.balken) return;                                  // nothing certain, nothing written
-  const neu = {li: R.balken.li, re: R.balken.re};
+  /* THREE THINGS IN ONE ROW (HUD-LAGE): the score of the last bar reading
+     that is younger than a writing interval - not only this look's, or a
+     line written for the countdown would drop the score whenever a single
+     look missed the bars -, the seconds left at this moment (the row's own
+     time is the reference, see gefRestSek), and the objective row. Written
+     every fifteen seconds while something moves; AT ONCE when the countdown
+     jumps by more than GEF_REST_SPRUNG against what was written (the time
+     bonus) or a box changes its holder. A countdown at zero is written once.
+     THE COUNTDOWN AND THE ROW GO TO THE CLAN ONLY WHILE THE HUD IS IN SIGHT
+     (the guard of gefLesen, GEF_HUD_HALTEN): what the reader still knows
+     after the scoreboard, the map or the loading screen took the picture is
+     what it saw last, and the last line written already carries that. */
+  if (zeitReise) return;                     /* the replay only reads (round 3, 13.09.2026) */
+  const nun = jetzt();
+  const neu = {};
+  const bk = GEF.balkenZuletzt, hud = GEF.hudZeit && nun - GEF.hudZeit <= GEF_HUD_HALTEN;
+  if (bk && nun - bk.t <= GEF_SCHREIB_MS){ neu.li = bk.li; neu.re = bk.re; }
+  if (GEF.rest && hud) neu.rest = {s: Math.max(0, Math.round(gefRestSek(GEF.rest.s, GEF.rest.t)))};
+  if (GEF.kp && GEF.kp.length && hud) neu.kp = GEF.kp.slice(0, GEF_KP_HOECHSTENS).map(p => ({k: p.k, h: p.h, r: p.r, f: p.f}));
+  if (neu.li === undefined && !neu.rest && !neu.kp) return;   // nothing certain, nothing written
   const alt = GEF.geschrieben;
-  const weit = !GEF.gesendet || jetzt() - GEF.gesendet >= GEF_SCHREIB_MS;
-  const bewegt = !alt || Math.abs(neu.li - alt.li) >= GEF_SPRUNG
-                      || Math.abs(neu.re - alt.re) >= GEF_SPRUNG;
-  if (!(weit && bewegt)) return;
+  const weit = !GEF.gesendet || nun - GEF.gesendet >= GEF_SCHREIB_MS;
+  let bewegt = !alt, sofort = false;
+  if (alt){
+    if (neu.li !== undefined && (alt.li === undefined || Math.abs(neu.li - alt.li) >= GEF_SPRUNG
+                                 || Math.abs(neu.re - alt.re) >= GEF_SPRUNG)) bewegt = true;
+    if (neu.rest){
+      if (!alt.rest || neu.rest.s > 0 || alt.rest.s > 0) bewegt = true;
+      if (alt.rest && GEF.gesendet && neu.rest.s > 0
+          && Math.abs(neu.rest.s - Math.max(0, alt.rest.s - (nun - GEF.gesendet)/1000)) > GEF_REST_SPRUNG) sofort = true;
+    }
+    if (neu.kp){
+      /* a holder changing at a place that was in the last line: at once. A
+         place coming or going (the side objectives do, every few minutes on
+         the Erfurt recording) is the row moving, not a holder changing - as
+         "at once" it wrote 34 of 143 lines under fifteen seconds apart. */
+      const vorher = new Map((alt.kp || []).map(p => [p.k, p]));
+      if (neu.kp.some(p => vorher.has(p.k) && vorher.get(p.k).h !== p.h)) sofort = true;
+      else if (!alt.kp || alt.kp.length !== neu.kp.length
+               || neu.kp.some(p => !vorher.has(p.k) || vorher.get(p.k).r !== p.r || Math.abs(vorher.get(p.k).f - p.f) >= 0.05)) bewegt = true;
+    }
+  }
+  if (!(sofort || (weit && bewegt))) return;
   gefSchreiben(i, neu);
 }
 
@@ -28111,6 +28817,15 @@ function gefNeu(){
   return {live: null, laeuft: false, bildNr: 0, ort: null, stand: null,
           kastenY: null, anker: null, proben: [], marke: null,
           uhrZeile: null, uhrZeit: 0, uhrVorschlag: null,
+          /* the countdown and the objective row (HUD-LAGE, FABLE 13.09.2026):
+             uhrLesung is the last raw reading of the digits, rest the last
+             credible one {s, t}; balkenZuletzt the last bar reading with its
+             time; hudZeit when the HUD was last seen in the picture (the
+             guard for the objective reader); kpPlaetze the state per place,
+             kp the row of them for the sheet and the clan, kpLog the events;
+             kpFaktor the HUD factor of the picture, 1 for a live window */
+          uhrLesung: null, rest: null, restVerworfen: 0, balkenZuletzt: null,
+          hudZeit: 0, paarGesehen: false, kp: null, kpPlaetze: null, kpLog: [], kpFaktor: 1,
           endbild: null, ende: null, endbildGemeldet: null,
           geschrieben: null, gesendet: 0, orteSchluessel: null,
           status: "Waiting for the game window ..."};
@@ -28149,6 +28864,10 @@ function gefLiveStop(auchFreigabe){
   if (!GEF) return;
   if (GEF.live){ clearInterval(GEF.live); GEF.live = null; }
   GEF.stand = null; GEF.anker = null; GEF.proben = []; GEF.kastenY = null; GEF.marke = null;
+  /* the countdown and the objective row go with the tick as well - a stopped
+     capture that still counts down or shows three boxes reads like a running
+     one. The event lines stay: they record what was seen. */
+  gefLageWeg(GEF);
   /* THE READER'S CLAIM GOES WITH THE TICK, the confirmation does not. Same
      ground as two paragraphs up: a stopped capture that still shows a
      standing verdict reads exactly like a running one. GEF.ende stays - it
@@ -28177,6 +28896,7 @@ async function gefTick(){
     GEF.stand = R;
     GEF.status = R ? "Live" : "The picture came back empty.";
     gefMelden();
+    gefUhrStarten();
     gefEndbildMelden();
     gefZeichnen();
   } catch(e){
@@ -28222,8 +28942,8 @@ function gefPult(){
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="gf-klang">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
     <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run
-      borderless or windowed. Only the town picked on the left is written to, and only the score
-      goes into it.</div>`;
+      borderless or windowed. Only the town picked on the left is written to: the score, the
+      countdown and the objective row.</div>`;
   document.getElementById("gf-kraft").addEventListener("click", () => {
     if (GEF && GEF.live) gefLiveStop(true); else gefLiveStart(); });
   /* share again: end the share and ask once; declined, the tick stops the desk itself */
@@ -28259,6 +28979,9 @@ function gefZeichnen(){
     <div class="rd-kf"><div class="t">Score, left to right</div>
       <div class="v">${b ? `${b.li}<small> : </small>${b.re}` : "-"}</div>
       <div class="bar"><i style="width:${b ? b.li : 0}%"></i></div></div>
+    <div class="rd-kf"><div class="t">Time left</div>
+      <div class="v">${GEF.rest ? esc(gefRestKurz(gefRestSek(GEF.rest.s, GEF.rest.t))) : "-"}</div>
+      <div class="bar"></div></div>
     <div class="rd-kf"><div class="t">Capture</div>
       <div class="v"><small>${GEF.live && R ? `${R.w}x${R.h}, every ${GEF_TAKT} ms` : esc(GEF.status)}</small></div>
       <div class="bar"></div></div>
@@ -28276,9 +28999,10 @@ function gefZeichnen(){
     </select>
     ${orte.length ? "" : `<div class="note" style="margin-top:6px">No town carries the battle mark. Set it on the map first.</div>`}
     <h3 style="margin-top:14px">Reading</h3>
-    Share the game window and play. The head strip is read every ${GEF_TAKT} ms, and the two boxes are only measured once they have been found at the same place in three looks. A look that brought the same picture as the one before it does not count towards those three. The town's line goes to the clan every fifteen seconds while the score moves.
-    Hold-and-take battles carry the two bars, assaults do not.
+    Share the game window and play. The head strip is read every ${GEF_TAKT} ms, and the two boxes are only measured once they have been found at the same place in three looks. A look that brought the same picture as the one before it does not count towards those three. The town's line goes to the clan every fifteen seconds while the score, the countdown or the objective row moves, and only while the head strip shows the battle.
+    Hold-and-take battles carry the two bars, assaults do not. In an assault the countdown is read from its digits, believed only when two looks agree, and the clan's clock starts by itself when the countdown ends. The objective boxes under the clock are read in both, with the capture circle around them. The end screen ends the reading.
     <h3 style="margin-top:14px">What was measured</h3>
+    <div class="note">Over the recorded assault the countdown was read 1014 times, all of them right, and two wrong single readings were thrown out; over the two other recordings it read no countdown at all. The objective boxes were read in 2590 of 2676 looks of the assault, the same as the measurement in 2583 of them. A display drawn at double size is not read.</div>
     <div class="note">Over a recorded assault, which carries no bars at all, the reader said nothing in 2677 looks a second apart. Over the one recorded hold-and-take battle it read 69 times; at the ten points where a stored measurement of the same battle also holds, it stood between 1,2 points under and 1,2 points over it. That is the whole comparison there is. A display drawn at double size is not read at all - the pair of boxes is then wider than the strip cut out here, and half a box is not measured.</div>
     <h3 style="margin-top:14px">The end of the battle</h3>
     <div class="note">The end of a battle is read from the writing in the head strip, held against twenty-four words for won and lost in the game's twelve languages; no language has to be picked. Over eleven end screens at five sizes it read 51 right, none wrong, and stayed silent four times. The five rating stars are not waited for - they come about fourteen seconds after the writing, and the game's own close button comes with them. Nothing of it goes to the clan.</div>`;
@@ -28286,8 +29010,7 @@ function gefZeichnen(){
     const of = links.querySelector("#gf-ort");
     if (of) of.addEventListener("change", ev => {
       const v = ev.target.value;
-      GEF.ort = v === "" ? null : +v;
-      GEF.geschrieben = null; GEF.gesendet = 0;
+      gefOrtSetzen(v === "" ? null : +v);       // the reading of one battle is not the next town's (HUD-LAGE)
       gefZeichnen();
     });
   }
@@ -28305,6 +29028,20 @@ function gefZeichnen(){
         <div style="margin-top:4px">${b.liTon || b.reTon ? "Measured colours of the filled part. Which side is yours is not read." : "Neither bar carries a filled part yet."}</div></div>
       <div class="note">In none of the recordings was the left bar ever seen filled, so its filled colour has never been measured.</div>`
     : `<div class="gf-nichts">No score bars read.</div>`}
+    ${(() => {
+      /* the objective row as it stands, and the last events with the local
+         time. Named by their place against the middle (gefKpName); the label
+         in the box is not read. */
+      const K = GEF.kp;
+      if (!K || !K.length) return "";
+      const farbe = h => GEF_KP_FARBEN[h] || GEF_KP_FARBEN.g;
+      return `<div style="margin-top:14px">
+        <div class="kb-titel">Objectives · ${K.filter(p => p.h === "b").length}/${K.length} ours</div>
+        ${K.map(p => `<div style="margin:3px 0"><span class="gf-ton" style="background:${farbe(p.h)}"></span>${esc(gefKpName(p.k))} · ${
+          p.h === "g" ? "neutral" : p.h === "b" ? "blue" : "red"}${p.r ? ` · ring ${p.r === "b" ? "blue" : "red"} ${Math.round(p.f*100)}%` : ""}</div>`).join("")}
+        ${GEF.kpLog && GEF.kpLog.length ? `<div class="note" style="margin-top:6px">${GEF.kpLog.slice(-8).reverse().map(l =>
+          `${esc(gefUhrzeit(l.t))} ${esc(l.text)}`).join("<br>")}</div>` : ""}</div>`;
+    })()}
     ${(() => {
       /* WHAT WAS READ - AND NOT HOW IT WENT. A box that stands, no animation
          and no flash: this sheet is rewritten at every tick (GEF_TAKT), so
@@ -28348,11 +29085,14 @@ function gefZeichnen(){
          ueberschrieben und ihren Starter geloescht.
          UND NUR AN DER STADT, ZU DER DER VORSCHLAG GEHOERT. */
       const passt = V.ort === null || V.ort === undefined || V.ort === i;
-      const knopf = wo && passt && !zeitReise && !gefechtStand(i) && alt < OT_DAUER;
+      /* started by the reader itself (gefUhrStarten): said so, no button */
+      const knopf = !V.gestartet && wo && passt && !zeitReise && !gefechtStand(i) && alt < OT_DAUER;
       return `<div class="ot-zeile" style="margin-top:16px">
-        <span style="color:${GEF_FARBE}">The countdown stood in the head strip, then a line with a highlighted word took its place, ${esc(otMmSs(alt))} ago.</span>
+        <span style="color:${GEF_FARBE}">The countdown stood in the head strip, then a line with a highlighted word took its place, ${esc(otMmSs(alt))} ago.${
+          V.gestartet ? " Clan's clock started." : ""}</span>
         ${knopf ? `<button class="mini" id="gf-ot">Start the clan's clock at that moment</button>` : ""}
         <div class="note">Read from the strip itself, not from the clock's digits: the box of four digits was there in one look and gone in the next, and the line that took its place carries a highlighted word. Which line it is, is not read — the game puts a highlighted word in the sudden-death line and in both exhaustion lines. The moment lies in the ${V.spanne} ms between those two looks.${
+          V.gestartet ? "" :
           !wo ? " No town picked, so there is nothing to start it on." :
           !passt ? " That reading belongs to another town." :
           gefechtStand(i) ? " A clock already stands on this town." :
@@ -47419,7 +48159,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build ce2d81a1ff</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bb0e718006</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -47647,7 +48387,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "ce2d81a1ff";
+const BAU = "bb0e718006";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
