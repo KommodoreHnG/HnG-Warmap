@@ -14352,6 +14352,12 @@ cv.addEventListener("mousedown", e => {
   const i = hitTest(e.offsetX, e.offsetY);
   if (tool === "arrow" && i !== null){ zieh = {art:"arrow", von:i}; return; }
   if (tool === "line" && !lineEinzel() && i !== null){ zieh = {art:"line", pts:[i]}; return; }
+  /* ACTIVE PARABLOCK IN ONE SWEEP (PAR-1). ENNO 11.09.2026: "wie frueher in
+     einem Zug ueber mehrere Staedte ziehen" - the drag from before the
+     plan/active split: pointermove collects the towns crossed, pointerup
+     marks them. A bare click still goes to the click handler and toggles
+     one town. FABLE 13.09.2026 */
+  if (tool === "parablock" && i !== null){ zieh = {art:"para", pts:[i]}; return; }
   if (tool === "brush"){
     /* rechte Taste = auf "open", dieselbe -1 wie der graue Knopf in der
        Stadtspalte. Alles andere malt die gewaehlte Seite. */
@@ -14498,14 +14504,22 @@ window.addEventListener("mouseup", e => {
        hintereinander heisst, dass die erste nie gelesen wird. Und die Zahl
        muss die WIRKLICH markierte sein, sonst glaubt der Mensch, er habe
        dreiundsechzig Staedte geschuetzt, waehrend es vierzig sind. */
-    const gemeint = zieh.pts.length;
-    const markiert = Math.min(gemeint, PARA_ZUG_MAX);
-    for (const p of zieh.pts.slice(0, PARA_ZUG_MAX)) setPara(p, faction, paraGeplant);
-    toast(gemeint > markiert
-      ? `${markiert} of ${gemeint} towns marked para-blocked — that is the most `
-        + `one drag can do. Drag again for the rest.`
-      : `${markiert} town${markiert===1?"":"s"} marked para-blocked`);
-    side();
+    /* ONE TOWN IS A CLICK, NOT A SWEEP: the click handler sets or clears it
+       as before. From two towns on the sweep marks them ACTIVE (plan false)
+       and eats the click that follows the drag - the same latch as the
+       drawn defence line - or that click would clear the last town's block
+       again. Counted is what setPara really set. FABLE 13.09.2026 (PAR-1) */
+    if (zieh.pts.length >= 2){
+      const gemeint = zieh.pts.length;
+      let markiert = 0;
+      for (const p of zieh.pts.slice(0, PARA_ZUG_MAX)) if (setPara(p, faction, false)) markiert++;
+      toast(gemeint > PARA_ZUG_MAX
+        ? `${markiert} of ${gemeint} towns marked para-blocked — that is the most `
+          + `one drag can do. Drag again for the rest.`
+        : `${markiert} town${markiert===1?"":"s"} marked para-blocked`);
+      dragged = true;
+      side();
+    }
   } else if (zieh.art === "line"){
     /* A DRAWN LINE MUST SWALLOW THE CLICK THAT FOLLOWS IT. The line branch
        of mousedown returns before "dragging = true", so the latch that
@@ -14990,7 +15004,7 @@ function tips(){
     arrow:  `<b>Attack</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
     line:   `<b>Defence</b> — ${lineEinzel() ? "click the town to hold" : "drag across the towns"}. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
     para:   `<b>Plan parablock</b> — ${paraTipp()} For <b>${p}</b>.${entwurfModus ? " A town carries one block, so this one cannot be a draft — it goes out at once." : ""}`,
-    parablock: `<b>Active parablock</b> — click a town that is blocked right now; click again to clear it. For <b>${p}</b>.${entwurfModus ? " A town carries one block, so this one cannot be a draft — it goes out at once." : ""}`,
+    parablock: `<b>Active parablock</b> — click a town that is blocked right now, or drag across several; click again to clear one. For <b>${p}</b>.${entwurfModus ? " A town carries one block, so this one cannot be a draft — it goes out at once." : ""}`,
     brush:  `<b>Paint</b> — drag over the map; every town under the brush goes to <b>${FACTIONS[faction].name}</b>, right button sets it open. Up to ${PINSEL_ZUG_MAX} per stroke.${pinselRueck ? ` <button class="btn" id="tip-rueck" style="padding:1px 7px;font-size:10.5px">Undo last stroke</button>` : ""}`,
     area:   `<b>Area</b> — draw a shape, then label it. For <b>${p}</b>.${entwurfModus ? " <b>Draft mode</b> — only you see it until you publish." : ""}`,
     aufkl:  `<b>Recon</b> — ${aufklTipp()}${entwurfModus ? " A request only you can see asks nobody — it goes out at once." : ""}`,
@@ -47050,7 +47064,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f9649d651c</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 48b2927d14</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -47089,7 +47103,7 @@ function hilfeDialog(){
         <div class="note"><b>Plan parablock</b> (6) plans a drop: click the target, then one of the
           marked airfields, or the airfield first and then a town inside its ring (menu over the tool
           button; hold <kbd>Ctrl</kbd> on the target to add more). <b>Active parablock</b> marks a town
-          as blocked right now, a second click clears it. Para-blocks also sit on the town's right-click
+          as blocked right now (drag across several), a second click clears it. Para-blocks also sit on the town's right-click
           menu.</div>
         <div class="note"><b>The right button opens a menu.</b> On a town the para-block; on an
           arrow, a defence line or an area the same state buttons its window carries — and the
@@ -47278,7 +47292,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f9649d651c";
+const BAU = "48b2927d14";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
