@@ -5143,6 +5143,26 @@ const rollenListe = () => {
   return Array.isArray(e) && e.length ? e : ROLLEN_VORGABE;
 };
 const rangKarte  = () => (S.meta.rang && S.meta.rang.v) || {};
+/* THE SECOND AXIS (PKT-12). ENNO 07.09.2026: "Der Clanleader kann Spieler
+   auch horizontal Raengen zuweisen, bspw. Ein Offizier, der den Schwerpunkt
+   der Luftwaffenkoordination, Aufklaerung, Panzerwaffe, Fallschirmjaeger
+   etc." One focus per player in meta:fokus, the five branches of the wish
+   list (ZWEIGWAHL); no right hangs on it, he calls it optional. Written by
+   the leader only - the row is meta:%, and that is the leader's on the
+   server as well. FABLE 13.09.2026 */
+const fokusKarte = () => (S.meta.fokus && S.meta.fokus.v) || {};
+const fokusVon   = player => String(fokusKarte()[player] || "");
+const fokusName  = k => { const z = ZWEIGWAHL.find(q => q[0] === k); return z ? z[1] : ""; };
+function setFokus(player, k){
+  const m = Object.assign({}, fokusKarte());
+  if (k && fokusName(k)) m[player] = k; else delete m[player];
+  stamp("meta", "fokus", Object.keys(m).length ? m : null); save();
+}
+/* rank and focus in one line: "Officer · Air" */
+const rangZeile = player => {
+  const n = rangNamen(player), f = fokusName(fokusVon(player));
+  return f && n[0] !== "Leader" ? n.concat([f]) : n;
+};
 /* Wer keinen Rang zugeteilt bekommen hat, faellt auf diesen zurueck - sonst
    duerfte ein frisch Eingeladener gar nichts, nicht einmal aufs Brett. */
 const standardRang = () => {
@@ -16150,7 +16170,7 @@ function kraftLeiste(){
     /* Der eigene Rang steht ueber dem Namen. Wer nicht weiss, was er darf,
        versucht es sonst und bekommt eine Absage - das ist die schlechtere
        Reihenfolge. */
-    const rang = rangNamen(S.me);
+    const rang = rangZeile(S.me);
     mich.innerHTML = `<span class="k">${esc(rang.length ? rang.join(" · ") : "you")}</span>
       <span class="v">${esc(S.name || "unnamed")}</span>
       <span class="u">${mein.length ? `${mein.length - raus.size} free of ${mein.length}`
@@ -42138,7 +42158,7 @@ function zwInhalt(k){
     return `
       <div class="note" style="margin-top:0">Signed in as
         <b style="color:var(--text)">${esc(CFG.name || "you")}</b>${
-        rangNamen(S.me).length ? ` · ${esc(rangNamen(S.me).join(" · "))}` : ""}.</div>
+        rangZeile(S.me).length ? ` · ${esc(rangZeile(S.me).join(" · "))}` : ""}.</div>
       <!-- Der Server kann den Anmeldenamen geaendert haben: ist er schon
            vergeben, haengt er die Kennung an. Wer das nicht sieht, tippt am
            zweiten Geraet einen Namen ein, den es nicht gibt. -->
@@ -45701,8 +45721,12 @@ function leuteZeichnen(liste){
                  ? `<select data-rangfuer="${esc(m.player)}" style="font-size:11px">
                       <option value="">— ${esc(standardRang() ? rangTitel(standardRang()) : "none")} —</option>
                       ${R.map(r=>`<option value="${esc(r.id)}" ${r.id===ist?"selected":""}
-                        >${esc(rangTitel(r))}</option>`).join("")}</select>`
-                 : esc(rangNamen(m.player).join(", ") || "—"))}</td>
+                        >${esc(rangTitel(r))}</option>`).join("")}</select>${darfRollen
+                    ? ` <select data-fokusfuer="${esc(m.player)}" title="Focus" style="font-size:11px">
+                        <option value="">— focus —</option>
+                        ${ZWEIGWAHL.map(([k,n])=>`<option value="${k}" ${k===fokusVon(m.player)?"selected":""}>${esc(n)}</option>`).join("")}</select>`
+                    : (fokusName(fokusVon(m.player)) ? ` · ${esc(fokusName(fokusVon(m.player)))}` : "")}`
+                 : esc(rangZeile(m.player).join(" · ") || "—"))}</td>
             <td>${teamsVon(m.player) || "—"}</td>
             <td style="text-align:left;font-size:11.5px;color:var(--dim)">${
               w ? `${(w.zweige||[]).map(z=>`<span class="chip">${esc((ZWEIGWAHL.find(q=>q[0]===z)||[,z])[1])}</span>`).join(" ")}
@@ -45796,6 +45820,10 @@ function leuteZeichnen(liste){
   });
   feld.querySelectorAll("[data-rangfuer]").forEach(s => s.addEventListener("change", ()=>{
     setRang(s.dataset.rangfuer, s.value ? [s.value] : null);
+    leuteZeichnen(); kraftLeiste();
+  }));
+  feld.querySelectorAll("[data-fokusfuer]").forEach(s => s.addEventListener("change", ()=>{
+    setFokus(s.dataset.fokusfuer, s.value);
     leuteZeichnen(); kraftLeiste();
   }));
   document.getElementById("lp-wunsch-go")?.addEventListener("click", ()=>{
@@ -47340,7 +47368,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b9a6bd0b33</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b3e65b3d13</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -47568,7 +47596,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b9a6bd0b33";
+const BAU = "b3e65b3d13";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
