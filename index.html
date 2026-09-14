@@ -8724,6 +8724,7 @@ function rolleZeile(id){
   return {id, stadt: i, rolle: v.rolle,
           n: Math.max(1, Math.min(rolleGrenze(v.rolle), +v.n || 1)),
           text: v.text || "", veh: v.veh || "", ammo: v.ammo || "", art: v.art || "",
+          gegner: v.gegner ? rolleGegnerKurz(v.gegner) : "",   /* BAT-2 Teil E */
           by: e.by, name: e.n || e.by || "?",
           t: e.t || 0, mine: e.by === S.me, weg: darfWeg(e)};
 }
@@ -8772,13 +8773,83 @@ function rolleWunschPasst(s, w){
 }
 /* the wish in words, behind the role: "Panzerkampfwagen VI Tiger · APCR
    88mm Panzergranate 40", "HE ammo", or the old typed text */
+/* THE ENEMY'S STRENGTH IN THE ROLE'S BRANCH, from the battle window
+   (BAT-2 Teil E, 14.09.2026). ENNO 05.09.2026: "Sind bspw. In einem Kampf
+   Flugzeuge auf beiden Seiten vorhanden, aber im Gegnerteam sehr gute
+   Piloten, dann koennen Piloten zwar natuerlich angefordert werden, die
+   Details der Schlachtanalyse, die fuer den Auftrag relevant sind sollen
+   mit in die Details des Befehlsauftrages fliessen."
+   Which branch a role looks at is FABLE's reading (14.09.2026, put to
+   him): pilot and anti-air the air force, tank crew and anti-tank the
+   armour, scout the recon, infantry, medic and sniper the infantry. The
+   runner has no branch - he carries the player log beside a job the
+   battle does not depend on (RUNNER_MAX), and a branch's strength tells
+   him nothing (builder, 14.09.2026, put to him as well).
+   The sentence: the groups of the branch (GF_GRUPPEN) summed over every
+   side that is not the clan's, values above zero only, the game's own
+   column word in lower case, "~" where a side's cell was a shortened
+   thousand (ca, as the town column marks it). Two enemy sides (Triple):
+   one part per side with its tag. Nothing in the branch: "nothing read".
+   No btl row, no enemy side, no branch: "" - the caller shows nothing
+   rather than "not read" (FABLE: nothing is pre-chewed).
+   The QUALITY of the enemy's pilots - his example - is not in the table;
+   it would come from the register (SPI-2, pgEtikett) and is a question on
+   the answer sheet, not built here. Nor is any recommendation: the line
+   says what stands over there, the judgement is his. */
+const ROLLE_ZWEIG = {pilot: "airforce", flak: "airforce", tanker: "armor", at: "armor", scout: "recon",
+                     infantry: "infantry", medic: "infantry", sniper: "infantry"};
+/* the enemy line has its own lid (a triple with three groups a side runs
+   past 80); over it, the cut falls on a group or side boundary, never in a
+   word (FABLE 14.09.2026 after the skeptic) */
+const ROLLE_GEGNER_MAX = 160;
+const rolleGegnerKurz = s => {
+  s = String(s || "");
+  if (s.length <= ROLLE_GEGNER_MAX) return s;
+  const kopf = s.slice(0, ROLLE_GEGNER_MAX - 1);
+  const schnitt = Math.max(kopf.lastIndexOf(", "), kopf.lastIndexOf(" \u00b7 "));
+  return (schnitt > 20 ? kopf.slice(0, schnitt) : kopf.replace(/[\s,]+$/, "")) + "\u2026";
+};
+function rolleGegnerText(i, rolle){
+  const zweig = Object.prototype.hasOwnProperty.call(ROLLE_ZWEIG, rolle) ? ROLLE_ZWEIG[rolle] : "";
+  const e = zweig ? battleStand(i) : null;
+  const v = e && e.v;
+  const seiten = v && Array.isArray(v.seiten) ? v.seiten.filter(s => s && s.f !== clanFaktion()) : [];
+  if (!seiten.length) return "";
+  const gruppen = GF_GRUPPEN.filter(g => g.zweig === zweig);
+  const satz = liste => {
+    const teile = [];
+    for (const g of gruppen){
+      let n = 0, ca = false;
+      for (const s of liste){
+        n += Math.max(0, +((s.n || {})[g.k]) || 0);
+        if (Array.isArray(s.ca) && s.ca.includes(g.k)) ca = true;
+      }
+      /* one of a kind loses the plural s ("1 fighter plane"); a word without it stays ("1 infantry", "1 tank crew") */
+      if (n > 0){ const w = g.teil.toLowerCase(); teile.push(`${ca ? "~" : ""}${n} ${n === 1 && /s$/.test(w) ? w.slice(0, -1) : w}`); }
+    }
+    return teile.join(", ");
+  };
+  const kopf = `Their ${zweigName(zweig).toLowerCase()}: `;
+  /* a read table with nothing in the branch says "none" - the town column
+     writes the same cell as 0; "nothing read" would sound like a reader's fault (FABLE 14.09.2026) */
+  if (seiten.length === 1) return kopf + (satz(seiten) || "none");
+  const je = seiten.map(s => { const t = satz([s]); return t ? `${FACTIONS[s.f] ? FACTIONS[s.f].tag : "?"} ${t}` : ""; })
+    .filter(Boolean);
+  return kopf + (je.length ? je.join(" \u00b7 ") : "none");
+}
 function rolleWunschText(r){
   const w = rolleWunsch(r);
-  if (!w) return r && r.text ? String(r.text) : "";
   const teile = [];
-  if (w.veh) teile.push(VEH[w.veh] ? VEH[w.veh].name : w.veh);
-  if (w.ammo){ const t = munArt(w.veh, w.ammo); teile.push((t ? t + " " : "") + munKurz(w.ammo)); }
-  else if (w.art) teile.push(w.art + " ammo");
+  if (!w){ if (r && r.text) teile.push(String(r.text)); }
+  else {
+    if (w.veh) teile.push(VEH[w.veh] ? VEH[w.veh].name : w.veh);
+    if (w.ammo){ const t = munArt(w.veh, w.ammo); teile.push((t ? t + " " : "") + munKurz(w.ammo)); }
+    else if (w.art) teile.push(w.art + " ammo");
+  }
+  /* the enemy's strength the request was made against (BAT-2 Teil E) -
+     the detail of the order in the town column, the inbox and the own
+     acceptance; a snapshot, the living number stands in the battle window */
+  if (r && r.gegner) teile.push(String(r.gegner));
   return teile.join(" \u00b7 ");
 }
 /* which vehicles the role window offers for a role: tank crew the armour
@@ -8976,7 +9047,6 @@ const rolleFrisch = () => { rolleOrteStand = 0; rolleDrinStand = 0; };
    are the battle reader's (BAT-1), not this check's. */
 function panzerGemeldet(i){
   const gruppen = spotsAt(i);
-  if (!gruppen.length) return null;
   const eigene = clanFaktion();
   let n = 0, t = 0;
   for (const g of gruppen) for (const u of g.list){
@@ -8984,6 +9054,22 @@ function panzerGemeldet(i){
     n += Math.max(0, +u.n || 0);
     if (g.t > t) t = g.t;
   }
+  /* the battle window (btl, BAT-2) is the better witness when it is younger
+     than the sightings: its enemy armour columns are counted, and a town
+     nobody sighted but somebody read is not "not scouted" (BAT-2 Teil F,
+     the note at battleStand; ENNO 12.09.2026 BEF-13: "es muss halt nur
+     vorher geguckt werden, ob ueberhaupt Panzer verfuegbar sind") */
+  const b = battleStand(i);
+  if (b && b.v && Array.isArray(b.v.seiten) && (+b.t || 0) >= t){
+    let bn = 0;
+    for (const s of b.v.seiten){
+      if (!s || s.f === eigene) continue;
+      for (const k of ["light_armor", "medium_armor", "heavy_armor", "tank_destroyer", "heavy_tank_destroyer"])
+        bn += Math.max(0, +((s.n || {})[k]) || 0);
+    }
+    return {n: bn, t: +b.t || 0};
+  }
+  if (!gruppen.length) return null;
   return {n, t};
 }
 /* ask for a role at a town that is fighting. wunsch = {veh, ammo, art} from
@@ -9031,6 +9117,16 @@ function rolleAnlegen(stadt, rolle, n, wunsch){
     if (w.ammo && v.veh && munEintrag(v.veh, w.ammo)) v.ammo = w.ammo.slice(0, ROLLE_TEXT_MAX);
     else if (w.art) v.art = w.art.slice(0, 20);
   }
+  /* THE ENEMY'S STRENGTH GOES WITH THE REQUEST (BAT-2 Teil E). ENNO
+     05.09.2026: "die Details der Schlachtanalyse, die fuer den Auftrag
+     relevant sind sollen mit in die Details des Befehlsauftrages
+     fliessen." What the battle window showed in the role's branch, as it
+     stands now - a request is a snapshot and is not pulled after (FABLE
+     14.09.2026, put to him); the living number stays in the battle window
+     and the town column. Only with a branch and a btl row; a text field
+     on the same row, under ROLLE_TEXT_MAX like the wish. */
+  const gegner = rolleGegnerText(+stadt, rolle);
+  if (gegner) v.gegner = rolleGegnerKurz(gegner);
   if (!stamp("rolle", Math.random().toString(36).slice(2, 10), v, {n: S.name || ""})) return false;
   save(); rolleFrisch();
   return true;
@@ -9258,6 +9354,7 @@ function rolleDialog(i){
         <button class="btn primary" id="rr-ok">Ask</button>
       </div>
       <div class="note" id="rr-kann">${paraTextSicher(() => rolleErfuellbarText(KAMPFROLLEN[0].k))}</div>
+      ${battleStand(i) ? `<div class="note" id="rr-gegner" hidden></div>` : ""}
       <div class="note">Everyone on our side sees it in the orders inbox and on the town.
         A cross marks a role your own soldiers cannot fill.</div>
     </div>
@@ -9274,6 +9371,18 @@ function rolleDialog(i){
   };
   nFuellen();
   rSel.addEventListener("change", nFuellen);
+  /* the enemy's strength in the role's branch, from the battle window
+     (BAT-2 Teil E, rolleGegnerText): the line stands only where a btl row
+     stands, follows the role, and hides for a role without a branch */
+  const gegnerZeile = () => {
+    const z = document.getElementById("rr-gegner");
+    if (!z) return;
+    const e = battleStand(i), satz = e ? rolleGegnerText(i, rSel.value) : "";
+    z.textContent = satz ? `${satz} \u00b7 read ${alterText(e.t)} by ${werWar(e)}` : "";
+    z.hidden = !satz;
+  };
+  gegnerZeile();
+  rSel.addEventListener("change", gegnerZeile);
   /* VEHICLE AND AMMUNITION, PICKED (BEF-8). ENNO 12.09.2026: "Der Granatentyp
      soll fest waehlbar sein, keine Freitexte." The vehicles are the clan
      side's - the rule kitWahl uses (verfuegbar), without a class - narrowed
@@ -50132,7 +50241,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d22e9a98d6</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b77599fff5</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -50360,7 +50469,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d22e9a98d6";
+const BAU = "b77599fff5";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
