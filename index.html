@@ -1061,6 +1061,19 @@ body.meld-modus{cursor:help}
 .gf-ton{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid #6a5f43;
   vertical-align:-1px;margin-right:5px}
 .gf-nichts{color:#6b6250;font-style:italic}
+/* the scoreboard block on the battle desk (BAT-1): strip, name field, role, mark.
+   Two lists to a line, not three: with three the name field was 83 points wide at
+   1920 and showed a third of "AldebaranMcArthur" (round 4, Skeptiker H3; measured
+   two to a line 232, stacked 758 at twice the height, strip over field 293 at
+   half again the height); the mark column takes "us · on record" whole (70) */
+.gf-tf .sp-liste{flex:1 1 400px;min-width:min(400px,100%)}
+.gf-tf .sp-z{grid-template-columns:22px 96px minmax(0,280px) 44px 72px}
+.gf-tf .sp-z img{height:16px;max-width:96px;image-rendering:pixelated;background:#2b2e33;border-radius:2px;display:block}
+.gf-tf .sp-z input{width:100%;font:inherit;font-size:12px;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 4px;min-width:0}
+.gf-tf .sp-z input.unsicher{color:#6d5410;border-color:#d1b45a;background:#fff3c4}
+.gf-tf .sp-z input.leer{border-style:dashed}
+.gf-tf .rl{font-size:10px;color:#7a6a48;letter-spacing:.08em;text-transform:uppercase}
+.gf-tf .mk{font-size:10px;color:#4f7a3a;font-weight:700;white-space:nowrap}
 .kb-links{grid-area:links;width:260px;background:#0e1013;border-right:1px solid #22252c;
   padding:14px;color:#a9b0b8;font-size:13px;line-height:1.5;overflow:auto}
 .kb-links h3{margin:0 0 6px;font-size:10px;letter-spacing:.14em;color:#6d7680;text-transform:uppercase}
@@ -15403,7 +15416,7 @@ function hoverZeigen(i, mx, my){
       ${(g => { if (!g) return ""; const sc = gefKurz(g), rt = gefRestZeigen(g, i);
         return (sc ? `<span class="chip" style="border-color:${GEF_FARBE};color:${GEF_FARBE}">${esc(sc)}</span>` : "")
              + (rt ? `<span class="chip" id="h-rest" style="border-color:${GEF_FARBE};color:${GEF_FARBE}">${esc(rt)}</span>` : "")
-             + gefKpChip(g); })(gefAn(i))}
+             + gefKpChip(g) + gefTafelChip(g); })(gefAn(i))}
       ${pb?`<span class="chip" style="border-color:var(--accent);color:var(--accent)">para ${
         pb.plan?"planned":"blocked"}${fremdeSeite(pb) ? "" : " · " + ZUSTAND_NAME[befehlZustand(`para:${i}`, pb)]}</span>`:""}
     </div>`:""}
@@ -29991,6 +30004,1087 @@ function gefKpStand(z, erg, nun){
 const gefKpName = k => "Box " + (k === 0 ? "M" : (k < 0 ? "L" : "R") + Math.abs(k));
 /* the local time of an event line */
 const gefUhrzeit = t => new Date(t).toTimeString().slice(0, 8);
+
+/* ==== THE SCOREBOARD IN THE BATTLE  (BAT-1) ==================================
+   ENNO 31.08.2026: "Wenn die Abfrage aus dem Live-Gefecht funktioniert, ist
+   das die wichtigste Funktion." ENNO 30.08.2026: "Es geht um das Schreiben in
+   die Clan-Datenbank, dass es diesen Spieler ueberhaupt gibt." And: "Hier
+   muss aber noch beachtet werden, dass Spieler zum Kampf auch neu
+   dazukommen oder diesen verlassen."
+   The board stands over the game world while Tab is held, one to three
+   seconds at a time (measured: 108 s in 53 runs over a 45-minute assault).
+   So the look CUTS the strips while the board stands and the names are read
+   afterwards, one strip a turn in the worker.
+   MEASURED FIRST (Listen/MESSUNG-BAT-1.md, MESSER 13.09.2026; the numbers
+   of this build stand in Flicks/flick_bat_1.py): the head bars found on 43 of
+   43 boards with the RELATIVE colour rule below and none on 167 pictures
+   without a board nor in 3541 seconds of head strips; the rows counted on
+   683 of 683 with the raster and the ink gate - only with the head count as
+   the cap; names read exactly in 71-75 % of the rows, two looks agreeing
+   right in 87 %; town 19 of 19, battle type 21 of 21, head count 43 of 43,
+   faction by the head sign 40 of 40.
+   WHAT THIS DOES NOT DO: set the town (5.17), count as HUD sighting for the
+   objective reader (5.93), tell a staged battle from a war battle by its
+   words (5.16, no material) - the town picked on the left is the gate, as it
+   is for everything this desk writes. The board's own town line is a
+   WITNESS only: names another town, nothing goes. */
+const GEF_TAFEL = {
+  BAND_Y0: 150, BAND_Y1: 600, BAND_HALB: 660,     // the band the head bars are looked for in, HUD points
+  BAND_MIN: 6, BAND_MAX: 108,                       // a head bar is this many band rows tall
+  PAAR_DY: 4, PAAR_DH: 6,                           // the pair: same height, same size
+  BREIT_MIN: 0.08, BREIT_MAX: 0.45, MIND: 0.10,     // width against the picture width; points a row needs to count
+  ZWEITE_DY: 8, ZWEITE_DX: 12,                      // the second red board under the right one
+  DUNKEL: 80,                                       // head bar this dark: the player card is open, the board is dimmed
+  ZEILEN_MAX: 40, DECKEL: 12,                       // rows cut at most; the game's own cap without a head count
+  TINTE_MIN: 20, SPANNE_MIN: 18, GRUND_ANTEIL: 0.43, LUECKEN: 3,   // the row gate (count C of the measurement)
+  TINTE_SCHWELLE: 58,                               // ink over the row's ground, for the end of the name
+  KOPF_X0: 40, KOPF_X1: 330,                        // "PLAYERS: N  BOTS: M" right of the faction sign, points of 600
+  ZEICHEN_X: 3, ZEICHEN_Y: 3, ZEICHEN_MIN: 0.5, ZEICHEN_VORSPRUNG: 0.06,   // the head sign, the sheet's rule: smallest hit 0,626, lead over the second on one board at least 0,298 (27 boards of the build's run), noise under 0,41
+  ABDRUCK_GLEICH: 0.9,                              // the same strip again: dot product of the 48x12 prints
+  ORT_HALB: 350, ORT_Y0: 120, ORT_Y1: 215, WEISS_MIN: 185, WEISS_BUNT: 30, ZEILE_MIN: 7, ZEILE_MAX: 40,   // the head block over the boards
+  SCHLANGE_MAX: 160, EINTRAEGE_MAX: 240, FRUEHER_MAX: 60,   // jobs and entries held; rows seen earlier shown at most
+  HALTEN: 10000            // ASSUMPTION (builder): a side that stood in the stand and is missing from a look is carried this long - the third board of a triple battle; never met on the material
+};
+/* the head bars, relative: the dimmed board (card open) reads blue (32,42,53)
+   and red (58,36,36), the bright one (55,98,132) and (141,51,49); the
+   absolute window of the old reader lost the dimmed ones. The measurement's
+   draft said r > 2 g for red - that meets the dark red bar 0 times. */
+const gefTafelBlau = (r, g, b) => b >= 40 && b > 1.5*r && b > 1.15*g;
+const gefTafelRot  = (r, g, b) => r >= 45 && r > 1.4*g && r > 1.4*b;
+/* THE THREE HEAD SIGNS - hammer and sickle, star, bar cross - 42 by 29
+   points, grey (mean of RGB), 8-bit base64. Cut out of Battlereader/Triple
+   Kampf Scoreboard.png at head bar x0+3..x0+45, y0+3..y1-2
+   (Messungen/bat1_fraktionszeichen.json, MESSER 13.09.2026). Held
+   mean-free and at length one against the same box of every board, one
+   point of play each way, at the board's scale. */
+const GEF_TAFEL_ZEICHEN = {b: 42, h: 29,
+  USSR: "WVlaWlpaWlpaWlpaWlpaWlpZWFdXV1dXV1dXV1ZWVlZWV1dXWFlZWlpaWVpaWlpaWlpaWlpaWlpaWlpZV1dXV1dXV1dWV1ZWVlZWV1dXV1laWlpaWlpaWlpaWlpaWlllcHRvY1pZWFpZWVdXV1ZVVlZWVlZWV1dWVlhZWlpaWlpaWlpaWlpZbKm1uMDGw7CIWVhYWVlXV1dXVlZWVlZWV1ZXVlhZWlpaWllZWlpaWlpaWlZWVmKIt8bFuHRXWFlZV1dXVlZWVlZWVlZXVldYWVpaWVlaWlpaWlpaWlpZWlpaW3O5x8RxWVlYWFhXVlZWVlZWVlZWV1dYWVpZWVlZWVlZW1taWoShcHOodlpjtsbDc1hXV1hXVlZWVlZWVlZWVldWWFlZWVhYWFdYWVlZecTGxsbGvm9aZr/Fu1hXWFhYVlZWVlZWVlZWVlZWVlhZV1dXWFdXV1eExMbGxsbGuGBaW4zFxYtYWFhXVlZWVlZWVlZWVlZWVldXV1dXV1dXV3fDxcXGxsawXVpaWlm9xbBYWFdXV1VWVldWVlZWVlZWVVqEWFdXV1dWgsTFxcXGxsNtWlpaWlmtxcJjWFlZWFdWVlZWVlZWVlZWVYrFWFdXV1dZwcXFxcXFxsa1aVpaWlmqxcVzWVlYVlZWVlZWVlZWVlZWXcLFV1dXWFhYbb3FxcWzssXGwW5ZWlqxxcV6WVhYVlZWVlZWVlZWVlZVdMXCV1dXV1dYV2XDxbReWq/GxsB6W2DAxcV1WFhYVlZWVlZWVlZWVlZWecW+V1dXV1dXV1drql5ZWl2wxcbGlpvGxsRmWllYVlZWVlZWVlZWVlZWc8XEV1dXWFhXV1dXVllaWlpassbGxMTGxrVXWVlYWlZWVlZWVlZWVlZWW7vFV1dXV1dXV1aIgVhaWlpaXa/GxsbHxpJYWllaWlZWVlVWVlZWVlZWVnG+WFdXV1dXV4bEw7B5X1pdcarGxsbGxW5YWFlZWVlWVlVWVlZWVlZWVlZfWFdXV1dWh8HGxsbGwLu+xcbGxsbGxrp3V1hYWFhWVlZWVlZWVlZWVVZWV1dYWFmIxcbGxsbGxsbGxsbGxsbGxsXChldYWFZWVlZWVlZVVVZWVVZWWFlZWIfBxsbGxsbGxsbGxsbGvYqsxsXFw4tWV1ZWVlZWVlZWVlZWeZ6PWlpaicTGxsbEs8PFxsbGxcKjXlpbuMXFxZdXV1ZWVlZXVlZWVVZWh8WzWlpZssbGxrtyWlpuiY2HYFpZWlpZWavFtldXV1dXVlZWVlZWVVVWbcXFWlpadsHGwnRbWlpaWlpaWlpaWlpZWVu0d1hXV1dWVlZWVlZWVlVWVqDFWllZWIa6dF1dWlpaWlpaWlpaWlpaWVpXV1hXV1dWVlZWVlZWVVVWVlmPWllaWlphWltZWVpaWlpaWlpaWlpaWVlXV1dXWFVWVlZWVlZWVlVWVlZWWVlaWlZWVlpZWllbW1paWllaWlpaWllYWFdXVlZWVlZWVlZWVlZVVlZWWlpaWVdXWFdVWllZWlpaWlpaWllaWllZWVlYVlZWVlZWVlZWVlZVVVZXWlpaWldXWVlWWllZWlpZWlpZWVlZWVlaWVlaVlZWVlZWVlZWVlZWVlZW",
+  US: "RkdHR0hIR0dHR0dGRkZHRUZFRkZGR0dISUdHSEhISEdHRkZGR0ZGRERERUZHR0dHR0dHR0dFSWVjSENDRkZGR0dISkhISEdHR0hHR0ZGRkRGREZGRkZHR0dHSEdOfK64vb+/vbiufUxGRUdISElISEhHR0hIR0dGRkRERkZHRkVGR0dHSHu4wrysnZmZnqy8wrd7R0ZIR0dHSEhIR0hIR0dHRkZEQ0ZHRURGRkdJqcDCklZFRmJlRkVWksLAqUlHR0dGR0hISEhISEdIR0dGREZHRUZGRkimwqVTRkRGR4WFSEdHQ1KkwqdHRkZHSEdISEhISEhISEdHREZHRURGRqjCpkpHRkRFRLCwRUdDRkZHpMKoR0ZHR0hISEhISEhIR0dHRkZERURFeMCkSkdGREdHUL29UkdHRkZESaTAeUZHR0lJSUdISEhHR0ZGRkZGRURMuMJTR0dFREdGisLCikdGRkZER1LCt01GR0lHSUpISEdHR0ZGRERGRUZ8wpFGR0ZGRERFtMLCtEZGRkZFRkaRwnxGR0hISktISEdGRkZISEh4RkWtvGVUVFRXVVRswsLCwmxUVFRTVFRmvK1GR0lJSklLR0dGRkZHR4HCRUS4q0qavL28vLy/wsLCwr68vLy8vJtKq7hFRkRDSEdHR0dGRkZIT7/CRUi9nUZGhrvCwsLCwsLCwsLCwsK7gkZGnb1JRERHR0hHR0ZGR0dHacK+RmTAkUZGR1eywsPCw8LCwsLCwrJWRUZGkb9iRERHREdHRkZHR0dHbsK5RmW/kkZGR0dMi8HCwsLCwsLAi0xFRUZFkb9iREREQ0dHRkZHR0dHZ8LBR0m9nUZGR0dHSLjCwsLCwsK2SEdHR0ZFnL1HRENER0dHR0ZGREZHS7bCR0W4q0RGR0ZGUsLCwsLCwsLCUERIR0ZDq7hEQ0RHR0dHR0ZGRERERmK5R0euvFdGR0ZGf8LCwsLCwsLCf0RHR0ZVvK1GRkdHR0dHR0hGRERDRERQR0h9wpJGRkZGpMLCsWFescLBpUNHR0eSwnxGRkZGRkdHSEhISERERERGR0dOucJTR0ZQu8KkT0dEUKTBvFFHR1LCuExGRkZIRkZHR0hIRURERERFR0dIesGlSUeAuX5ERkdHR0Z9uYFISqXAekZFRkhHR0dGRkdEREhHa5aFR0dHSKnCpVCrYEZGRkZGR0dDYqtSpsKpSEZGRkdHR0hIRkZHSENGe8KuR0dHSEimwqlyRkZGRkZHR0dDR3KqwqZJR0dGR0dHR0lIREZHSEZGXcLCR0dHR0dHqMDBkldGRkVGR0VTksLAqUhHR0dFRUdER0dEREdHR0dHQ5nCR0dGRkZGR3u4wrysnZKRnqy7wrl7SUhISEdEREZFSEZEREZGR0dHQ0qHR0ZGRkZGSEdNfK64vcC/vbetfE5HR0dJSUZERUZFRUZEREZFRUZHQ0dHRkdGRkZHR0dGRkVESGVlSURDR0ZIR0hISEdGRUZFRkRGRkZFRkZHQ0dHRkdGRkZHR0dGRkZGRERFRURER0lJSUlISEhIRUVERkREREZERkZGQ0dHRklJRkZGR0ZGRkZGRkRERURER0lJSUlJS0pKRkZGRkZGREZFRkZGREdH",
+  GE: "R0dGRkdHR0dHR0RFREdHR0dFR0NHR0VERkZGRkZGRkZGRkZERUVFRERER0dHRkZHR0dIREREREdHR0dHR0dDREVGRkZGRkZGRkZGRkZGRkVFRURER0dHR0ZESptIRER3oKCfoXZGR0yaS0NHR0dGR0ZGRkZGRkZGRkZHRERERERER0ZETbhLRESRwsLCwo9GRky4TkNHR0dGRkZGRkZGRkZHRkRFRURERERHR0dETbhLRESRwsLCwo5GRky4TURHR0dGRkdHR0dGRkZHR0dEREVERERERERETbhMRUSQwsLCwo5HRky4TERHR0dHR0dHR0ZGRkZGRkZHREVFRERJS0tKWLdMRUSQwsLCwo5GRky3V0pOTkpGR0dHR0dGRkZGRkdHR0ZERUSauLi4t7dMRUSQwsLCwo5GREy5uLe3uZlGR0dHR0dGRkZGR0dHRkZGRURMT01NTE5FRUSQwsLCwo5GRENPT01PT0xGRkZHR0dGRkZHR0dHRkZGREhIRkZERERFRUWRwsLCwo1GRENERkVHR0dGRkZGRkZGRkZHR0dHR0d4RERER0ZGRERERUSQwsLCwoxEQ0NERkVGRkZGRkZGRkdHR0dHR0dHR4HCSER3jo2NjY2Ojo2vwsLCwq6Njo2Njo6OkHdGRkZGRkdGRkdHR0dHT7/CSESiwsLCwsLCwsLCwsLCwsLCwsHCwsLCwqFGRkdEREdHRkZGRkZHacK/SESiwsLCwsLCwsLCwsLCwsLCwsLCwsLCwqBEREREREdERkZGRkZHbsK6RkSiwsLCwsLCwsLCwsLCwsLCwsLCwsLCwp9ERERERERERkZGR0ZHZcLBR0ShwsLCwsLCwsLCwsLCwsLCwsHCwcLCwqBGRERERERGRkZGRkdESbbCR0d3j5CQkJCQkY+vwsLCwq6QkJCSkpKSkXhGRkZGREZGRkdGR0dERGK5R0dHRERERERFRUSQwsLCwoxFR0NHR0dHR0ZGRkZGR0ZGR0dEREVFR0ZPR0dHRERERUVFRUSQwsLCwo1ESENISEdHR0ZGRkZGRkZGRkZFREdER0ZGR0RJS0tMTExFRESQwsLCwo1HSEROUU9OTUtHR0dGRkZGREZERkdHR0ZGR0aauLi4t7ZMRUSQwsLCwo1HR025uLm5uppHR0dHR0ZGRkRGRkdFbZaFR0dKTU5MWLdMRUSQwsLCwo1HRE24WlFSUk1HR0dHR0ZGRkZERkZEfcKuR0dERUVFTbhMRUWQwsLCwo1FRU24TklHR0lJR0dHR0ZGRkZGREZGX8LCR0dERUVFTrhMRUWRwsLCwo1ERU24T0hJSUlISkZGSUZGRkVFRUVFRpnCRkRFRURFTblMRUWQwsLCwo1FRE65TEhJSUlLS0ZGSUhHR0ZFRkZGRkiHREVFRUVES5pKRUR3oaKioXdFRUuaSkhJSklNS0VHRUhIR0ZGRkZGRkVGREVFRURFRUVFRERFREVFRURFRUVEREhLSkpNTEVISEdHR0ZGREZGRkZER0VFRUVFREVFRERERERFRURERERESUlKSktNS0VJSEhHR0dHR0RHRkZERERFRERFRUVERERERkRFRUVERURHSEpMSUlLR0hJSkdHR0dHR0dER0ZE"};
+/* the game's five default squad names in its twelve languages
+   (D:/Programme/HnG/AnimationBin/localiser/HnG_Ingame_*.xml,
+   squadtemplate/1..5Title; Messungen/bat1_spieltexte.json). Only these give
+   a role; a squad named by hand gives none - ENNO 06.09.2026: the squad name
+   is no pointer to a clan, and it is not read as one. */
+const GEF_TAFEL_TRUPPS = [["Pěchotní četa", "inf"], ["Četa stíhaček", "fighter"], ["Četa výsadkářů", "para"], ["Obrněná četa", "armor"], ["Průzkumná četa", "recon"], ["Infanterietrupp", "inf"], ["Jagdflieger", "fighter"], ["Fallschirmjägertrupp", "para"], ["Panzertrupp", "armor"], ["Aufklärungstrupp", "recon"], ["Infantry Squad", "inf"], ["Fighter Squad", "fighter"], ["Paratrooper Squad", "para"], ["Armor Squad", "armor"], ["Recon Squad", "recon"], ["Escuadrón de infantería", "inf"], ["Escuadrón de cazas", "fighter"], ["Escuadrón de paracaidistas", "para"], ["Escuadrón de blindados", "armor"], ["Escuadrón de reconocimiento", "recon"], ["Troupe d'infanterie", "inf"], ["Pilotes de chasse", "fighter"], ["Troupe de parachutistes", "para"], ["Troupe de blindés", "armor"], ["Troupe de reconnaissance", "recon"], ["歩兵部隊", "inf"], ["戦闘機部隊", "fighter"], ["パラシュート部隊", "para"], ["装甲車部隊", "armor"], ["偵察部隊", "recon"], ["보병 분대", "inf"], ["전투비행대", "fighter"], ["강습분대", "para"], ["기갑부대", "armor"], ["정찰분대", "recon"], ["Drużyna piechoty", "inf"], ["Drużyna pilotów myśliwców", "fighter"], ["Drużyna spadochroniarzy", "para"], ["Drużyna pancerna", "armor"], ["Drużyna zwiadowców", "recon"], ["Esquadrão de infantaria", "inf"], ["Esquadrão de combate", "fighter"], ["Esquadrão paraquedista", "para"], ["Esquadrão de blindados", "armor"], ["Esquadrão de reconhecimento", "recon"], ["Пехотный отряд", "inf"], ["Эскадрилья истребителей", "fighter"], ["Десантный отряд", "para"], ["Отряд бронетехники", "armor"], ["Отряд разведчиков", "recon"], ["Piyade Mangası", "inf"], ["Avcı Mangası", "fighter"], ["Paraşütçü Mangası", "para"], ["Zırhlı Araç Mangası", "armor"], ["Keşif Mangası", "recon"], ["步兵小队", "inf"], ["战斗机小队", "fighter"], ["伞兵小队", "para"], ["装甲小队", "armor"], ["侦查小队", "recon"]];
+/* the battle type words of the head block, same files, Gamemodes/Assault,
+   Skirmish, Encounter, Supply */
+const GEF_TAFEL_ARTEN = {"assault": ["Útok", "Sturm", "Assault", "Asalto", "Assaut", "突撃", "습격전", "Szturm", "Ataque", "Штурм", "Taarruz", "突击"], "skirmish": ["Obsadit a udržet", "Einnehmen & halten", "Capture & Hold", "Captura y conquista", "Capturer et tenir", "キャプチャ&ホールド", "점령 및 수비", "Przejęcie i utrzymanie", "Capturar e Manter", "Захват и удержание", "Ele Geçirme ve Savunma", "攻占&掌控"], "encounter": ["Střetnutí", "Begegnung", "Encounter", "Encuentro", "Confrontation", "交戦する", "교전", "Pojedynek", "Encontro", "Столкновение", "Karşılaşma", "遭遇战"], "supply": ["Odříznutí", "Abriegelung", "Interdiction", "Interdicción", "Interdiction", "阻止攻撃", "금지", "Izolacja", "Interdição", "Противодействие", "Tecrit", "封锁"]};
+function gefTafelNeu(){
+  return {eintraege: [], schlange: [], liest: false, stand: null, offen: null, zuletzt: 0, dunkelZuletzt: 0, kopfZeit: 0,
+          kopf: null, ortGewaehlt: null,           // the head block's last reading (type, town) - the stand takes it from here (round 3, H2)
+          blickNr: 0, zaehler: 0, kopfOffen: false, tippt: false, wb: null, wbZeit: 0, zeiten: [],
+          version: 0, blatt: null};                // change counter and the desk block built for it (round 3, H7)
+}
+let gefTafelZeichenV = null;
+function gefTafelZeichenVorlagen(){
+  if (gefTafelZeichenV) return gefTafelZeichenV;
+  const Z = GEF_TAFEL_ZEICHEN, n = Z.b*Z.h;
+  gefTafelZeichenV = [];
+  for (const [name, f] of [["USSR", 2], ["US", 0], ["GE", 1]]){
+    const bin = atob(Z[name] || ""), v = new Uint8Array(n);
+    for (let i = 0; i < n && i < bin.length; i++) v[i] = bin.charCodeAt(i);
+    gefTafelZeichenV.push({name, f, v: abdruckNorm(v)});
+  }
+  return gefTafelZeichenV;
+}
+/* THE BAND SEARCH. One window, drawn once: x = middle +-660 HUD points,
+   y 150..600 - at factor 2 drawn at half size, so the search runs over the
+   same 1320 by 450 points either way (measured unsampled: 7,4 ms at factor 2
+   against 1,5 at factor 1). The pair of head bars at the same height, each
+   8 to 45 percent of the picture wide as the longest run with bridged gaps
+   (the white "PLAYERS: 20" cuts the run), then the second red bar under the
+   right one for a triple battle. Returns the boards in picture points. */
+function gefTafelSuchen(bild, W, H, fk){
+  fk = fk || 1;
+  const K = GEF_TAFEL;
+  const bx0 = Math.max(0, (W >> 1) - K.BAND_HALB*fk), bx1 = Math.min(W, (W >> 1) + K.BAND_HALB*fk);
+  const by0 = K.BAND_Y0*fk, by1 = Math.min(H, K.BAND_Y1*fk);
+  if (bx1 - bx0 < 200*fk || by1 - by0 < 60) return null;
+  const bw = Math.round((bx1 - bx0)/fk), bh = Math.round((by1 - by0)/fk);
+  const f = gefFlaeche("tafel", bw, bh);
+  f.g.imageSmoothingEnabled = false;     // the half-size draw at factor 2: 1,4 ms against 3,3 with smoothing, the bars are flat colour
+  f.g.drawImage(bild, bx0, by0, bx1 - bx0, by1 - by0, 0, 0, bw, bh);
+  let d = null;
+  try { d = f.g.getImageData(0, 0, bw, bh).data; } catch(e){ return null; }
+  const Ws = W/fk, mind = Math.round(Ws*K.MIND);
+  const zb = new Int32Array(bh), zr = new Int32Array(bh);
+  for (let y = 0; y < bh; y++){
+    let nb = 0, nr = 0;
+    for (let x = 0, i = y*bw*4; x < bw; x += 2, i += 8){
+      const r = d[i], g = d[i+1], b = d[i+2];
+      if (gefTafelBlau(r, g, b)) nb += 2; else if (gefTafelRot(r, g, b)) nr += 2;
+    }
+    zb[y] = nb; zr[y] = nr;
+  }
+  const baender = z => { const out = []; let s = -1;
+    for (let y = 0; y <= bh; y++){ const an = y < bh && z[y] > mind;
+      if (an && s < 0) s = y;
+      if (!an && s >= 0){ const h = y - s; if (h >= K.BAND_MIN && h <= K.BAND_MAX) out.push([s, y - 1]); s = -1; } }
+    return out; };
+  const blau = baender(zb), rot = baender(zr);
+  let paar = null;
+  for (const a of blau) for (const c of rot){
+    if (Math.abs(a[0] - c[0]) > K.PAAR_DY || Math.abs((a[1] - a[0]) - (c[1] - c[0])) > K.PAAR_DH) continue;
+    if (paar && (a[1] - a[0]) <= (paar[0][1] - paar[0][0])) continue;
+    paar = [a, c];
+  }
+  const aus = {tafeln: [], blau: blau.length, rot: rot.length, paar: !!paar, band: [bw, bh]};
+  if (!paar) return aus;
+  const spanne = (bd, pruef) => {
+    const hoehe = bd[1] - bd[0] + 1, je = new Int32Array(bw);
+    for (let y = bd[0]; y <= bd[1]; y++) for (let x = 0, i = y*bw*4; x < bw; x++, i += 4) if (pruef(d[i], d[i+1], d[i+2])) je[x]++;
+    const noetig = Math.max(2, hoehe*0.22), brueck = Math.max(8, Math.round(Ws*0.012));
+    let x0 = 0, x1 = -1, s = -1, letzt = -1;
+    for (let x = 0; x <= bw; x++){ const an = x < bw && je[x] >= noetig;
+      if (an){ if (s < 0 || x - letzt > brueck){ if (letzt - s > x1 - x0){ x0 = s; x1 = letzt; } s = x; } letzt = x; } }
+    if (s >= 0 && letzt - s > x1 - x0){ x0 = s; x1 = letzt; }
+    return x1 < 0 ? [0, -1] : [x0, x1];
+  };
+  const roh = [];
+  /* a run that touches the band's edge is a bar wider than the band: the
+     doubled display looked at with factor 1 (measured: the fullhd board read
+     as two one-row boards, "1 v 9") - thrown away, as the box reader throws
+     its own away (round 3, Skeptiker H1) */
+  const amRand = (sx0, sx1) => sx0 <= 0 || sx1 >= bw - 1;
+  for (const [bd, pruef, farbe] of [[paar[0], gefTafelBlau, "b"], [paar[1], gefTafelRot, "r"]]){
+    const [sx0, sx1] = spanne(bd, pruef);
+    if (amRand(sx0, sx1) || sx1 - sx0 < Ws*K.BREIT_MIN || sx1 - sx0 > Ws*K.BREIT_MAX) continue;
+    roh.push({sx0, sx1, sy0: bd[0], sy1: bd[1], farbe});
+  }
+  roh.sort((a, b) => a.sx0 - b.sx0);
+  if (roh.length === 2){ roh[0].lage = "l"; roh[1].lage = "r"; }
+  else if (roh.length === 1) roh[0].lage = roh[0].sx0 + (roh[0].sx1 - roh[0].sx0)/2 < bw/2 ? "l" : "r";
+  if (roh.length === 2){
+    const re = roh[1], hoch = re.sy1 - re.sy0;
+    for (const c of rot){
+      if (c[0] <= re.sy1 + K.ZWEITE_DY || Math.abs((c[1] - c[0]) - hoch) > K.PAAR_DH) continue;
+      const [sx0, sx1] = spanne(c, gefTafelRot);
+      if (amRand(sx0, sx1) || Math.abs(sx0 - re.sx0) > K.ZWEITE_DX || Math.abs(sx1 - re.sx1) > K.ZWEITE_DX) continue;
+      roh.push({sx0, sx1, sy0: c[0], sy1: c[1], farbe: "r", lage: "r2"}); break;
+    }
+  }
+  for (const t of roh){
+    /* the bar's own brightness: the dimmed board (card open) sits at 53 and
+       58 in the brightest channel, the bright one at 132 and 141 */
+    let hell = 0, n = 0;
+    for (let y = t.sy0; y <= t.sy1; y++) for (let x = t.sx0, i = (y*bw + t.sx0)*4; x <= t.sx1; x += 4, i += 16){ hell += Math.max(d[i], d[i+1], d[i+2]); n++; }
+    const x0 = bx0 + t.sx0*fk, x1 = bx0 + t.sx1*fk, y0 = by0 + t.sy0*fk, y1 = by0 + (t.sy1 + 1)*fk - 1;
+    aus.tafeln.push({lage: t.lage, farbe: t.farbe, x0, x1, y0, y1, breite: x1 - x0, kopfU: y1, E: (x1 - x0)/SB_BREITE,
+                     hell: n ? Math.round(hell/n) : 0, dunkel: n ? hell/n < K.DUNKEL : true});
+  }
+  return aus;
+}
+/* the faction from the head sign: the three signs held against the box
+   next to the bar's left edge, one point of play each way, at the board's
+   scale. The best must clear ZEICHEN_MIN and lead the second by
+   ZEICHEN_VORSPRUNG - measured on 40 boards: smallest hit 0,626, largest
+   second 0,566, the noise of the same correlation on 400 random patches
+   at most 0,405. */
+function gefTafelZeichenLesen(bild, tab){
+  const V = gefTafelZeichenVorlagen(), Z = GEF_TAFEL_ZEICHEN, K = GEF_TAFEL, E = tab.E, n = Z.b*Z.h;
+  /* ONE draw: the box with one point of margin each way, brought to
+     44 by 31, and the nine placements are windows in that buffer (at the
+     double scale a window step is one picture point, as before) */
+  const bw = Z.b + 2, bh = Z.h + 2;
+  const c = gefFlaeche("tafelzeichen", bw, bh);
+  c.g.imageSmoothingEnabled = true; try { c.g.imageSmoothingQuality = "high"; } catch(e){}
+  const x0 = tab.x0 + Math.round(K.ZEICHEN_X*E) - 1, y0 = tab.y0 + Math.round(K.ZEICHEN_Y*E) - 1;
+  c.g.drawImage(bild, x0, y0, Math.round(bw*E), Math.round(bh*E), 0, 0, bw, bh);
+  let px = null;
+  try { px = c.g.getImageData(0, 0, bw, bh).data; } catch(e){ return {f: null, wert: 0, zweit: 0}; }
+  const alle = new Map(), g = new Uint8Array(n);
+  for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 3; dx++){
+    for (let yy = 0, j = 0; yy < Z.h; yy++){
+      let i = ((yy + dy)*bw + dx)*4;
+      for (let xx = 0; xx < Z.b; xx++, i += 4, j++) g[j] = (px[i] + px[i+1] + px[i+2])/3;
+    }
+    const v = abdruckNorm(g);
+    for (const T of V){
+      let s = 0; for (let j = 0; j < n; j++) s += v[j]*T.v[j];
+      if (!alle.has(T.f) || s > alle.get(T.f)) alle.set(T.f, s);
+    }
+  }
+  const sortiert = [...alle.entries()].sort((a, b) => b[1] - a[1]);
+  if (!sortiert.length) return {f: null, wert: 0, zweit: 0};
+  const wert = sortiert[0][1], zweit = sortiert.length > 1 ? sortiert[1][1] : 0;
+  return {f: wert >= K.ZEICHEN_MIN && wert - zweit >= K.ZEICHEN_VORSPRUNG ? sortiert[0][0] : null, wert, zweit};
+}
+/* the faction from the rank badge of one row, held against the game's own
+   211 badge files over the row's ground (sbRangLesen's rule, on the row's
+   strip: origin x0+16 E at the row's top, the badge at 17..32 by 7..13 of
+   600). The second witness next to the head sign; per board the majority
+   of the rows counts. Files 1 = US, 2 = GE, 3 = USSR; FACTIONS start at 0. */
+function gefTafelAbzeichen(c, E, ton){
+  const V = sbRangVorlagen();
+  if (!V.length) return null;
+  const RB = V[0].RB, RH = V[0].RH;
+  const k = gefFlaeche("tafelabz", RB, RH);
+  k.g.imageSmoothingEnabled = true; try { k.g.imageSmoothingQuality = "high"; } catch(e){}
+  const bwid = (SB.abzX1 - SB.abzX0)*SB_BREITE*E, bhei = SB.abzH*SB_BREITE*E, grund = (ton[0] + ton[1] + ton[2])/3;
+  const best = new Map(), xv = new Float32Array(RB*RH*3), tv = new Float32Array(RB*RH*3);
+  for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]){
+    k.g.clearRect(0, 0, RB, RH);
+    k.g.drawImage(c, E + dx, SB.abzY*SB_BREITE*E + dy, bwid, bhei, 0, 0, RB, RH);
+    let x = null;
+    try { x = k.g.getImageData(0, 0, RB, RH).data; } catch(e){ return null; }
+    let xs = 0;
+    for (let p = 0, q = 0; p < RB*RH; p++) for (let j = 0; j < 3; j++, q++){ xv[q] = x[p*4 + j]; xs += xv[q]; }
+    const xm = xs/xv.length; let xq = 0;
+    for (let q = 0; q < xv.length; q++){ xv[q] -= xm; xq += xv[q]*xv[q]; }
+    const xn = Math.sqrt(xq) || 1;
+    for (const T of V){
+      let ts = 0;
+      for (let p = 0, q = 0; p < RB*RH; p++){ const a = T.px[p*4 + 3]/255;
+        for (let j = 0; j < 3; j++, q++){ tv[q] = T.px[p*4 + j]*a + grund*(1 - a); ts += tv[q]; } }
+      const tm = ts/tv.length; let s = 0, tq = 0;
+      for (let q = 0; q < tv.length; q++){ const dd = tv[q] - tm; tq += dd*dd; s += xv[q]*dd; }
+      const wert = s/(xn*(Math.sqrt(tq) || 1));
+      if (!best.has(T.fraktion) || wert > best.get(T.fraktion)) best.set(T.fraktion, wert);
+    }
+  }
+  const sortiert = [...best.entries()].sort((a, b) => b[1] - a[1]);
+  return sortiert.length ? {f: sortiert[0][0] - 1, guete: sortiert[0][1]} : null;
+}
+/* the 48x12 print of a row's name, the register's own kind (sbAbdruck):
+   the name's own columns (to where its ink ends, gefTafelSchneiden), cut to
+   the ink on the red channel, drawn down smoothed, grey, then mean-free at
+   length one. Drawn straight out of the picture. */
+function gefTafelAbdruck(bild, d, cw, cx0, cy0, nx0, nx1, y, y1){
+  let mi = 255, ma = 0;
+  for (let yy = y; yy < y1; yy++) for (let x = nx0, i = ((yy - cy0)*cw + (nx0 - cx0))*4; x < nx1; x++, i += 4){ const v = d[i]; if (v < mi) mi = v; if (v > ma) ma = v; }
+  const schwelle = mi + (ma - mi)*0.35;
+  let gL = nx1, gR = nx0 - 1, gO = y1, gU = y - 1;
+  for (let yy = y; yy < y1; yy++) for (let x = nx0, i = ((yy - cy0)*cw + (nx0 - cx0))*4; x < nx1; x++, i += 4)
+    if (d[i] > schwelle){ if (x < gL) gL = x; if (x > gR) gR = x; if (yy < gO) gO = yy; if (yy > gU) gU = yy; }
+  let sx = nx0, sy = y, sw = Math.max(2, nx1 - nx0), sh = Math.max(2, y1 - y);
+  if (gR >= gL && gU >= gO){
+    sx = Math.max(nx0, gL - 1); sy = Math.max(y, gO - 1);
+    sw = Math.max(2, Math.min(nx1 - sx, gR - gL + 3)); sh = Math.max(2, Math.min(y1 - sy, gU - gO + 3));
+  }
+  const f = gefFlaeche("tafelfp", FP_B, FP_H);
+  f.g.imageSmoothingEnabled = true; try { f.g.imageSmoothingQuality = "high"; } catch(e){}
+  f.g.drawImage(bild, sx, sy, sw, sh, 0, 0, FP_B, FP_H);
+  const px = f.g.getImageData(0, 0, FP_B, FP_H).data, b = new Uint8Array(FP_B*FP_H);
+  for (let i = 0; i < b.length; i++) b[i] = Math.max(0, Math.min(255, Math.round(px[i*4]*0.299 + px[i*4+1]*0.587 + px[i*4+2]*0.114)));
+  return b;
+}
+/* a job for the worker; the queue is bounded, the oldest name job goes first */
+function gefTafelEinreihen(T, job, vorn){
+  const K = GEF_TAFEL;
+  if (T.schlange.length >= K.SCHLANGE_MAX){
+    const alt = T.schlange.findIndex(j => j.art === "name");
+    gefTafelJobWeg(T, alt >= 0 ? T.schlange.splice(alt, 1)[0] : T.schlange.shift());
+  }
+  if (vorn) T.schlange.unshift(job); else T.schlange.push(job);
+}
+/* a job dropped from the queue: a name job frees its entry, a head count
+   counts as read (no number), so the look it belongs to can still become
+   the stand; a head line job closes the head block's reading with what it has */
+function gefTafelJobWeg(T, j){
+  if (!j) return;
+  if (j.art === "name" && j.e) j.e.offen = Math.max(0, (j.e.offen || 1) - 1);
+  else if (j.art === "kopf" && j.tab){ j.tab.kopfGelesen = true; gefTafelStandSetzen(T); }
+  else if (j.art === "kopfzeile" && j.k){ j.k.jobs = Math.max(0, (j.k.jobs || 1) - 1); if (!j.k.jobs) gefTafelKopfFertig(T, j.k); }
+}
+/* THE ROWS OF ONE BOARD, cut in one look. The name column is fetched once
+   (30..200 of 600, all forty possible rows); each raster row passes the ink
+   gate or not; each row that passes gets its print and is matched against
+   the entries. A matched entry that is settled costs nothing more. A new
+   entry gets its three strips. */
+function gefTafelSchneiden(bild, W, H, tab, T, nun){
+  const K = GEF_TAFEL, E = tab.E, pitch = SB.pitch*SB_BREITE*E, oben0 = tab.kopfU + SB.ersteZeile*SB_BREITE*E;
+  const cx0 = Math.max(0, Math.round(tab.x0 + 30*E)), cx1 = Math.min(W, Math.round(tab.x0 + 200*E));
+  const cy0 = Math.max(0, Math.round(oben0)), cy1 = Math.min(H, Math.round(oben0 + pitch*K.ZEILEN_MAX + 3));
+  const cw = cx1 - cx0, ch = cy1 - cy0;
+  if (cw < 20 || ch < 8) return [];
+  const f = gefFlaeche("tafelspalte", cw, ch);
+  f.g.drawImage(bild, cx0, cy0, cw, ch, 0, 0, cw, ch);
+  let d = null;
+  try { d = f.g.getImageData(0, 0, cw, ch).data; } catch(e){ return []; }
+  const nx0 = Math.max(cx0, Math.round(tab.x0 + SB.namX0*SB_BREITE*E)), nx1 = Math.min(cx1, Math.round(tab.x0 + SB.namX1*SB_BREITE*E));
+  const gx0 = Math.max(cx0, Math.round(tab.x0 + 33*E)), gx1 = Math.min(cx1, Math.round(tab.x0 + 40*E));
+  /* one strip per new row, from the badge to the end of the squad column:
+     the name is read from its first part, the squad name from its last,
+     the badge from its head (gefTafelAbzeichen) */
+  const sx0 = Math.max(0, Math.round(tab.x0 + 16*E)), sx1 = Math.min(W, Math.round(tab.x0 + SB.truX1*SB_BREITE*E));
+  const tx0 = Math.round(tab.x0 + SB.truX0*SB_BREITE*E);
+  const hist = new Uint32Array(256), nb = nx1 - nx0;
+  const zeilen = []; let luecke = 0, grund1 = null;
+  for (let i = 0; i < K.ZEILEN_MAX; i++){
+    const y = Math.round(oben0 + pitch*i);
+    if (y + pitch >= H || Math.round(y + pitch + 2) > cy1) break;
+    hist.fill(0); let n = 0;
+    for (let yy = y + 2, yb = Math.round(y + pitch - 2); yy < yb; yy++){
+      let j = ((yy - cy0)*cw + (nx0 - cx0))*4;
+      for (let x = 0; x < nb; x++, j += 4){ const r = d[j], g = d[j+1], b = d[j+2]; hist[r > g ? (r > b ? r : b) : (g > b ? g : b)]++; n++; }
+    }
+    if (!n) break;
+    let s = 0, grund = 0, p99 = 255;
+    for (let v = 0; v < 256; v++){ s += hist[v]; if (s >= n*0.5){ grund = v; break; } }
+    s = 0; for (let v = 0; v < 256; v++){ s += hist[v]; if (s >= n*0.99){ p99 = v; break; } }
+    const sw = grund + Math.max(20, 0.5*(p99 - grund));
+    let tinte = 0; for (let v = Math.floor(sw) + 1; v < 256; v++) tinte += hist[v];
+    let r = 0, g = 0, b = 0, m = 0;
+    for (let yy = Math.round(y + 3), yb = Math.round(y + 13); yy < yb; yy++){
+      let j = ((yy - cy0)*cw + (gx0 - cx0))*4;
+      for (let x = gx0; x < gx1; x++, j += 4){ r += d[j]; g += d[j+1]; b += d[j+2]; m++; }
+    }
+    const ton = m ? [r/m, g/m, b/m] : [110, 116, 120];
+    if (!grund1) grund1 = ton;
+    const abstand = Math.abs(ton[0] - grund1[0]) + Math.abs(ton[1] - grund1[1]) + Math.abs(ton[2] - grund1[2]);
+    const zeile = tinte >= K.TINTE_MIN*E*E && (p99 - grund) >= K.SPANNE_MIN && abstand <= K.GRUND_ANTEIL*(grund1[0] + grund1[1] + grund1[2]);
+    if (!zeile){ if (++luecke >= K.LUECKEN) break; continue; }
+    luecke = 0;
+    zeilen.push({i, y, ton});
+  }
+  for (const zl of zeilen){
+    const y = zl.y, y1 = Math.min(cy1, Math.round(y + pitch + 2)), hh = y1 - y;
+    /* the end of the name: the last column with ink before a gap longer
+       than five points - the leader's chevrons and the skull stand further
+       right and stay out; the trailing underscore of a name stays in.
+       One pass over the strip: the histogram for the ground and the
+       brightest value of every column. */
+    hist.fill(0); let n = 0;
+    const spalten = new Uint8Array(nb);
+    for (let yy = y; yy < y1; yy++){
+      let j = ((yy - cy0)*cw + (nx0 - cx0))*4;
+      for (let x = 0; x < nb; x++, j += 4){ const r = d[j], g = d[j+1], b = d[j+2], v = r > g ? (r > b ? r : b) : (g > b ? g : b); hist[v]++; n++; if (v > spalten[x]) spalten[x] = v; }
+    }
+    let s = 0, grund = 0;
+    for (let v = 0; v < 256; v++){ s += hist[v]; if (s >= n*0.5){ grund = v; break; } }
+    const schwelle = grund + K.TINTE_SCHWELLE, spalt = Math.max(4, Math.round(5*E));
+    let ende = 0, letzt = -1;
+    for (let x = 0; x < nb; x++) if (spalten[x] > schwelle){ if (letzt >= 0 && x - letzt > spalt) break; letzt = x; ende = x + 1; }
+    if (letzt < 0) ende = nb;
+    ende = Math.min(nb, Math.max(Math.round(20*E), ende + Math.round(2*E)));
+    /* the print covers the name alone, cut where the name's ink ends: the
+       leader's chevrons and the skull to its right change with the game and
+       lost a third of the prints between two looks (round 3: 32 of 35 rows
+       met again against 24 with the whole column) */
+    const fb = gefTafelAbdruck(bild, d, cw, cx0, cy0, nx0, Math.min(nx1, nx0 + ende), y, Math.min(cy1, Math.round(y + pitch)));
+    const vec = abdruckNorm(fb);
+    let best = null, bw = 0;
+    for (const e of T.eintraege){ if (e.seite !== tab.lage) continue;   // a row stays on its board's side for the battle: half the prints to hold against (round 3, H7)
+      const ev = e.fp; let sd = 0; for (let k = 0; k < vec.length; k++) sd += vec[k]*ev[k]; if (sd > bw){ bw = sd; best = e; } }
+    let e = (best && bw >= K.ABDRUCK_GLEICH) ? best : null;
+    const neu = !e;
+    if (neu){
+      if (T.eintraege.length >= K.EINTRAEGE_MAX){
+        let aeltest = 0;
+        for (let k = 1; k < T.eintraege.length; k++) if (T.eintraege[k].zuletzt < T.eintraege[aeltest].zuletzt) aeltest = k;
+        T.eintraege.splice(aeltest, 1);
+      }
+      e = {id: ++T.zaehler, fp: vec, lesungen: [], name: null, zuv: 0, schrift: null, zweit: null, sicher: false, unlesbar: false,
+           versuche: 0, offen: 0, rolle: null, trupp: null, abz: null, hand: null, handGeerbt: false, handVon: null, bekannt: false, vorschlag: null, bild: null, lage: null, url: null,
+           gespeichert: false, seit: nun, zuletzt: nun, blickNr: 0, wert: 1, seite: tab.lage};
+      T.eintraege.push(e);
+    }
+    e.zuletzt = nun; e.blickNr = T.blickNr; e.wert = neu ? 1 : bw;
+    zl.e = e; zl.ende = ende;
+    const fest = (e.hand && !e.handGeerbt) || e.sicher || e.versuche >= PG_VERSUCHE;   // a row judged unreadable is tried again until the third look; an inherited hand is read on
+    if ((neu || (!fest && !e.offen)) && sx1 - sx0 > 40){
+      const c = document.createElement("canvas"); c.width = sx1 - sx0; c.height = hh;
+      c.getContext("2d").drawImage(bild, sx0, y, sx1 - sx0, hh, 0, 0, sx1 - sx0, hh);
+      /* where the name and the squad column lie in the strip, in points of it */
+      const lage = {nx: nx0 - sx0, nw: ende, tx: tx0 - sx0, tw: sx1 - tx0};
+      if (!e.bild){ e.bild = c; e.lage = lage; }
+      if (!fest && !e.offen){ e.offen = (e.offen || 0) + 1; gefTafelEinreihen(T, {art: "name", e, c, lage}); }
+      if (neu) gefTafelEinreihen(T, {art: "trupp", e, c, lage, E, ton: zl.ton});
+    }
+  }
+  /* a typed name stays with its row: a row whose print changed (the mouse
+     over it, a skull, a chevron) gets a new entry, and the hand typed on the
+     stand's row of the same place and side comes along when the entry that
+     carries it is not in this look. Only onto an entry that has no name yet
+     or whose name is near the reading the hand overruled (or the hand
+     itself): the place alone is no witness - when the typed player leaves
+     the board or the board sorts itself anew, another player stands there
+     (round 4, Skeptiker H1: the hand landed on kinotus and on MCarFish).
+     An inherited hand yields to a sure reading far from both
+     (gefTafelLesung). Round 3, Skeptiker H4. */
+  const at = T.stand && T.stand.tafeln.find(a => a.lage === tab.lage);
+  if (at) for (let k = 0; k < zeilen.length && k < at.zeilen.length; k++){
+    const e = zeilen[k].e, alt = at.zeilen[k].e;
+    if (e.hand || alt === e || !alt.hand || zeilen.some(z => z.e === alt)) continue;
+    const von = (alt.handGeerbt && alt.handVon) ? alt.handVon : (alt.vorschlag || alt.name || null);   // the reading the hand overruled, down the chain
+    const da = e.vorschlag || e.name;
+    if (da && !gefTafelNah(da, von) && !gefTafelNah(da, alt.hand)) continue;   // the place holds someone else
+    e.hand = alt.hand; e.handGeerbt = true; e.handVon = von; e.gespeichert = alt.gespeichert; T.version++;
+  }
+  return zeilen;
+}
+/* two names near enough to be the same row read twice: at most two edits
+   between their keys ("125149" and "T25149", "Get Goods" and "Get_Good#");
+   an empty name is near nothing */
+function gefTafelNah(a, b){
+  const ka = namKey(a || ""), kb = namKey(b || "");
+  if (!ka.length || !kb.length) return false;
+  return Math.abs(ka.length - kb.length) <= 2 && levenshtein(ka, kb) <= 2;
+}
+/* the head block over the boards: white writing in x = middle +-350 E,
+   y 120..215 E - the battle type, then the town (an assault) or the two
+   factions (hold and take), then "ATTACKERS VS DEFENDERS". The first two
+   lines are cut and read; the head count of every board goes in front. The
+   reading lands on T.kopf (gefTafelKopfFertig) and the stand takes it from
+   there - not on the look that cut it, which may be gone by then (round 3,
+   Skeptiker H2: the first stand of a session had no town). */
+function gefTafelKopfzeilen(bild, W, H, E, T){
+  const K = GEF_TAFEL, mx = W >> 1;
+  const x0 = Math.max(0, mx - Math.round(K.ORT_HALB*E)), x1 = Math.min(W, mx + Math.round(K.ORT_HALB*E));
+  const y0 = Math.round(K.ORT_Y0*E), y1 = Math.min(H, Math.round(K.ORT_Y1*E));
+  const w = x1 - x0, h = y1 - y0;
+  const kopf = {art: null, ort: null, artText: "", ortText: "", jobs: 0, t: jetzt()};
+  if (w < 40 || h < 8){ gefTafelKopfFertig(T, kopf); return; }
+  const f = gefFlaeche("tafelkopf", w, h);
+  f.g.drawImage(bild, x0, y0, w, h, 0, 0, w, h);
+  let d = null;
+  try { d = f.g.getImageData(0, 0, w, h).data; } catch(e){ gefTafelKopfFertig(T, kopf); return; }
+  const weiss = (i) => { const r = d[i], g = d[i+1], b = d[i+2]; const mn = Math.min(r, g, b), mxx = Math.max(r, g, b); return mn > K.WEISS_MIN && mxx - mn < K.WEISS_BUNT; };
+  const zeilen = []; let s = -1, xa = w, xb = -1;
+  for (let y = 0; y <= h; y++){
+    let n = 0, za = w, zb = -1;
+    if (y < h) for (let x = 0, i = y*w*4; x < w; x++, i += 4) if (weiss(i)){ n++; if (x < za) za = x; if (x > zb) zb = x; }
+    const an = y < h && n >= 3;
+    if (an){ if (s < 0){ s = y; xa = w; xb = -1; } if (za < xa) xa = za; if (zb > xb) xb = zb; }
+    if (!an && s >= 0){ const hoch = y - s; if (hoch >= Math.round(K.ZEILE_MIN*E) && hoch <= Math.round(K.ZEILE_MAX*E)) zeilen.push({ya: s, yb: y - 1, xa, xb}); s = -1; }
+  }
+  const m = Math.round(4*E);
+  let jobs = 0;
+  for (let k = 0; k < 2 && k < zeilen.length; k++){
+    const z = zeilen[k];
+    const cx = Math.max(0, x0 + z.xa - m), cy = Math.max(0, y0 + z.ya - m);
+    const cw = Math.min(W, x0 + z.xb + m + 1) - cx, ch = Math.min(H, y0 + z.yb + m + 1) - cy;
+    if (cw < 8 || ch < 6) continue;
+    const c = document.createElement("canvas"); c.width = cw; c.height = ch;
+    c.getContext("2d").drawImage(bild, cx, cy, cw, ch, 0, 0, cw, ch);
+    gefTafelEinreihen(T, {art: "kopfzeile", welche: k === 0 ? "art" : "ort", k: kopf, c}, true);
+    jobs++;
+  }
+  kopf.jobs = jobs;
+  if (jobs) T.kopfOffen = true; else gefTafelKopfFertig(T, kopf);
+}
+/* the head block's reading is complete: it becomes T.kopf - a line read this
+   time replaces the last reading, a line not read keeps it - and goes onto
+   the stand and the open look; the open look may become the stand now */
+function gefTafelKopfFertig(T, kopf){
+  const alt = T.kopf;
+  T.kopf = {art: kopf.art !== null ? kopf.art : (alt ? alt.art : null), ort: kopf.ort !== null ? kopf.ort : (alt ? alt.ort : null),
+            artText: kopf.artText || (alt ? alt.artText : ""), ortText: kopf.ortText || (alt ? alt.ortText : ""), t: kopf.t};
+  T.kopfOffen = false;
+  for (const B of [T.stand, T.offen]) if (B){ B.art = T.kopf.art; B.ort = T.kopf.ort; B.artText = T.kopf.artText; B.ortText = T.kopf.ortText; }
+  T.version++;
+  gefTafelStandSetzen(T);
+}
+/* ONE LOOK. The band search, and when the board stands bright: the head
+   sign, the rows, the head count strip of every board, the head block. The
+   look becomes the stand when two boards were found. A dimmed board (the
+   player card open) confirms only - measured: 9 of 272 of its names read.
+   Returns what this look saw, for the desk's capture line. */
+function gefTafelBlick(bild, W, H, z){
+  const K = GEF_TAFEL, fk = z.kpFaktor || 1;
+  if (!gefTafelGebunden(z)) return null;   // no town with the battle mark picked: the board is not looked at (5.16)
+  const S0 = gefTafelSuchen(bild, W, H, fk);
+  if (!S0 || !S0.tafeln.length) return null;
+  const nun = jetzt();
+  if (!z.tafel) z.tafel = gefTafelNeu();
+  const T = z.tafel;
+  T.zuletzt = nun; T.blickNr++; T.ortGewaehlt = z.ort;
+  if (S0.tafeln.some(t => t.dunkel)){ T.dunkelZuletzt = nun; return {n: S0.tafeln.length, dunkel: true, zeilen: 0}; }
+  const blick = {t: nun, nr: T.blickNr, faktor: fk, tafeln: [], art: null, ort: null, artText: "", ortText: ""};
+  let zeilen = 0;
+  for (const tab of S0.tafeln){
+    const zc = gefTafelZeichenLesen(bild, tab);
+    const zs = gefTafelSchneiden(bild, W, H, tab, T, nun);
+    zeilen += zs.length;
+    const kx0 = Math.round(tab.x0 + K.KOPF_X0*tab.E), kx1 = Math.min(W, Math.round(tab.x0 + K.KOPF_X1*tab.E)), kh = tab.y1 - tab.y0 + 1;
+    const t = {lage: tab.lage, farbe: tab.farbe, x0: tab.x0, x1: tab.x1, y0: tab.y0, y1: tab.y1, E: tab.E, hell: tab.hell,
+               kopfF: zc.f, zeichen: zc, zeilen: zs, n: null, bots: null, kopfText: null, kopfGelesen: false, gesehen: nun};   // gesehen: the last look that showed this side (HALTEN)
+    if (kx1 - kx0 > 20 && kh > 4){
+      const c = document.createElement("canvas"); c.width = kx1 - kx0; c.height = kh;
+      c.getContext("2d").drawImage(bild, kx0, tab.y0, kx1 - kx0, kh, 0, 0, kx1 - kx0, kh);
+      gefTafelEinreihen(T, {art: "kopf", tab: t, c}, true);
+    } else t.kopfGelesen = true;
+    blick.tafeln.push(t);
+  }
+  if (blick.tafeln.length >= 2){
+    /* a board that stood in the last stand and is missing from this look is
+       held for a few seconds after it was LAST SEEN - the second red board
+       of a triple battle (HALTEN, an assumption). Not after the stand's own
+       time: a carried side made every new stand young again and was held
+       for as long as the looks kept coming (round 4, Skeptiker H4). */
+    const alt = T.stand;
+    if (alt) for (const at of alt.tafeln) if (!blick.tafeln.some(t => t.lage === at.lage) && nun - (at.gesehen || alt.t) < K.HALTEN) blick.tafeln.push(at);
+    /* the head block is read once every few seconds, not at every look:
+       type and town do not change inside a battle, and the next battle is
+       minutes away */
+    if (!T.kopfOffen && (!T.kopf || nun - (T.kopfZeit || 0) >= 5000)){ gefTafelKopfzeilen(bild, W, H, blick.tafeln[0].E, T); T.kopfZeit = nun; }
+    if (T.kopf){ blick.art = T.kopf.art; blick.ort = T.kopf.ort; blick.artText = T.kopf.artText; blick.ortText = T.kopf.ortText; }
+    /* the look is open until its head counts are read (front of the queue);
+       the last stand holds until then (gefTafelStandSetzen) */
+    T.offen = blick;
+    gefTafelStandSetzen(T);
+  }
+  return {n: S0.tafeln.length, dunkel: false, zeilen};
+}
+/* THE STAND. An open look becomes the stand once every head count of it is
+   read. A side's rows replace the stand's rows of that side only when the
+   look cut at least as many rows as the head count it read - or, with no
+   head count read, as many as the stand holds for that side. Fewer rows
+   are a covered or cut-off board (a window over it, a dark room, the head
+   strip of a capture): that look confirms the side, it does not shorten it.
+   A side carried over from the last stand (HALTEN) stays as it was. No
+   stand before the head block was read once (T.kopf): the first stand of a
+   session carries the board's town like every later one (round 3, H2). */
+function gefTafelStandSetzen(T){
+  const P = T.offen, K = GEF_TAFEL;
+  if (!P || !T.kopf || P.tafeln.some(t => !t.kopfGelesen)) return false;
+  P.art = T.kopf.art; P.ort = T.kopf.ort; P.artText = T.kopf.artText; P.ortText = T.kopf.ortText;
+  const alt = T.stand;
+  P.bestaetigt = 0;
+  const drei = P.tafeln.length >= 3;   // three boards: the game shows twelve rows on each, a head count above that is never met (round 3, H3)
+  P.tafeln = P.tafeln.map(t => {
+    if (!alt || alt.tafeln.includes(t)) return t;
+    const at = alt.tafeln.find(a => a.lage === t.lage);
+    if (!at) return t;
+    const hatN = t.n !== null && t.n !== undefined && t.n > 0, altN = at.n !== null && at.n !== undefined && at.n > 0;
+    const soll = Math.min(hatN ? t.n : altN ? at.n : at.zeilen.length, drei ? K.DECKEL : K.ZEILEN_MAX);
+    if (t.zeilen.length < soll){ P.bestaetigt++; at.gesehen = t.gesehen || at.gesehen; return at; }   // confirmed: the side was seen, its rows stay
+    if (!hatN && altN){ t.n = at.n; t.bots = at.bots; t.kopfText = at.kopfText; }   // no head count read this time: the stand's carries over (round 3, H5)
+    return t;
+  });
+  T.stand = P; T.offen = null; T.version++;
+  return true;
+}
+/* the town gate (E, 5.16): a board is looked at, held and kept only with a
+   town that carries the battle mark picked on the left, and a stand only
+   while the board's own town line does not name another town */
+function gefTafelGebunden(z, B){
+  const i = z && z.ort;
+  if (i === null || i === undefined || !fightAt(i)) return false;
+  if (B && B.ort !== null && B.ort !== undefined && B.ort !== i && !(MAP.n[B.ort] && MAP.n[i] && MAP.n[B.ort][0] === MAP.n[i][0])) return false;   // by name: the list holds a town twice (Eindhoven)
+  return true;
+}
+/* the one name of a row, for the field, the clan and the register alike:
+   typed by hand, else the register's own spelling the reading met, else the
+   reading. BUILD FORM (question 8): the sheet says the register's name is
+   proposed and the reading stays the reading - both at once made twins in
+   the register (Keep wrote the reading next to the name it had matched), so
+   one name goes everywhere and the reading stays on the entry (e.name). */
+const gefTafelName = e => e.hand || e.vorschlag || e.name || null;
+/* THE QUEUE: one strip a turn in the worker, as the cabin's kbSchlange.
+   The loop ends by itself when the state it works for is gone (town
+   changed, capture stopped, desk closed) - it holds the state it started
+   with and looks whether it still stands. */
+async function gefTafelSchlange(z){
+  const T = z && z.tafel;
+  if (!T || T.liest) return;
+  T.liest = true;
+  try {
+    while (z.tafel === T && T.schlange.length){
+      const job = T.schlange.shift();
+      const t0 = performance.now();
+      try { await gefTafelLesen(T, job); } catch(e){ if (job.e) job.e.offen = Math.max(0, (job.e.offen || 1) - 1); }
+      T.zeiten.push([job.art, Math.round(performance.now() - t0)]); T.version++;
+      if (T.zeiten.length > 200) T.zeiten.splice(0, T.zeiten.length - 200);
+    }
+  } finally { T.liest = false; }
+}
+/* one job: the head count, a head line, a name, a squad name with its badge */
+async function gefTafelLesen(T, job){
+  const c = job.c;
+  if (job.art === "kopf"){
+    const tab = job.tab;
+    try {
+      const r = await unitsText(c, 0, 0, UNITS_W, UNITS_H, null, "hell");
+      tab.kopfText = r.text || "";
+      const zahlen = [...tab.kopfText.matchAll(/[:\uFF1A]\s*(\d+)/g)].map(m => +m[1]);   // the full-width colon of the ja/zh texts too
+      tab.n = zahlen.length ? zahlen[0] : null;
+      tab.bots = zahlen.length > 1 ? zahlen[1] : 0;
+    } finally { tab.kopfGelesen = true; gefTafelStandSetzen(T); }
+    return;
+  }
+  if (job.art === "kopfzeile"){
+    const B = job.k;
+    try {
+      if (job.welche === "art"){
+        const r = await unitsText(c, 0, 0, UNITS_W, UNITS_H, null, "hell");
+        B.artText = r.text || ""; B.art = gefTafelArt(B.artText);
+      } else {
+        const feld = await bildAufbereiten(c, {x: 0, y: 0, w: 1, h: 1}, false);
+        const r = await ocrMitZuv(feld, ORT_PSM, null, ORT_BUCHSTABEN);
+        B.ortText = (r.text || "").trim(); B.ort = gefTafelStadt(B.ortText, T.ortGewaehlt);
+      }
+    } finally { B.jobs = Math.max(0, (B.jobs || 1) - 1); if (!B.jobs) gefTafelKopfFertig(T, B); }
+    return;
+  }
+  const e = job.e;
+  const L = job.lage, f = UNITS_W/c.width;      // the strip's parts in the reader's own measure (unitsBox)
+  if (job.art === "trupp"){
+    const r = await unitsText(c, Math.round(L.tx*f), 0, Math.round(L.tw*f), UNITS_H, null, "hell");
+    e.trupp = (r.text || "").trim(); e.rolle = gefTafelRolle(e.trupp);
+    try { e.abz = gefTafelAbzeichen(c, job.E, job.ton); } catch(err){ e.abz = null; }
+    return;
+  }
+  if (job.art !== "name") return;
+  e.offen = Math.max(0, (e.offen || 1) - 1);
+  if ((e.hand && !e.handGeerbt) || e.sicher) return;   // an inherited hand is read on: it yields to a sure other name
+  /* the same road as gfName in the player room: one Latin pass with the
+     tool's own preparation, the other alphabets after it, the choice by the
+     shapes, then the clean-up */
+  const beste = await unitsText(c, Math.round(L.nx*f), 0, Math.round(L.nw*f), UNITS_H, null, "hell");
+  const fremd = await unitsTextSchriften(c, L.nx, 0, L.nw, c.height, beste, null);
+  let nimmFremd = false;
+  if (fremd.schrift && fremd.text){
+    if (!unitsHatFremde(fremd.text)) nimmFremd = fremd.zuv > beste.zuv + 5;
+    else nimmFremd = !unitsGleicheFormen(fremd.text, beste.text);
+  }
+  const t = nimmFremd ? fremd : beste;
+  const saeuber = (s, schrift) => unitsCjkEng(s || "", schrift || null).trim().replace(/\s+/g, " ")
+        .replace(/^[\s"'`´,;]+|[\s"'`´,;]+$/g, "").replace(/\s*_\s*/g, "_");
+  const name = saeuber(t.text, t.schrift);
+  let unlesbar = false;
+  try { unlesbar = unitsUnlesbar(t.text, t.symbole, t.feld, t.schrift || null); } catch(err){ unlesbar = false; }
+  const andere = (fremd.schrift && fremd.text && fremd.text !== beste.text)
+    ? (nimmFremd ? {text: beste.text, zuv: beste.zuv, schrift: null} : {text: fremd.text, zuv: fremd.zuv, schrift: fremd.schrift}) : null;
+  let zweit = null;
+  if (andere){ const n2 = saeuber(andere.text, andere.schrift); if (n2.length >= 2 && n2 !== name) zweit = {name: n2, zuv: andere.zuv, schrift: andere.schrift || null}; }
+  gefTafelLesung(T, e, {name: unlesbar || name.length < 2 ? null : name, unlesbar, zuv: t.zuv, schrift: t.schrift || null, zweit});
+}
+/* a reading lands on its entry. Sure: two readings the same - from two looks
+   of the board, or from another entry that read the same name in another
+   look (a strip the print did not recognise as the same) - or the reading
+   meets the register (gefTafelBekannt). The register's name is PROPOSED,
+   the reading stays the reading. Unreadable after PG_VERSUCHE tries without
+   a name. */
+function gefTafelLesung(T, e, L){
+  e.versuche++;
+  if (!L.name){ if (!e.name && (L.unlesbar || e.versuche >= PG_VERSUCHE)) e.unlesbar = true; return; }   // the verdict marks the row at once; it is still tried again
+  e.lesungen.push(L);
+  if (e.lesungen.length > 4) e.lesungen.shift();
+  let best = e.lesungen[0];
+  for (const x of e.lesungen) if (x.zuv > best.zuv) best = x;
+  const gleich = e.lesungen.filter(x => x.name === L.name).length >= 2;
+  const nimm = gleich ? L : best;
+  e.name = nimm.name; e.zuv = nimm.zuv; e.schrift = nimm.schrift; e.zweit = nimm.zweit;
+  if (gleich) e.sicher = true;
+  /* ASSUMPTION (builder): the same name read on another entry of another
+     look - a strip the print did not recognise as the same row - counts as
+     the second reading. Of the two spellings the one without a blank goes
+     on both: the key drops what is not a letter, so "kinotus ." met
+     "kinotus" and the blank with its tail went to the clan; no name of the
+     72 on the truth sheet holds a blank (round 4, Skeptiker H5). */
+  const k = namKey(e.name);
+  for (const o of T.eintraege) if (o !== e && o.name && o.blickNr !== e.blickNr && namKey(o.name) === k){
+    e.sicher = true; o.sicher = true;
+    if (o.name !== e.name){ const eB = /\s/.test(e.name), oB = /\s/.test(o.name);
+      if (eB && !oB) e.name = o.name; else if (oB && !eB) o.name = e.name; }
+  }
+  const bek = gefTafelBekannt(T, e.name);
+  e.bekannt = !!bek; e.vorschlag = bek && bek !== e.name ? bek : null;
+  if (bek) e.sicher = true;
+  e.unlesbar = false;
+  /* a hand that came along from the stand's row (gefTafelSchneiden) yields
+     to a sure reading that is far from both the reading the hand overruled
+     and the hand itself - more than two edits: the row is someone else's
+     now. The same row misread again stays near ("125149" for "T25149",
+     "Get_Good#" for "Get Goods"); a hand for a row that had no reading is
+     measured against the hand alone. Round 4, Skeptiker H1: the register
+     rule of round 3 never met - the hand landed on a sure player the
+     register did not know and stayed. */
+  if (e.hand && e.handGeerbt && e.sicher){ const n = e.vorschlag || e.name;
+    if (!gefTafelNah(n, e.handVon) && !gefTafelNah(n, e.hand)){ e.hand = null; e.handGeerbt = false; e.handVon = null; e.gespeichert = false; } }
+  /* an inherited hand on a row whose three readings never agree would sit
+     there for good (the row is not read again after PG_VERSUCHE): it goes
+     as well, the row keeps its best reading, unsure (FABLE 14.09.2026 after
+     the fourth round's skeptic) */
+  if (e.hand && e.handGeerbt && !e.sicher && e.versuche >= PG_VERSUCHE){
+    e.hand = null; e.handGeerbt = false; e.handVon = null; e.gespeichert = false; }
+}
+/* the register as a dictionary: clan members (leuteListe) and the players
+   on record (S.roster) as the sheet says; ASSUMPTION (builder): the depot
+   owners and the player's own name as well - both are names this tool
+   already holds as players. Built once a half-minute. */
+function gefTafelWoerterbuch(T){
+  const nun = jetzt();
+  if (T.wb && nun - T.wbZeit < 30000) return T.wb;
+  const m = new Map();
+  const nimm = n => { if (!n) return; const k = namKey(n); if (k.length >= 2 && !m.has(k)) m.set(k, String(n)); };
+  try { if (S && S.name) nimm(S.name); } catch(e){}
+  try { for (const p of (leuteListe || [])) nimm(p && p.name); } catch(e){}
+  try { for (const d of depotIdx.values()) nimm(d && d.name); } catch(e){}
+  try { for (const key of Object.keys(S.roster || {})){ const e = S.roster[key]; if (e && e.v && e.v.name) nimm(e.v.name); } } catch(e){}
+  T.wb = [...m.entries()]; T.wbZeit = nun;
+  return T.wb;
+}
+/* the one name of the register a reading meets: the same key, else exactly
+   one at Levenshtein 1 (measured with the truth as the register: 52 of 112
+   inexact readings right, none wrong, 60 without a candidate) */
+function gefTafelBekannt(T, name){
+  const k = namKey(name || "");
+  if (k.length < 2) return null;
+  const eins = [];
+  for (const [wk, wn] of gefTafelWoerterbuch(T)){
+    if (wk === k) return wn;
+    if (Math.abs(wk.length - k.length) <= 1 && levenshtein(k, wk) === 1) eins.push(wn);
+  }
+  return eins.length === 1 ? eins[0] : null;
+}
+/* the role from the squad name: only the game's own five names, in its
+   twelve languages, the number behind them dropped, two errors allowed on
+   the stem (measured: 298 of 302 default names right, none wrong, 101 of
+   101 hand-named squads left alone) */
+function gefTafelRolle(text){
+  const t = namKey(String(text || "").replace(/\s*\d+\s*$/, ""));
+  if (t.length < 4) return null;
+  let best = null;
+  for (const [wort, rolle] of GEF_TAFEL_TRUPPS){
+    const w = namKey(wort);
+    if (Math.abs(w.length - t.length) > 2) continue;
+    const d = levenshtein(t, w);
+    if (best === null || d < best[0]) best = [d, rolle];
+  }
+  return best && best[0] <= 2 ? best[1] : null;
+}
+/* the battle type from the head block's first line, one error per eight
+   characters allowed */
+function gefTafelArt(text){
+  const k = unitsKey(String(text || ""));
+  if (k.length < 3) return null;
+  for (const [art, worte] of Object.entries(GEF_TAFEL_ARTEN))
+    for (const w of worte){ const wk = unitsKey(w); if (wk.length >= 3 && levenshtein(k, wk) <= Math.max(1, Math.floor(wk.length/8))) return art; }
+  return null;
+}
+/* the town from the head block's second line: the last one to three words
+   against the town list, one error per eight characters, at least one
+   (tagUndOrt's own bar). Hold and take shows the two factions there and
+   meets no town. */
+function gefTafelStadt(text, gewaehlt){
+  const w = String(text || "").replace(/[^\p{L}\p{N}\s'\-]/gu, " ").split(/\s+/).filter(Boolean);
+  if (!w.length) return null;
+  /* every town the reading meets within its error bar; the town picked wins
+     among them - "Morburg" is Marburg and Warburg alike, and the list holds
+     Eindhoven twice (round 3, Skeptiker H6) */
+  const gName = (gewaehlt !== null && gewaehlt !== undefined && MAP.n[gewaehlt]) ? MAP.n[gewaehlt][0] : null;
+  let best = null;
+  for (let ab = Math.max(0, w.length - 3); ab < w.length; ab++){
+    const t = namKey(w.slice(ab).join(" "));
+    if (t.length < 3) continue;
+    for (let i = 0; i < MAP.n.length; i++){
+      const sk = namKey(MAP.n[i][0]);
+      if (Math.abs(sk.length - t.length) > 3) continue;
+      const d = levenshtein(t, sk);
+      if (d > Math.max(1, Math.floor(sk.length/8))) continue;
+      if (gName !== null && MAP.n[i][0] === gName) return gewaehlt;
+      if (best === null || d < best[0]) best = [d, i];
+    }
+  }
+  return best === null ? null : best[1];
+}
+/* who of us is on the board: the tool names of the clan (members list,
+   depot owners, the player's own), keyed like the register keys names */
+function gefTafelKameraden(){
+  const m = new Set();
+  const nimm = n => { if (n){ const k = namKey(n); if (k.length >= 2) m.add(k); } };
+  try { if (S && S.name) nimm(S.name); } catch(e){}
+  try { for (const p of (leuteListe || [])) nimm(p && p.name); } catch(e){}
+  try { for (const d of depotIdx.values()) nimm(d && d.name); } catch(e){}
+  return m;
+}
+/* one board of the stand as the clan and the desk see it: faction (head
+   sign; the badge majority as second witness, null when the two disagree),
+   colour, place, head count, bots, the rows up to the head count - or to
+   the game's cap of twelve, all unsure, when no head count was read */
+function gefTafelSeite(t, kam){
+  const stimmen = new Map(); let votes = 0;
+  for (const zl of t.zeilen){ const a = zl.e && zl.e.abz; if (a && a.f !== null && a.f !== undefined){ stimmen.set(a.f, (stimmen.get(a.f) || 0) + 1); votes++; } }
+  let mehrheit = null, mv = 0;
+  for (const [f, n] of stimmen) if (n > mv){ mv = n; mehrheit = f; }
+  if (mehrheit !== null && (votes < 3 || mv < votes*0.6)) mehrheit = null;
+  let f = t.kopfF !== null && t.kopfF !== undefined ? t.kopfF : mehrheit;
+  if (t.kopfF !== null && t.kopfF !== undefined && mehrheit !== null && mehrheit !== t.kopfF) f = null;
+  const n = t.n !== null && t.n !== undefined && t.n > 0 ? t.n : null;
+  const deckel = n !== null ? n : GEF_TAFEL.DECKEL;
+  const leute = t.zeilen.slice(0, Math.min(t.zeilen.length, deckel)).map(zl => {
+    const e = zl.e, name = gefTafelName(e);
+    const sicher = !!(e.hand || e.sicher);
+    return {n: name, r: e.rolle || null, u: name && sicher && n !== null ? 0 : 1,
+            e: !!(name && kam && kam.has(namKey(name))), id: e.id, eintrag: e};
+  });
+  return {f, farbe: t.farbe, lage: t.lage, n, bots: t.bots || 0, leute, mehrheit, votes};
+}
+/* the rows seen earlier in this battle and gone from the stand: a player
+   who left before "Keep" is still a player of this battle - ENNO
+   30.08.2026: "dass es diesen Spieler ueberhaupt gibt". Only entries whose
+   name is sure or typed, one per name, none the stand still shows; the
+   faction from the stand's board of the same side, else from the badge.
+   BUILD FORM (builder, round 3, Skeptiker Wort SOLL 2): shown under the
+   boards and kept with them; what goes to the clan stays the stand. */
+function gefTafelFrueher(T, B, fVon, kam){
+  const K = GEF_TAFEL, drin = new Set(), namen = [], aus = [];
+  for (const t of B.tafeln) for (const zl of t.zeilen){ drin.add(zl.e); const n = gefTafelName(zl.e); if (n) namen.push(namKey(n)); }
+  const kand = T.eintraege.filter(e => !drin.has(e) && (e.hand || e.sicher) && gefTafelName(e)).sort((a, b) => b.zuletzt - a.zuletzt);
+  /* one name once: the same key, or one character apart (the register's own
+     twin rule) from a name the stand shows or one listed here already */
+  const schon = k => namen.some(m => m === k || (Math.abs(m.length - k.length) <= 1 && levenshtein(m, k) <= 1));
+  for (const e of kand){
+    const n = gefTafelName(e), k = namKey(n);
+    if (schon(k)) continue;
+    namen.push(k);
+    const fs = fVon && fVon.has(e.seite) ? fVon.get(e.seite) : null;
+    const f = fs !== null && fs !== undefined ? fs : (e.abz && e.abz.f !== null && e.abz.f !== undefined ? e.abz.f : null);
+    aus.push({n, r: e.rolle || null, u: 0, f, e: !!(kam && kam.has(k)), id: e.id, eintrag: e});
+    if (aus.length >= K.FRUEHER_MAX) break;
+  }
+  return aus;
+}
+/* what goes to the clan: the last complete stand, once every head count
+   was read once, and only when the board's own town line does not name
+   another town than the one picked (E) */
+function gefTafelFuerClan(z){
+  const T = z && z.tafel, B = T && T.stand;
+  if (!B || B.tafeln.length < 2) return null;
+  if (!gefTafelGebunden(z, B)) return null;
+  const kam = gefTafelKameraden();
+  const seiten = B.tafeln.map(t => gefTafelSeite(t, kam));
+  let wir = 0;
+  for (const s of seiten) for (const l of s.leute) if (l.e) wir++;
+  return {art: B.art || null, ort: (B.ort !== null && B.ort !== undefined && MAP.n[B.ort]) ? MAP.n[B.ort][0] : null, wir,
+          seiten: seiten.map(s => ({f: s.f, farbe: s.farbe, lage: s.lage, n: s.n, bots: s.bots,
+                                    leute: s.leute.map(l => ({n: l.n, r: l.r, u: l.u}))}))};
+}
+const gefTafelKennung = tf => { try { return JSON.stringify(tf); } catch(e){ return ""; } };
+/* the short form: "18 v 19 · 1 of us on the board" */
+function gefTafelKurz(tf){
+  if (!tf || !tf.seiten || !tf.seiten.length) return "";
+  const z = tf.seiten.map(s => s.n !== null && s.n !== undefined ? s.n : (s.leute || []).length + "+").join(" v ");   // no head count read: at least this many
+  return z + (tf.wir ? ` · ${tf.wir} of us on the board` : "");
+}
+function gefTafelChip(b){
+  const t = b && b.tafel ? gefTafelKurz(b.tafel) : "";
+  return t ? `<span class="chip" style="border-color:${GEF_FARBE};color:${GEF_FARBE}">${esc(t)}</span>` : "";
+}
+/* the battle type as the game's English word, for the title */
+const gefTafelArtWort = art => (GEF_TAFEL_ARTEN[art] && GEF_TAFEL_ARTEN[art][2]) || "";
+/* the block on the desk's sheet: one list per board, the strip, the name
+   field, the role, the marks. Attackers and defenders only where the desk
+   already knows them (assault, owner and clan faction, as gefZeile does);
+   blue is ours - ENNO 05.09.2026: "blau (Verbuendete)". */
+function gefTafelBlatt(){
+  const T = GEF && GEF.tafel, B = T && T.stand;
+  if (!B) return "";
+  const gebunden = gefTafelGebunden(GEF, B);
+  const kam = gefTafelKameraden();
+  const i = GEF.ort, o = (i !== null && i !== undefined) ? ownerOf(i) : -1, cf = clanFaktion(), recht = darf("aufklaerung");
+  const nun = jetzt();
+  /* the lists under the title are built again only when something on them
+     changed (the stand, a reading, a hand, the gate, the right, the clan) or
+     ten seconds passed: the sheet is rebuilt every tick and the strips are
+     data URLs, a hundred kilobytes a build (round 3, Skeptiker H7) */
+  const schluessel = [B.nr, T.version, gebunden, recht, kam.size, o, cf, i].join("|");
+  if (!T.blatt || T.blatt.schluessel !== schluessel || nun - T.blatt.t > 10000){
+  const rollen = B.art === "assault" && o >= 0 && cf !== undefined && cf !== null;
+  const wort = farbe => rollen ? (farbe === "b" ? (o === cf ? "Defenders" : "Attackers") : (o === cf ? "Attackers" : "Defenders")) : (farbe === "b" ? "Blue" : "Red");
+  const kurz = {inf: "inf", fighter: "fighter", para: "para", armor: "armor", recon: "recon"};
+  const widerspruch = (B.ort !== null && B.ort !== undefined && i !== null && i !== undefined && MAP.n[B.ort] && MAP.n[i] && MAP.n[B.ort][0] !== MAP.n[i][0])
+    ? `<div class="note" style="color:#c9946a;margin-top:6px">The board says ${esc(MAP.n[B.ort][0])}, the town picked is ${esc(MAP.n[i][0])}.</div>` : "";
+  let namen = 0;
+  const zeile = (l, k) => {
+      const e = l.eintrag;
+      if (e.bild && !e.url){
+        try {
+          const L = e.lage || {nx: 0, nw: e.bild.width}, k = document.createElement("canvas");
+          k.width = Math.max(2, L.nw); k.height = e.bild.height;
+          k.getContext("2d").drawImage(e.bild, L.nx, 0, k.width, k.height, 0, 0, k.width, k.height);
+          e.url = k.toDataURL("image/png");
+        } catch(err){ e.url = ""; }
+      }
+      const wertFeld = l.n || "";
+      if (l.n) namen++;
+      const cls = !l.n ? "leer" : (l.u ? "unsicher" : "");
+      const hinweis = !l.n ? ` placeholder="${e.unlesbar ? "unreadable — click and type it" : "not read yet"}"`
+        : e.vorschlag && !e.hand ? ` title="read as &quot;${esc(e.name)}&quot;"` : l.u ? ` title="read once, ${e.zuv} of 100"` : "";
+      return `<div class="sp-z" data-e="${e.id}"><div class="nr">${k + 1}</div>
+        <div>${e.url ? `<img src="${e.url}" alt="">` : ""}</div>
+        <div><input type="text" class="${cls}" value="${esc(wertFeld)}" data-e="${e.id}" dir="auto" spellcheck="false"${hinweis}></div>
+        <div class="rl">${l.r ? esc(kurz[l.r] || l.r) : ""}</div>
+        <div class="mk">${l.e ? "us" : ""}${e.bekannt ? (l.e ? " · " : "") + "on record" : ""}${
+          e.zweit ? ` <span class="sp-tausch" data-e="${e.id}" title="Also read as &quot;${esc(e.zweit.name)}&quot;${e.zweit.schrift ? " (" + esc(e.zweit.schrift) + ")" : " (Latin)"} — click to use that one">⇄</span>` : ""}${
+          e.gespeichert ? " ✓" : ""}</div></div>`;
+  };
+  const seiten = B.tafeln.map(t => gefTafelSeite(t, kam));
+  let listen = seiten.map(s => `<div class="sp-liste"><h4>${esc(wort(s.farbe))} · ${s.f === 0 || s.f === 1 || s.f === 2 ? esc(FACTIONS[s.f].name) : "side not read"} · ${
+      s.n !== null ? s.n + " players" : "players not counted"}${s.bots ? ` · ${s.bots} bots` : ""}</h4>${s.leute.map(zeile).join("")}</div>`).join("");
+  /* the rows gone from the stand, sure or typed: kept with the others (SOLL 2) */
+  const frueher = gefTafelFrueher(T, B, new Map(seiten.map(s => [s.lage, s.f])), kam);
+  if (frueher.length) listen += `<div class="sp-liste"><h4>Seen earlier · ${frueher.length}</h4>${frueher.map(zeile).join("")}</div>`;
+  T.blatt = {schluessel, t: nun, namen, html: `${widerspruch}
+    <div class="sp-listen">${listen}</div>
+    <div style="margin-top:8px"><button class="mini" id="gf-tf-keep"${namen && gebunden && recht ? "" : " disabled"}>Keep ${namen} name${namen === 1 ? "" : "s"}</button></div>`};
+  }
+  return `<div class="gf-tf">
+    <div class="kb-titel">Scoreboard${B.art ? " · " + esc(gefTafelArtWort(B.art) || B.art) : ""}${B.ort !== null && B.ort !== undefined && MAP.n[B.ort] ? " · " + esc(MAP.n[B.ort][0]) : ""} · seen ${esc(alterText(B.t))}</div>
+    ${T.blatt.html}</div>`;
+}
+/* the sheet's wiring: typing holds the rebuild (GEF.tafel.tippt, as
+   PG.tippt does), Enter and blur commit, Escape puts the value back and
+   leaves the field. The listeners sit on the sheet container once; the
+   rows are rebuilt under them at every tick. */
+function gefTafelVerdrahten(blatt){
+  if (blatt.dataset.tafel !== "1"){
+    blatt.dataset.tafel = "1";
+    const eintrag = el => { const T = GEF && GEF.tafel; const id = +(el && el.dataset && el.dataset.e); return T ? T.eintraege.find(e => e.id === id) : null; };
+    blatt.addEventListener("focusin", ev => {
+      const el = ev.target.closest(".gf-tf input[data-e]"); if (!el || !GEF || !GEF.tafel) return;
+      el.dataset.vorher = el.value;
+      GEF.tafel.tippt = true;
+    });
+    blatt.addEventListener("focusout", ev => {
+      const el = ev.target.closest(".gf-tf input[data-e]"); if (!el || !GEF || !GEF.tafel) return;
+      const e = eintrag(el);
+      /* the field set back to the reading or the register's name takes the
+         hand away again (round 4, Skeptiker H2: "Handname" stood on after
+         the field was put back to "abznt"); the mark of the register goes
+         with a name that changed */
+      if (e){ const v = el.value.trim(), vorher = gefTafelName(e);
+              if (v === vorher && e.handGeerbt){ /* looked at, not changed: the inherited hand stays inherited (round 4) */ }
+              else if (v.length < 2 || v === (e.vorschlag || e.name || "")){ e.hand = null; e.handGeerbt = false; } else { e.hand = v; e.handGeerbt = false; }
+              if (gefTafelName(e) !== vorher) e.gespeichert = false; GEF.tafel.version++; }
+      GEF.tafel.tippt = false;
+      gefZeichnen();
+    });
+    blatt.addEventListener("keydown", ev => {
+      const el = ev.target.closest(".gf-tf input[data-e]"); if (!el) return;
+      if (ev.key === "Enter"){ ev.preventDefault(); el.blur(); }
+      if (ev.key === "Escape"){ ev.stopPropagation(); ev.preventDefault(); if (el.dataset.vorher !== undefined) el.value = el.dataset.vorher; el.blur(); }
+    });
+    blatt.addEventListener("pointerdown", ev => {
+      const t = ev.target.closest(".gf-tf .sp-tausch[data-e]");
+      if (t){ ev.preventDefault(); ev.stopPropagation(); gefTafelTauschen(+t.dataset.e); return; }
+      if (ev.target.closest("#gf-tf-keep")){ ev.preventDefault(); gefTafelBehalten(); }
+    });
+  }
+}
+/* the other reading takes the field, one click wide - as in the player room */
+function gefTafelTauschen(id){
+  const T = GEF && GEF.tafel, e = T && T.eintraege.find(x => x.id === id);
+  if (!e || !e.zweit) return;
+  const alt = {name: e.name, zuv: e.zuv, schrift: e.schrift};
+  e.name = e.zweit.name; e.zuv = e.zweit.zuv; e.schrift = e.zweit.schrift; e.zweit = alt; e.gespeichert = false;
+  const bek = gefTafelBekannt(T, e.name);
+  e.bekannt = !!bek; e.vorschlag = bek && bek !== e.name ? bek : null;
+  T.version++;
+  gefZeichnen();
+}
+/* "Keep N names": every row with a name goes into the register with its
+   board's side, as the player room's "Keep the sheet" does - no tick per
+   row (question 5) - and with them the rows seen earlier in this battle and
+   gone from the stand (gefTafelFrueher, SOLL 2). merkeSpieler asks for the
+   right itself and says nothing; the word is said here, once. */
+function gefTafelBehalten(){
+  if (!GEF || !GEF.tafel || !GEF.tafel.stand) return;
+  if (!gefTafelGebunden(GEF, GEF.tafel.stand)) return;   // no town, or the board names another: nothing to the register (5.16)
+  if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return; }
+  const T = GEF.tafel, B = T.stand, kam = gefTafelKameraden(), fVon = new Map();
+  let n = 0, schon = 0;
+  const nimm = (l, f) => {
+    if (!l.n) return;
+    if (l.eintrag.gespeichert){ schon++; return; }
+    if (merkeSpieler(l.n, f === 0 || f === 1 || f === 2 ? f : undefined)){ l.eintrag.gespeichert = true; n++; }
+  };
+  for (const t of B.tafeln){ const s = gefTafelSeite(t, kam); fVon.set(s.lage, s.f); for (const l of s.leute) nimm(l, s.f); }
+  for (const l of gefTafelFrueher(T, B, fVon, kam)) nimm(l, l.f);
+  T.version++;
+  toast(n ? `${n} player${n === 1 ? "" : "s"} on record${schon ? `, ${schon} were already` : ""}` : schon ? "All of them are already on record" : "Nothing to keep yet");
+  gefZeichnen();
+}
+/* ---- TEST BENCH FOR THE BOARD READER (probe only, through window) -----
+   gefProbeTafel(quelle, opts): one picture down gefLesen with ONE state
+   (opts.z carries a state from look to look, opts.faktor the HUD factor),
+   then the queue run dry (opts.warten, default), and back come the boards,
+   the rows with their readings, the clan object, the copies of the look
+   (kbKostenAn) and the worker's times. opts.nur "suchen" runs the band
+   search alone, "blick" the whole look on a fresh state without the
+   queue, "zweit" the look again on a state whose stand is set and whose
+   entries are settled - each opts.wiederholungen times, for the cost per
+   look. opts.ort is the town picked (the gate asks for one with the battle
+   mark). */
+async function gefProbeTafel(quelle, opts){
+  const o = opts || {};
+  const bild = await kbProbeBitmap(quelle);
+  const z = o.z || gefNeu();
+  z.kpFaktor = o.faktor || z.kpFaktor || 1;
+  if (o.ort !== undefined) z.ort = o.ort;
+  const W = bild.width, H = bild.height;
+  const E = {w: W, h: H, faktor: z.kpFaktor, z, blick: null, tafeln: [], art: null, ort: null, ortText: null, artText: null,
+             clan: null, clanBytes: 0, kosten: null, kostenGesamt: null, zeiten: null, ms: {}, fehler: null, suche: null};
+  try {
+    if (o.nur === "suchen" || o.nur === "blick" || o.nur === "zweit"){
+      const N = Math.max(1, o.wiederholungen || 1);
+      const frisch = () => { const zz = gefNeu(); zz.kpFaktor = z.kpFaktor; zz.ort = z.ort; return zz; };
+      let zw = null;
+      if (o.nur === "zweit"){
+        zw = frisch(); gefTafelBlick(bild, W, H, zw);
+        if (zw.tafel){ for (const e of zw.tafel.eintraege) e.sicher = true; zw.tafel.schlange.length = 0;
+                       if (zw.tafel.offen) for (const t of zw.tafel.offen.tafeln) t.kopfGelesen = true;
+                       gefTafelKopfFertig(zw.tafel, {art: null, ort: null, artText: "", ortText: "", jobs: 0, t: jetzt()}); }
+      }
+      kbKostenAn();
+      const t0 = performance.now();
+      let S0 = null, B0 = null;
+      for (let n = 0; n < N; n++){
+        if (o.nur === "suchen") S0 = gefTafelSuchen(bild, W, H, z.kpFaktor);
+        else { const zz = o.nur === "zweit" ? zw : frisch(); B0 = gefTafelBlick(bild, W, H, zz);
+               const Bz = zz.tafel && (zz.tafel.offen || zz.tafel.stand); S0 = Bz ? {tafeln: Bz.tafeln} : {tafeln: []};
+               if (zz.tafel && o.nur === "zweit") zz.tafel.schlange.length = 0; }
+      }
+      E.ms.jeBlick = +((performance.now() - t0)/N).toFixed(3);
+      E.kosten = kbKostenStand(); kbKostenAus();
+      E.kosten.jeBlick = {draw: E.kosten.draw/N, drawPx: Math.round(E.kosten.drawPx/N), getData: E.kosten.getData/N, getPx: Math.round(E.kosten.getPx/N)};
+      E.suche = S0 ? {blau: S0.blau, rot: S0.rot, paar: S0.paar, band: S0.band} : null;
+      E.blick = B0;
+      E.tafeln = (S0 && S0.tafeln || []).map(t => ({lage: t.lage, farbe: t.farbe, x0: t.x0, x1: t.x1, y0: t.y0, y1: t.y1, hell: t.hell, dunkel: !!t.dunkel, zeilen: t.zeilen ? t.zeilen.length : undefined, f: t.kopfF}));
+      return E;
+    }
+    kbKostenAn();
+    const t0 = performance.now();
+    const R = gefLesen(bild, z);
+    E.ms.blick = +(performance.now() - t0).toFixed(3);
+    E.kosten = kbKostenStand();
+    E.blick = R && R.tafel;
+    if (o.warten !== false && z.tafel){
+      gefTafelSchlange(z);
+      const bis = performance.now() + (o.frist || 120000);
+      while (z.tafel && (z.tafel.liest || z.tafel.schlange.length) && performance.now() < bis) await new Promise(r => setTimeout(r, 30));
+    }
+    E.ms.gesamt = +(performance.now() - t0).toFixed(1);
+    E.kostenGesamt = kbKostenStand(); kbKostenAus();
+    const T = z.tafel, B = T && T.stand;
+    E.zeiten = T ? T.zeiten.slice() : null;
+    E.offen = !!(T && T.offen); E.bestaetigt = B ? (B.bestaetigt || 0) : null;
+    E.kopf = T ? T.kopf : null; E.eintraege = T ? T.eintraege.length : 0;
+    E.frueher = B ? gefTafelFrueher(T, B, new Map(B.tafeln.map(t => [t.lage, gefTafelSeite(t, null).f])), gefTafelKameraden()).map(l => [l.n, l.f, l.r]) : null;
+    if (B){
+      const kam = gefTafelKameraden();
+      E.art = B.art; E.artText = B.artText; E.ort = B.ort; E.ortText = B.ortText; E.standT = B.t; E.standNr = B.nr;
+      E.tafeln = B.tafeln.map(t => { const s = gefTafelSeite(t, kam); return {
+        lage: t.lage, farbe: t.farbe, x0: t.x0, x1: t.x1, y0: t.y0, y1: t.y1, E: +t.E.toFixed(3), hell: t.hell, f: s.f, kopfF: t.kopfF, zeichen: t.zeichen,
+        mehrheit: s.mehrheit, votes: s.votes, n: t.n, bots: t.bots, kopfText: t.kopfText, geschnitten: t.zeilen.length,
+        zeilen: t.zeilen.map((zl, k) => { const e = zl.e; return {i: zl.i, y: zl.y, ende: zl.ende, id: e.id, wert: +e.wert.toFixed(3), getragen: e.seit < e.zuletzt, name: e.name, zuv: e.zuv, schrift: e.schrift,
+          zweit: e.zweit ? e.zweit.name : null, sicher: e.sicher, unlesbar: e.unlesbar, versuche: e.versuche, lesungen: e.lesungen.map(x => x.name),
+          rolle: e.rolle, trupp: e.trupp, abz: e.abz, bekannt: e.bekannt, vorschlag: e.vorschlag, hand: e.hand, imStand: k < (s.leute.length)}; })}; });
+      E.clan = gefTafelFuerClan(z);
+      E.clanBytes = E.clan ? JSON.stringify(E.clan).length : 0;
+    }
+    return E;
+  } catch(err){
+    try { kbKostenAus(); } catch(e2){}
+    E.fehler = String(err && err.stack || err);
+    return E;
+  } finally {
+    if (bild && bild.close) bild.close();
+  }
+}
 /* THE READING OF ONE BATTLE ENDS WITH IT. The countdown, the raw digit
    reading, the last bars, the guard's time and the objective row are what
    the reader knows about the battle in the window - and they live as long as
@@ -30004,6 +31098,7 @@ const gefUhrzeit = t => new Date(t).toTimeString().slice(0, 8);
 function gefLageWeg(z){
   z.uhrLesung = null; z.rest = null; z.restVerworfen = 0; z.balkenZuletzt = null;
   z.hudZeit = 0; z.paarGesehen = false; z.kp = null; z.kpPlaetze = null;
+  z.tafel = null;                         // the scoreboard's stand, entries and queue go with it (BAT-1)
 }
 /* ONE LOOK. One window out of the shared picture, at its own size - no
    scaling, because everything measured here is measured in points. */
@@ -30044,9 +31139,16 @@ function gefLesen(bild, z){
      window, and in its own catch. Nothing above is touched by it: not px,
      not bw, not bh, not the band. If the word reader falls over, the score
      and the clock still stand. */
+  /* THE SCOREBOARD (BAT-1), its own window and its own catch, before the
+     head block: it cuts its strips while the board stands and reads them
+     afterwards in the worker (gefTafelSchlange). The score and the clock
+     stand whatever happens here. Not a HUD sighting for the guard above
+     (5.93 open); its own witness is the pair of head bars. */
+  let tafel = null;
+  try { tafel = gefTafelBlick(bild, W, H, z); if (tafel) gefTafelSchlange(z); } catch(e){ tafel = null; }
   let endbild = null;
   try { endbild = gefEndbildPruefen(bild, W, H, z); } catch(e){ endbild = null; }
-  return {w: W, h: H, balken: balken, endbild: endbild, kp: kp};
+  return {w: W, h: H, balken: balken, endbild: endbild, kp: kp, tafel: tafel};
 }
 /* ---- what the clan is told ---------------------------------------------
    HOW OFTEN. Not with every look. Over four minutes the bar moved about two
@@ -30066,7 +31168,7 @@ const GEF_FRISCH = 15*60000;
 function gefStand(i){
   const e = S.gefecht[i];
   /* a reading is a score (li), a countdown (rest) or the objective row (kp) - an assault carries no bars at all */
-  const b = (imKrieg(e) && imZeit(e) && e.v && e.v.bat && (e.v.bat.li !== undefined || e.v.bat.rest || e.v.bat.kp)) ? e.v.bat : null;
+  const b = (imKrieg(e) && imZeit(e) && e.v && e.v.bat && (e.v.bat.li !== undefined || e.v.bat.rest || e.v.bat.kp || e.v.bat.tafel)) ? e.v.bat : null;
   if (!b || !e.t) return null;
   const t = b.t || e.t;                                 // frozen time first, see gefAlterHalten
   return ((zeitReise || jetzt()) - t <= GEF_FRISCH) ? Object.assign({}, b, {t: t}) : null;
@@ -30095,7 +31197,7 @@ function gefRestZeigen(b, i){
    ENNO 05.09.2026: "blau (Verbuendete)". */
 const gefKpKurz = b => (b && b.kp && b.kp.length) ? b.kp.filter(p => p.h === "b").length + "/" + b.kp.length : "";
 /* all three short texts of a reading, for the route text and the hover card */
-const gefKurzAlle = (b, i) => [gefKurz(b), gefRestZeigen(b, i), gefKpKurz(b)].filter(Boolean);
+const gefKurzAlle = (b, i) => [gefKurz(b), gefRestZeigen(b, i), gefKpKurz(b), gefTafelKurz(b.tafel)].filter(Boolean);
 /* the hover card's chip for the row: one coloured box per place, and the
    ring's fill in percent where a ring is */
 function gefKpChip(b){
@@ -30142,6 +31244,7 @@ function gefZeile(i){
   const rt = gefRestZeigen(b, i);
   if (rt) teile.push(rt + " left");
   if (b.kp && b.kp.length) teile.push(b.kp.filter(p => p.h === "b").length + " of " + b.kp.length + " objectives ours");
+  if (b.tafel){ const tk = gefTafelKurz(b.tafel); if (tk) teile.push(tk); }   // "18 v 19 · 1 of us on the board" (BAT-1)
   if (b.li !== undefined) teile.push(gefSatz(b));
   /* the reader's name, not the row's author: whoever starts or clears the
      clock by hand stamps this row anew and becomes its author, and the
@@ -30554,8 +31657,18 @@ function gefMelden(){
   if (bk && nun - bk.t <= GEF_SCHREIB_MS){ neu.li = bk.li; neu.re = bk.re; }
   if (GEF.rest && hud) neu.rest = {s: Math.max(0, Math.round(gefRestSek(GEF.rest.s, GEF.rest.t)))};
   if (GEF.kp && GEF.kp.length && hud) neu.kp = GEF.kp.slice(0, GEF_KP_HOECHSTENS).map(p => ({k: p.k, h: p.h, r: p.r, f: p.f}));
-  if (neu.li === undefined && !neu.rest && !neu.kp) return;   // nothing certain, nothing written
+  /* THE SCOREBOARD (BAT-1): the last complete stand, its own witness (the
+     head bars), not behind the HUD guard; nothing when the board's town line
+     names another town than the one picked (gefTafelFuerClan). */
+  const tafel = gefTafelFuerClan(GEF);
+  if (tafel) neu.tafel = tafel;
   const alt = GEF.geschrieben;
+  /* the board alone starts a line only while the HUD is in sight, or as the
+     first line ever: a line written for the board while the HUD is gone
+     would drop the countdown and the objective row the last line carries
+     (round 3, Skeptiker Wort SOLL 1) */
+  const tafelDarf = !!tafel && (hud || !alt);
+  if (neu.li === undefined && !neu.rest && !neu.kp && !tafelDarf) return;   // nothing certain, nothing written
   const weit = !GEF.gesendet || nun - GEF.gesendet >= GEF_SCHREIB_MS;
   let bewegt = !alt, sofort = false;
   if (alt){
@@ -30576,6 +31689,13 @@ function gefMelden(){
       else if (!alt.kp || alt.kp.length !== neu.kp.length
                || neu.kp.some(p => !vorher.has(p.k) || vorher.get(p.k).r !== p.r || Math.abs(vorher.get(p.k).f - p.f) >= 0.05)) bewegt = true;
     }
+  }
+  /* the board: at once with the first complete stand, then with the
+     quarter-minute whenever the stand changed - a name come or gone, a name
+     turned sure (BAT-1) */
+  if (alt && neu.tafel && hud){
+    if (!alt.tafel) sofort = true;
+    else if (gefTafelKennung(alt.tafel) !== gefTafelKennung(neu.tafel)) bewegt = true;
   }
   if (!(sofort || (weit && bewegt))) return;
   gefSchreiben(i, neu);
@@ -30605,6 +31725,9 @@ function gefNeu(){
              kpFaktor the HUD factor of the picture, 1 for a live window */
           uhrLesung: null, rest: null, restVerworfen: 0, balkenZuletzt: null,
           hudZeit: 0, paarGesehen: false, kp: null, kpPlaetze: null, kpLog: [], kpFaktor: 1,
+          /* the scoreboard (BAT-1): entries, queue and the last complete
+             look live here, made on the first look that finds the board */
+          tafel: null,
           endbild: null, ende: null, endbildGemeldet: null,
           geschrieben: null, gesendet: 0, orteSchluessel: null,
           status: "Waiting for the game window ..."};
@@ -30820,7 +31943,7 @@ function gefPult(){
     <div class="kb-abstand"></div>
     <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run
       borderless or windowed. Only the town picked on the left is written to: the score, the
-      countdown and the objective row.</div>`;
+      countdown, the objective row and the scoreboard.</div>`;
   document.getElementById("gf-kraft").addEventListener("click", () => {
     if (GEF && GEF.live) gefLiveStop(true); else gefLiveStart(); });
   /* share again: end the share and ask once; declined, the tick stops the desk itself */
@@ -30887,7 +32010,9 @@ function gefZeichnen(){
     <h3 style="margin-top:14px">Reading</h3>
     Share the game window and play. The head strip is read every ${GEF_TAKT} ms, and the two boxes are only measured once they have been found at the same place in three looks. A look that brought the same picture as the one before it does not count towards those three. The town's line goes to the clan every fifteen seconds while the score, the countdown or the objective row moves, and only while the head strip shows the battle.
     Hold-and-take battles carry the two bars, assaults do not. In an assault the countdown is read from its digits, believed only when two looks agree, and the clan's clock starts by itself when the countdown ends. The objective boxes under the clock are read in both, with the capture circle around them. The end screen ends the reading.
+    Hold Tab with a town picked on the left: the scoreboard is cut while it stands, its names are read afterwards one at a time. The last full look is the stand that goes to the clan; a name is sure once two readings agree or the register knows it.
     <h3 style="margin-top:14px">What was measured</h3>
+    <div class="note">Over twenty-one captures the head bars were found on all 43 boards and on none of 167 pictures without one; every row was counted right. Names read exactly in 282 of 397 rows at one look; after two looks 26 of 35 stood sure and right and 6 sure and wrong - the same misreading twice, so a sure name can still be wrong. A look at the board costs 9 to 10 ms the first time and 5 to 6 after; a name takes the reader about 30 ms.</div>
     <div class="note">Over the recorded assault the countdown was read 1014 times, all of them right, and two wrong single readings were thrown out; over the two other recordings it read no countdown at all. The objective boxes were read in 2590 of 2676 looks of the assault, the same as the measurement in 2583 of them. A display drawn at double size is not read.</div>
     <div class="note">Over a recorded assault, which carries no bars at all, the reader said nothing in 2677 looks a second apart. Over the one recorded hold-and-take battle it read 69 times; at the ten points where a stored measurement of the same battle also holds, it stood between 1,2 points under and 1,2 points over it. That is the whole comparison there is. A display drawn at double size is not read at all - the pair of boxes is then wider than the strip cut out here, and half a box is not measured.</div>
     <h3 style="margin-top:14px">The end of the battle</h3>
@@ -30900,6 +32025,10 @@ function gefZeichnen(){
       gefZeichnen();
     });
   }
+  /* while a name on the scoreboard block is being typed the sheet is not
+     rebuilt under the hand (BAT-1, the rule of pgZeichnen): nothing below
+     this line runs, the clock button's listener included */
+  if (GEF.tafel && GEF.tafel.tippt){ gefPult(); return; }
   blatt.innerHTML = `
     <div class="kb-titel">Battle state</div>
     ${b ? `
@@ -30955,6 +32084,7 @@ function gefZeichnen(){
           return "Sending to the clan ...";
         })()}</div></div>`;
     })()}
+    ${gefTafelBlatt()}
     ${!darf("aufklaerung") ? `<div class="note" style="margin-top:16px">${esc(rechtSatz("aufklaerung"))} Nothing is sent.</div>`
       : GEF.ort === null || GEF.ort === undefined ? `<div class="note" style="margin-top:16px">Pick a town on the left, or nothing is sent to the clan.</div>`
       : GEF.gesendet ? (() => {
@@ -31020,6 +32150,7 @@ function gefZeichnen(){
     if (V.ort !== null && V.ort !== undefined && V.ort !== i) return;
     if (overtimeStart(i, V.t)){ side(); draw(); gefZeichnen(); }
   });
+  gefTafelVerdrahten(blatt);
   gefPult();
 }
 async function gefstandAuf(){
@@ -31379,6 +32510,7 @@ async function ocrSprachenSetzen(sprachen){
 }
 window.kbProbeBild = kbProbeBild;
 window.ocrSprachenSetzen = ocrSprachenSetzen;
+window.gefProbeTafel = gefProbeTafel;
 
 /* 'Read screenshot' is gone - the radar room does that job, live. */
 
@@ -43712,8 +44844,11 @@ async function sbAnzeigen(datei, quelle){
 }
 
 /* ---- Das Kampf-Scoreboard lesen -------------------------------------
-   Zwei Tabellen am Ende einer Schlacht: links die Angreifer, rechts die
-   Verteidiger. Je Zeile ein Rangabzeichen, ein Spielername und der Name der
+   The Tab board IN THE RUNNING BATTLE (not the end screen - that carries no
+   player rows; corrected with BAT-1, 13.09.2026): two tables side by side.
+   The chain below (scoreboardLesen ... sbNamenVerdrahten) has had no door
+   since 02.09.; the parts SB, sbRangVorlagen, the sbAbdruck rule and
+   abdruckNorm are used by the battle reader (gefTafelBlick). Je Zeile ein Rangabzeichen, ein Spielername und der Name der
    Kampfeinheit - letzterer ist bei vielen der Clanname ("Volkssturm",
    "Chud Brigade").
 
@@ -50516,7 +51651,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5653d92d41</span></p></div>
+         installation. <span style="color:var(--dim2)">· build cb4f107c18</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -50744,7 +51879,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "5653d92d41";
+const BAU = "cb4f107c18";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
