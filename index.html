@@ -1067,13 +1067,28 @@ body.meld-modus{cursor:help}
    two to a line 232, stacked 758 at twice the height, strip over field 293 at
    half again the height); the mark column takes "us · on record" whole (70) */
 .gf-tf .sp-liste{flex:1 1 400px;min-width:min(400px,100%)}
-.gf-tf .sp-z{grid-template-columns:22px 96px minmax(0,280px) 44px 72px}
+.gf-tf .sp-z{grid-template-columns:22px 96px minmax(0,280px) 44px 72px 30px}
 .gf-tf .sp-z img{height:16px;max-width:96px;image-rendering:pixelated;background:#2b2e33;border-radius:2px;display:block}
 .gf-tf .sp-z input{width:100%;font:inherit;font-size:12px;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 4px;min-width:0}
 .gf-tf .sp-z input.unsicher{color:#6d5410;border-color:#d1b45a;background:#fff3c4}
 .gf-tf .sp-z input.leer{border-style:dashed}
 .gf-tf .rl{font-size:10px;color:#7a6a48;letter-spacing:.08em;text-transform:uppercase}
 .gf-tf .mk{font-size:10px;color:#4f7a3a;font-weight:700;white-space:nowrap}
+/* the kit mask under a row of the scoreboard block (Paket 20): the game's
+   lists for the board's side, a search box over them, the chips this player
+   already has on that side. Built from GEF.tafel.kit at every tick. */
+.gf-tf .sp-z .mini{font-size:10px;padding:0 4px;line-height:16px;cursor:pointer}
+.gf-tf .sp-z .mini:disabled{opacity:.45;cursor:default}
+.gf-tf .mini.an{background:#7a6a48;color:#fff8e6;border-color:#7a6a48}
+.gf-kit{margin:2px 0 6px 28px;padding:6px 8px;border:1px solid #b9ab8a;border-radius:3px;background:rgba(255,248,230,.6);
+  display:flex;flex-direction:column;gap:5px;font-size:12px;line-height:1.4}
+.gf-kit-k{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:#2b2416}
+.gf-kit-k input{margin-left:auto;width:130px;font:inherit;font-size:12px;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 4px;min-width:0}
+.gf-kit-r{display:flex;align-items:center;gap:6px}
+.gf-kit-r select{flex:1;min-width:0;font:inherit;font-size:12px;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:1px 4px;color:#2b2416}
+.gf-kit-c{display:flex;flex-wrap:wrap;gap:4px}
+.gf-kit-c .chip{color:#2b2416;border-color:#b9ab8a;text-transform:none;letter-spacing:0;font-size:11px}
+.gf-kit-c .chip b{cursor:pointer;padding:0 0 0 5px;font-size:12px}
 .kb-links{grid-area:links;width:260px;background:#0e1013;border-right:1px solid #22252c;
   padding:14px;color:#a9b0b8;font-size:13px;line-height:1.5;overflow:auto}
 .kb-links h3{margin:0 0 6px;font-size:10px;letter-spacing:.14em;color:#6d7680;text-transform:uppercase}
@@ -30472,7 +30487,9 @@ function gefTafelKopfFertig(T, kopf){
   T.kopf = {art: kopf.art !== null ? kopf.art : (alt ? alt.art : null), ort: kopf.ort !== null ? kopf.ort : (alt ? alt.ort : null),
             artText: kopf.artText || (alt ? alt.artText : ""), ortText: kopf.ortText || (alt ? alt.ortText : ""), t: kopf.t};
   T.kopfOffen = false;
-  for (const B of [T.stand, T.offen]) if (B){ B.art = T.kopf.art; B.ort = T.kopf.ort; B.artText = T.kopf.artText; B.ortText = T.kopf.ortText; }
+  if (T.geruht && !T.offen) return;   /* a head job from before the rest: the next battle reads its own head block (round 1, Skeptiker KANN 5) */
+  for (const B of [T.geruht ? null : T.stand, T.offen]) if (B){ B.art = T.kopf.art; B.ort = T.kopf.ort; B.artText = T.kopf.artText; B.ortText = T.kopf.ortText; }   // a rested stand keeps its own head block: this one belongs to the next battle (Paket 20)
+  if (T.stand && !T.geruht) gefTafelBinden(T.ortGewaehlt, T.stand);   // the board's town line came in anew: the gate is asked again and held (Paket 20)
   T.version++;
   gefTafelStandSetzen(T);
 }
@@ -30540,7 +30557,14 @@ function gefTafelStandSetzen(T){
   const P = T.offen, K = GEF_TAFEL;
   if (!P || !T.kopf || P.tafeln.some(t => !t.kopfGelesen)) return false;
   P.art = T.kopf.art; P.ort = T.kopf.ort; P.artText = T.kopf.artText; P.ortText = T.kopf.ortText;
-  const alt = T.stand;
+  /* a stand set after a rest (capture stopped, town changed, end screen
+     read) opens a new battle's book: the old stand neither confirms nor
+     carries a side, and the entries this look did not meet go with it -
+     otherwise the last battle's players would stand under "Seen earlier"
+     of this one, and a half-covered board would hold the last battle's rows
+     as the stand (Paket 20) */
+  const neu = !!(T.stand && T.geruht);
+  const alt = neu ? null : T.stand;
   P.bestaetigt = 0;
   const drei = P.tafeln.length >= 3;   // three boards: the game shows twelve rows on each, a head count above that is never met (round 3, H3)
   P.tafeln = P.tafeln.map(t => {
@@ -30554,6 +30578,9 @@ function gefTafelStandSetzen(T){
     return t;
   });
   T.stand = P; T.offen = null; T.version++;
+  if (neu){ const drin = new Set(); for (const t of P.tafeln) for (const zl of t.zeilen) drin.add(zl.e); T.eintraege = T.eintraege.filter(e => drin.has(e)); }
+  T.geruht = false;
+  gefTafelBinden(T.ortGewaehlt, P);        // the gate, asked of the living mark now and held (Paket 20)
   return true;
 }
 /* the town gate (E, 5.16): a board is looked at, held and kept only with a
@@ -30564,6 +30591,114 @@ function gefTafelGebunden(z, B){
   if (i === null || i === undefined || !fightAt(i)) return false;
   if (B && B.ort !== null && B.ort !== undefined && B.ort !== i && !(MAP.n[B.ort] && MAP.n[i] && MAP.n[B.ort][0] === MAP.n[i][0])) return false;   // by name: the list holds a town twice (Eindhoven)
   return true;
+}
+/* THE GATE, HELD (Paket 20; FABLE 14.09.2026, decision 2). Asked of the
+   living battle mark whenever a stand is set and whenever a town is picked,
+   then held on the stand: it does not fall with the mark after the battle
+   (the radar drops the mark, the Kommodore still wants to keep names and
+   record kit), and a town picked later binds as long as its mark still
+   stands. Keep and Kit ask the held answer (gefTafelHaelt); the look and
+   the clan line keep asking the living one (gefTafelGebunden). */
+function gefTafelBinden(i, B){
+  if (!B) return;
+  B.stadt = (i === null || i === undefined) ? null : i;
+  B.gebunden = gefTafelGebunden({ort: B.stadt}, B);
+}
+const gefTafelHaelt = (z, B) => !!B && (B.gebunden === undefined ? gefTafelGebunden(z, B) : !!B.gebunden);
+/* THE READING RESTS, THE STAND STAYS (Paket 20, "auch nach dem Ende offen"
+   - ENNO 30.08.2026: "ein Kampf kann auch nach 5 min um sein"). Called where
+   the HUD state falls (gefLageWeg: capture stopped, town changed, end screen
+   read): the queue is emptied through gefTafelJobWeg - a name job frees its
+   entry, or e.offen would hold that row for good -, the open look and the
+   head block go, a strip still in the worker runs out by itself (the loop
+   in gefTafelSchlange finds an empty queue). The stand, its entries with
+   their strips and the kit mask stay, so Keep and Kit go on after the
+   battle. The next stand set after a rest is a new battle's (T.geruht,
+   gefTafelStandSetzen). The stand falls with the next capture
+   (gefLiveStart) and with the desk (gefstandZu). */
+function gefTafelRuhen(z){
+  const T = z && z.tafel;
+  if (!T) return;
+  while (T.schlange.length) gefTafelJobWeg(T, T.schlange.shift());
+  T.offen = null; T.kopfOffen = false; T.kopf = null; T.kopfZeit = 0;
+  T.geruht = true; T.version++;
+}
+/* THE KIT (Paket 20, SPI-1): the arsenal of a player on the board, written
+   from the desk while the battle runs or after it - ENNO 30.08.2026: "ein
+   Folgemenue ..., wo man ... schnell und einfach das Equipment eintragen
+   kann, ... waehrend man selbst im Kampf ist"; ENNO 12.09.2026: only what
+   one "als Mensch selbst bemerken kann, d.h. im FPS-Spiel". Same row, same
+   writer as the enemy window (setFeindArsenal, one arsenal per side), so
+   the first find "Their kit" is credited there as before - nothing new for
+   the server. The side is the board's (head sign), else the register's;
+   not read: no kit (question 1). */
+const gefKitSeite = (l, sf) => {
+  if (sf === 0 || sf === 1 || sf === 2) return sf;
+  const r = l && l.n ? S.roster[spielerKey(l.n)] : null, f = r && r.v ? r.v.f : null;
+  return (f === 0 || f === 1 || f === 2) ? f : null;
+};
+/* the options of one list for one side, narrowed by the search text - the
+   game's player card says "M2 Carbine", the list has three carbines: the
+   search leaves them all, the choice stays with the person (question 6) */
+function gefKitOptionen(liste, f, such, wahl){
+  const q = String(such || "").trim().toLowerCase();
+  return (liste || []).filter(x => fuerSeite(x, f) && (!q || String(x.name || "").toLowerCase().includes(q)))
+    .map(x => `<option value="${esc(x.k)}"${x.k === wahl ? " selected" : ""}>${esc(x.name)}</option>`).join("");
+}
+/* the focus leaves the sheet before it is rebuilt: an element removed from
+   the document fires no blur, and the hold (tippt) would stand for good. A
+   name field still open is committed by its own focusout. */
+function gefKitFrei(){
+  const a = document.activeElement;
+  if (a && a.closest && a.closest(".gf-tf")) a.blur();
+  if (GEF && GEF.tafel) GEF.tafel.tippt = false;
+}
+function gefKitOeffnen(id){
+  const T = GEF && GEF.tafel;
+  if (!T) return;
+  gefKitFrei();
+  T.kit = (T.kit && T.kit.id === id) ? null : {id, such: "", w: null, v: null};
+  T.version++; gefZeichnen();
+}
+function gefKitZu(){
+  const T = GEF && GEF.tafel;
+  if (!T) return;
+  gefKitFrei(); T.kit = null; T.version++; gefZeichnen();
+}
+/* "Add": the row goes into the register first, as Keep writes it - an
+   arsenal on a player the register does not know is invisible to the clan
+   (Intel > Players lists the register; question 2) -, then the piece goes
+   onto the arsenal read AT THIS MOMENT, not when the mask was built. */
+function gefKitEintragen(art, k, f){
+  const T = GEF && GEF.tafel, K = T && T.kit;
+  if (!K || !k || !(f === 0 || f === 1 || f === 2)) return;
+  const e = T.eintraege.find(x => x.id === K.id), name = e ? gefTafelName(e) : null;
+  if (!e || !name || !(e.hand || e.sicher)) return;          // a sure or typed name only (FABLE decision 5)
+  if (!gefTafelHaelt(GEF, T.stand)) return;                  // no town, or the board names another (5.16)
+  if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return; }
+  const key = spielerKey(name);
+  if (!e.gespeichert){ if (!merkeSpieler(name, f)) return; e.gespeichert = true; }
+  const alt = feindArsenal(key, f);
+  if (art === "w"){
+    if (alt.w.includes(k)){ toast("Already recorded."); return; }
+    setFeindArsenal(key, f, {w: alt.w.concat([k]), v: alt.v});
+  } else {
+    if (alt.v.some(x => (x && x.k ? x.k : x) === k)){ toast("Already recorded."); return; }
+    setFeindArsenal(key, f, {w: alt.w, v: alt.v.concat([{k, upg: []}])});
+  }
+  T.version++; gefKitFrei(); gefZeichnen();
+}
+/* the x on a chip: the piece goes, the first find stays (it was seen) */
+function gefKitEntfernen(art, k, f){
+  const T = GEF && GEF.tafel, K = T && T.kit;
+  if (!K || !k || !(f === 0 || f === 1 || f === 2)) return;
+  const e = T.eintraege.find(x => x.id === K.id), name = e ? gefTafelName(e) : null;
+  if (!e || !name) return;
+  if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return; }
+  const key = spielerKey(name), alt = feindArsenal(key, f);
+  if (art === "w") setFeindArsenal(key, f, {w: alt.w.filter(x => x !== k), v: alt.v});
+  else setFeindArsenal(key, f, {w: alt.w, v: alt.v.filter(x => (x && x.k ? x.k : x) !== k)});
+  T.version++; gefKitFrei(); gefZeichnen();
 }
 /* the one name of a row, for the field, the clan and the register alike:
    typed by hand, else the register's own spelling the reading met, else the
@@ -30873,7 +31008,7 @@ const gefTafelArtWort = art => (GEF_TAFEL_ARTEN[art] && GEF_TAFEL_ARTEN[art][2])
 function gefTafelBlatt(){
   const T = GEF && GEF.tafel, B = T && T.stand;
   if (!B) return "";
-  const gebunden = gefTafelGebunden(GEF, B);
+  const gebunden = gefTafelHaelt(GEF, B);   // held on the stand, not the living mark (Paket 20)
   const kam = gefTafelKameraden();
   const i = GEF.ort, o = (i !== null && i !== undefined) ? ownerOf(i) : -1, cf = clanFaktion(), recht = darf("aufklaerung");
   const nun = jetzt();
@@ -30889,7 +31024,41 @@ function gefTafelBlatt(){
   const widerspruch = (B.ort !== null && B.ort !== undefined && i !== null && i !== undefined && MAP.n[B.ort] && MAP.n[i] && MAP.n[B.ort][0] !== MAP.n[i][0])
     ? `<div class="note" style="color:#c9946a;margin-top:6px">The board says ${esc(MAP.n[B.ort][0])}, the town picked is ${esc(MAP.n[i][0])}.</div>` : "";
   let namen = 0;
-  const zeile = (l, k) => {
+  /* the Kit button of a row (Paket 20): every row with a name that is not
+     one of us - a comrade keeps his own arsenal. Shut without the right,
+     without the held gate (as Keep), without a side, and on a name that is
+     not sure or typed (FABLE decision 5): a kit on a misread name would be
+     a kit on a stranger. */
+  const kitKnopf = (l, sf) => {
+    const e = l.eintrag;
+    if (!l.n || l.e) return "<div></div>";
+    const f = gefKitSeite(l, sf);
+    /* sure or typed - the same rule the hand itself checks (gefKitEintragen); l.u
+       is also 1 while the head count is unread, and a typed name must not stay
+       shut behind "type it" (round 1, Skeptiker) */
+    const unsicher = !(e && (e.hand || e.sicher));
+    const zu = !recht ? rechtSatz("aufklaerung") : !gebunden ? "" : f === null ? "side not read" : unsicher ? "name not sure - click the name and type it" : null;
+    const offen = !!(T.kit && T.kit.id === e.id);
+    return `<div><button class="mini${offen ? " an" : ""}" data-kit="${e.id}"${zu !== null ? ` disabled${zu ? ` title="${esc(zu)}"` : ""}` : ""}>Kit</button></div>`;
+  };
+  /* the mask under the open row, from its state (GEF.tafel.kit): the side
+     it writes to stands on the element (data-kitf), the hands read it there */
+  const kitMaske = (l, sf) => {
+    const e = l.eintrag, K = T.kit;
+    if (!K || K.id !== e.id || !l.n || l.e || !(e.hand || e.sicher) || !gebunden || !recht) return "";
+    const f = gefKitSeite(l, sf);
+    if (f === null) return "";
+    const ars = feindArsenal(spielerKey(l.n), f);
+    const chip = (name, art, k) => `<span class="chip">${esc(name)}<b data-kitrm="${art}:${esc(k)}">×</b></span>`;
+    return `<div class="gf-kit" data-e="${e.id}" data-kitf="${f}">
+      <div class="gf-kit-k"><b>${esc(l.n)}</b> · ${esc(FACTIONS[f].name)}<input type="text" data-kitsuch value="${esc(K.such || "")}" placeholder="search" spellcheck="false"></div>
+      <div class="gf-kit-r"><select data-kitw>${gefKitOptionen(MAP.arms, f, K.such, K.w)}</select><button class="mini" data-kitadd="w">Add</button></div>
+      <div class="gf-kit-r"><select data-kitv>${gefKitOptionen(MAP.veh, f, K.such, K.v)}</select><button class="mini" data-kitadd="v">Add</button></div>
+      ${ars.w.length || ars.v.length ? `<div class="gf-kit-c">${ars.w.map(k => chip((ARM[k] && ARM[k].name) || k, "w", k)).join("")}${
+        ars.v.map(x => { const k = x && x.k ? x.k : x; return chip((VEH[k] && VEH[k].name) || k, "v", k); }).join("")}</div>` : ""}
+      <div><button class="mini" data-kitzu>Done</button></div></div>`;
+  };
+  const zeile = (l, k, sf) => {
       const e = l.eintrag;
       if (e.bild && !e.url){
         try {
@@ -30910,14 +31079,14 @@ function gefTafelBlatt(){
         <div class="rl">${l.r ? esc(kurz[l.r] || l.r) : ""}</div>
         <div class="mk">${l.e ? "us" : ""}${e.bekannt ? (l.e ? " · " : "") + "on record" : ""}${
           e.zweit ? ` <span class="sp-tausch" data-e="${e.id}" title="Also read as &quot;${esc(e.zweit.name)}&quot;${e.zweit.schrift ? " (" + esc(e.zweit.schrift) + ")" : " (Latin)"} — click to use that one">⇄</span>` : ""}${
-          e.gespeichert ? " ✓" : ""}</div></div>`;
+          e.gespeichert ? " ✓" : ""}</div>${kitKnopf(l, sf)}</div>${kitMaske(l, sf)}`;
   };
   const seiten = B.tafeln.map(t => gefTafelSeite(t, kam));
   let listen = seiten.map(s => `<div class="sp-liste"><h4>${esc(wort(s.farbe))} · ${s.f === 0 || s.f === 1 || s.f === 2 ? esc(FACTIONS[s.f].name) : "side not read"} · ${
-      s.n !== null ? s.n + " players" : "players not counted"}${s.bots ? ` · ${s.bots} bots` : ""}</h4>${s.leute.map(zeile).join("")}</div>`).join("");
+      s.n !== null ? s.n + " players" : "players not counted"}${s.bots ? ` · ${s.bots} bots` : ""}</h4>${s.leute.map((l, k) => zeile(l, k, s.f)).join("")}</div>`).join("");
   /* the rows gone from the stand, sure or typed: kept with the others (SOLL 2) */
   const frueher = gefTafelFrueher(T, B, new Map(seiten.map(s => [s.lage, s.f])), kam);
-  if (frueher.length) listen += `<div class="sp-liste"><h4>Seen earlier · ${frueher.length}</h4>${frueher.map(zeile).join("")}</div>`;
+  if (frueher.length) listen += `<div class="sp-liste"><h4>Seen earlier · ${frueher.length}</h4>${frueher.map((l, k) => zeile(l, k, l.f)).join("")}</div>`;
   T.blatt = {schluessel, t: nun, namen, html: `${widerspruch}
     <div class="sp-listen">${listen}</div>
     <div style="margin-top:8px"><button class="mini" id="gf-tf-keep"${namen && gebunden && recht ? "" : " disabled"}>Keep ${namen} name${namen === 1 ? "" : "s"}</button></div>`};
@@ -30963,6 +31132,52 @@ function gefTafelVerdrahten(blatt){
       if (t){ ev.preventDefault(); ev.stopPropagation(); gefTafelTauschen(+t.dataset.e); return; }
       if (ev.target.closest("#gf-tf-keep")){ ev.preventDefault(); gefTafelBehalten(); }
     });
+    /* THE KIT MASK (Paket 20). Its state lives on GEF.tafel.kit and the block
+       is rebuilt from it at every tick; a control of the mask holds the sheet
+       only while it has the focus (the open list of a select dies with a
+       rebuild), as the name field does. The buttons on pointerdown, as Keep.
+       Escape shuts the mask, not the desk. */
+    blatt.addEventListener("focusin", ev => {
+      if (!ev.target.closest(".gf-kit") || !GEF || !GEF.tafel) return;
+      GEF.tafel.tippt = true;
+    });
+    blatt.addEventListener("focusout", ev => {
+      if (!ev.target.closest(".gf-kit") || !GEF || !GEF.tafel) return;
+      GEF.tafel.tippt = false;
+    });
+    blatt.addEventListener("input", ev => {
+      const el = ev.target.closest(".gf-kit [data-kitsuch]"), T = GEF && GEF.tafel;
+      if (!el || !T || !T.kit) return;
+      T.kit.such = el.value; T.version++;
+      const m = el.closest(".gf-kit"), f = +m.dataset.kitf;
+      const w = m.querySelector("[data-kitw]"), v = m.querySelector("[data-kitv]");
+      if (w) w.innerHTML = gefKitOptionen(MAP.arms, f, T.kit.such, T.kit.w);
+      if (v) v.innerHTML = gefKitOptionen(MAP.veh, f, T.kit.such, T.kit.v);
+    });
+    blatt.addEventListener("change", ev => {
+      const el = ev.target.closest(".gf-kit select"), T = GEF && GEF.tafel;
+      if (!el || !T || !T.kit) return;
+      if (el.hasAttribute("data-kitw")) T.kit.w = el.value; else T.kit.v = el.value;
+      T.version++;   /* the block's buffer must not hand back the older pick after the next beat (round 1, Skeptiker) */
+    });
+    blatt.addEventListener("keydown", ev => {
+      if (!ev.target.closest(".gf-kit")) return;
+      if (ev.key === "Escape"){ ev.stopPropagation(); ev.preventDefault(); gefKitZu(); }
+      else if (ev.key === "Enter" && ev.target.matches("[data-kitsuch]")) ev.preventDefault();
+    });
+    blatt.addEventListener("pointerdown", ev => {
+      if (!GEF || !GEF.tafel) return;
+      const kn = ev.target.closest(".gf-tf [data-kit]");
+      if (kn){ ev.preventDefault(); if (!kn.disabled) gefKitOeffnen(+kn.dataset.kit); return; }
+      const m = ev.target.closest(".gf-kit");
+      if (!m) return;
+      const add = ev.target.closest("[data-kitadd]"), rm = ev.target.closest("[data-kitrm]"), zu = ev.target.closest("[data-kitzu]");
+      if (add){ ev.preventDefault(); const sel = m.querySelector(add.dataset.kitadd === "w" ? "[data-kitw]" : "[data-kitv]");
+                gefKitEintragen(add.dataset.kitadd, sel ? sel.value : "", +m.dataset.kitf); }
+      else if (rm){ ev.preventDefault(); const p = rm.dataset.kitrm, t = p.indexOf(":");
+                    gefKitEntfernen(p.slice(0, t), p.slice(t + 1), +m.dataset.kitf); }
+      else if (zu){ ev.preventDefault(); gefKitZu(); }
+    });
   }
 }
 /* the other reading takes the field, one click wide - as in the player room */
@@ -30983,7 +31198,7 @@ function gefTafelTauschen(id){
    right itself and says nothing; the word is said here, once. */
 function gefTafelBehalten(){
   if (!GEF || !GEF.tafel || !GEF.tafel.stand) return;
-  if (!gefTafelGebunden(GEF, GEF.tafel.stand)) return;   // no town, or the board names another: nothing to the register (5.16)
+  if (!gefTafelHaelt(GEF, GEF.tafel.stand)) return;   // no town, or the board names another: nothing to the register (5.16; held on the stand, Paket 20)
   if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return; }
   const T = GEF.tafel, B = T.stand, kam = gefTafelKameraden(), fVon = new Map();
   let n = 0, schon = 0;
@@ -31098,7 +31313,7 @@ async function gefProbeTafel(quelle, opts){
 function gefLageWeg(z){
   z.uhrLesung = null; z.rest = null; z.restVerworfen = 0; z.balkenZuletzt = null;
   z.hudZeit = 0; z.paarGesehen = false; z.kp = null; z.kpPlaetze = null;
-  z.tafel = null;                         // the scoreboard's stand, entries and queue go with it (BAT-1)
+  gefTafelRuhen(z);                       // the scoreboard's queue and open look go with it; its stand stays for Keep and Kit (Paket 20)
 }
 /* ONE LOOK. One window out of the shared picture, at its own size - no
    scaling, because everything measured here is measured in points. */
@@ -31630,6 +31845,7 @@ function gefOrtSetzen(i){
   GEF.ort = i;
   GEF.geschrieben = null; GEF.gesendet = 0;
   gefLageWeg(GEF);
+  if (GEF.tafel && GEF.tafel.stand) gefTafelBinden(i, GEF.tafel.stand);   // a town picked later binds while its mark stands (Paket 20)
   const V = GEF.uhrVorschlag;
   if (V && V.ort !== null && V.ort !== undefined && V.ort !== i) GEF.uhrVorschlag = null;
 }
@@ -31748,6 +31964,7 @@ function gefLiveStart(){
      screen has been read and the window may go. That is exactly the harm the
      Kommodore's note is there to prevent. (FABLE 08.09.2026.) */
   GEF.ende = null; GEF.endbild = null; GEF.endbildGemeldet = null;
+  GEF.tafel = null;                       // the scoreboard of the last battle goes with the new capture (Paket 20)
   GEF.live = setInterval(gefTick, GEF_TAKT);
   GEF.status = "Live";
   gefZeichnen(); gefTick();
@@ -32010,7 +32227,7 @@ function gefZeichnen(){
     <h3 style="margin-top:14px">Reading</h3>
     Share the game window and play. The head strip is read every ${GEF_TAKT} ms, and the two boxes are only measured once they have been found at the same place in three looks. A look that brought the same picture as the one before it does not count towards those three. The town's line goes to the clan every fifteen seconds while the score, the countdown or the objective row moves, and only while the head strip shows the battle.
     Hold-and-take battles carry the two bars, assaults do not. In an assault the countdown is read from its digits, believed only when two looks agree, and the clan's clock starts by itself when the countdown ends. The objective boxes under the clock are read in both, with the capture circle around them. The end screen ends the reading.
-    Hold Tab with a town picked on the left: the scoreboard is cut while it stands, its names are read afterwards one at a time. The last full look is the stand that goes to the clan; a name is sure once two readings agree or the register knows it.
+    Hold Tab with a town picked on the left: the scoreboard is cut while it stands, its names are read afterwards one at a time. The last full look is the stand that goes to the clan; a name is sure once two readings agree or the register knows it. Kit: click a name's Kit, pick weapon and vehicle from the game's lists - what the player card in the game shows.
     <h3 style="margin-top:14px">What was measured</h3>
     <div class="note">Over twenty-one captures the head bars were found on all 43 boards and on none of 167 pictures without one; every row was counted right. Names read exactly in 282 of 397 rows at one look; after two looks 26 of 35 stood sure and right and 6 sure and wrong - the same misreading twice, so a sure name can still be wrong. A look at the board costs 9 to 10 ms the first time and 5 to 6 after; a name takes the reader about 30 ms.</div>
     <div class="note">Over the recorded assault the countdown was read 1014 times, all of them right, and two wrong single readings were thrown out; over the two other recordings it read no countdown at all. The objective boxes were read in 2590 of 2676 looks of the assault, the same as the measurement in 2583 of them. A display drawn at double size is not read.</div>
@@ -51651,7 +51868,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build cb4f107c18</span></p></div>
+         installation. <span style="color:var(--dim2)">· build cc2a8b239c</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -51879,7 +52096,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "cb4f107c18";
+const BAU = "cc2a8b239c";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
