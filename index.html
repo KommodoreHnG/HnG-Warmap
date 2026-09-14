@@ -378,6 +378,90 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
   #leiste .lz .kb-k{width:40px;height:30px}
   #leiste .lz .kb-k svg{width:28px;height:19px}
 }
+/* BAT-11: THE BATTLE WINDOW over the map (ENNO 07.09./12.09.2026) - the
+   game's detail view of a battle: head, three tables, one name block per
+   side. A float, not a dialog: the map stays clickable under it (the stack
+   and the bar of KAR-6 - ENNO 12.09.2026: "sollen sich die beiden Fenter
+   nicht behindern"). Under the veil (50), the hover card (68) and the rooms
+   (120); above the plates, the bar (11) and the watch (12). The search hits
+   (#hits) opened UNDER it at z 6 - raised to 15. Width at most 62 % of the
+   map or 1100 px so the legend stays free and the three tables stand in one
+   row (round 2). Height at most the map minus the window's own top (46 px)
+   minus the LARGER of 150 px and the unit bar's height plus 50 px
+   (--leiste-auf, KAR-6; round 2: above the bar only what sits on it - the
+   zoom box - needs room; without the bar the 150 px keep zoom box, watch
+   and front note free). Never overflow:auto on the desktop - the font steps
+   down (--f-schlacht 13 -> 12 -> 11 px, schlachtAnsichtPassen) instead of
+   scrolling; on the phone (media rule) the window scrolls in itself. The
+   float is zoomed by --ui: a percentage here already resolves in its own
+   zoomed units (measured 14.09.2026, Chrome 152: 100 % = map height / --ui).
+   The 150 px and the 1100 px are screen measures (the probe reads them off
+   getBoundingClientRect) and are divided by --ui; the bar's height
+   (--leiste-auf) is written by the bar in these same zoomed units and is
+   taken as it is, and so are the 50 px and the window's own top (46 px).
+   Sizes inside in em, so a font step shrinks the whole window - the chips
+   too (#schlacht .chip), which carry a fixed 10.5 px elsewhere. */
+#schlacht{top:46px;left:10px;z-index:14;display:flex;flex-direction:column;gap:.45em;padding:.5em .8em .6em;
+  font-size:var(--f-schlacht,13px);color:var(--text);overflow:hidden;line-height:1.3;
+  max-width:min(62%, calc(1100px / var(--ui,1)));
+  max-height:calc(100% - 46px - max(150px / var(--ui,1), var(--leiste-auf,0px) + 50px))}
+#schlacht[hidden]{display:none}
+/* the column must not squeeze its rows to fit the cap - what does not fit
+   is cut at the bottom, never overlapped (measured on the phone: the
+   objectives row shrank to nothing under the first table's head) */
+#schlacht > *{flex:none}
+#hits{z-index:15}
+#schlacht .dlg-x{right:.45em;top:.45em;width:1.9em;height:1.9em;font-size:1.15em}
+#schlacht .chip{font-size:.8em;padding:.15em .55em;letter-spacing:.06em}
+#schlacht .sf-kopf{display:flex;justify-content:space-between;align-items:flex-start;gap:1.2em;padding-right:2.6em;min-width:0}
+#schlacht .sf-ort b{display:block;font-family:var(--schmal);text-transform:uppercase;letter-spacing:.06em;font-size:1.45em;
+  font-weight:700;line-height:1.1;white-space:nowrap}
+#schlacht .sf-ort span{font-size:.85em;color:var(--dim)}
+#schlacht .sf-zeit{text-align:right;flex:none;font-variant-numeric:tabular-nums}
+#schlacht .sf-zeit b{display:block;font-family:var(--schmal);font-size:1.3em;font-weight:700;line-height:1.1;color:var(--accent)}
+#schlacht .sf-zeit span{font-size:.85em;color:var(--dim);white-space:nowrap}
+#schlacht .sf-lage{display:flex;flex-wrap:wrap;align-items:center;gap:.45em;font-size:.9em;color:var(--dim)}
+#schlacht .sf-lage:empty{display:none}
+#schlacht .sf-tafeln{display:flex;flex-wrap:wrap;gap:.6em;align-items:flex-start}
+#schlacht .sf-tafel{border-collapse:collapse;font-variant-numeric:tabular-nums;flex:none}
+#schlacht .sf-tafel th,#schlacht .sf-tafel td{padding:.12em .3em;text-align:center;border-top:1px solid var(--line)}
+#schlacht .sf-tafel th{font-family:var(--schmal);font-size:.85em;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);font-weight:600}
+#schlacht .sf-tafel th.sf-block{border-top:0;text-align:left;padding-left:.3em}
+#schlacht .sf-tafel th.sf-seite,#schlacht .sf-tafel td.sf-seite{text-align:left;padding-right:.5em;min-width:2.6em}
+#schlacht .sf-tafel .sf-raute{width:1.4em;height:1.4em;display:block;margin:0 auto;filter:invert(1);opacity:.9}
+:root[data-theme="light"] #schlacht .sf-tafel .sf-raute{filter:none}
+#schlacht .sf-tafel td{min-width:2.2em}
+#schlacht .sf-tafel td.null{color:var(--dim2)}
+#schlacht .sf-note{font-size:.85em;color:var(--dim)}
+#schlacht .sf-seiten{display:flex;flex-wrap:wrap;gap:.5em 1.6em;align-items:flex-start}
+#schlacht .sf-seite{min-width:0}
+#schlacht .sf-sh{display:flex;align-items:center;gap:.5em;margin-bottom:.25em;font-size:.95em;color:var(--dim)}
+#schlacht .sf-sh b{font-size:1.15em;color:var(--text)}
+#schlacht .sf-namen{column-gap:1.2em;column-fill:balance}
+#schlacht .sf-namen div{break-inside:avoid;white-space:nowrap;line-height:1.3}
+#schlacht .sf-namen small{font-size:.8em;color:var(--dim2);margin-left:.45em}
+/* the last step of schlachtAnsichtPassen: tighter gaps and lines */
+#schlacht.sf-eng{gap:.3em;line-height:1.2}
+#schlacht.sf-eng .sf-tafel th,#schlacht.sf-eng .sf-tafel td{padding:.06em .3em}
+#schlacht.sf-eng .sf-namen div{line-height:1.2}
+#schlacht.sf-eng .sf-sh{margin-bottom:.1em}
+/* the phone: full width under the search box, and the ONE place where the
+   window scrolls - in itself (round 2; F5 puts the choice to him) */
+@media (max-width: 760px){
+  #schlacht{left:6px;right:6px;top:44px;max-width:none;padding:.5em .55em .6em;overflow-y:auto;
+    max-height:calc(100% - 44px - max(150px / var(--ui,1), var(--leiste-auf,0px) + 50px))}
+  /* the mark's line may wrap here - at 13 px it is wider than the phone
+     leaves next to the town's name (measured 375 x 800: the time ran under
+     the x) */
+  #schlacht .sf-kopf{gap:.6em}
+  #schlacht .sf-zeit{flex:0 1 auto;min-width:0}
+  #schlacht .sf-zeit span{white-space:normal}
+  #schlacht .sf-ort b{white-space:normal}   /* a 27-letter town name squeezed the time to 40 px (round 2) */
+  #schlacht .sf-tafel th,#schlacht .sf-tafel td{padding:1px 2px}
+  #schlacht .sf-tafel td{min-width:0}
+  #schlacht .sf-tafel .sf-raute{width:12px;height:12px}
+  #schlacht .sf-tafeln{gap:.35em}
+}
 /* Achtzehn Zeilen statt zehn: der Kasten bekommt eine Obergrenze und darf
    notfalls scrollen. Gemessen wird am Kartenfeld, nicht am Fenster - die
    Kopfzeile waechst ja mit. Und geteilt durch --ui, weil der Kasten selbst
@@ -2309,6 +2393,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <div id="tip" class="float"></div>
       <div id="wache" class="float" data-fest></div>
       <div id="leiste" class="float" hidden></div>
+      <div id="schlacht" class="float" hidden></div>
     </div>
 
     <div id="rechts">
@@ -7409,7 +7494,7 @@ function ordersDialog(tab){
   });
   document.querySelectorAll("#dlg tr[data-go]").forEach(r => r.addEventListener("click", ev => {
     if (ev.target.closest("button")) return;
-    sel = +r.dataset.go; closeDlg(); flyTo(sel); side(); draw();
+    sel = +r.dataset.go; closeDlg(); flyTo(sel); schlachtSprung(sel); side(); draw();
   }));
 }
 document.getElementById("b-orders").addEventListener("click", ()=>ordersDialog("units"));
@@ -10171,6 +10256,8 @@ function resize(){
   draw();
   /* Der Radarpult haengt an der Fensterhoehe, nicht nur am Regler. */
   if (typeof radarMassHalten === "function") radarMassHalten();
+  /* the battle window fits itself to the new map size (BAT-11, round 2) */
+  if (typeof schlachtAnsichtZeichnen === "function" && schlachtOrt !== null) schlachtAnsichtZeichnen();
 }
 function fit(){
   const r = cv.parentElement.getBoundingClientRect();
@@ -15465,7 +15552,7 @@ cv.addEventListener("click", e => {
      unten oeffnen"). A click on the disc itself stays what it was. */
   if (tool === "inspect"){
     const st = stapelTreffer(e.offsetX, e.offsetY);
-    if (st !== null){ leisteOeffnen(st); sel = st; side(); draw(); tally(); return; }
+    if (st !== null){ leisteOeffnen(st); sel = st; if (fightAt(st)) schlachtAnsichtAuf(st); side(); draw(); tally(); return; }   // BAT-11: bar and window together
   }
   if (tool === "inspect" && hitTest(e.offsetX, e.offsetY) === null){
     /* Liegt eine Stadt unter dem Zeiger, gewinnt sie - sonst verschluckt ein
@@ -15525,7 +15612,7 @@ cv.addEventListener("click", e => {
     const pb = paraAt(i);
     if (pb && pb.f === faction && !pb.plan) setPara(i, null); else setPara(i, faction, false);
     sel = i;
-  } else sel = i;
+  } else { sel = i; if (fightAt(i)) schlachtAnsichtAuf(i); }   // BAT-11: a contested town opens the battle window
   side(); draw(); tally();
 });
 cv.addEventListener("wheel", e => {
@@ -15576,6 +15663,7 @@ document.addEventListener("keydown", e => {
     /* the half-drawn defence line, before the catch-all below clears the
        selection instead and leaves the rubber band hanging */
     else if (lineDraft){ lineDraft = null; toast("Defence line cancelled"); draw(); }
+    else if (schlachtOrt !== null && !schlachtRaumOffen()){ schlachtAnsichtZu(); }   // BAT-11: the battle window lies on top - it goes first
     else if (leisteZust.offen !== null){ leisteSchliessen(); }   // KAR-6: the bar first, then the selection
     else { sel = null; side(); draw(); }
   }
@@ -16977,7 +17065,7 @@ function tally(){
 function side(){
   const el = document.getElementById("side");
   if (sel === null){ el.classList.add("hidden"); rechtsPruefen();
-                     requestAnimationFrame(resize); return; }
+                     requestAnimationFrame(resize); schlachtAnsichtZeichnen(); return; }   // BAT-11: the window follows the state, not the selection
   el.classList.remove("hidden");
   rechtsPruefen();
   const i = sel, n = MAP.n[i], f = factionOf(i);
@@ -17373,16 +17461,17 @@ function side(){
     setMyUnits(i, list); side(); draw(); depotZeichnen();
   }));
   el.querySelectorAll("[data-goto]").forEach(b => b.addEventListener("click", ()=>{
-    sel = +b.dataset.goto; flyTo(sel); side(); draw();
+    sel = +b.dataset.goto; flyTo(sel); schlachtSprung(sel); side(); draw();
   }));
   el.querySelector("#note")?.addEventListener("input", ev=>{
     stamp("notes", i, ev.target.value.trim() || null); save();
   });
   el.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", ()=>{
-    sel = +b.dataset.go; flyTo(sel); side(); draw();
+    sel = +b.dataset.go; flyTo(sel); schlachtSprung(sel); side(); draw();
   }));
   overtimeZeileStarten(i);                 // the clock line ticks on its own, see OVERTIME CLOCK
   seitenspalteRechte(el);
+  schlachtAnsichtZeichnen();               // BAT-11: the battle window, when it is open
 }
 /* DIE ERSTE LINIE in der Seitenspalte - ein Durchgang nach dem Zeichnen
    statt zwoelf Bedingungen im Vorlagetext. Der ist ueber vierhundert Zeilen
@@ -17792,7 +17881,7 @@ search.addEventListener("input", ()=>{
     ${esc(MAP.n[i][0])}<span class="t">${esc(MAP.typen[MAP.n[i][3]])}</span></div>`).join("");
   hits.style.display = "block";
   hits.querySelectorAll("[data-i]").forEach(el => el.addEventListener("click", ()=>{
-    sel = +el.dataset.i; flyTo(sel); side(); draw();
+    sel = +el.dataset.i; flyTo(sel); schlachtSprung(sel); side(); draw();
     hits.style.display = "none"; search.value = "";
   }));
 });
@@ -39060,7 +39149,7 @@ document.getElementById("b-board").addEventListener("click", ()=>{
     closeDlg(); boardZahl(); toast("Removed");
   }));
   document.querySelectorAll("#dlg [data-go]").forEach(a => a.addEventListener("click", ev=>{
-    ev.preventDefault(); sel = +a.dataset.go; closeDlg(); flyTo(sel); side(); draw();
+    ev.preventDefault(); sel = +a.dataset.go; closeDlg(); flyTo(sel); schlachtSprung(sel); side(); draw();
   }));
 });
 
@@ -39862,7 +39951,7 @@ function intelDialog(tab, seite){
     }
   }));
   document.querySelectorAll("#dlg [data-go]").forEach(el => el.addEventListener("click", ()=>{
-    sel = +el.dataset.go; closeDlg(); flyTo(sel); side(); draw();
+    sel = +el.dataset.go; closeDlg(); flyTo(sel); schlachtSprung(sel); side(); draw();
   }));
   fensterRechte();
 }
@@ -42224,7 +42313,7 @@ function ocrDialog(){
       stadtTxt = ` · ${MAP.n[ort][0]}`;
     }
     closeDlg();
-    if (sel !== null){ flyTo(sel); side(); draw(); }
+    if (sel !== null){ flyTo(sel); schlachtSprung(sel); side(); draw(); }
     toast(`${n} name${n===1?"":"s"} recorded${stadtTxt}`);
   });
 }
@@ -47338,6 +47427,10 @@ function beitrittDialog(){
    the head strip is not read here - they may be missing, and BAT-11 must
    do without them. battleStand hands out the whole row (t and by are
    wanted), this war and within the replay moment, like gefechtStand.
+   READ SINCE 14.09.2026 by the battle window (BAT-11, schlachtAnsichtZeichnen):
+   seiten[].f for the chips, text[j] as the cell (ca -> "~"), spieler and
+   namen for the name blocks, t and by for "read by"; seiten: [] counts as
+   not read, and t is what its tick watches for a fresh row.
    NOTE FOR KLEIN-3 (BEF-13): panzerGemeldet may take a younger btl row's
    enemy armour columns (light/medium/heavy_armor, tank_destroyer,
    heavy_tank_destroyer) as the better witness; the row comes from here,
@@ -47453,6 +47546,188 @@ function schlachtFenster(i){
   return `<div class="hint" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><b>Battle window</b></div>
       ${zeilen.join("")}
       <div class="hint" style="color:var(--dim)">read from the battle window by ${esc(werWar(e))} ${esc(alterText(e.t))}</div>`;
+}
+/* ---- BAT-11: THE BATTLE WINDOW (ENNO 07.09.2026 / 12.09.2026) -------------
+   ENNO 12.09.2026 (BAT-11): "Die Detailansicht der Schlacht soll einfach nur
+   aehnlich aussehen wie im Spiel, nur dass ich die Namen der aktiven Spieler
+   gerne so haette, dass kein Scrollbalken notwendig ist."
+   The game's view (Bilder/Triple Fight with players.png): a head strip with
+   the town and the running time, three tables Army / Armor / Air Force with
+   one row per side, under them one block of names per side. Here: the head
+   with the town, its type and what the tool knows of the time - the
+   countdown of the battle reader, else the clan's overtime clock, always the
+   age of the battle mark and who set it (the mark's time, not the battle's);
+   the tables and the names out of the pot btl, which the players' room
+   writes (BAT-2), in exactly the form setBattle describes; behind every name
+   what the register knows (pgEtikett, read only). Kind of battle and running
+   time ("aktiv seit") are NOT shown: BAT-2 does not read the head strip
+   (typ/seit absent), and nothing is guessed. No layout card of the FPS map
+   (its holder colours are BAT-17).
+   Opened by a click on a contested town (the disc, or the stack of KAR-6);
+   closed by the x, by Escape when no room and no dialog is open, and by
+   itself when the battle mark falls. A click elsewhere leaves it standing.
+   Reads only; writes nothing - no stamp, no save.
+   NO SCROLLBAR on the desktop: the names stand in CSS columns, ceil(n/13)
+   per side, the side blocks side by side and wrapping; the window grows with
+   its content up to the caps of #schlacht, and when that is not enough the
+   font steps down 13 -> 12 -> 11 px (schlachtAnsichtPassen) - and the three
+   tables keep ONE row like the game's, the font falls before they wrap
+   (round 2). Laid out for three sides of 18 names - the war's Assault
+   presets allow 18 per side and 36 per battle (WarDatabase/missionpreset
+   fields 7 and 11, read 14.09.2026). On the phone the window scrolls in
+   itself (the media rule; round 2). */
+let schlachtOrt = null, schlachtUhr = null, schlachtMerk = "";
+const SCHLACHT_SPALTE = 13;                    /* names per column before a second one opens */
+const schlachtRaumOffen = () =>
+  (typeof radarOffen !== "undefined" && radarOffen) || (typeof kbOffen !== "undefined" && kbOffen) ||
+  (typeof pgOffen !== "undefined" && pgOffen) || (typeof gefOffen !== "undefined" && gefOffen);
+/* ENNO 07.09.2026: "Bei allen laufenden Gefechten von Staedten oder Orten
+   innerhalb der Befehle muss, falls bekannt, die Zeit und eine
+   Detailansicht des Gefechts. ... Dieses 'Schlachtfenster' soll sich AUCH
+   DANN oeffnen, wenn man ein Stadt anklickt auf der Karte." - the jump out
+   of an order, the inbox or the search list is the first case he names;
+   side() itself never opens (a window closed by its x would come back with
+   the next sync), so the jumps call this (FABLE 14.09.2026, round 2) */
+function schlachtSprung(i){
+  if (i !== null && i !== undefined && fightAt(i)) schlachtAnsichtAuf(i);
+}
+function schlachtAnsichtAuf(i){
+  if (!MAP.n[i] || !fightAt(i)) return;
+  schlachtOrt = i;
+  schlachtAnsichtZeichnen();
+  if (!schlachtUhr) schlachtUhr = setInterval(schlachtAnsichtTakt, 1000);
+}
+function schlachtAnsichtZu(){
+  schlachtOrt = null; schlachtMerk = "";
+  if (schlachtUhr){ clearInterval(schlachtUhr); schlachtUhr = null; }
+  const el = document.getElementById("schlacht");
+  el.hidden = true; el.innerHTML = ""; el.style.removeProperty("--f-schlacht");
+}
+/* the time on the right of the head: the countdown first, else the clan's
+   clock; the mark's age and author always - it is the MARK that is dated */
+function schlachtZeit(i){
+  const b = gefStand(i), e = S.fight[i];
+  const rt = b ? gefRestZeigen(b, i) : "";
+  const ot = !rt && overtimeAn(i);
+  return {gross: rt ? rt + " left" : ot ? overtimeKurz(ot) : "",
+          klein: e ? `marked contested ${alterText(e.t)} by ${werWar(e)}` : ""};
+}
+/* what the window was drawn from: the row times of the pot and of the
+   reading. The players' room (setBattle) and the battle reader (gefSchreiben
+   with another town selected) write without a side() for this town - the
+   tick compares and redraws when one of them changed (round 2) */
+const schlachtStandKey = i => { const e = battleStand(i), b = gefStand(i); return (e ? e.t : "") + "|" + (b ? b.t : ""); };
+/* per second only the time and the ages - no rebuild, the tooltips stay;
+   a rebuild only when the pot or the reading changed */
+function schlachtAnsichtTakt(){
+  if (schlachtOrt === null) return;
+  if (!fightAt(schlachtOrt)){ schlachtAnsichtZu(); return; }
+  if (schlachtStandKey(schlachtOrt) !== schlachtMerk){ schlachtAnsichtZeichnen(); return; }
+  const el = document.getElementById("schlacht"), z = schlachtZeit(schlachtOrt);
+  const g = el.querySelector("[data-sf-zeit]"), k = el.querySelector("[data-sf-seit]");
+  if (g) g.textContent = z.gross;
+  if (k) k.textContent = z.klein;
+  const e = battleStand(schlachtOrt), n = el.querySelector("[data-sf-gelesen]");
+  if (e && n) n.textContent = `read by ${werWar(e)} ${alterText(e.t)}`;
+}
+/* the font steps down until nothing is cut off - never a scrollbar. 13,
+   12, 11 are the steps of the sheet (A.6); 10 and 9 are the builder's two
+   more (measured 14.09.2026: names of 28 characters, or 3 x 25, need them).
+   FIRST TIGHTER, THEN SMALLER: every size is tried twice, plain and with
+   tighter gaps and lines (class sf-eng), before the next smaller size -
+   measured 14.09.2026 at 1920 x 1080 with the unit bar open: three sides
+   of 18 names at 11 px are 321 zoomed points high, the cap leaves 318, and
+   11 px tight (298) keeps the sheet's 11 px where plain steps would have
+   fallen to 10. FIRST SMALLER, THEN WRAP (round 2): the three tables must
+   stand in one row like the game's - a step counts only when nothing is
+   cut off AND the tables share one row; when even 9 px tight cannot hold
+   the row, the largest step at which nothing is cut off wins and the
+   tables wrap. What still does not fit then stays cut (overflow hidden),
+   never scrolled. On the phone the window scrolls in itself: the steps
+   serve only the width there, and the tables may wrap. */
+function schlachtAnsichtPassen(el){
+  const tel = matchMedia("(max-width: 760px)").matches;
+  const breit = () => el.scrollWidth <= el.clientWidth + 1;
+  const hoch = () => el.scrollHeight <= el.clientHeight + 1;
+  const eineReihe = () => new Set([...el.querySelectorAll(".sf-tafel")].map(t => Math.round(t.getBoundingClientRect().top))).size <= 1;
+  const lauf = bed => {
+    for (const px of [13, 12, 11, 10, 9]) for (const eng of [false, true]){
+      el.classList.toggle("sf-eng", eng);
+      el.style.setProperty("--f-schlacht", px + "px");
+      if (bed()) return px;
+    }
+    return 0;
+  };
+  if (tel) return lauf(breit);
+  return lauf(() => breit() && hoch() && eineReihe()) || lauf(() => breit() && hoch());
+}
+function schlachtAnsichtZeichnen(){
+  const i = schlachtOrt;
+  if (i === null) return;
+  if (!MAP.n[i] || !fightAt(i)){ schlachtAnsichtZu(); return; }
+  const el = document.getElementById("schlacht"), n = MAP.n[i];
+  const b = gefStand(i), z = schlachtZeit(i);
+  /* a row without sides - the old form, or seiten: [] - is "not read" */
+  const e = battleStand(i), v = e && e.v, seiten = (v && Array.isArray(v.seiten) && v.seiten.length) ? v.seiten : null;
+  schlachtMerk = schlachtStandKey(i);
+  const chipVon = f => `<span class="chip own" style="--f:${(f === 0 || f === 1 || f === 2) ? col(FACTIONS[f]) : "var(--dim)"}">${
+    (f === 0 || f === 1 || f === 2) ? FACTIONS[f].tag : "?"}</span>`;
+  /* attacker or defender by the rule of gefZeile: only with a reading that
+     carries no bars (an assault), owner against our side; with bars the
+     score sentence of the town column (gefSatz) */
+  const lage = [];
+  const o = ownerOf(i), f = clanFaktion();
+  if (b && b.li === undefined && o >= 0 && f !== undefined && f !== null) lage.push(`<span>${o === f ? "Defending" : "Attacking"}</span>`);
+  if (seiten) lage.push(`<span>${seiten.map(s => chipVon(s.f)).join(" ")}</span>`);
+  if (b && b.kp && b.kp.length) lage.push(`${gefKpChip(b)}<span>${b.kp.filter(p => p.h === "b").length} of ${b.kp.length} objectives ours</span>`);
+  if (b && b.li !== undefined) lage.push(`<span>${esc(gefSatz(b))}</span>`);
+  /* the three tables: GF_BLOECKE gives the blocks, GF_GRUPPEN the eighteen
+     columns in the game's order; the cell is text[j] as the game showed it
+     ("1.3k" stays "1.3k"), a shortened one with "~" as the column does */
+  let spalte = 0;
+  const tafeln = GF_BLOECKE.map(bl => {
+    const von = spalte, bis = spalte + bl.n; spalte = bis;
+    const gruppen = GF_GRUPPEN.slice(von, bis);
+    const kopf1 = `<tr><th class="sf-block" colspan="${bl.n + 1}">${esc(bl.zweig ? zweigName(bl.zweig) : bl.name)}</th></tr>`;
+    const kopf2 = `<tr><th class="sf-seite"></th>${gruppen.map(g => `<th title="${esc(g.teil)}">${
+      pgRauteBild(g.teil) ? `<img class="sf-raute" src="${pgRauteBild(g.teil)}" alt="">` : esc(g.teil.slice(0, 3))}</th>`).join("")}</tr>`;
+    const zeilen = seiten ? seiten.map(sd => {
+      const nn = sd.n || {}, ca = new Set(sd.ca || []), text = Array.isArray(sd.text) ? sd.text : [];
+      return `<tr><td class="sf-seite">${chipVon(sd.f)}</td>${gruppen.map((g, k) => {
+        const j = von + k, t = text[j] !== undefined && text[j] !== null && text[j] !== "" ? String(text[j]) : String(nn[g.k] || 0);
+        return `<td class="${t === "0" ? "null" : ""}" title="${esc(g.teil)}">${ca.has(g.k) ? "~" : ""}${esc(t)}</td>`;
+      }).join("")}</tr>`;
+    }).join("") : "";
+    return `<table class="sf-tafel">${kopf1}${kopf2}${zeilen}</table>`;
+  }).join("");
+  /* the names, one block per side: the head's count, the sheet's count
+     behind it only when they differ and never with an empty list; a side
+     with neither count nor names says "not read"; the register's label
+     behind each name */
+  const namen = seiten ? seiten.map(sd => {
+    const liste = Array.isArray(sd.namen) ? sd.namen : [];
+    const zahl = +sd.spieler || liste.length;
+    const cols = Math.max(1, Math.ceil(liste.length / SCHLACHT_SPALTE));
+    return `<div class="sf-seite">
+      <div class="sf-sh">${chipVon(sd.f)}${zahl ? `<b>${zahl}</b>${zahl !== liste.length && liste.length ? `<span>players \u00b7 ${liste.length} read</span>` : ""}` : `<span class="empty">not read</span>`}</div>
+      <div class="sf-namen" style="column-count:${cols}">${liste.map(nm => {
+        const et = pgEtikett(nm);
+        return `<div dir="auto">${esc(nm)}${et ? `<small title="${esc(et.tip)}">${esc(et.text)}</small>` : ""}</div>`;
+      }).join("")}</div>
+    </div>`;
+  }).join("") : `<span class="empty">not read</span>`;
+  el.innerHTML = `<button class="dlg-x" data-sf-zu title="Close">\u00d7</button>
+    <div class="sf-kopf">
+      <div class="sf-ort"><b>${esc(n[0])}</b><span>${esc(MAP.typen[n[3]] || "")}</span></div>
+      <div class="sf-zeit"><b data-sf-zeit>${esc(z.gross)}</b><span data-sf-seit>${esc(z.klein)}</span></div>
+    </div>
+    <div class="sf-lage">${lage.join("")}</div>
+    <div class="sf-tafeln">${tafeln}</div>
+    <div class="sf-note">${seiten ? `<span data-sf-gelesen>read by ${esc(werWar(e))} ${esc(alterText(e.t))}</span>` : `<span class="empty">not read</span>`}</div>
+    <div class="sf-seiten">${namen}</div>`;
+  el.querySelector("[data-sf-zu]").addEventListener("click", schlachtAnsichtZu);
+  el.hidden = false;
+  schlachtAnsichtPassen(el);
 }
 function schlachtZweige(jeTyp){
   const m = new Map();
@@ -48990,7 +49265,7 @@ The depot of that side becomes the active one.`)) return;
     clanDialog("over");
   }));
   document.querySelectorAll("#dlg [data-go]").forEach(a => a.addEventListener("click", ev=>{
-    ev.preventDefault(); sel = +a.dataset.go; closeDlg(); flyTo(sel); side(); draw();
+    ev.preventDefault(); sel = +a.dataset.go; closeDlg(); flyTo(sel); schlachtSprung(sel); side(); draw();
   }));
   document.getElementById("cl-copy")?.addEventListener("click", async ()=>{
     const zeilen = [["Player","Owned","Committed","Available","Men","Vehicles","CP","Warfunds"].join("\t")]
@@ -50241,7 +50516,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b77599fff5</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 5653d92d41</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -50469,7 +50744,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b77599fff5";
+const BAU = "5653d92d41";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
