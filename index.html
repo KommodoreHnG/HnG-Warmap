@@ -464,11 +464,17 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
 }
 /* Achtzehn Zeilen statt zehn: der Kasten bekommt eine Obergrenze und darf
    notfalls scrollen. Gemessen wird am Kartenfeld, nicht am Fenster - die
-   Kopfzeile waechst ja mit. Und geteilt durch --ui, weil der Kasten selbst
-   noch gezoomt wird: sonst waere die Grenze bei 150 Prozent anderthalbmal
-   so hoch wie gemeint. */
+   Kopfzeile waechst ja mit. The percentage is NOT divided by --ui: the box
+   is zoomed, and a percentage inside a zoomed element already resolves in
+   its own zoomed units - 100 % = map height / --ui (measured 14.09.2026 at
+   #schlacht, same rule there); the 20 px are the box's own points, like
+   its top:10px. Dividing once more made the cap --ui times too small
+   (Skeptiker BAT-11, 14.09.2026; measured 15.09.2026: 1920x1080 at --ui
+   1.5 the cap stood at 372 instead of 559 own points, the legend scrolled
+   with 285 free points of map below it). Now 729 screen points there, no
+   scrollbar; at --ui 1 nothing changes. */
 #legend{top:10px;right:10px;padding:8px 10px;font-size:10.5px;color:var(--dim);display:none;
-  max-width:214px;max-height:calc((100% - 20px) / var(--ui, 1));overflow-y:auto}
+  max-width:214px;max-height:calc(100% - 20px);overflow-y:auto}
 #legend.on{display:block}
 #legend h4{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim2);margin-bottom:5px}
 #legend h5{font-family:var(--schmal);font-size:10px;text-transform:uppercase;letter-spacing:.09em;
@@ -603,6 +609,8 @@ body.zieht #mapwrap canvas{pointer-events:none}
 .dep .tname:not([readonly]),.dep .ttag:not([readonly]){border-bottom-color:var(--accent-dk)}
 .dep .tname::placeholder{color:var(--dim2);font-style:italic}
 .dep .c{font-size:10.5px;font-family:var(--schmal);text-transform:uppercase;letter-spacing:.08em;color:var(--dim2)}
+/* DEP-3: the queue mark in the own depot row opens its window again */
+.dep .n em a[data-schlange]{color:var(--accent);cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
 .dep.raus{border-left-color:var(--accent);background:rgba(226,172,72,.09)}
 .dep .pull{background:transparent;border:0;cursor:pointer;color:var(--dim2);font-size:15px;padding:0 3px}
 /* Der Aufruestknopf. Er sieht aus wie die anderen kleinen Knoepfe der Zeile
@@ -1566,8 +1574,9 @@ body.kb-zieht{user-select:none}
   #radar.an{grid-template-columns:1fr;grid-template-rows:auto 1fr auto auto}
   .rd-schirm{min-height:38vh}
   .rd-kopf{overflow-y:auto}
-  /* Fingerziele: die 38px-Regel der Telefonstufe kennt nur .btn/.fac/
-     .tabs button - die Radarknoepfe tragen keine dieser Kennungen und
+  /* Fingerziele: die 38px-Regel der Telefonstufe kennt nur .btn und
+     .tabs button (.fac traegt seit MOB-2, 15.09.2026, seine 28px bei
+     #factions) - die Radarknoepfe tragen keine dieser Kennungen und
      standen bei 22 bis 31 Punkten (gemessen 29.08.2026, 375x812).
      Pult und Leisten sind mit --rd-z (0,85) gezoomt, darum hier 45px,
      das ergibt 38 echte Bildschirmpunkte. Das Kreuz rd-zu ist UNgezoomt
@@ -1789,6 +1798,13 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 .tw td.sy+td{text-align:left}
 .tw tr.me{background:rgba(217,164,65,.09)}
 .tw tr.me em{font-style:normal;color:var(--accent);font-size:10.5px}
+/* DEP-1: the members' groups in the clan window (Depot tab) - one column
+   per member, the phone gets one column */
+.cl-grps{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px 14px;align-items:start}
+.cl-grp-p{border-left:3px solid var(--line);padding:2px 0 2px 10px;min-width:0}
+.cl-grp-n{font-size:12px;font-weight:600;margin-bottom:5px}
+.cl-grp-n em{font-style:normal;color:var(--accent);font-size:10.5px}
+.cl-grp-p .grp+.grp{margin-top:8px}
 /* ORDERS, DIE ZWEITE ZEILE JE BEFEHL (ENNO 07.09.2026: "Zeilen koennen
    deutlich hoeher, da wir hier noch mehr Details brauchen"). .tw td steht
    auf nowrap - diese Zelle darf umbrechen und haengt ohne Strich an ihrer
@@ -1960,8 +1976,11 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   #top-right .btn{padding:7px 8px;font-size:12px;letter-spacing:.04em}
 
   /* DIE RAUMLEISTE ROLLT, DIE DREI RECHTEN STEHEN FEST.
-     #top-capture (Radar, Units, Players, Board, Orders) ist 600 Punkte
-     breit. Ohne min-width:0 schrumpft ein Flex-Kind nicht unter seine
+     #top-capture (Radar, Units, Battle, Players, Board, Orders; gemessen
+     mit fuenf Knoepfen, Battle kam spaeter dazu; am Telefon ohne Units
+     und Players, MOB-4) ist 600 Punkte breit. b-radar liegt HIER, nicht
+     in #top-right - die Radar-Haelfte der Regel "#top-right #b-radar .txt"
+     weiter oben trifft nichts. Ohne min-width:0 schrumpft ein Flex-Kind nicht unter seine
      Inhaltsbreite - also schob es alles Weitere aus dem Schirm, und die
      Regel weiter oben gab ausgerechnet #top-right das Wachsen. Gemessen bei
      375x812: b-board, b-orders, b-burger, b-sync und b-gear lagen
@@ -1978,6 +1997,14 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   /* Und die Raumknoepfe etwas enger, damit ohne Rollen schon drei statt
      zwei zu sehen sind. */
   #top-capture .btn{padding:7px 8px;font-size:12px;letter-spacing:.04em;gap:5px}
+  /* MOB-4: no Players and no Units button on a phone. ENNO 05.09.2026:
+     "Spielererfassung kann hier erstmal ausgeblendet werden." ENNO
+     12.09.2026: "Nur Radar und Battlereader brauchen die Kopplung, da wir
+     beim AT-Grabber ja das Overlay haben." Without screen sharing both
+     rooms only say "This browser cannot share a window here." The
+     buttons, the rooms and their wiring stay; on the desk nothing changes
+     (5.15). Hidden, not removed - his "erstmal" keeps the way back. */
+  #top-capture #b-spieler,#top-capture #b-units{display:none}
   /* Fuenf Titel passen nebeneinander nicht auf 375 Bildpunkte - sie wurden
      abgeschnitten. Auf dem Telefon also ein Griff, der alles auf einmal
      aufklappt, wie ueberall sonst auch. */
@@ -2043,12 +2070,23 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
      schmaler machen, die ist ja sehr hoch." Innenrand 4 statt 7, unten 4
      statt 6. GEMESSEN bei 375x812, drei Zustaende: vorher 52,8 - so 50,4 -
      zusaetzlich mit kleineren Zeichen 49,2. Der Gewinn ist also 2,4 Punkte.
-     Mehr ist ueber das Stilblatt nicht zu holen: die Hoehe haengt an der
-     Bediengroesse, nicht am Rand - #bar traegt zoom 1,2 und der Knopfinhalt
-     steht auf 13,5 Punkten Schrift, der Knopf ist damit 45,6 hoch. Der
-     Regler dafuer ist "Everything" im Zahnrad. */
+     MOB-2, ENNO 12.09.2026: "Die Knoepfe koennen kleiner werden, aber nur
+     in der Vertikalen. Gewissermassen kann der Feldrand kleiner, der Text
+     und der bunte Kreis aber gleich gross bleiben." The height never came
+     from the padding or the font: the finger rule further down
+     (.btn,.tabs button{min-height:38px}; .fac stood in that list) lifted a
+     24-point button (10 px x 1.4 line, the 11-px dot beneath it, 4+4
+     padding, 1+1 border) to 38 = 45.6 on screen at --ui 1.2. Now .fac has
+     its own cap of 28 here (FABLE choice, F1): the empty field above and
+     below dot and label is 6 instead of 11 points; dot 11, label 10 px,
+     padding, gap and the row's own padding unchanged - only the vertical.
+     Measured 15.09.2026 (375x812 iframe, --ui 1.2): button 45.6 -> 33.6,
+     row 50.4 -> 38.4, dot 13.2 and label 10 px before and after, width
+     119.4 unchanged; at 1.5: button 57.0 -> 42.0, row 63.0 -> 48.0. Phone
+     only: on the desktop .fac has no cap (26.7 high, one column). The
+     "Everything" slider in the cog still scales all of it. */
   #factions{display:flex;flex-direction:row;gap:3px;padding:0 4px 4px}
-  #factions .fac{justify-content:center;padding:4px 4px}
+  #factions .fac{justify-content:center;padding:4px 4px;min-height:28px}
   #factions .fac .lbl{font-size:10px}
 
   /* DER GRIFF AN DER OBERKANTE - VIER RASTEN, KEINE FREIE HOEHE.
@@ -2060,12 +2098,16 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
      (scrollHeight 219 = 3 x 73). Also Rasten, jede eine gemessene Hoehe,
      und keine, die je einen halben Knopf abschneidet:
 
-       Raste 3  Zeichen, Wort und Ziffer   Leiste 159.5  Karte 511.3
-       Raste 2  nur die Zeichen            Leiste 118.1  Karte 552.7
-       Raste 1  Streifen weg, Farben da    Leiste  68.2  Karte 602.7
+       Raste 3  Zeichen, Wort und Ziffer   Leiste 145.1  Karte 525.7
+       Raste 2  nur die Zeichen            Leiste 103.8  Karte 567.1
+       Raste 1  Streifen weg, Farben da    Leiste  53.8  Karte 617.1
        Raste 0  nur der Griff              Leiste  27.4  Karte 643.5
      (Bildschirmpunkte bei 375x812, Bedienungsgroesse 1.2, Kopfzeile 141.2;
-      vorher stand die Leiste fest auf 152.3 und die Karte auf 518.5)
+      gemessen 15.09.2026 nach MOB-2 im 375x812-iframe, Rollbalken ohne
+      Platz wie am Telefon - ein klassischer Rollbalken im Streifen gibt
+      den Rasten 2 und 3 zehn Punkte dazu. Vor MOB-2 waren die Rasten 1-3
+      zwoelf Punkte hoeher; ganz am Anfang stand die Leiste fest auf 152.3
+      und die Karte auf 518.5)
 
      Nach OBEN geht es nicht weiter, und das ist gemessen und nicht
      gespart: zwei Reihen kosten die Karte 80 Punkte und zeigen trotzdem
@@ -2094,8 +2136,8 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
      zieht den Griff eine Raste hoch. */
   #bar.s2 .tool .lbl,#bar.s2 .tool .kb{display:none}
   /* Raste 1: der Streifen geht, die Fraktionswahl bleibt. Nach ihr greift
-     man im Spiel am oeftesten, und sie ist mit 52.8 Punkten die billigste
-     Zeile der Leiste.
+     man im Spiel am oeftesten, und sie ist mit 38.4 Punkten die billigste
+     Zeile der Leiste (gemessen 15.09.2026 nach MOB-2; vorher 50.4).
      Die Zweispaltenregel traegt Kennung UND Merkmal und muss hier mit
      genannt werden, sonst gewinnt sie - dieselbe Falle wie oben. */
   #bar.s1 #toolwrap,#bar.s1.zwei #toolwrap{display:none}
@@ -2130,8 +2172,9 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   .tabs{overflow-x:auto;flex-wrap:nowrap}
   .tabs button{white-space:nowrap;flex:0 0 auto}
 
-  /* Fingerfreundliche Ziele */
-  .btn,.fac,.tabs button{min-height:38px}
+  /* Fingerfreundliche Ziele - .fac carries its own cap at #factions .fac
+     (28px, MOB-2 15.09.2026) */
+  .btn,.tabs button{min-height:38px}
 
   /* Das Einstellungs-Unterfenster liegt auf dem Telefon VOR dem
      Zahnradstreifen (Weiche in zwZeigen/zwNachziehen) - dafuer muss es
@@ -2910,6 +2953,32 @@ const ZWEIGE = [
 ];
 const zweigVon = k => (AT[k] && AT[k].branch) || "other";
 const zweigName = z => (ZWEIGE.find(x=>x.k===z) || {name:z}).name;
+/* DEP-3 part 1 - which teams get the queue question when set out of the
+   depot. ENNO 07.09.2026: "Daher sollte jeder Nutzer beim Einsetzen/
+   Platzieren der eigenen Kampfeinheiten auf der Karte einmal gefragt werden,
+   ob er die Position auf der Warteschlange angeben möchte. Relevant ist das
+   aber nur für: Panzereinheiten, Flugzeuge, Fallschirmspringer und
+   Infanterie mit APCs und Aufklärer mit IFV."
+   The game (texts/HnG_Strategy_en.xml, AssaultTeamScreen): "Your queue no."
+   / "No. {0} in queue" - "Your queue number shows how many assault teams of
+   the same type are waiting to be resupplied before yours." A counter per
+   type, not a time; 0 is possible (nobody ahead of you).
+   FABLE 15.09.2026, his list read against the game data (MAP.at):
+   A1 "Panzereinheiten" = the whole branch armor, tank destroyers included;
+   "Flugzeuge" = airforce; "Fallschirmspringer" = airborne;
+   "Infanterie mit APCs" = mechanized_infantry (cost armored_personnel_carrier);
+   A2 "Aufklaerer mit IFV" = mechanized_recon (Armored Recon Vehicles, cost
+   armoured_car - the game has no IFV; the other recon with a vehicle rides
+   motorcycles), ENNO 08.09.2026 (BEF-C): "Aufklärer (Fahrzeuge nur IFVs,
+   Motorräder bei Infanterie draufrechnen)".
+   Twelve of the eighteen types - exactly those whose cost holds a resource
+   produced under 20 per 10 min ("Die Länge der Warteschlange lässt sich
+   leider nur sinnvoll anwenden bei Einheiten, die sehr geringe Mengen im
+   Depot aufweisen."). That check is the evidence; built is his list.
+   Part 2 - the waiting time at the order from faction pool + queue - is NOT
+   here: it needs the War grabber (DEP-9) and 5.50/5.51/5.52. */
+const schlangeRelevant = k => ["armor", "airforce", "airborne"].includes(zweigVon(k))
+  || k === "mechanized_infantry" || k === "mechanized_recon";
 /* ---- DIE ANFORDERUNG AN EINEM BEFEHL (08.09.2026) --------------------
    Sein Wortlaut: "Es geht um eine Anforderung fuer diesen Befehl, dem man
    dann im zweiten Schritt die Einheiten zuweist", und "Wichtig ist auch
@@ -7698,8 +7767,8 @@ function paraVorratWarnung(){
   setTimeout(() => toast(`More drops planned than paras on hand: ${v.frei} free, ${v.ungedeckt} drop${v.ungedeckt === 1 ? "" : "s"} without teams`), 2600);
 }
 /* C. who could meet an order asking for one of these types. Since
-   12.09.2026 by status too: Mobile and Inactive members are left out
-   altogether, neither counted nor unknown (statusKannAT). */
+   12.09.2026 by status too: Mobile, Inactive and Offline members are left
+   out altogether, neither counted nor unknown (statusKannAT). */
 function paraErfuellbar(typen, ausser){
   const will = new Set(typen || []), belegt = paraBelegteTeams(ausser), gefunden = new Set();
   let n = 0, unbekannt = 0;
@@ -8245,7 +8314,7 @@ function startPunktZeichnen(){
      Bei 70 Prozent laege dieser Ring sonst auf +5,95 - innerhalb des
      Auswahlrings (+6) und des Kampfrings (+6,4), und der dunkle Strich
      deckte den Meldering (+5,4) zu. Nachgemessen von einem Gegenleser. */
-  const R  = (isCap(i) ? r0*STERN_RAGT : r0) + Math.max(8.5, 8.5*uiScale);
+  const R  = startRingR(i, r0);
   ctx.save();
   ctx.globalAlpha = 1;
   /* stumpfe Enden: draw() steht an dieser Stelle auf lineCap "round", und
@@ -8279,7 +8348,7 @@ function startPunktZeichnen(){
   for (const [v] of kantenVon(i)){
     if (!MAP.n[v] || ownerOf(v) === faction) continue;
     const [vx, vy] = toScr(MAP.n[v][1], MAP.n[v][2]);
-    const RV = (isCap(v) ? r0*STERN_RAGT : r0) + Math.max(8.5, 8.5*uiScale);
+    const RV = startRingR(v, r0);
     /* NUR, WENN DIE RINGE SICH NICHT INS GEHEGE KOMMEN. Bei kleinem Zoom
        liegen die Nachbarn dichter beieinander als zwei Ringdurchmesser, und
        dann schneidet jeder Zielring den Startring - ein Gegenleser hat es
@@ -8293,6 +8362,75 @@ function startPunktZeichnen(){
     ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 1.4*uiScale;
     ctx.beginPath(); ctx.arc(vx, vy, RV, 0, 6.284); ctx.stroke();
   }
+  ctx.restore();
+}
+
+/* The start ring's radius, in one place: the ring, the neighbour rings and
+   the X read the same number (MOB-3). 8,5 stays raw when the "Everything"
+   slider is below 100 percent - see the note at startPunktZeichnen. */
+const startRingR = (i, r0) => (isCap(i) ? r0*STERN_RAGT : r0) + Math.max(8.5, 8.5*uiScale);
+
+/* ---- THE RED X ON THE START RING (MOB-3) ------------------------------
+   ENNO 12.09.2026: "Es soll der Startpunkt leuchten, damit ich weißt, dass
+   ich richtig gesetzt habe. Ein kleines Rotes X in der Ecke dieses
+   leuchtkreises zum Ab- und Neuwählen des Ausgangspunktes wäre dann
+   natürlich noch super."
+   The ring exists since 08.09. (startPunktZeichnen); this is the X.
+
+   WHERE: on the ring, at 45 degrees up and to the right (NE) - the corner
+   a window's close button uses (.dlg-x sits right/top). NW carries the
+   para glyph and the fallback sword, E the note bubble and the sword,
+   S the name. What can stand NE (Aufmarsch count, note bubble, unit
+   stack) is display and switchable; the half order in the hand wins - the
+   same rule that puts the ring on the Aufmarsch ring. ON the ring, not
+   outside it: measured over 1438 towns and 2661 edges at z 4 the centre
+   of a neighbour town lies inside the X's hit circle at 5,5 % of the
+   towns (outside the ring it would be 9,8 %); at z 6 1,0 %, at z 8 0,1 %,
+   at z 2 34,6 % (there the discs are 10 points and the neighbour rings
+   are suppressed anyway - zooming in shows it). FABLE 15.09.2026.
+
+   SIZE in operating points, not map points - a control has finger size:
+   half-size 4,5*uiScale (phone 5,4 - the X is 10,8 points across), hit
+   radius max(12; 11*uiScale) (phone 13,2 - 26,4 points across; the page
+   already widens finger targets invisibly, .op-griff::before inset -6).
+   Drawing and hit test read the same numbers (paraMarkeLage /
+   paraMarkeTreffer). A dark plate under the strokes: a red X vanishes on
+   a red USSR disc (#e03b32 is --su, the same red the urgent note uses),
+   on the Aufmarsch ring or on a stack; the plate covers that piece of
+   the ring, the X sits on it like a marker. Only while tool is "arrow"
+   and a start is set (setTool clears arrowFrom); otherwise one compare.
+
+   COST: per frame with a start one fill and one path of two strokes;
+   without a start one compare. Per click with a start one toScr and one
+   hypot. Nothing in the town loop. */
+function startXLage(){
+  const i = arrowFrom;
+  if (tool !== "arrow" || i === null || i === undefined || !MAP.n[i]) return null;
+  const [x, y] = toScr(MAP.n[i][1], MAP.n[i][2]);
+  const R = startRingR(i, ortRadius());
+  return {x: x + R*Math.SQRT1_2, y: y - R*Math.SQRT1_2,
+          g: 4.5*uiScale, h: Math.max(12, 11*uiScale)};
+}
+function startXTreffer(sx, sy){
+  const L = startXLage();
+  return !!L && Math.hypot(sx - L.x, sy - L.y) <= L.h;
+}
+/* drawn LAST in draw(), above stack, note bubble, Aufmarsch count, sword
+   and names - a close button under a stack is none. The ring itself stays
+   under the names. Alpha 1 always: the X is a control, not a marker of
+   the town's state. */
+function startXZeichnen(){
+  const L = startXLage();
+  if (!L) return;
+  ctx.save();
+  ctx.globalAlpha = 1; ctx.setLineDash([]); ctx.lineCap = "round";
+  ctx.fillStyle = "rgba(5,8,12,.85)";                 // the ring's dark underline
+  ctx.beginPath(); ctx.arc(L.x, L.y, L.g*1.6, 0, 6.284); ctx.fill();
+  ctx.strokeStyle = "#e03b32"; ctx.lineWidth = Math.max(2, 2*uiScale);
+  ctx.beginPath();
+  ctx.moveTo(L.x - L.g, L.y - L.g); ctx.lineTo(L.x + L.g, L.y + L.g);
+  ctx.moveTo(L.x + L.g, L.y - L.g); ctx.lineTo(L.x - L.g, L.y + L.g);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -11113,6 +11251,8 @@ function draw(){
       ctx.globalAlpha = 1;
     }
   }
+
+  startXZeichnen();                       // MOB-3: the red X on the start ring, above everything at the town
 
   /* ---- Wer gerade wo scannt ----
      Gewuenscht: das Handy als Orientierung, waehrend der PC scannt. Hier
@@ -14975,8 +15115,115 @@ function deployTeam(town, id){
   if (!team) return false;
   const alt = townOfTeam(id);
   if (alt === town) return false;
+  /* DEP-3 A4 (FABLE 15.09.2026): a march from town to town is no placing -
+     in the game a team joins the queue when it is set out of the depot, not
+     when it moves. The queue mark (q, qt) travels with the entry; the
+     question itself is asked by the callers, and only when alt was null. */
+  const vorher = alt !== null ? myUnits(alt).find(u => u.id === id) : null;
   if (alt !== null) setMyUnits(alt, myUnits(alt).filter(u => u.id !== id));
-  setMyUnits(town, myUnits(town).concat([{id, k: team.k, s: 1}]));
+  const neu = {id, k: team.k, s: 1};
+  if (vorher && vorher.q != null){ neu.q = vorher.q; neu.qt = vorher.qt; }
+  setMyUnits(town, myUnits(town).concat([neu]));
+  return true;
+}
+/* ---- DEP-3 part 1: the queue no. of a team just set out of the depot ----
+   ENNO 07.09.2026: "Daher sollte jeder Nutzer beim Einsetzen/Platzieren der
+   eigenen Kampfeinheiten auf der Karte einmal gefragt werden, ob er die
+   Position auf der Warteschlange angeben möchte."
+   Asked ONCE per team, when it is set out of the depot (drag, Place, the
+   depot reader) - not when it marches on (A4, deployTeam above). May, not
+   must: Skip, Escape and the X write nothing; the question comes again only
+   after the team went back to the depot (x in the depot row, "Back to depot",
+   the eraser, delete) and is set out again. No "never ask" switch (not his
+   word, F6).
+   Stored in the team's entry of the units row: q (0..99999, the number the
+   game shows) and qt (ms, like t). The row already carries by and n, so the
+   clan sees who wrote it and when ("natürlich wieder mit Angabe von
+   Eintragendem und Zeitstempel", same paragraph). No consumer here: the
+   waiting time at the order (part 2) needs the faction pool from the War
+   grabber (DEP-9) and 5.50/5.51/5.52.
+   A3: several teams at once (depot reader) share one window, one line each;
+   Skip drops all, Save takes the filled lines. A6: the mark in the own depot
+   row opens the same window with the old number; empty + Save clears it.
+   Only the owner, only through this window - nothing is overwritten
+   quietly. Shown in the depot row and in the town window for every group
+   (the entry comes through unitIdx from the clan; foreign marks are not
+   clickable). FABLE 15.09.2026. */
+function schlangeText(u){
+  /* q and qt come from a units row of somebody else via the sync - text and
+     number only, never markup (round 1, Skeptiker S1) */
+  return u && u.q != null ? `queue no. ${esc(String(u.q))}${typeof u.qt === "number" ? ` · ${alterText(u.qt)}` : ""}` : "";
+}
+function schlangeVermerk(town, id){
+  const u = myUnits(town).find(x => x.id === id);
+  return u && u.q != null ? `<em><a data-schlange="${esc(id)}" title="Change or clear">${schlangeText(u)}</a></em>` : "";
+}
+/* q null = clear. Same write path as everything else (setMyUnits: dirty,
+   save, kraftLeiste); the id is already in the row, so no second credit. */
+function schlangeSetzen(town, id, q){
+  const liste = myUnits(town).slice();
+  const i = liste.findIndex(u => u.id === id);
+  if (i < 0) return false;
+  const u = {...liste[i]};
+  if (q == null){ if (u.q == null) return false; delete u.q; delete u.qt; }
+  else { u.q = q; u.qt = jetzt(); }
+  liste[i] = u;
+  setMyUnits(town, liste);
+  return true;
+}
+/* paare: [{id, town}]. Sifts itself - only own teams that stand in that
+   town and queue in the game get a line; no line, no window. */
+function schlangeFragen(paare){
+  const zeilen = (paare || []).map(p => {
+    const d = teamById(p.id);
+    if (!d || !schlangeRelevant(d.k) || !MAP.n[p.town]) return null;
+    const u = myUnits(p.town).find(x => x.id === p.id);
+    return u ? {id: p.id, town: p.town, d, q: u.q} : null;
+  }).filter(Boolean);
+  if (!zeilen.length) return false;
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  openDlg(`<div class="dlg-h"><h2>Queue no.</h2></div>
+    <div class="dlg-b">${zeilen.map(z => `
+      <div class="row" style="align-items:center">
+        <span style="width:26px;height:18px;flex:0 0 auto">${symbolSVG(z.d.k, c, 26, 18)}</span>
+        <span style="flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" dir="auto">${
+          esc((z.d.tag ? z.d.tag + " · " : "") + (z.d.name || atName(z.d.k)))} <span style="color:var(--dim)">at ${esc(MAP.n[z.town][0])}</span></span>
+        <input type="number" min="0" max="99999" step="1" inputmode="numeric" data-sq="${esc(z.id)}" value="${z.q != null ? z.q : ""}" style="width:78px">
+      </div>`).join("")}
+    </div>
+    <div class="dlg-f">
+      <button class="btn" id="sq-skip">Skip</button>
+      <button class="btn primary" id="sq-save">Save</button>
+    </div>`, "klein");
+  const felder = [...document.querySelectorAll("#dlg input[data-sq]")];
+  let fertigWar = false;
+  const fertig = () => {
+    if (fertigWar) return;                                   // a double click on Save must not write twice (round 1, Skeptiker K1)
+    const werte = [];
+    for (const f of felder){
+      const t = f.value.trim();
+      if (t === "" && !(f.validity && f.validity.badInput)){ werte.push([f.dataset.sq, null]); continue; }
+      if (!/^\d{1,5}$/.test(t)){ dlgRuetteln(); f.focus(); f.select(); return; }
+      werte.push([f.dataset.sq, +t]);
+    }
+    fertigWar = true;
+    closeDlg();
+    let geaendert = false;
+    for (const [id, q] of werte){
+      const z = zeilen.find(x => x.id === id);
+      if (z && schlangeSetzen(z.town, id, q)) geaendert = true;
+    }
+    if (geaendert){ depotZeichnen(); side(); }
+  };
+  document.getElementById("sq-save").addEventListener("click", fertig);
+  document.getElementById("sq-skip").addEventListener("click", closeDlg);
+  /* Enter and Escape at the field itself - the page-wide keydown hands
+     fields back untouched (Escape there only blurs). */
+  for (const f of felder) f.addEventListener("keydown", ev => {
+    if (ev.key === "Enter"){ ev.preventDefault(); fertig(); }
+    if (ev.key === "Escape"){ ev.preventDefault(); closeDlg(); }
+  });
+  setTimeout(() => { if (felder[0] && document.body.contains(felder[0])){ felder[0].focus(); felder[0].select(); } }, 60);
   return true;
 }
 /* NIMMT NUR VOM FELD, NICHT AUS DEM DEPOT. Eine Gruppe wird hier deshalb
@@ -15023,6 +15270,10 @@ function teamLoeschen(id){
    WAS DER CLAN SIEHT: diese Zeile geht ueber den Server wie jede andere,
    der Gruppenname steht also darin - wie seit dem 12.09.2026 auch die
    Teamnamen (ENNO: "Lass uns diese einfach mit an den Clan uebergeben").
+   Seit DEP-1 (15.09.2026) zeigt das Clan-Fenster (Reiter Depot) die
+   Gruppen aller Mitglieder mit ihren Teams - gruppenVon liest sie, nur
+   lesend (ENNO 05.09.2026: "Die Zusammensetzung und Existenz dieser
+   Gruppen ist clanintern zugaenglich.").
    Gewollt: eine Gruppe gibt es nur in diesem Werkzeug und soll dem Spieler
    auf sein zweites Geraet folgen. Der Satz steht auch im Fenster, denn von
    aussen sieht man es nicht.
@@ -15073,6 +15324,32 @@ function gruppenEindeutig(liste){
     g.ats = (g.ats || []).filter(id => !gesehen.has(id) && (gesehen.add(id), true));
   }
   return liste;
+}
+/* DEP-1: THE GROUPS OF ANY MEMBER, READ ONLY. ENNO 05.09.2026: "Die
+   Zusammensetzung und Existenz dieser Gruppen ist clanintern zugaenglich."
+   The grp row of every member already lies in this browser (syncPull
+   fetches the whole room, applyRemote keeps every known pot); until now
+   only S.grp[S.me] was ever read. This reads the row of `who` and sieves
+   the ids against depotIdx - the teams of the side on screen, because the
+   clan window looks at ONE side (ENNO 08.09.2026: "Das darf natuerlich
+   nicht fraktionsuebergreifend sein"). Dead ids fall out as in
+   gruppenListe, a team stays in the first group naming it
+   (gruppenEindeutig). A group whose teams all stand on the other side
+   keeps its entry with an empty list - the existence is what he named.
+   Returns [{id, n, ats: [team objects of the row]}]; [] without a row,
+   without a depot entry, or for a tombstone (v: null). Never stamp, never
+   dirty, never save - nothing here writes, and the server would refuse a
+   foreign grp row anyway (warmap_may_write). */
+function gruppenVon(who){
+  const e = who ? S.grp[who] : null;
+  const d = who ? depotIdx.get(who) : null;
+  if (!e || !Array.isArray(e.v) || !d) return [];
+  const team = new Map((d.list || []).map(t => [t.id, t]));
+  return gruppenEindeutig(e.v.filter(g => g && g.id).map(g => ({
+    id: String(g.id),
+    n: String(g.n == null ? "" : g.n),
+    ats: (Array.isArray(g.ats) ? g.ats : []).filter(id => team.has(id))
+  }))).map(g => ({id: g.id, n: g.n, ats: g.ats.map(id => team.get(id))}));
 }
 function gruppeSchreiben(liste){
   const rein = (liste || []).filter(g => g && g.id).slice(0, GRUPPE_MAX).map(g => ({
@@ -15304,7 +15581,7 @@ function depotDialog(tab){
           <button class="btn" id="gr-neu" ${klein}${gruppen.length >= GRUPPE_MAX
             ? ` disabled title="${GRUPPE_MAX} groups is the ceiling"` : ""}>Add group</button>
         </div>
-        <div class="note">One group per team. Group names go to the clan, team names stay here.</div>`
+        <div class="note">One group per team. The clan sees your groups.</div>`
         : `<div class="empty">Waiting for the first sync.</div>`}
       </div>
     </div>
@@ -15460,6 +15737,7 @@ cv.addEventListener("mousedown", e => {
       draw(); return;
     }
   }
+  if (startXTreffer(e.offsetX, e.offsetY)) return;   // MOB-3: no arrow drag from under the X - the click takes it
   const i = hitTest(e.offsetX, e.offsetY);
   if (tool === "arrow" && i !== null){ zieh = {art:"arrow", von:i}; return; }
   if (tool === "line" && !lineEinzel() && i !== null){ zieh = {art:"line", pts:[i]}; return; }
@@ -15678,6 +15956,13 @@ cv.addEventListener("click", e => {
     const ar = areaHit(e.offsetX, e.offsetY);
     if (ar){ areaDialog(ar.id, ar.e); return; }
   }
+  /* MOB-3: the red X on the start ring wins over everything under it - a
+     neighbour town under the X stays tappable on its free side. The phone
+     comes through here too (fingerSteuerung builds one click event), so
+     this is the one place that reads the X. The start is cleared, the tool
+     and the selection stay, no toast: the next tap on a town sets the new
+     start (ENNO 12.09.2026: "zum Ab- und Neuwählen des Ausgangspunktes"). */
+  if (startXTreffer(e.offsetX, e.offsetY)){ arrowFrom = null; draw(); return; }
   const i = hitTest(e.offsetX, e.offsetY);
   if (i === null){
     if (tool === "arrow" && arrowFrom !== null){ arrowFrom = null; draw(); }
@@ -16523,7 +16808,9 @@ function leisteStufeSetzen(n){
      vorgefuehrt: bei 667x375 (Telefon seitwaerts, iPhone 6/7/8/SE) ist der
      Deckel 63,8 und die kleinste Raste mit Inhalt 67,9 - vier Punkte zu
      hoch, und alle elf Werkzeuge samt Fraktionswahl verschwanden. Bei
-     736x414 dasselbe eine Raste milder.
+     736x414 dasselbe eine Raste milder. (Since MOB-2, 15.09.2026, notches
+     1-3 are 12 points flatter - at 667x375 notch 1 is 53.8 under a cap
+     of 63.8 and fits, measured 15.09.2026; the rule stays as it is.)
      Der Deckel greift darum nur bis Raste 1 herunter. Wird es dort ZU eng,
      ist die kleinere Karte das kleinere Uebel: eine Karte ohne Werkzeuge
      ist keine Karte mehr. */
@@ -16766,7 +17053,7 @@ function depotZeichnen(){
             <input class="ttag" data-id="${esc(d.id)}" value="${esc(d.tag||"")}"
               placeholder="TAG" spellcheck="false" maxlength="10"
               ${d.tag ? 'readonly title="Double-click to change"' : ""}></span>
-          <em>${esc(atName(d.k))} · ${atText(d.k)}${drin?` · ${esc(MAP.n[town][0])}`:""}${grVon.has(d.id) ? ` · <span style="color:var(--accent)">${esc(grVon.get(d.id))}</span>` : ""}${Array.isArray(d.st) && d.st.length ? ` · <b>${stSymbole(d.k, d.st)}</b>${d.stT ? ` ${alterText(d.stT*1000)}` : ""}` : ""}</em></span>
+          <em>${esc(atName(d.k))} · ${atText(d.k)}${drin?` · ${esc(MAP.n[town][0])}`:""}${grVon.has(d.id) ? ` · <span style="color:var(--accent)">${esc(grVon.get(d.id))}</span>` : ""}${Array.isArray(d.st) && d.st.length ? ` · <b>${stSymbole(d.k, d.st)}</b>${d.stT ? ` ${alterText(d.stT*1000)}` : ""}` : ""}</em>${drin ? schlangeVermerk(town, d.id) : ""}</span>
         <span class="rechts">
           ${atKinder(d.k).length ? `<button class="hoch" data-hoch="${esc(d.id)}"
              title="Upgrade this team to ${esc(atKinder(d.k).map(atName).join(" or "))}">▲</button>` : ""}
@@ -16815,6 +17102,16 @@ function depotZeichnen(){
     b.addEventListener("pointerdown", ev => ev.stopPropagation());
     b.addEventListener("click", ev => { ev.stopPropagation(); hochWahl(b, b.dataset.hoch); });
   });
+  /* DEP-3 A6: a deliberate click on the mark, no drag start (stopPropagation
+     like data-hoch) */
+  liste.querySelectorAll("[data-schlange]").forEach(b => {
+    b.addEventListener("pointerdown", ev => ev.stopPropagation());
+    b.addEventListener("click", ev => {
+      ev.stopPropagation();
+      const t = townOfTeam(b.dataset.schlange);
+      if (t !== null) schlangeFragen([{id: b.dataset.schlange, town: t}]);
+    });
+  });
   liste.querySelectorAll("[data-pull]").forEach(b => {
     b.addEventListener("pointerdown", ev => ev.stopPropagation());
     b.addEventListener("click", ()=>{ withdrawTeam(b.dataset.pull); depotZeichnen(); side(); draw(); });
@@ -16847,9 +17144,11 @@ function depotZeichnen(){
         const i = hitTest(x, y);
         if (i !== null){
           const d = teamById(carrying.id);
+          const warImDepot = townOfTeam(carrying.id) === null;     // DEP-3: asked only when set out of the depot
           if (deployTeam(i, carrying.id)){
             sel = i; side(); draw(); tally();
             toast(`${d.name || atName(d.k)} → ${MAP.n[i][0]}`);
+            if (warImDepot) schlangeFragen([{id: carrying.id, town: i}]);
           }
         } else toast("Drop it right on a town");
       }
@@ -17406,7 +17705,7 @@ function side(){
             <div class="unit" style="--f:${col(FACTIONS[aktiveSeite()])}">
               <span class="sym">${symbolSVG(u.k, c)}</span>
               <span class="n" dir="auto">${esc(teamNameVon(g.who, u.id) || atName(u.k))}
-                <em>${u.s>1?`${u.s}× · `:""}${atText(u.k)}${atRadius(u.k)?` · strike ${atRadius(u.k)}`:""}${atVision(u.k)?` · vision ${atVision(u.k)}`:""}</em></span>
+                <em>${u.s>1?`${u.s}× · `:""}${atText(u.k)}${atRadius(u.k)?` · strike ${atRadius(u.k)}`:""}${atVision(u.k)?` · vision ${atVision(u.k)}`:""}</em>${u.q != null ? `<em>${schlangeText(u)}</em>` : ""}</span>
               ${g.mine ? `<button class="x" data-rm="${k}" title="Back to depot">×</button>`
                        : `<span class="lock" title="Only its owner can change this">🔒</span>`}
             </div>`).join("")}
@@ -17563,7 +17862,8 @@ function side(){
     setSpot(i, list); side(); draw();
   }));
   el.querySelector("#u-add")?.addEventListener("click", ()=>{
-    if (deployTeam(i, el.querySelector("#u-type").value)){ side(); draw(); depotZeichnen(); }
+    const id = el.querySelector("#u-type").value, warImDepot = townOfTeam(id) === null;   // DEP-3
+    if (deployTeam(i, id)){ side(); draw(); depotZeichnen(); if (warImDepot) schlangeFragen([{id, town: i}]); }
   });
   el.querySelectorAll("[data-rm]").forEach(b => b.addEventListener("click", ()=>{
     const list = myUnits(i).slice(); list.splice(+b.dataset.rm, 1);
@@ -26328,6 +26628,7 @@ function kbPlatzhalter(i){
 window.addEventListener("message", ev => {
   const m = ev.data;
   if (!m || m.hng !== "taste" || ev.source !== window) return;
+  bedient();                                        // a shortcut is use of the page (SON-1)
   if (!KB){ toast("Open Units first, then the shortcuts work."); return; }
   const i = kbWahl();
   if (m.was === "bestaetigen"){
@@ -41639,6 +41940,11 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
     for (const [id, tw] of gestellt) deployTeam(tw, id);
     closeDlg(); depotZeichnen(); side(); draw(); tally();
     toast(`${n} team${n===1?"":"s"} added${gestellt.length?`, ${gestellt.length} placed`:""}`);
+    /* DEP-3 A3: one window for all just placed teams that queue - AFTER
+       closeDlg (it clears #dlg next tick only while the veil is off, and
+       openDlg puts the veil back on). Every id here is new, so all were
+       set out of the depot. */
+    schlangeFragen(gestellt.map(([id, tw]) => ({id, town: tw})));
   });
 });
 
@@ -44473,9 +44779,16 @@ function handySchalter(){
 const amHandy = () => matchMedia("(max-width: 760px)").matches;
 
 /* ---- Der eigene Status ------------------------------------------------
-   Vier Zustaende, so wie sie im Blatt stehen. Sie sagen dem Clan, ob man
-   ansprechbar ist - mehr nicht, deshalb auch keine fuenfte Stufe und kein
-   erklaerender Satz an der Auswahl.
+   Five states, four of them by hand: Active, RTS only, Mobile, Inactive.
+   The fifth, Offline, only the tool sets - when the window closes, and in
+   the eyes of the others when a row has had no heartbeat for STAT_TOT.
+   ENNO 05.09.2026: "3 min ist zu wenig, vielleicht eher 30 min. Oder wir
+   nehmen noch offline hinzu. Man klickt ja nicht dauernd irgendwas an.
+   Inactive waere dann einfach wenn das Tool offen ist, man aber aktuell
+   seit einer Weile nichts gemacht hat." - Inactive = open but still (the
+   clock below, RUHE_NACH), Offline = gone (FABLE reading, 15.09.2026).
+   No explaining sentence at the select; the key "off" stays Inactive,
+   rows with it lie in every clan.
 
    Geschrieben wird in den Topf stat (Topftafel Zeile 3178): ein Eintrag je
    Spieler, Schluessel stat:<spieler>, Eigentum im Schluessel. Kein neues
@@ -44490,18 +44803,42 @@ const STATUS = [
   {k:"on",  n:"Active",   f:"var(--us)"},
   {k:"rts", n:"RTS only", f:"var(--accent)"},
   {k:"mob", n:"Mobile",   f:"var(--ge)"},
-  {k:"off", n:"Inactive", f:"var(--dim2)"}
+  {k:"off", n:"Inactive", f:"var(--dim2)"},
+  {k:"out", n:"Offline",  f:"var(--dim2)", hohl:1, werkzeug:1}   // hollow ring; werkzeug: set by the tool only, never in the select
 ];
 const STAT_HAND = "hng-warmap-status";
-const STAT_TIPP = "hng-warmap-status-tipp";
+const STAT_TIPP = "hng-warmap-status-tipp-2";   // -2: the hint's wording changed (Offline), it falls once more
+/* SON-1 (FABLE 15.09.2026): RUHE_NACH - no use of the page for this long
+   sets Inactive (ENNO 05.09.2026: "vielleicht eher 30 min"). HERZ_TAKT -
+   the heartbeat, a rewrite of the own row with a fresh hz; STAT_TOT - a
+   foreign row older than this counts as Offline for the readers (three
+   missed beats and a minute; FABLE choice, F7). bedientUm: the last use
+   of this page; ruheGesetzt: the clock, not the hand, set the Inactive;
+   pulsUm: the last beat - an own marker, not the row's t, so that a server
+   keeping t on a beat could never make this fire every round. */
+const RUHE_NACH = 30*60e3, HERZ_TAKT = 5*60e3, STAT_TOT = 16*60e3;
+let bedientUm = jetzt(), ruheGesetzt = false, pulsUm = 0;
 const statusArt = k => STATUS.find(x => x.k === k) || null;
 const statusVon = who => {
   const e = S.stat && S.stat[who];
-  return e && statusArt(e.v) ? e.v : "";
+  if (!e || !statusArt(e.v)) return "";
+  /* no heartbeat for STAT_TOT: Offline for the others (crash, power cut, a
+     tab the browser threw away - no pagehide). Never the own row: this
+     page is alive. t is server time (applyRemote), jetzt() the reader's
+     clock - the same reading pos uses with 60 s. */
+  if (who !== S.me && e.v !== "out" && jetzt() - (e.t||0) > STAT_TOT) return "out";
+  return e.v;
 };
+/* a recording running against the game counts as use of the page: whoever
+   has the radar, the units cabin, the players room or the battlereader on
+   the game is doing something with the tool, even without a click for 40
+   minutes (FABLE 15.09.2026, F2). Read only, nothing is set. */
+const aufnahmeLaeuft = () => wacheLaeuft() || !!(KB && KB.live) || !!(PG && PG.live) || !!(GEF && GEF.live);
 /* WER NACH SEINEM STATUS EINEN BEFEHL ERFUELLEN KANN. AT-Befehle (Pfeil,
    Parablock, Flaeche): Active und RTS only - der schiebt seine Einheiten.
-   FPS-Rollen: nur Active. Mobile sieht nur zu, Inactive ist weg. Wer nichts
+   FPS-Rollen: nur Active. Mobile sieht nur zu, Inactive ist weg, Offline
+   ebenso (gesetzt beim Schliessen oder gealtert ohne Herzschlag, statusVon;
+   SON-1, 15.09.2026). Wer nichts
    gesetzt hat, zaehlt: ueber ihn wird nichts behauptet, wie beim Punkt.
    ENNO 12.09.2026: "Bei mobile nein, diese Spieler haben ja auf das Spiel
    keinen Zugriff ueber das Handy. ... Die RTS Only Spieler hingegen ...
@@ -44515,35 +44852,142 @@ const statusKannFPS = who => { const s = statusVon(who); return s === "" || s ==
 function statusPunkt(who){
   const st = statusArt(statusVon(who));
   if (!st) return "";
-  return `<i title="${esc(st.n)}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${st.f};margin-right:6px;vertical-align:middle"></i>`;
+  /* Offline: a hollow ring, 8 px outside like the dots (border-box), and
+     the time of the last row as the friends list would say it - "Offline
+     (2 h ago)"; a filled grey dot stays Inactive, no dot stays "nothing
+     set" (FABLE 15.09.2026, F5). */
+  const e = S.stat && S.stat[who];
+  const titel = st.hohl && e && e.t ? `${st.n} (${alterText(e.t)})` : st.n;
+  const form = st.hohl ? `background:transparent;border:1px solid ${st.f};box-sizing:border-box` : `background:${st.f}`;
+  return `<i title="${esc(titel)}" style="display:inline-block;width:8px;height:8px;border-radius:50%;${form};margin-right:6px;vertical-align:middle"></i>`;
 }
 function statusLeiste(){
   const kasten = document.getElementById("me-status");
   if (!kasten) return;
   const k = statusVon(S.me) || "off";
+  /* TWO DEVICES, ONE ACCOUNT (FABLE 15.09.2026, S4/S5, F6): the other
+     device closed (out) or its clock set Inactive ({auto:1}) while this
+     one is alive and was used within RUHE_NACH - and it was not this
+     page's own clock (ruheGesetzt): take the state back at the next pull.
+     Once there, once back, no loop: a device's clock fires once per own
+     idle spell (ruheGesetzt), and the take-back arms it again - a page
+     that is open but idle after the other one closed turns Inactive at
+     its next minute. Not while this page is closing (statusZu). */
+  const e = S.stat && S.stat[S.me];
+  if (!statusZu && (k === "out" || (k === "off" && e && e.auto && !ruheGesetzt && jetzt() - bedientUm < RUHE_NACH))){ ruheGesetzt = false; statusAn(); return; }
   const wahl = kasten.querySelector("select");
   if (wahl && wahl.value !== k) wahl.value = k;
   const punkt = kasten.querySelector(".dot");
   const st = statusArt(k);
   if (punkt) punkt.style.background = st ? st.f : "var(--dim2)";
 }
-function statusSetzen(k, vonHand){
+function statusSetzen(k, vonHand, extra){
   if (!statusArt(k)) return;
-  if (statusVon(S.me) !== k && stamp("stat", S.me, k)) save();
+  if (vonHand) ruheGesetzt = false;               // a hand's choice stands until the hand changes it
+  /* written when the state changes OR the auto mark does: a hand picking
+     Inactive over the clock's Inactive must drop {auto:1}, or a second
+     device would take it back (statusLeiste). */
+  const e = S.stat && S.stat[S.me];
+  if ((statusVon(S.me) !== k || !!(e && e.auto) !== !!(extra && extra.auto)) && stamp("stat", S.me, k, extra)) save();
+  pulsUm = jetzt();                                // a change of state is a beat
   if (vonHand) schreib(STAT_HAND, k);
   statusLeiste();
-  /* Steht die Mitgliederliste gerade offen, traegt sie den Punkt sofort
-     nach - so wie es der Rang schon macht. */
-  if (document.getElementById("cl-people")) leuteZeichnen();
+  /* Steht die Mitgliederliste gerade offen, traegt sie den Punkt nach -
+     so wie es der Rang schon macht; seit SON-1 geschuetzt (leuteNachziehen). */
+  leuteNachziehen();
+}
+/* USE OF THE PAGE (SON-1, FABLE 15.09.2026, F1): pointer, key, wheel on
+   the page and the extension's shortcuts. Nothing outside the page: no
+   hook in the game, no window focus, no visibility - looking is not doing
+   (ENNO 05.09.2026: "nichts gemacht"). The first use after a
+   clock-set Inactive brings the previous state back (statusAn: last hand
+   choice, else the device's default); a hand-set Inactive stays (F3). */
+function bedient(){
+  bedientUm = jetzt();
+  const e = S.stat && S.stat[S.me];
+  /* the own clock, or the clock of another device on this account (auto
+     mark on the row): the first use here brings the state back (round 1,
+     Skeptiker S2; FABLE decision 4) */
+  if (ruheGesetzt || (e && e.v === "off" && e.auto)){ ruheGesetzt = false; statusAn(); }
+}
+/* THE CLOCK, once a minute (statusAufbau): RUHE_NACH without use, no
+   recording running, and the own row is not already Inactive or Offline -
+   Inactive with {auto:1} (the mark travels with the value; a second device
+   reads it, statusLeiste). No toast: nobody is sitting there, the dot in
+   the bar turns grey. Active, RTS only and Mobile alike (F4). Runs without
+   a server too - the state is this page's as well. Then the member list,
+   so that a ring appears after STAT_TOT without a click. */
+function statusRuhePruefen(){
+  /* another device took the account back after this clock had set
+     Inactive: that counts as use here, the clock starts over - otherwise
+     this open, silent page would never set Inactive again and its
+     heartbeat would keep the account Active for good (round 1, Skeptiker S3) */
+  if (ruheGesetzt && S.me && statusVon(S.me) !== "off"){ ruheGesetzt = false; bedientUm = jetzt(); }
+  if (!ruheGesetzt && S.me){
+    const k = statusVon(S.me);
+    if (k && k !== "off" && k !== "out" && !aufnahmeLaeuft() && jetzt() - bedientUm > RUHE_NACH){
+      ruheGesetzt = true;
+      statusSetzen("off", false, {auto:1});
+    }
+  }
+  leuteNachziehen();
+}
+/* THE HEARTBEAT (SON-1, FABLE 15.09.2026, F7/F10): every HERZ_TAKT the own
+   row goes out again with the same state and a fresh hz (minute number) -
+   for the server a change, so warmap_stempeln sets t anew (probed
+   15.09.2026 in the test room: hz 1 -> 2 sets t, equal hz leaves it). In
+   all four states and in a hidden tab (the 30-s round); not without a
+   connection (nothing to send), not for "" (nothing said) and not over
+   an "out" of another device (statusLeiste takes that back first). The
+   auto mark stays on the row - a beat must not turn the clock's Inactive
+   into a hand's. Nobody reads hz. Called from runde before syncPush. */
+function statusPuls(){
+  if (!CFG || !S.me) return;
+  const k = statusVon(S.me);
+  if (!k || k === "out") return;
+  if (jetzt() - pulsUm < HERZ_TAKT) return;
+  pulsUm = jetzt();
+  const e = S.stat[S.me];
+  stamp("stat", S.me, k, Object.assign({hz: Math.floor(jetzt()/60000)}, e && e.auto ? {auto:1} : {}));
+}
+/* THE MEMBER LIST FOLLOWS THE STATUS (FABLE 15.09.2026, S3): "Who is here"
+   is redrawn only when the run of statusVon over the members (ageing
+   included) differs from what the list last showed - and never over
+   somebody's hands: not while an element of the clan window has the
+   focus, not while the wish field or its ticks hold something unsaved.
+   leuteZeichnen rebuilds the whole tab; a redraw at the wrong moment
+   would drop typed text without a word. The signature is kept on
+   #cl-people itself, so a freshly opened window is drawn once more at the
+   first check (guarded like every other). */
+const statusSignatur = () => leuteListe.map(m => statusVon(m.player)).join(",");
+function wunschOffen(feld){
+  const w = feld.querySelector("#lp-wunsch");
+  if (!w) return false;
+  const n = feld.querySelector("#lp-neu");                 // a rank name being typed (leader) counts as unsaved too (round 1, Skeptiker S1)
+  if (n && n.value.trim()) return true;
+  const mein = wunschVon(S.me) || {text:"", zweige:[]};
+  if (w.value.trim() !== (mein.text || "")) return true;
+  const z = [...feld.querySelectorAll("[data-wz]")].filter(c => c.checked).map(c => c.dataset.wz);
+  const soll = mein.zweige || [];
+  return z.length !== soll.length || z.some(k => !soll.includes(k));
+}
+function leuteNachziehen(){
+  const feld = document.getElementById("cl-people");
+  if (!feld || !feld.querySelector("#lp-wunsch")) return;    // not open, or still "Loading"
+  const sig = statusSignatur();
+  if (feld.dataset.statsig === sig) return;
+  if (feld.contains(document.activeElement) || wunschOffen(feld)) return;
+  feld.dataset.statsig = sig;
+  leuteZeichnen();
 }
 /* ANMELDEN. Wer die Seite oeffnet, ist da. Aufgehoben wird aber nur ein
-   Inactive - eine bewusst gesetzte Wahl bleibt stehen, sonst waere "RTS
-   only" nach jedem Neuladen weg.
+   Inactive oder ein Offline (SON-1) - eine bewusst gesetzte Wahl bleibt
+   stehen, sonst waere "RTS only" nach jedem Neuladen weg.
    Wohin es zurueckgeht, sagt die letzte Handwahl dieses Geraets. Gibt es
    keine, entscheidet das Geraet: auf dem Telefon Mobile, sonst Active. */
 function statusAn(){
   const ist = statusVon(S.me);
-  if (ist && ist !== "off"){ statusLeiste(); return; }
+  if (ist && ist !== "off" && ist !== "out"){ statusLeiste(); return; }
   const hand = lies(STAT_HAND, "") || "";
   statusSetzen(statusArt(hand) && hand !== "off" ? hand
              : amHandy() ? "mob" : "on", false);
@@ -44562,8 +45006,8 @@ let statusZu = false;
 function statusSchliessen(){
   if (statusZu || !S.me) return;
   statusZu = true;
-  if (statusVon(S.me) === "off") return;
-  if (!stamp("stat", S.me, "off")) return;
+  if (statusVon(S.me) === "out") return;
+  if (!stamp("stat", S.me, "out")) return;       // Offline, not Inactive: an Inactive that closes is gone too (SON-1)
   saveSofort();                       // sonst faellt die Zeile mit dem Fenster
   if (!CFG) return;
   try {
@@ -44579,22 +45023,26 @@ function statusAufbau(){
   if (!kasten) return;
   const wahl = kasten.querySelector("select");
   if (!wahl) return;
-  wahl.innerHTML = STATUS.map(x => `<option value="${x.k}">${esc(x.n)}</option>`).join("");
+  wahl.innerHTML = STATUS.filter(x => !x.werkzeug).map(x => `<option value="${x.k}">${esc(x.n)}</option>`).join("");   // Offline is not a choice: the tool is open
   wahl.addEventListener("change", ()=> statusSetzen(wahl.value, true));
   statusAn();
+  /* use of the page: capture phase, passive - the page reads its own
+     events only (bedient). The clock once a minute, its own interval. */
+  for (const art of ["pointerdown", "keydown", "wheel"]) document.addEventListener(art, bedient, {capture:true, passive:true});
+  setInterval(statusRuhePruefen, 60000);
   /* NUR DAS ECHTE SCHLIESSEN. pagehide feuert auch, wenn der Browser die
      Seite nur einfriert und in den Rueck-Vor-Speicher legt - auf dem
      Telefon bei jedem Wechsel in eine andere App. Dann steht ev.persisted
      auf wahr, und wer gerade spielt, waere sonst mitten im Gefecht auf
-     Inactive gesetzt. Genau der Fall, den dieser Punkt vermeiden soll. */
+     Offline gesetzt. Genau der Fall, den dieser Punkt vermeiden soll. */
   addEventListener("pagehide", ev => { if (!ev.persisted) statusSchliessen(); });
   /* Zurueck aus dem Vor-Zurueck-Speicher des Browsers: die Seite lebt
      weiter, das Abmelden von eben ist damit hinfaellig. */
-  addEventListener("pageshow", ev => { if (ev.persisted){ statusZu = false; statusAn(); } });
+  addEventListener("pageshow", ev => { if (ev.persisted){ statusZu = false; ruheGesetzt = false; bedientUm = jetzt(); statusAn(); } });
   /* Einmal sagen, was beim Schliessen passiert. Danach nie wieder. */
   if (!lies(STAT_TIPP, "")){
     schreib(STAT_TIPP, "1");
-    setTimeout(()=>toast("Closing this window sets you to Inactive."), 2500);
+    setTimeout(()=>toast("Closing this window sets you to Offline."), 2500);
   }
 }
 
@@ -50559,6 +51007,36 @@ function clanDialog(tab){
               <td>${nz(d.teams*((AT[d.k]&&AT[d.k].wf[0])||0))}</td></tr>`;
           }).join("")}</tbody></table></div>
         
+        ${(()=>{
+          /* DEP-1: the assault-team groups of every member, read only.
+             ENNO 05.09.2026: "Die Zusammensetzung und Existenz dieser
+             Gruppen ist clanintern zugaenglich." Same order as the tables
+             above (leute); one block per group, drawn like the town column
+             draws its teams; the side is the one this tab looks at. Own
+             groups are edited in the Depot window, not here. */
+          const bl = aktiveSeite();
+          /* the tag: from the row; for S.me the local copy fills what the
+             row lacks (namenAn), as the depot window does */
+          const kz = (p, t) => (p.mine ? namenAn(t) : t).tag || "";
+          const bloecke = leute.map(p => ({p, gr: gruppenVon(p.who)})).filter(x => x.gr.length);
+          return `<h3 style="margin:18px 0 6px;font-size:11px;letter-spacing:.12em;
+                   text-transform:uppercase;color:var(--dim2)">Groups</h3>
+          ${bloecke.length ? `<div class="cl-grps">${bloecke.map(({p, gr}) => `
+            <div class="cl-grp-p"${p.mine ? ' style="border-left-color:var(--accent)"' : ''}>
+              <div class="cl-grp-n">${nameMitClan(p.name)}${p.mine ? " <em>you</em>" : ""}</div>
+              ${gr.map(g => `
+              <div class="grp">
+                <div class="grp-h">${esc(gruppeName(g))}
+                  <span>${g.ats.length} team${g.ats.length === 1 ? "" : "s"} · ${nz(g.ats.reduce((s,t)=>s+atMen(t.k), 0))} men</span></div>
+                ${g.ats.length ? g.ats.map(t => `
+                <div class="unit" style="--f:${col(FACTIONS[bl])}">
+                  <span class="sym">${symbolSVG(t.k, c)}</span>
+                  <span class="n" dir="auto">${esc(teamNameVon(p.who, t.id) || atName(t.k))}${
+                    kz(p, t) ? ` <small style="color:var(--dim2)">${esc(kz(p, t))}</small>` : ""}<em>${esc(atName(t.k))}</em></span>
+                </div>`).join("") : `<div class="empty">No teams on this side.</div>`}
+              </div>`).join("")}
+            </div>`).join("")}</div>` : `<div class="empty">No groups yet.</div>`}`;
+        })()}
         ` : `<div class="note">Open the <b>Depot</b> on the right (key <kbd>D</kbd>) and enter what you own,
           with the names the teams have in the game. From then on this window shows the whole clan.</div>`}
       </div>
@@ -51994,7 +52472,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 84ca8d5e42</span></p></div>
+         installation. <span style="color:var(--dim2)">· build bc0c79cb53</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -52222,7 +52700,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "84ca8d5e42";
+const BAU = "bc0c79cb53";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -52983,6 +53461,7 @@ async function syncStart(){
   const syncTakt = () => document.hidden ? SYNC_RUHE
                        : (radarOffen && (radarFern || wacheLaeuft())) ? 1200 : 3500;
   const runde = async () => {
+    statusPuls();                                   // the heartbeat, every HERZ_TAKT (SON-1)
     await syncPush(); await syncPull(); offenSichern();
     if (syncTimer !== null) syncTimer = setTimeout(runde, syncTakt());
   };
