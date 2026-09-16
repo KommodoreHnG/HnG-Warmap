@@ -1884,6 +1884,9 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 .op-k.op-zu{cursor:default}
 .op-griff{position:absolute;right:-12px;top:18px;width:24px;height:24px;border-radius:50%;background:var(--accent);
   color:#1a1207;font-weight:bold;font-size:17px;line-height:23px;text-align:center;cursor:crosshair}
+@media (min-width:761px) and (max-width:830px){
+  #top-capture .btn{padding:7px 6px;font-size:11px;letter-spacing:0;gap:4px}   /* Nachzuegler-1: "Battlereader" must not push the gear out (FABLE 16.09.2026) */
+}
 @media (max-width:760px){.op-griff::before{content:"";position:absolute;inset:-6px;border-radius:50%}}
 .op-x{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:var(--su);
   color:#fff;font-size:15px;line-height:22px;text-align:center;cursor:pointer}
@@ -2032,8 +2035,12 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
      beim AT-Grabber ja das Overlay haben." Without screen sharing both
      rooms only say "This browser cannot share a window here." The
      buttons, the rooms and their wiring stay; on the desk nothing changes
-     (5.15). Hidden, not removed - his "erstmal" keeps the way back. */
-  #top-capture #b-spieler,#top-capture #b-units{display:none}
+     (5.15). Hidden, not removed - his "erstmal" keeps the way back.
+     Nachzuegler-1 (FABLE 16.09.2026): the Battlereader button goes the
+     same way until a phone can see the battle board - it needs the
+     shared game window as well (his 12.09.: the coupling). Room and
+     wiring stay; the desk keeps all six. */
+  #top-capture #b-spieler,#top-capture #b-units,#top-capture #b-gefstand{display:none}
   /* Fuenf Titel passen nebeneinander nicht auf 375 Bildpunkte - sie wurden
      abgeschnitten. Auf dem Telefon also ein Griff, der alles auf einmal
      aufklappt, wie ueberall sonst auch. */
@@ -2285,17 +2292,19 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       </button>
       <button class="btn" id="b-gefstand" title="Reads the battle you are in">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
-          <!-- crossed sabres, the same drawing as the battle-mark tool.
+          <!-- crossed sabres - the battlereader's own sign since
+               Nachzuegler-1 (the battle-mark tool carries a burst).
                ENNO 12.09.2026: "Dieser kann dann auch die gekreuzten
                Saebel als Symbol bekommen und ersetzt/integriert die
-               Schlachtanalyse als eigenen Raum." The name stays "Battle"
-               until ENNO names it (ENNO 05.09.2026: "Der Battlereader oder
-               wie wir das dann nennen"). -->
+               Schlachtanalyse als eigenen Raum." Named "Battlereader":
+               ENNO 02.09.2026 "nicht einfach Battle", ENNO 05.09.2026
+               "Der Battlereader oder wie wir das dann nennen" (FABLE
+               16.09.2026). -->
           <path d="M4.6 3.4c4.2 1.1 9.4 6.3 12.8 12.4"/>
           <path d="M19.4 3.4c-4.2 1.1-9.4 6.3-12.8 12.4"/>
           <path d="M15.6 17.2l3.4 3.4M17.9 14.9l3.4 3.4"/>
           <path d="M8.4 17.2l-3.4 3.4M6.1 14.9l-3.4 3.4"/>
-        </svg><span class="txt">Battle</span>
+        </svg><span class="txt">Battlereader</span>
       </button>
       <button class="btn" id="b-spieler" title="Read the players of a battle from the war map">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
@@ -2392,24 +2401,17 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
         <svg viewBox="0 0 24 24"><path d="M19.5 3.5l1 1-8.2 8.6-1.4-1.4z"/>
           <path d="M10.6 11.8c-2.2.2-3.6 1.4-3.8 3.6-.2 2.1-1.2 3.3-3.3 3.8 3.9 1.6 8-.4 8.5-4.2z"/></svg>
         <span class="lbl" data-txt="tool.brush">Paint</span></button>
-      <!-- GEKREUZTE SAEBEL. ENNO 05.09.2026 ("Gekreuzte Saebel als Symbol,
-           wie bereits besprochen") galt dem Schlachtanalyseraum, ENNO
-           12.09.2026 dem Battlereader - der traegt sie seit dem Kosmetik-Paket 1 am
-           Knopf oben. Das Werkzeug hier behaelt sie als FABLE-Wahl
-           (Zeichen der Textplaketten, U+2694), bis er etwas anderes sagt
-           (F8). Vorher stand hier ein
-           eingekreistes X: keine Klinge, kein Griff, kein Parierstueck -
-           und die Textplaketten des Werkzeugs benutzen das Saebelzeichen
-           laengst. Drei verschiedene Zeichen fuer dieselbe Sache.
-           Je Saebel eine geschwungene Klinge, ein Parierbuegel und ein
-           Knauf; die beiden kreuzen sich oberhalb der Mitte, wie im
-           Wappengebrauch. -->
+      <!-- EINSCHLAGSTERN (Nachzuegler-1, FABLE 16.09.2026). Die gekreuzten
+           Saebel gehoeren dem Battlereader-Knopf in der Kopfleiste (ENNO
+           05.09.2026 "Gekreuzte Saebel als Symbol, wie bereits
+           besprochen", ENNO 12.09.2026 BAT-16); ein Werkzeug mit demselben
+           Zeichen sah aus wie derselbe Raum. Die Kampfmarke bekommt darum
+           einen achtzackigen Stern im 24er-Raster, vier lange und vier
+           kurze Zacken um (12|12), derselbe Strich wie die Nachbarn. Die
+           Textplaketten des Werkzeugs (U+2694) bleiben. -->
       <button class="tool" data-t="battle" aria-pressed="false">
         <svg viewBox="0 0 24 24">
-          <path d="M4.6 3.4c4.2 1.1 9.4 6.3 12.8 12.4"/>
-          <path d="M19.4 3.4c-4.2 1.1-9.4 6.3-12.8 12.4"/>
-          <path d="M15.6 17.2l3.4 3.4M17.9 14.9l3.4 3.4"/>
-          <path d="M8.4 17.2l-3.4 3.4M6.1 14.9l-3.4 3.4"/></svg>
+          <path d="M12 2.2L13.8 7.7L17.8 6.2L16.3 10.2L21.8 12L16.3 13.8L17.8 17.8L13.8 16.3L12 21.8L10.2 16.3L6.2 17.8L7.7 13.8L2.2 12L7.7 10.2L6.2 6.2L10.2 7.7Z"/></svg>
         <span class="lbl" data-txt="tool.battle">Battle</span><span class="kb">9</span></button>
       <button class="tool" data-t="erase" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M3.8 7.1h16.4"/><path d="M9.4 7.1V4.4h5.2v2.7"/><path d="M6.4 7.1l.9 12.5h9.4l.9-12.5"/><path d="M10.2 10.4v6.1M13.8 10.4v6.1"/></svg>
@@ -2724,18 +2726,30 @@ const capHome= i => { const v = MAP.n[i][4]; return v > 0 ? FACTIONS[v-1] : null
      Stadion        x 15,4..84,4  y 15,4..53,3  -  IMMER gleich gross
      Gewichtsbalken Mitten 15,25 und 27,8, Breite 6, ueber die volle Hoehe,
                     und sie liegen UEBER dem Stadion, nicht daneben
-     Jagdpanzer     Dreieck von den unteren Innenecken zur Spitze (50,6),
-                    Spitze massiv ausgefuellt
+     Jagdpanzer     zwei Striche von den unteren Innenecken zur Spitze
+                    (50,9,5), die Spitze blank - das Spiel fuellt dort
+                    nichts (Nachzuegler-1, Aufnahme 200 x 138: Scheitel der
+                    Mittellinien bei y 11, sichtbare Spitze bei 6,5)
      Flugzeugkeule  Tropfen: Spitze in der Mitte (50,34,5), runder Abschluss
                     aussen mit Radius 15,4 - keine Ellipse, und die Striche
                     beider Keulen kreuzen sich in der Mitte
-     Pfeil          massiv, Kopf 42,7..57,3 bis y 17, Schaft 6,2 bis y 37,8
-     Schirm         Kuppel x 36..64, Sehne y 36, Last bis (50,56)
-     Fluegel        von den Aussenkanten zur Kuppelschulter geschwungen
+     Pfeil          massiv, Kopf 42,7..57,3 bis y 17, Schaft 6,2 bis y 37,8;
+                    schwerer Jaeger: drei Sprossen 18 x 2,4 im Abstand 4,5
+                    ab der Kopfbasis (Nachzuegler-1); Aufklaerungsjaeger:
+                    Schaft bis y 51, kurzer Fuss (56,5|46)..(43|58,5) mit
+                    runden Enden (Nachzuegler-1)
+     Schirm         Halbkreis Mitte (50|27), Radius aussen 16; Sehne als
+                    Balken y 26,5..29 von x 25 bis 75; hohles V von den
+                    Sehnenenden bis (50|55) (Nachzuegler-1)
+     Schultern      dicke Bogen (1,5 Innenstrich) von den Innenkanten bei
+                    y 29 zur Kuppelwand bei y 25 (Nachzuegler-1)
+     G              nachgezeichnet statt Schrift: x 32..65, y 13,5..57,5,
+                    serifenlos, schwere Senkrechte, duenner Bogen oben
+                    (Nachzuegler-1)
 
    Bausteine: X Infanterie | \ Aufklaerung | Stadion Panzer | Keulen + Pfeil
-   Flugzeug | Raeder motorisiert | Balken Gewicht | Dreieck Jagdpanzer |
-   Schirm mit Fluegeln Luftlande.                                          */
+   Flugzeug | Raeder motorisiert | Balken Gewicht | Spitze Jagdpanzer |
+   Schirm mit Schultern Luftlande.                                         */
 const SYM = {
   infantry:"X", guard:"G", motorized_guard:"G M", motorized_infantry:"X M",
   mechanized_infantry:"X A", recon:"R", motorized_recon:"R M", mechanized_recon:"R A",
@@ -2775,10 +2789,8 @@ function symbolSVG(key, farbe, w=26, h=18){
      spaeter darueber gelegt und verdecken sein linkes Ende. */
   if (hat("A")) g.push(`<rect x="15.4" y="15.4" width="69" height="37.9"
     rx="18.95" ry="18.95"/>`);
-  if (hat("T")){                          // Jagdpanzer
-    g.push(`<path d="M${L} ${U}L50 ${O}L${Re} ${U}"/>`);
-    voll.push(`<path d="M50 ${O-1}L57.4 19H42.6Z"/>`);   // massive Spitze
-  }
+  if (hat("T"))                           // Jagdpanzer: two strokes to a plain point, the game fills nothing at the tip (Nachzuegler-1)
+    g.push(`<path d="M${L} ${U}L50 9.5L${Re} ${U}"/>`);
   if (hat("F")){
     /* Zwei Tropfen, deren Spitzen sich in der Mitte treffen und deren Striche
        sich dort kreuzen - deshalb ein geschlossener Pfad je Keule und keine
@@ -2786,20 +2798,33 @@ function symbolSVG(key, farbe, w=26, h=18){
     g.push(`<path d="M50 34.5L29.6 21.9A15.4 15.4 0 1 0 29.6 47.1Z"/>`
          + `<path d="M50 34.5L70.4 21.9A15.4 15.4 0 1 1 70.4 47.1Z"/>`);
     voll.push(`<path d="M50 ${O-1}L57.3 17H53.1V37.8H46.9V17H42.7Z"/>`);
-    if (hat("H"))                         // schwerer Jaeger: massive Sprossen
-      for (let k = 0; k < 4; k++)
-        voll.push(`<rect x="42" y="${16 + k*3.4}" width="16" height="1.8"/>`);
-    if (hat("R2"))                        // Aufklaerer: Strich quer zum Schaft
-      g.push(`<path d="M36 54L54 38"/>`);
+    if (hat("H"))                         // heavy fighter: three rungs, the first ON the head's base at y 17 (Nachzuegler-1; game: 18,5 wide, 2,5 thick, pitch 4,5 - measured IoU 0,404 -> 0,439)
+      for (let k = 0; k < 3; k++)
+        voll.push(`<rect x="41" y="${17 + k*4.5}" width="18" height="2.4"/>`);
+    if (hat("R2")){
+      /* recon fighter: the shaft runs on below the clubs to y 51 and a
+         short foot crosses its end, (56,5|46) to (43|58,5), round ends -
+         as the game draws it (Nachzuegler-1; before: a long bar from
+         (36|54) to (54|38) across the shaft's middle) */
+      voll.push(`<rect x="46.9" y="37" width="6.2" height="14"/>`);
+      p.push(`<path d="M56.5 46L43 58.5" fill="none" stroke="${farbe}" stroke-width="${I}" stroke-linecap="round"/>`);
+    }
   }
   if (hat("P")){
-    /* Fallschirm mit Fluegeln: schmale Kuppel in der Mitte, Sehne, Last als
-       Spitze, dazu die beiden geschwungenen Fluegel bis an die Innenkanten. */
-    g.push(`<path d="M36 36A14 22 0 0 1 64 36"/>`
-         + `<path d="M36 36H64"/>`
-         + `<path d="M40 36L50 56L60 36"/>`
-         + `<path d="M${L} 34Q24 17 36 25"/>`
-         + `<path d="M${Re} 34Q76 17 64 25"/>`);
+    /* THE CANOPY AS THE GAME DRAWS IT (Nachzuegler-1, FABLE 16.09.2026;
+       ENNO 02.09.2026: "haargenau wie im Spiel nachbauen"). Measured on
+       the purchase-screen cut at 200 x 138 (raster 100 x 69): a wide
+       semicircle, centre (50|27), outer radius 16, stroke about 3; its
+       chord a bar 2,5 thick from x 25 to 75 - wider than the dome, it
+       runs into the shoulders; a hollow V from the chord's ends (34,5 and
+       65,5) to a tip at y 55; two thick shoulders (about 5,5) rising from
+       the frame's sides at y 29 to the dome's wall at y 25. Before: a
+       narrow bell 28 x 22 on a chord at y 36, a small V, thin wing lines. */
+    g.push(`<path d="M35.5 27A14.5 14.5 0 0 1 64.5 27"/>`
+         + `<path d="M25 27.75H75"/>`
+         + `<path d="M34.5 29L50 52.5L65.5 29"/>`);
+    p.push(`<path d="M${L} 29Q12 24 36 24.8M${Re} 29Q88 24 64 24.8" fill="none"
+      stroke="${farbe}" stroke-width="${I*1.5}" stroke-linecap="butt"/>`);
   }
   if (hat("TP")){
     /* Transportflugzeug von oben: Rumpf, Tragflaechen, Leitwerk - massiv,
@@ -2820,9 +2845,11 @@ function symbolSVG(key, farbe, w=26, h=18){
 
   if (voll.length) p.push(`<g fill="${farbe}" stroke="none">${voll.join("")}</g>`);
   if (hat("G"))
-    p.push(`<text x="48" y="52" font-size="47" font-weight="700" fill="${farbe}"
-      text-anchor="middle" stroke="none"
-      font-family="Georgia,'Times New Roman',serif">G</text>`);
+    /* the game's G, traced from the purchase-screen cut (Nachzuegler-1):
+       a wide letter without serifs, heavy verticals, a thin top - x 32 to
+       65, y 13,5 to 57,5 of the raster. A font drew its own G, a different
+       one on every machine. */
+    p.push(`<path fill="${farbe}" stroke="none" d="M50 13.5C56 13.5 61 16 63 20L63.5 22L63.5 24.5L55.5 24.5L55 22C54 18.5 52 16.5 48.5 16.5C45.5 16.5 43.5 18 42 21L42 25L41.5 25L41.5 52C42.5 54.5 45 56 48.5 56C51.5 56 53.5 55.5 55 54.5L55 39.5L54 38.5L53 38L53 37.5L54 37L56 36L59.5 35L63 35L65 36L64.5 38L64 39.5L64 56.5L55.5 57L53 57.5L44 57.5C38 57.5 33 54 32 46L32 22.5L32.3 21.3L33.5 20.3L36 19L39 17.8L42 16.3L45.5 15Z"/>`);
   if (hat("M"))
     p.push(`<circle cx="22" cy="56" r="6.5" fill="${farbe}"/>`
          + `<circle cx="78" cy="56" r="6.5" fill="${farbe}"/>`);
@@ -5774,6 +5801,22 @@ const abzEigen = id => {
   const v = z && z.v;
   return typeof v === "string" && v.length <= ABZ_MAX && ABZ_FORM.test(v) ? v : "";
 };
+/* ---- THE LEADER'S INSIGNIA (Nachzuegler-1, FABLE 16.09.2026) ----
+   ENNO 07.09.2026: "Clanleader kann Symbole, bzw. Rangabzeichen vergeben
+   fuer die Rollen, die dann automatisch bei den Spielern angezeigt
+   werden." "Leader" is no rank of the list, so no entry could carry his
+   picture. Two rows of the leader's own, both meta:% and so his on the
+   server as well: meta:abzleader = {v: game name | "own"} says which,
+   meta:abz:leader holds an uploaded picture exactly as meta:abz:<id> does
+   for a rank (abzEigen("leader") reads it). The editor treats the pair as
+   one entry {id: LEITER_ABZ, name: "Leader", abz} and writes it through
+   o.leader / o.abz, never by itself (SOLL-5). Shown by spielerAbz for the
+   leader only while he holds no rank by hand or by points - a rank he
+   holds shows the rank (SOLL-2 stands). The value is foreign matter out
+   of a server row: "own" or a name that passes abzName, else nothing. */
+const LEITER_ABZ = "leader";
+const abzLeiterWahl = () => { const z = S.meta.abzleader, v = z && z.v; return v === "own" || abzName(v) ? v : ""; };
+const abzLeiterEintrag = () => ({id: LEITER_ABZ, name: "Leader", abz: abzLeiterWahl()});
 /* the <img> of a rank entry, "" without one; px = its height where it stands */
 function rangAbz(r, px = 18){
   if (!r || typeof r !== "object") return "";
@@ -5790,7 +5833,7 @@ function rangAbz(r, px = 18){
    like rollenVon does. */
 function spielerAbz(player, px){
   const fuehrt = leaderId() ? player === leaderId() : (player === S.me && istLeader());
-  if (fuehrt && !rangQuelle(player)) return "";
+  if (fuehrt && !rangQuelle(player)) return rangAbz(abzLeiterEintrag(), px);   // Nachzuegler-1: the leader's own insignia
   return rangAbz(rollenVon(player)[0], px);
 }
 /* the 211 names of MAP.rang, parsed once: {name, f, z, r} in game order */
@@ -5911,10 +5954,10 @@ function abzEditorZeichnen(g){
   k.restore();
 }
 /* wiring of the open editor inside a picker g; writes only on Apply / every rank, only through o */
-function abzEditorVerdrahten(g, id, o, kopie, gitterAuf){
+function abzEditorVerdrahten(g, id, o, kopie, gitterAuf, eintrag, abzSetzen){
   const ed = g.querySelector(".abz-ed");
   if (!ed || !abzEd || abzEd.id !== id) return;
-  const r = o.liste().find(x => x.id === id), name = abzGrund(r);
+  const r = eintrag(id), name = abzGrund(r);             // Nachzuegler-1: the leader's row comes through eintrag too
   if (!name){ abzEd = null; return; }
   const zeichne = () => abzEditorZeichnen(ed);
   if (abzEd.grund && abzEd.grundName === name) zeichne();
@@ -5995,17 +6038,17 @@ function abzEditorVerdrahten(g, id, o, kopie, gitterAuf){
     try {
       const erg = abzKombinieren(abzEd.grund);
       o.abz.schreibe(id, erg.d, name);
-      const L = kopie(), e = L.find(x => x.id === id);
-      if (e) e.abz = "own";
       abzEd.text = null;
       abzHinweis = {id, text: `${erg.w} × ${erg.h}, ${(erg.d.length / 1024).toFixed(1)} kB.`};
-      o.schreibe(L); o.neu();
+      abzSetzen(id, e => { e.abz = "own"; }); o.neu();
     } catch(e){ abzEd.text = String(e.message || e); gitterAuf(id); }
   });
   /* Put it on every rank: the same place and size on every entry that builds on a game picture */
   ed.querySelector("[data-abzedalle]")?.addEventListener("click", async ()=>{
     if (!abzEd || !abzEd.grund || !abzUeber) return;
     const L = kopie(), ziele = L.map(e => ({e, name: abzGrund(e)})).filter(z => z.name);
+    /* Nachzuegler-1: the leader's row joins when it builds on a game picture; it is written on its own way */
+    if (o.leader){ const e = o.leader.eintrag(), name = abzGrund(e); if (name) ziele.push({e, name, leiter: true}); }
     const grundIm = abzEd.grund, grundName = abzEd.grundName;   // taken before the first await: a click elsewhere may null abzEd meanwhile (round 2, Skeptiker KANN-1)
     let n = 0, zu = 0, grund = "";
     for (const z of ziele){
@@ -6014,6 +6057,7 @@ function abzEditorVerdrahten(g, id, o, kopie, gitterAuf){
         const erg = abzKombinieren(im);
         o.abz.schreibe(z.e.id, erg.d, z.name);
         z.e.abz = "own"; n++;
+        if (z.leiter) o.leader.schreibe("own");
       } catch(e){ zu++; grund = grund || String(e.message || e); }
     }
     if (n) o.schreibe(L);                                        // the rows are written: the list follows, whatever happened to the editor meanwhile
@@ -8110,12 +8154,15 @@ function paraVorratWarnung(){
 }
 /* C. who could meet an order asking for one of these types. Since
    12.09.2026 by status too: Mobile, Inactive and Offline members are left
-   out altogether, neither counted nor unknown (statusKannAT). */
+   out altogether, neither counted nor unknown (statusKannAT). Since
+   Nachzuegler-1 a member without any status is out like Offline (the
+   member list shows the hollow ring), not "can" and not "unknown" -
+   "unknown" stays what it was: a depot nobody has read. */
 function paraErfuellbar(typen, ausser){
   const will = new Set(typen || []), belegt = paraBelegteTeams(ausser), gefunden = new Set();
   let n = 0, unbekannt = 0;
   for (const who of paraMitglieder()){
-    if (!statusKannAT(who)) continue;
+    if (!statusKannAT(who)) continue;                          // no status set counts like Offline - out, not unknown (Nachzuegler-1, round 1)
     const liste = paraDepotVon(who);
     if (!liste){ unbekannt++; continue; }
     const weg = deployedIds(who);
@@ -8647,8 +8694,11 @@ function aufklRingeZeichnen(){
    dem Aufmarschring, der heute schon bei 12,7 sitzt; zum Antippen muss man
    ohnehin hineinzoomen, die Trefferflaeche ist dort 7,1 Punkte. */
 function startPunktZeichnen(){
-  const i = arrowFrom;
-  if (i === null || i === undefined || !MAP.n[i]) return;
+  /* Nachzuegler-1: the arrow's start AND the first town of a defence line
+     (startRingOrt); a drop's airfield keeps its own pulsing mark */
+  const o = startRingOrt();
+  if (!o || o.art === "para") return;
+  const i = o.i, fc = col(FACTIONS[o.art === "line" && lineDraft ? lineDraft.f : faction]);
   const [x, y] = toScr(MAP.n[i][1], MAP.n[i][2]);
   const r0 = ortRadius();
   /* 8,5 auch dann, wenn der Regler "Everything" kleiner als 100 Prozent
@@ -8668,8 +8718,9 @@ function startPunktZeichnen(){
   ctx.setLineDash([6*uiScale, 4.5*uiScale]);
   ctx.strokeStyle = "rgba(5,8,12,.85)"; ctx.lineWidth = 4.6*uiScale;
   ctx.beginPath(); ctx.arc(x, y, R, 0, 6.284); ctx.stroke();
-  ctx.strokeStyle = col(FACTIONS[faction]); ctx.lineWidth = 2.2*uiScale;
+  ctx.strokeStyle = fc; ctx.lineWidth = 2.2*uiScale;
   ctx.beginPath(); ctx.arc(x, y, R, 0, 6.284); ctx.stroke();
+  if (o.art !== "arrow"){ ctx.restore(); return; }   // a line's next town is any town: no neighbour rings (Nachzuegler-1)
   /* MOEGLICHE ZIELE (MOB-2, zweiter Teil): "Start gesetzt, moegliche Ziele
      leuchten." Ein Angriffspfeil darf ueberallhin - eine Zielmenge gab es
      darum nicht. Sie steht aber an der Kante: die NACHBARN des gesetzten
@@ -8745,13 +8796,54 @@ const startRingR = (i, r0) => (isCap(i) ? r0*STERN_RAGT : r0) + Math.max(8.5, 8.
    COST: per frame with a start one fill and one path of two strokes;
    without a start one compare. Per click with a start one toScr and one
    hypot. Nothing in the town loop. */
+/* WHICH RING CARRIES THE X (Nachzuegler-1, FABLE 16.09.2026). ENNO
+   05.09.2026: "Ansteuerung der Befehle noch sehr hakelig, hier Highlights
+   bei Zweipunktbefehlen wichtig." - plural: the attack arrow (MOB-3), the
+   start-first drop and the defence line. One place says whose ring, at
+   which radius, and what a tap on the X takes back:
+     arrow  arrowFrom on the start ring (startRingR)   -> arrowFrom = null
+     para   F.start on the pulsing airfield ring, the mark's own radius
+            (paraMarkeLage: r0 + 8*uiScale, half a point inside the start
+            ring) - the "Leuchtkreis" of his 12.09. NOT the reach ring:
+            at z 4 that one measures 462 points (1850/16 map units), its
+            NE point lies 327 points from the airfield - off a phone's 375
+            points, 980 points off at z 12.  -> paraFlussAbbruch(): the
+            flow back to its beginning, the chain closes as on Escape
+            (BEF-12), the tool stays
+     line   lineDraft.pts[0] on a start ring of the arrow's build
+            (startRingR)                                -> lineDraft = null
+   Nothing else changes: the X, its plate, its hit circle and its place on
+   the ring are MOB-3's. Tool-bound like before: setTool clears all three. */
+function startRingOrt(){
+  if (tool === "arrow"){
+    const i = arrowFrom;
+    return (i === null || i === undefined || !MAP.n[i]) ? null : {i, R: startRingR(i, ortRadius()), art: "arrow"};
+  }
+  if (tool === "para"){
+    const F = paraFluss, i = F ? F.start : null;
+    return (i === null || i === undefined || !MAP.n[i]) ? null : {i, R: paraMarkeLage(i).r, art: "para"};
+  }
+  if (tool === "line"){
+    const i = lineDraft && lineDraft.pts.length ? lineDraft.pts[0] : null;
+    return (i === null || i === undefined || !MAP.n[i]) ? null : {i, R: startRingR(i, ortRadius()), art: "line"};
+  }
+  return null;
+}
+/* a tap on the X: the half order goes back to its beginning, the tool
+   stays, no toast - the ring that vanishes is the answer */
+function startXAufheben(){
+  const o = startRingOrt();
+  if (!o) return;
+  if (o.art === "para") paraFlussAbbruch();
+  else if (o.art === "line") lineDraft = null;
+  else arrowFrom = null;
+}
 function startXLage(){
-  const i = arrowFrom;
-  if (tool !== "arrow" || i === null || i === undefined || !MAP.n[i]) return null;
-  const [x, y] = toScr(MAP.n[i][1], MAP.n[i][2]);
-  const R = startRingR(i, ortRadius());
+  const o = startRingOrt();
+  if (!o) return null;
+  const [x, y] = toScr(MAP.n[o.i][1], MAP.n[o.i][2]), R = o.R;
   return {x: x + R*Math.SQRT1_2, y: y - R*Math.SQRT1_2,
-          g: 4.5*uiScale, h: Math.max(12, 11*uiScale)};
+          g: 4.5*uiScale, h: Math.max(12, 11*uiScale), art: o.art};
 }
 function startXTreffer(sx, sy){
   const L = startXLage();
@@ -9521,8 +9613,9 @@ const rolleWarum = (k, wunsch) => {
   return (kampfRolle(k) || {}).warum || "your soldiers cannot fill it";
 };
 /* WER EINE ROLLE FUELLEN KOENNTE, fuer das Rollenfenster: Mitglieder am
-   Rechner (statusKannFPS: Active oder ohne Status - RTS only nicht, der kann
-   "nicht aber das FPS-Spiel sinnvoll nutzen"), deren Soldaten die Rolle nach
+   Rechner (statusKannFPS: Active - RTS only nicht, der kann "nicht aber
+   das FPS-Spiel sinnvoll nutzen"; ohne Status seit Nachzuegler-1 unbekannt,
+   nicht "kann"), deren Soldaten die Rolle nach
    rolleKannIch fuellen. Wer kein Arsenal fuehrt (kein Soldat mit Waffe oder
    Fahrzeug), ist UNBEKANNT, nicht "kann": rolleKannIch sagt dort mit
    Absicht ja, weil ein Kreuz gegen einen Unbekannten eine Luege waere - eine
@@ -9538,7 +9631,7 @@ function rolleErfuellbar(k, wunsch){
   const w = rolleWunsch(wunsch);
   let n = 0, unbekannt = 0;
   for (const who of paraMitglieder()){
-    if (!statusKannFPS(who)) continue;
+    if (!statusKannFPS(who)) continue;                         // no status set counts like Offline - out, not unknown (Nachzuegler-1, round 1)
     if (r && r.immer && !w){ n++; continue; }
     const men = soldatenVon(who);
     if (!men.some(s => (s.w && s.w.length) || (s.v && s.v.length))){ unbekannt++; continue; }
@@ -11406,7 +11499,8 @@ function draw(){
     ctx.globalAlpha = 1;
   }
 
-  /* Der gesetzte Startort eines Zweipunktbefehls. Ueber den Scheiben und
+  /* Der gesetzte Startort eines Zweipunktbefehls (Pfeil, seit Nachzuegler-1
+     auch die erste Stadt einer Verteidigungslinie). Ueber den Scheiben und
      ueber dem Aufmarschring - solange ein halber Befehl in der Hand liegt,
      gewinnt der halbe Befehl. Unter den Namen, damit der Stadtname lesbar
      bleibt. */
@@ -11594,7 +11688,7 @@ function draw(){
     }
   }
 
-  startXZeichnen();                       // MOB-3: the red X on the start ring, above everything at the town
+  startXZeichnen();                       // MOB-3: the red X on the start ring (arrow, drop, line), above everything at the town
 
   /* ---- Wer gerade wo scannt ----
      Gewuenscht: das Handy als Orientierung, waehrend der PC scannt. Hier
@@ -16079,7 +16173,7 @@ cv.addEventListener("mousedown", e => {
       draw(); return;
     }
   }
-  if (startXTreffer(e.offsetX, e.offsetY)) return;   // MOB-3: no arrow drag from under the X - the click takes it
+  if (startXTreffer(e.offsetX, e.offsetY)) return;   // MOB-3: no arrow or line drag from under the X - the click takes it
   const i = hitTest(e.offsetX, e.offsetY);
   if (tool === "arrow" && i !== null){ zieh = {art:"arrow", von:i}; return; }
   if (tool === "line" && !lineEinzel() && i !== null){ zieh = {art:"line", pts:[i]}; return; }
@@ -16303,8 +16397,10 @@ cv.addEventListener("click", e => {
      comes through here too (fingerSteuerung builds one click event), so
      this is the one place that reads the X. The start is cleared, the tool
      and the selection stay, no toast: the next tap on a town sets the new
-     start (ENNO 12.09.2026: "zum Ab- und Neuwählen des Ausgangspunktes"). */
-  if (startXTreffer(e.offsetX, e.offsetY)){ arrowFrom = null; draw(); return; }
+     start (ENNO 12.09.2026: "zum Ab- und Neuwählen des Ausgangspunktes").
+     Nachzuegler-1: the same X on the drop's airfield and on the first town
+     of a defence line - startXAufheben knows what goes back. */
+  if (startXTreffer(e.offsetX, e.offsetY)){ startXAufheben(); draw(); return; }
   const i = hitTest(e.offsetX, e.offsetY);
   if (i === null){
     if (tool === "arrow" && arrowFrom !== null){ arrowFrom = null; draw(); }
@@ -45180,19 +45276,27 @@ const aufnahmeLaeuft = () => wacheLaeuft() || !!(KB && KB.live) || !!(PG && PG.l
    Parablock, Flaeche): Active und RTS only - der schiebt seine Einheiten.
    FPS-Rollen: nur Active. Mobile sieht nur zu, Inactive ist weg, Offline
    ebenso (gesetzt beim Schliessen oder gealtert ohne Herzschlag, statusVon;
-   SON-1, 15.09.2026). Wer nichts
-   gesetzt hat, zaehlt: ueber ihn wird nichts behauptet, wie beim Punkt.
+   SON-1, 15.09.2026). WER NICHTS GESETZT HAT, ZAEHLT NICHT (Nachzuegler-1,
+   FABLE 16.09.2026): bis dahin zaehlte er als "kann", und eine Zahl, die
+   Inaktive mitzaehlt, nuetzt niemandem (FABLE 16.09.2026, Anschlussliste
+   Nachzuegler-1) - er faellt wie ein Offline ganz heraus, auch aus der
+   Klammer "(k unknown)" (die zaehlt weiter nur ungelesene Depots).
+   ENNO 16.09.2026 (5.29): "Jedes Mitglied muss doch irgendeinen Status
+   haben?!" - das Blatt 16.09. sagt ihm: wer nie im Tool war, steht als
+   Offline (statusPunkt).
    ENNO 12.09.2026: "Bei mobile nein, diese Spieler haben ja auf das Spiel
    keinen Zugriff ueber das Handy. ... Die RTS Only Spieler hingegen ...
    nur ihre Kampfeinheiten verschieben koennen, nicht aber das FPS-Spiel
    sinnvoll nutzen koennen." FABLE 12.09.2026 */
-const statusKannAT  = who => { const s = statusVon(who); return s === "" || s === "on" || s === "rts"; };
-const statusKannFPS = who => { const s = statusVon(who); return s === "" || s === "on"; };
-/* Der Punkt vor einem Namen. Wer nichts gesetzt hat, bekommt KEINEN: ein
-   grauer Punkt saehe aus wie Inactive, und das waere eine Behauptung ueber
-   jemanden, der nie etwas gesagt hat. */
+const statusKannAT  = who => { const s = statusVon(who); return s === "on" || s === "rts"; };
+const statusKannFPS = who => statusVon(who) === "on";
+/* Der Punkt vor einem Namen. Wer keine Zeile hat, traegt den hohlen Ring
+   "Offline" ohne Zeit (Nachzuegler-1, FABLE 16.09.2026; ENNO 16.09.2026,
+   5.29: "Jedes Mitglied muss doch irgendeinen Status haben?!") - bis dahin
+   bekam er keinen Punkt, damit nichts ueber ihn behauptet wird; ein hohler
+   Ring behauptet nur, dass er nicht da ist. */
 function statusPunkt(who){
-  const st = statusArt(statusVon(who));
+  const st = statusArt(statusVon(who) || "out");
   if (!st) return "";
   /* Offline: a hollow ring, 8 px outside like the dots (border-box), and
      the time of the last row as the friends list would say it - "Offline
@@ -50978,8 +51082,24 @@ function rangEditorHtml(o){
       style="width:${k === "ab" ? 64 : 44}px;font-size:11px">`;
   const grenzeText = r => ["arrow", "line", "area"].filter(k => g(r)[k] !== undefined && g(r)[k] !== null)
       .map(k => `${MARKEN_WORT[k]} ${esc(String(g(r)[k]))}`).join(" · ");
+  /* Nachzuegler-1: the leader's fixed row above the ranks - no name field,
+     no Remove, no rights, only the insignia button with the ranks' picker
+     (o.leader); a reader without o.abz sees it only when a picture is set */
+  const leiter = o.leader ? o.leader.eintrag() : null;
   return `
       <div style="display:flex;flex-direction:column;gap:6px">
+        ${leiter && (o.abz || rangAbz(leiter, 18)) ? `
+          <div style="background:var(--panel2);border-radius:2px;padding:7px 9px;
+               border-left:3px solid var(--accent)">
+            <div class="row" style="align-items:center;gap:7px">
+              ${o.abz
+                ? `<button class="btn" data-abzbtn="${esc(leiter.id)}" title="Insignia" style="padding:2px 6px;min-width:34px">${
+                     rangAbz(leiter, 18) || `<span style="font-size:10.5px">Insignia</span>`}</button>`
+                : rangAbz(leiter, 18)}
+              <b style="flex:1;font-size:12.5px;color:var(--accent)">Leader</b>
+            </div>
+            ${o.abz ? `<div class="abz-gitter" data-abzfuer="${esc(leiter.id)}" hidden></div>` : ""}
+          </div>` : ""}
         ${R.map(r => `
           <div style="background:var(--panel2);border-radius:2px;padding:7px 9px;
                border-left:3px solid var(--accent-dk)">
@@ -51116,22 +51236,31 @@ function rangEditorVerdrahten(feld, o){
   if (o.abz){
     const gitter = id => feld.querySelector(`.abz-gitter[data-abzfuer="${CSS.escape(id)}"]`);
     const kopie = () => o.liste().map(x => ({...x}));
+    /* Nachzuegler-1: the leader's row is no entry of the list - it reads
+       through o.leader.eintrag and writes through o.leader.schreibe; a
+       rank's abz still goes out with the whole list (o.schreibe) */
+    const istLeiterZeile = id => !!(o.leader && id === LEITER_ABZ);
+    const eintrag = id => istLeiterZeile(id) ? o.leader.eintrag() : o.liste().find(x => x.id === id);
+    const abzSetzen = (id, fn) => {
+      if (istLeiterZeile(id)){ const e = o.leader.eintrag(); fn(e); o.leader.schreibe(e.abz || null); return; }
+      const L = kopie(), e = L.find(x => x.id === id);
+      if (!e) return;
+      fn(e); o.schreibe(L);
+    };
     const gitterAuf = id => {
-      const g = gitter(id), r = o.liste().find(x => x.id === id);
+      const g = gitter(id), r = eintrag(id);
       if (!g || !r) return;
       g.innerHTML = abzGitterHtml(r, abzAlle);
       g.hidden = false;
       abzOffen = id;
       g.querySelectorAll("[data-abz]").forEach(b => b.addEventListener("click", ()=>{
-        const L = kopie(), e = L.find(x => x.id === id);
-        if (!e) return;
         const n = b.dataset.abz;
+        if (n === "own" && !abzEigen(id)) return;
+        abzOffen = null; abzHinweis = null; abzEd = null;
         /* a pick only switches abz; an uploaded picture stays in its row
            until Remove (FABLE 15.09.2026, round 2 point 4) */
-        if (n === "own"){ if (!abzEigen(id)) return; e.abz = "own"; }
-        else if (abzName(n)) e.abz = n; else delete e.abz;
-        abzOffen = null; abzHinweis = null; abzEd = null;
-        o.schreibe(L); o.neu();
+        abzSetzen(id, e => { if (n === "own") e.abz = "own"; else if (abzName(n)) e.abz = n; else delete e.abz; });
+        o.neu();
       }));
       g.querySelector("[data-abzalle]")?.addEventListener("change", ev => { abzAlle = !!ev.target.checked; gitterAuf(id); });
       g.querySelector("[data-abzup]")?.addEventListener("change", async ev => {
@@ -51141,10 +51270,8 @@ function rangEditorVerdrahten(feld, o){
           const d = await abzVerkleinern(datei);
           o.abz.schreibe(id, d);
           abzEd = null;                                  // stage 3: a plain upload closes the editor (round 2, point 6)
-          const L = kopie(), e = L.find(x => x.id === id);
-          if (e) e.abz = "own";
           abzHinweis = {id, text: `Shrunk from ${(datei.size/1024).toFixed(0)} kB to ${(d.length/1024).toFixed(1)} kB.`};
-          o.schreibe(L); o.neu();
+          abzSetzen(id, e => { e.abz = "own"; }); o.neu();
         } catch(e){
           ev.target.value = "";
           abzHinweis = {id, text: String(e.message || e)};
@@ -51153,10 +51280,9 @@ function rangEditorVerdrahten(feld, o){
       });
       g.querySelector("[data-abzweg]")?.addEventListener("click", ()=>{
         o.abz.schreibe(id, null);                        // Remove is the only click that empties the row
-        const L = kopie(), e = L.find(x => x.id === id);
-        if (e && e.abz === "own") delete e.abz;          // a game pick over it stays
         abzHinweis = null; abzEd = null;
-        o.schreibe(L); o.neu();
+        abzSetzen(id, e => { if (e.abz === "own") delete e.abz; });   // a game pick over it stays
+        o.neu();
       });
       /* stage 3: Combine … opens the editor under the button row, a second click closes it */
       g.querySelector("[data-abzed]")?.addEventListener("click", ()=>{
@@ -51164,7 +51290,7 @@ function rangEditorVerdrahten(feld, o){
         abzHinweis = null;
         gitterAuf(id);
       });
-      abzEditorVerdrahten(g, id, o, kopie, gitterAuf);
+      abzEditorVerdrahten(g, id, o, kopie, gitterAuf, eintrag, abzSetzen);
     };
     feld.querySelectorAll("[data-abzbtn]").forEach(b => b.addEventListener("click", ()=>{
       const id = b.dataset.abzbtn, g = gitter(id);
@@ -51223,6 +51349,18 @@ function leuteZeichnen(liste){
         stamp("meta", "abz:" + id, d == null ? null : String(d), von ? {von: String(von)} : null); save();
       },
     } : null,
+    /* Nachzuegler-1: the leader's own insignia - which picture he shows
+       lies in meta:abzleader (a game name or "own"; his uploaded picture
+       goes through abz.schreibe as meta:abz:leader). Written by the
+       leader only, like meta:rollen; a null only where a row lies. */
+    leader: {
+      eintrag: abzLeiterEintrag,
+      schreibe: darfRollen ? v => {
+        const w = v === "own" || abzName(v) ? v : null;
+        if (w == null && !(S.meta.abzleader && S.meta.abzleader.v != null)) return;
+        stamp("meta", "abzleader", w); save();
+      } : () => {},
+    },
   };
 
   feld.innerHTML = `
@@ -52961,7 +53099,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 33b691e111</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 61cda428fa</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -53189,7 +53327,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "33b691e111";
+const BAU = "61cda428fa";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
