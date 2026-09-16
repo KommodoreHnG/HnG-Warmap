@@ -5437,11 +5437,40 @@ function stapelKarteRechnen(){
   const radar = new Set();
   for (const k of Object.keys(S.est || {})){ const town = +k.slice(0, k.indexOf(":")); if (MAP.n[town]) radar.add(town); }
   for (const town of radar){
+    /* 5.31: a radar row with a bearing (w) is grouped by side and sector;
+       a row without one (mark on the town, older rows) feeds the stack
+       above the disc as before */
+    const sektoren = new Map();                            // side -> Map(sector -> t)
     for (const e of estAt(town)){
       if (!e || !(e.auto || STAPEL_MASCHINE.test(e.text || ""))) continue;
       if (zeitReise && (e.t || 0) > zeitReise) continue;
-      const st = eintrag(town, stapelSeiteAusText(e.text || ""));
-      if (!st.n){ st.nurRadar = true; st.t = Math.max(st.t, e.t || 0); }
+      const f = stapelSeiteAusText(e.text || ""), sek = atSektor(e.w);
+      if (sek === null){
+        const st = eintrag(town, f);
+        if (!st.n){ st.nurRadar = true; st.t = Math.max(st.t, e.t || 0); }
+        continue;
+      }
+      let je = sektoren.get(f); if (!je){ je = new Map(); sektoren.set(f, je); }
+      je.set(sek, Math.max(je.get(sek) || 0, e.t || 0));
+    }
+    const d = m.get(town);
+    for (const [f, je] of sektoren){
+      const basis = d && d.je.get(f);
+      /* S3: exactly one sector and a card stack of that side - the cards
+         take the bearing and move to the rim, no second stack of the same
+         units. From two sectors on (ENNO 16.09.2026: "aus zwei
+         Richtungen") every sector
+         gets its own stack on the rim, the cards stay above the disc. */
+      if (je.size === 1 && basis && basis.n){
+        const [[sek, t]] = [...je];
+        basis.w = sek * (360/AT_SEKTOREN); basis.t = Math.max(basis.t, t);
+        continue;
+      }
+      for (const [sek, t] of je){
+        const st = eintrag(town, f + ":" + sek);            // its own key per sector
+        st.f = f; st.w = sek * (360/AT_SEKTOREN);
+        if (!st.n){ st.nurRadar = true; st.t = Math.max(st.t, t); }
+      }
     }
   }
   const raus = new Map();
@@ -5460,11 +5489,14 @@ function stapelKarte(){
   stapelLauf = zustandLauf; stapelZeit = zeitReise; stapelEpoche = ep; stapelS = S; stapelRechnungen++;
   return stapelCache;
 }
-/* the stack under the pointer, in screen points - the boxes draw() left.
-   Drawn in insertion order, so the last one lies on top: it wins the click */
+/* the stack under the pointer, in screen points - the boxes draw() left,
+   since 5.31 a list per town (the row above the disc and the stacks on the
+   rim). Drawn in insertion order, so the last one lies on top: it wins the
+   click */
 function stapelTreffer(sx, sy){
-  for (const [town, k] of [...stapelVon].reverse())
-    if (sx >= k.x0 && sx <= k.x1 && sy >= k.y0 && sy <= k.y1) return town;
+  for (const [town, liste] of [...stapelVon].reverse())
+    for (const k of liste)
+      if (sx >= k.x0 && sx <= k.x1 && sy >= k.y0 && sy <= k.y1) return town;
   return null;
 }
 /* ---- THE UNIT BAR ------------------------------------------------------
@@ -5499,6 +5531,9 @@ function leisteZeichnen(){
   const gelesen = spo.length ? `read ${alterText(spo[0].t)} by ${spo.map(g => g.mine ? "you" : esc(g.name || "?")).join(", ")}`
                 : nurRadar ? `seen by radar ${alterText(tJ)} \u00b7 nothing read yet`
                 : tJ ? `read ${alterText(tJ)}` : "";
+  /* 5.31: the bearing of every stack that has one, in words */
+  const lagen = stapel.filter(st => !(st.w === null || st.w === undefined))
+    .map(st => `${st.f < 3 ? FACTIONS[st.f].tag : "?"} \u00b7 from the ${atHimmel(st.w)}`).join(", ");
   /* the card tiles keep their own dark ground (.kb-k), the branch row below
      sits on the bar itself - in the light theme it needs the dark ink, as
      side() does */
@@ -5533,8 +5568,8 @@ function leisteZeichnen(){
       .filter(Boolean).join(" \u00b7 ");
     return `<div class="lz" title="${esc(titel)}">
       <span class="kb-k ${rand[u.f] || ""}">${u.sicht && u.n > 1 ? `<i>${u.n}\u00d7</i>` : ""}${zeichen}</span>
-      <b dir="auto">${u.sicht ? esc(u.melder || atKurz(u.k)) : esc(u.tag || "")}</b>
-      <span dir="auto">${u.sicht ? esc(atKurz(u.k)) : (u.unlesbar ? "" : esc(u.name || "")) + feindCutMarke(u)}</span>
+      <b dir="auto">${u.sicht ? esc(u.melder || (u.k ? atKurz(u.k) : "?")) : esc(u.tag || "")}</b>
+      <span dir="auto">${u.sicht ? (u.k ? esc(atKurz(u.k)) : "type ?") : (u.unlesbar ? "" : esc(u.name || "")) + feindCutMarke(u)}</span>
       ${u.owner ? `<span>${nameMitClan(u.owner)}</span>` : ""}
       ${st || u.l ? `<span>${st}${u.l ? `${st ? " \u00b7 " : ""}line ${esc(u.l)}` : ""}</span>` : ""}
       <span>${u.t ? alterText(u.t) : ""}</span>
@@ -5552,6 +5587,7 @@ function leisteZeichnen(){
       <b data-leiste-stadt>${esc(MAP.n[i][0])}</b>
       ${nurRadar ? "" : `<span class="n">${n} unit${n === 1 ? "" : "s"}</span>`}
       <span class="g">${gelesen}</span>
+      ${lagen ? `<span class="g">${esc(lagen)}</span>` : ""}
       <button class="x" data-leiste-zu title="Close">\u00d7</button>
     </div>${filter}
     <div class="lr">${kacheln || (karten.length ? `<span class="empty">Nothing matches the filter.</span>` : nurRadar ? "" : `<span class="empty">Nothing recorded here.</span>`)}</div>
@@ -5572,7 +5608,7 @@ const allSpots = () => {
     const town = +k.slice(0, k.indexOf(":"));
     if (!MAP.n[town]) continue;          // Stadt aus einem anderen Bau
     const d = m.get(town) || {town, n:0, t:0, f:null, arten:new Set()};
-    for (const s of e.v){ d.n += s.n; d.arten.add(s.k); d.f = s.f; }
+    for (const s of e.v){ d.n += s.n; if (s.k) d.arten.add(s.k); d.f = s.f; }
     d.t = Math.max(d.t, e.t||0);
     m.set(town, d);
   }
@@ -6579,6 +6615,46 @@ function zuordZahlen(b){
   for (const z of zuordVon(b)) if (z.st === 1) fest += z.ats.length; else offen += z.ats.length;
   return {fest, offen};
 }
+/* ---- 5.1 (BEF-6): PLAYABLE OR STRATEGIC ONLY (Nachzuegler-2, FABLE
+   16.09.2026). ENNO 16.09.2026: "Wenn die Truppenstaerke den Grenzwert von
+   288/72 uebersteigt ist der Parablock spielbar. Darunter kann keine
+   Schlacht zustandekommen, der Parablock ist dann rein strategisch."
+   Counted from the NOMINAL strength of the airborne teams assigned to the
+   block (crew 72 paras + 18 planes per Paratroopers team, 36 + 9 per
+   Pathfinders - warmap_daten.json); the read strength (st) lives only in
+   the owner's browser and is unknown to the clan (S4/S5), so the line says
+   "nominal". Accepted rows (st 1) when there are any, else every row - an
+   acceptance is no required step on a block. 288 of 288 counts as
+   playable (K8; the sheet of 16.09. says playable from 288/72, as the
+   ticket reckoner counts). A
+   line of text in the block window and the orders list; no gate, no
+   toast, no points. */
+const PARA_SPIELBAR = {paras: 288, planes: 72};
+function paraStaerke(i){
+  const alle = zuordVon({art: "para", id: i}), fest = alle.filter(z => z.st === 1);
+  const raus = {paras: 0, planes: 0, teams: 0, zusagen: alle.length};
+  for (const z of (fest.length ? fest : alle)){
+    const d = depotIdx.get(z.who), liste = d ? d.list : [];
+    for (const id of z.ats){
+      const t = liste.find(x => x && x.id === id), a = t && AT[t.k];
+      if (!a || zweigVon(t.k) !== LUFT_ZWEIG) continue;
+      raus.teams++;
+      for (const [nm, n] of (a.crew || [])){ if (/plane/i.test(String(nm))) raus.planes += +n || 0; else raus.paras += +n || 0; }
+    }
+  }
+  raus.spielbar = raus.paras >= PARA_SPIELBAR.paras && raus.planes >= PARA_SPIELBAR.planes;
+  return raus;
+}
+/* HTML from numbers and fixed words only (no user text), so it goes into
+   the window unescaped; a failure inside gives an empty line, like
+   paraTextSicher does */
+function paraSpielbarText(i){
+  let s;
+  try { s = paraStaerke(i); } catch(e){ return ""; }
+  if (!s.zusagen) return `No teams on it yet \u2014 <span style="color:var(--dim2)">strategic only</span>`;
+  return `<b>${s.paras}</b> of ${PARA_SPIELBAR.paras} paras \u00b7 <b>${s.planes}</b> of ${PARA_SPIELBAR.planes} planes \u2014 ${
+    s.spielbar ? `<span style="color:var(--accent)">playable (nominal)</span>` : `<span style="color:var(--dim2)">strategic only</span>`}`;
+}
 /* the shield's "ist": accepted teams when there are any, else what the
    caller has (the commitments on an arrow) */
 function zuordIst(art, id, sonst){
@@ -7374,6 +7450,8 @@ function ordersDetail(b, st, hab, alle){
   if (strecke) teile.push(strecke);
   const kette = ketteStelle(b, alle);
   if (kette) teile.push(kette);
+  /* 5.1: the block's nominal strength against 288/72 */
+  if (b.art === "para" && !fremdeSeite(b.v)) teile.push(paraSpielbarText(b.id));
   /* the priority as a word (BEF-16); the dot in the row above says the same */
   teile.push(`priority <b>${prioEintrag(b.v).name}</b>`);
   return teile;
@@ -10397,16 +10475,15 @@ const unitsAt = i => unitIdx.get(i) || [];
    (DEP-10): "Vermutlich macht es keinen Sinn, die Namen zu verstecken. Lass
    uns diese einfach mit an den Clan uebergeben. Dann sparen wir uns hier
    die Arbeit"
-   Fuer die eigenen greift die oertliche Kopie (eigenNamen) nur noch dort,
-   wo die Zeile keinen Namen traegt - das zweite Geraet, bis namenEinbringen
-   dort gelaufen ist. */
+   THE ROW IS THE ONLY SOURCE (Nachzuegler-2, 16.09.2026) - for the own
+   teams as well. ENNO 16.09.2026: "Der Serverstand soll immer das einzige
+   sein was man sieht." The browser copy (eigenNamen) is not read for a
+   name any more, on no device. */
 function teamNameVon(who, id){
   if (!id) return "";
   const d = depotIdx.get(who);
   const e = d && d.list.find(x => x.id === id);
-  if (e && e.name) return e.name;
-  const n = who === S.me ? eigenNamen[id] : null;
-  return (n && n.name) || "";
+  return (e && e.name) || "";
 }
 /* MIT KRIEGSSCHNITT. Hier stand die Abfrage ohne imKrieg - anders als bei
    ownerOf, fightAt und starAt gleich darueber, und anders als in
@@ -10453,10 +10530,15 @@ function myDepotAlle(){
 /* ---- Namen der eigenen Kampfeinheiten --------------------------------
    Sie gehen mit der Depotzeile an den Clan (ENNO 12.09.2026, siehe
    teamNameVon). Daneben liegt eine oertliche Kopie unter einem eigenen
-   Schluessel in diesem Browser - ausserhalb des synchronisierten Zustands:
-   der Vorrat fuer eine Zeile, die noch keine Namen traegt
-   (namenEinbringen), und die gelesene Staerke (st, stT, stO), die weiter
-   nur hier steht. Die Sicherungsdatei nimmt sie mit. */
+   Schluessel in diesem Browser - ausserhalb des synchronisierten Zustands.
+   Seit dem 16.09.2026 (5.39, ENNO: "Der Serverstand soll immer das
+   einzige sein was man sieht.") liefert sie nur noch die gelesene Staerke
+   (st, stT, stO), die weiter nur hier steht; Name, Kuerzel und Marke
+   kommen allein aus der Zeile, die Kopie folgt ihr in beide Richtungen
+   (namenAbstreifen). Kein Weg fuehrt mehr aus einer Kopie in die Zeile -
+   der Umzug vom 12.09. (namenEinbringen) ist gestrichen, das Tool wird
+   bisher nicht genutzt (ENNO 16.09.2026, 5.28). Die Sicherungsdatei nimmt
+   die Kopie mit, zurueck kommt daraus nur die Staerke. */
 const NAMEN_STORE = "hng-warmap-namen";
 let eigenNamen = {};
 function namenLaden(){
@@ -10470,74 +10552,44 @@ function namenAn(d){
   const n = eigenNamen[d.id];
   if (!n) return d;
   const raus = {...d};
-  /* THE ROW COMES FIRST (12.09.2026): the names travel with it, so it is
-     what this player wrote last - on whichever device. The copy here only
-     fills what the row lacks, and it is CLEANED ON THE WAY: what was laid
-     down before the limit existed still lies there - with trailing dots,
-     or longer than the game allows - and would match nothing at the next
-     comparison with a screenshot. */
-  if (n.name && !raus.name){
-    raus.name = atNameSauber(n.name);
-    /* OWN NAMES CUT OFF: the mark rides with the name, see below */
-    if (n.cut && raus.name) raus.cut = 1;
-  }
-  if (n.tag && !raus.tag) raus.tag = atTagSauber(n.tag);
-  /* the strength read from the map lives only here, see namenAbstreifen */
+  /* THE ROW IS THE ONLY SOURCE (ENNO 16.09.2026: "Der Serverstand soll
+     immer das einzige sein was man sieht."). Until 16.09.2026 the copy
+     filled a name, its cut mark and the tag where the row lacked them -
+     so a name cleared in the depot came back on the same device at the
+     next drawing. Nothing of that any more; only the strength read from
+     the map, which lives only here (see namenAbstreifen). */
   if (n.st){ raus.st = n.st; raus.stT = n.stT; raus.stO = n.stO; }
   return raus;
 }
-/* Einmal beim Start: die Namen aus der oertlichen Kopie in die eigene Zeile
-   bringen, wo sie dort fehlen. Bis zum 12.09.2026 lief es andersherum
-   (namenAbholen: Namen AUS der Zeile in diesen Browser, Zeile geleert) -
-   ENNO Ende August: "Die Namen der ATs meiner Clanmitglieder sehe ich ja
-   auf der ingame Karte eh. Das ist dann nur unnoetiges Zieren." Seit dem
-   12.09.2026 gehen sie mit (ENNO: "Lass uns diese einfach mit an den Clan
-   uebergeben. Dann sparen wir uns hier die Arbeit"), und was schon hier
-   liegt, muss einmal hinauf. Geschrieben wird nur, wenn sich etwas
-   aendert; geloescht wird nichts - die Kopie bleibt (Sicherungsdatei,
-   zweites Geraet). Direkt, nicht ueber depotSchreiben: der legte beim
-   Start eine sold-Zeile an und fuehrte den Verlauf fort.
-
-   WANN: mit Server in syncStart, HINTER dem ersten Abgleich - dirty
-   schlaegt in applyRemote alles, was vom Server kommt, und vor dem Abgleich
-   stuende hier nur die zwischengespeicherte Zeile dieses Browsers. Und nur,
-   wenn der Abgleich auch DURCH ist: syncPull faengt jeden Fehler selbst und
-   kehrt still zurueck, ersterAbrufDurch steht erst nach der letzten Seite -
-   sonst kommen die Namen beim naechsten Start mit hinauf, der Riegel ist
-   derselbe wie in neuerKrieg. Ohne Server im Startblock. Die Anzeige
-   braucht den Lauf nicht: namenAn fuellt die Luecken aus der Kopie. */
-function namenEinbringen(){
-  if (hatBuiltin() && !ersterAbrufDurch) return;
-  const e = S.depot[S.me];
-  if (!e || !Array.isArray(e.v)) return;
-  let fehlt = false;
-  const voll = depotListe(e.v).map(d => {
-    const n = d && eigenNamen[d.id];
-    if (!n) return d;
-    const nm = (!d.name && n.name) ? atNameSauber(n.name) : "";
-    const tg = (!d.tag  && n.tag)  ? atTagSauber(n.tag)   : "";
-    if (!nm && !tg) return d;
-    const k = {...d};
-    if (nm){ k.name = nm; if (n.cut) k.cut = 1; }
-    if (tg) k.tag = tg;
-    fehlt = true;
-    return k;
-  });
-  if (!fehlt) return;
-  S.depot[S.me] = {...e, v: voll, t: jetzt()};
-  dirty.add(`depot:${S.me}`); save();
+/* namenEinbringen stood here until 16.09.2026: the one-time move of the
+   names from this browser's copy into the row (12.09.2026, the day the
+   names began to travel with the row). Gone with 5.39 (ENNO 16.09.2026:
+   "Der Serverstand soll immer das einzige sein was man sieht.") and the
+   rule of 5.28 (ENNO 16.09.2026: "Das Tool wird nicht genutzt, bisher") -
+   a second device
+   must not put a name back that the first one cleared, and there is no
+   old stock to move. */
+/* 5.39: a backup file brings no names back - only the read strength
+   (st, stT, stO) is taken from its copy (merge and replace below) */
+function namenNurStaerke(o){
+  const raus = {};
+  for (const [id, n] of Object.entries(o || {}))
+    if (n && n.st) raus[id] = {st: n.st, stT: n.stT, stO: n.stO};
+  return raus;
 }
 /* Beim Schreiben in die geteilte Zeile bleiben Name, Kuerzel und die Marke
    "abgeschnitten" DRIN (ENNO 12.09.2026: "Lass uns diese einfach mit an den
    Clan uebergeben"); abgestreift wird nur noch die vom Kartenleser gelesene
    Staerke (st, stT, stO), die hier liegen bleibt. Die oertliche Kopie wird
-   nebenher nachgefuehrt - der Vorrat fuer eine Zeile, die noch keine Namen
-   traegt (namenEinbringen). Das ist die eine Stelle, an der das passieren
-   muss - alle Depotschreibwege laufen durch depotSchreiben. */
+   nebenher nachgefuehrt - IN BEIDE RICHTUNGEN (5.39, 16.09.2026): ein Name
+   oder ein Kuerzel, das die Zeile nicht mehr traegt, faellt auch aus der
+   Kopie, sonst kaeme es auf demselben Geraet zurueck. Das ist die eine
+   Stelle, an der das passieren muss - alle Depotschreibwege laufen durch
+   depotSchreiben. */
 function namenAbstreifen(liste){
   let geaendert = false;
   const raus = (liste || []).map(d => {
-    if (!d || (!d.name && !d.tag && !d.cut && d.st === undefined)) return d;
+    if (!d || (!d.name && !d.tag && !d.cut && d.st === undefined && !eigenNamen[d.id])) return d;
     const alt = eigenNamen[d.id] || {};
     const k = {...d};
     /* THE GAME'S LIMIT BELONGS IN THE FUNNEL. The two ways a hand can reach
@@ -10545,13 +10597,14 @@ function namenAbstreifen(liste){
        each carry the bolt already, but this is the place the file itself
        names as the one every write must pass. What is caught here is caught
        on ways not yet built. */
-    if (d.name) alt.name = k.name = atNameSauber(d.name);
-    if (d.tag)  alt.tag  = k.tag  = atTagSauber(d.tag);
+    if (d.name) alt.name = k.name = atNameSauber(d.name); else delete alt.name;
+    if (d.tag)  alt.tag  = k.tag  = atTagSauber(d.tag);  else delete alt.tag;
     if (d.st !== undefined){ alt.st = d.st; alt.stT = d.stT; alt.stO = d.stO; }
     /* OWN NAMES CUT OFF: the mark rides with the name, in the row as in
        the copy */
     if (d.cut && k.name) alt.cut = k.cut = 1; else { delete alt.cut; delete k.cut; }
-    eigenNamen[d.id] = alt; geaendert = true;
+    if (Object.keys(alt).length) eigenNamen[d.id] = alt; else delete eigenNamen[d.id];
+    geaendert = true;
     delete k.st; delete k.stT; delete k.stO;
     return k;
   });
@@ -11538,8 +11591,13 @@ function draw(){
     const g = Math.max(9, 7.5*Math.sqrt(z))*uiScale;
     const th = g, kw = 1.4*g, kh = 0.85*g, vs = 0.2*g, rim = Math.max(1.2, 0.12*g), luecke = 0.25*g;
     ctx.font = `700 ${g*0.9}px ${SCHMAL}`;
-    const breiten = d.stapel.map(st => Math.max(kw + 2*vs, st.nurRadar ? 0 : ctx.measureText(String(st.n)).width + 0.5*g));
-    const gesamt = breiten.reduce((a, b) => a + b, 0) + luecke*(breiten.length - 1);
+    /* 5.31 (Nachzuegler-2): a stack that knows its bearing (st.w, from the
+       radar) stands on the disc's rim at that angle - where the mark stands
+       in the game; the others keep the row above the disc */
+    const obenSt = d.stapel.filter(st => st.w === null || st.w === undefined), randSt = d.stapel.filter(st => !(st.w === null || st.w === undefined));
+    const breite = st => Math.max(kw + 2*vs, st.nurRadar ? 0 : ctx.measureText(String(st.n)).width + 0.5*g);
+    const breiten = obenSt.map(breite);
+    const gesamt = obenSt.length ? breiten.reduce((a, b) => a + b, 0) + luecke*(breiten.length - 1) : 0;
     const hoehe = th + kh + 2*vs;
     /* the own teams' count sits on the rim (teamsAt, drawn in the town
        loop) and the plates stack above it; the stack steps over whichever
@@ -11548,36 +11606,66 @@ function draw(){
     const decke = plattenKante.get(town);
     const unten = Math.min(y - rAussen(town) - 4 - eigen, decke === undefined ? Infinity : decke - 1);
     const oben = unten - hoehe;
-    let sx = x - gesamt/2, farbe0 = null;
-    for (let q = 0; q < d.stapel.length; q++){
-      const st = d.stapel[q], bw = breiten[q];
+    const kaesten = [];
+    let farbe0 = null;
+    const stapelMalen = (st, bw, sx, oy) => {
       const farbe = st.f < 3 ? col(FACTIONS[st.f]) : "#e8b04a";
       if (farbe0 === null) farbe0 = farbe;
       const stufe = aufmStufe(st.t);
       ctx.globalAlpha = st.nurRadar ? Math.min(stufe.a, .72) : stufe.a;
-      const kx = sx + (bw - kw - 2*vs)/2, ky = oben + th;
+      const kx = sx + (bw - kw - 2*vs)/2, ky = oy + th;
       for (let j = 2; j >= 0; j--){                       // three cards, back to front
         const cx = kx + j*vs, cy = ky + j*vs;
         ctx.fillStyle = "#0a0806"; ctx.fillRect(cx - 1, cy - 1, kw + 2, kh + 2);
         ctx.fillStyle = farbe;     ctx.fillRect(cx, cy, kw, kh);
         ctx.fillStyle = "#f3ecd8"; ctx.fillRect(cx + rim, cy + rim, kw - 2*rim, kh - 2*rim);
       }
-      ctx.fillStyle = "#0a0806"; ctx.fillRect(sx - 1, oben - 1, bw + 2, th + 2);   // the plate
-      ctx.fillStyle = "#14100a"; ctx.fillRect(sx, oben, bw, th);
-      if (!st.nurRadar){ ctx.fillStyle = "#f4ead9"; ctx.fillText(String(st.n), sx + bw/2, oben + th/2 + 0.5); }
+      ctx.fillStyle = "#0a0806"; ctx.fillRect(sx - 1, oy - 1, bw + 2, th + 2);   // the plate
+      ctx.fillStyle = "#14100a"; ctx.fillRect(sx, oy, bw, th);
+      if (!st.nurRadar){ ctx.fillStyle = "#f4ead9"; ctx.fillText(String(st.n), sx + bw/2, oy + th/2 + 0.5); }
       else {                                               // empty plate: a thin light rim, or it drowns in the map
         const rr = Math.max(1, 0.08*g);
         ctx.strokeStyle = "#f3ecd8"; ctx.lineWidth = rr;
-        ctx.strokeRect(sx + rr/2, oben + rr/2, bw - rr, th - rr);
+        ctx.strokeRect(sx + rr/2, oy + rr/2, bw - rr, th - rr);
       }
       if (stufe === AUFM_STUFEN[0] && z > 1){              // fresh: halo
         ctx.strokeStyle = farbe; ctx.globalAlpha = .5; ctx.lineWidth = 1.4;
-        ctx.strokeRect(sx - 3, oben - 3, bw + 6, hoehe + 6);
+        ctx.strokeRect(sx - 3, oy - 3, bw + 6, hoehe + 6);
       }
-      sx += bw + luecke;
+      /* every stack its own box for the click */
+      kaesten.push({x0: sx - 4, y0: oy - 4, x1: sx + bw + 4, y1: oy + hoehe + 4, w: st.w === undefined ? null : st.w});
+    };
+    let sx = x - gesamt/2;
+    for (let q = 0; q < obenSt.length; q++){ stapelMalen(obenSt[q], breiten[q], sx, oben); sx += breiten[q] + luecke; }
+    /* two sides in one sector (round 1, Skeptiker): side by side along
+       the rim, as the row does above the disc - not one over the other */
+    const jeSektor = new Map();
+    for (const st of randSt){ const s = atSektor(st.w); if (!jeSektor.has(s)) jeSektor.set(s, []); jeSektor.get(s).push(st); }
+    for (const gruppe of jeSektor.values()){
+      const rad = gruppe[0].w*Math.PI/180, tx = -Math.sin(rad), ty = Math.cos(rad);   // the tangent
+      const bws = gruppe.map(breite);
+      /* the extent of every stack along the tangent (support of the rectangle) */
+      const laengen = bws.map(bw => Math.abs(tx)*bw + Math.abs(ty)*hoehe);
+      const ganz = laengen.reduce((a, b) => a + b, 0) + luecke*(gruppe.length - 1);
+      let lauf = -ganz/2;
+      for (let q = 0; q < gruppe.length; q++){
+        const st = gruppe[q], bw = bws[q];
+        /* the stack's half-extent along its bearing (support of the
+           rectangle), so its near edge sits 4 points outside the disc in
+           every direction - east/west as north/south */
+        const halb = Math.abs(Math.cos(rad))*bw/2 + Math.abs(Math.sin(rad))*hoehe/2;
+        const R = rAussen(town) + 4*uiScale + halb, mitte = lauf + laengen[q]/2;
+        const cx = x + Math.cos(rad)*R + tx*mitte, cy = y + Math.sin(rad)*R + ty*mitte;
+        let oy = cy - hoehe/2;
+        /* the top sector (240..300, where the own count, the plates and the
+           row sit) steps over all of them like the row does */
+        if (st.w >= 240 && st.w <= 300) oy = Math.min(oy, (obenSt.length ? oben - luecke : unten) - hoehe);
+        stapelMalen(st, bw, cx - bw/2, oy);
+        lauf += laengen[q] + luecke;
+      }
     }
     ctx.globalAlpha = 1;
-    stapelVon.set(town, {x0: x - gesamt/2 - 4, y0: oben - 4, x1: x + gesamt/2 + 4, y1: oben + hoehe + 4});
+    stapelVon.set(town, kaesten);
 
     /* A clan tag turns "some enemies" into "an organised operation" - worth
        its own banner next to the stack; from the owners of the cards. */
@@ -14697,7 +14785,7 @@ function setSpot(town, list){
   for (const u of list){
     const m = `${u.k}|${(u.owner||"").toLowerCase()}`;
     if (!alt.has(m)) gutschrift("sp", `${town}|${m}`,
-      `${MAP.n[town] ? MAP.n[town][0] : town} \u00b7 ${atName(u.k)}${u.owner ? " \u00b7 " + String(u.owner).trim() : ""}`);
+      `${MAP.n[town] ? MAP.n[town][0] : town} \u00b7 ${u.k ? atName(u.k) : "type ?"}${u.owner ? " \u00b7 " + String(u.owner).trim() : ""}`);
   }
   S.spot[k] = {v: list.length ? list : null, t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`spot:${k}`); save();
@@ -14869,7 +14957,8 @@ function paraDialog(i){
     <div class="dlg-h"><h2>Para-block \u00b7 ${esc(MAP.n[i][0])}</h2>
       <p>${pb ? zustandText(key, pb, e && (e.n || e.by)) : "No block here yet."}</p>
       ${pb && !fremd ? streckeAbsatz(b) : ""}
-      ${fremd ? "" : `<p>${paraTextSicher(() => paraErfuellbarText(luftTypen().map(t => t.k), {art: "para", id: i}))}</p>`}</div>
+      ${fremd ? "" : `<p>${paraTextSicher(() => paraErfuellbarText(luftTypen().map(t => t.k), {art: "para", id: i}))}</p>`}
+      ${fremd || !pb ? "" : `<p>${paraSpielbarText(i)}</p>`}</div>
     <div class="dlg-b">
       <div class="own4" style="grid-template-columns:repeat(4,1fr)">
         ${FACTIONS.map(q=>`<button type="button" data-pbd="${q.id}" style="--f:${q.color}" aria-pressed="${seite===q.id}">${q.tag}</button>`).join("")}
@@ -18074,7 +18163,7 @@ function side(){
         return `<div class="sp-filter">
             <button data-sf="" aria-pressed="${!sichtTyp && !sichtWem && sichtSeite === null}">all</button>
             ${[...typen.entries()].map(([k,n]) => `<button data-sf="t:${k}" aria-pressed="${sichtTyp === k}"
-              title="${esc(atName(k))}">${esc(atKurz(k))}<b>${n}</b></button>`).join("")}
+              title="${k === "undefined" ? "type ?" : esc(atName(k))}">${k === "undefined" ? "?" : esc(atKurz(k))}<b>${n}</b></button>`).join("")}
           </div>${wem.size > 1 ? `<div class="sp-filter">
             ${[...wem.entries()].map(([k,w]) => `<button data-sf="w:${k}" aria-pressed="${sichtWem === k}">${esc(w.name)}<b>${w.n}</b></button>`).join("")}
           </div>` : ""}`;
@@ -18087,8 +18176,8 @@ function side(){
             <span class="${alter(g.t)<FRISCH?"":"stale"}">${alterText(g.t)}</span></div>
           ${g.list.map((u,k)=> !sichtZeigt(u) ? "" : `
             <div class="unit" style="--f:${col(FACTIONS[u.f!=null?u.f:faction])}">
-              <span class="sym">${symbolSVG(u.k, c)}</span>
-              <span class="n">${u.n}× ${esc(atName(u.k))}
+              <span class="sym">${u.k ? symbolSVG(u.k, c) : "?"}</span>
+              <span class="n">${u.n}× ${u.k ? esc(atName(u.k)) : "type ?"}
                 <em>${FACTIONS[u.f!=null?u.f:faction].tag}${u.owner?` · ${regionSVG(regionVon(u.owner), 13)}${nameMitClan(u.owner)}`:""}</em></span>
               ${g.mine ? `<button class="x" data-sprm="${k}" title="Remove">×</button>` : `<span class="lock">🔒</span>`}
             </div>`).join("")}
@@ -18131,7 +18220,7 @@ function side(){
       ${spo.flatMap(g => g.list.flatMap(u => (Array.isArray(u.st) ? u.st : []).filter(st => Array.isArray(st) && st.some(Boolean)).map(st => `
       <div class="unit" style="--f:${u.f != null ? col(FACTIONS[u.f]) : "var(--dim2)"}">
         <span class="sym">${symbolSVG(u.k, c)}</span>
-        <span class="n">${stSymbole(u.k, st)}<em>${esc(atName(u.k))}${u.owner ? ` · ${nameMitClan(u.owner)}` : ""} · ${alterText(g.t)}</em></span></div>`))).join("")}
+        <span class="n">${stSymbole(u.k, st)}<em>${u.k ? esc(atName(u.k)) : "type ?"}${u.owner ? ` · ${nameMitClan(u.owner)}` : ""} · ${alterText(g.t)}</em></span></div>`))).join("")}
     </div>` : ""; })()}
     <div class="sec">
       <h3>Assault teams ${teamsAt(i)?`<span class="sub">${teamsAt(i)} teams · ${menAt(i).toLocaleString("en")} men</span>`:""}</h3>
@@ -27020,12 +27109,17 @@ function kbBestaetigen(i){
    besten einschaetzen kann, ob die enthaltene Zahl nur Quatsch bzw. Teil
    des namens ist, oder hier eine Nummernfolge erahnt werden kann." So this
    runs only when asked: the fourth registered key (Alt+Down) or the button
-   in the floating strip, for the line under the frame. The number comes
-   from the tag, else from the name; every number below it that the owner's
-   book lacks gets a record as the postulate writes it - ung:1, verm:1,
-   infantry - through setFeindTeil: an assumption is no find. What is on
-   file already, real or placeholder, is never touched. The line itself is
-   not saved; that stays with Keep. Same limits as the postulate: nothing
+   in the floating strip, for the line under the frame. BOTH WAYS since
+   16.09.2026 (5.54, ENNO: "Was? Schwachsinnige Regel. Habe ich nie so
+   gesagt." - his answer to the question whether the tag comes first and
+   the name only without a tag number): the
+   number in the tag AND the number in the name, each its own stem with its
+   own gaps and its own limits; every number below it that the owner's book
+   lacks gets a record as the postulate writes it - ung:1, verm:1, NO TYPE
+   (5.55, ENNO 16.09.2026: "Typ kannst du daraus nicht ableiten.") -
+   through setFeindTeil: an assumption is no find. What is on file already,
+   real or placeholder, is never touched. The line itself is not saved;
+   that stays with Keep. Same limits as the postulate, per stem: nothing
    above AT_NUMMER_MAX, no more than AT_LUECKEN_MAX gaps. FABLE 13.09.2026 */
 function kbPlatzhalter(i){
   const z = KB && KB.zeilen[i];
@@ -27036,27 +27130,39 @@ function kbPlatzhalter(i){
   /* the tag as Keep files it - no blanks, upper case - or "ussr-003" would
      miss the "USSR-001" on file and double it */
   const tag = String(z.tag || "").replace(/\s+/g, "").toUpperCase();
-  const imTag = atNummer(tag), n = imTag || atNummer(z.name);
-  if (!n){ toast("No number in name or tag."); return; }
-  if (n.zahl < 2){ toast("Nothing before 1."); return; }
-  if (n.zahl > AT_NUMMER_MAX){ toast(`Above ${AT_NUMMER_MAX} - no placeholders.`); return; }
+  const nT = atNummer(tag), nN = atNummer(z.name);
+  const staemme = [];
+  if (nT) staemme.push({n: nT, feld: "tag", zeig: tag});
+  /* a stem both fields share is read once */
+  if (nN && !(nT && nT.stamm === nN.stamm)) staemme.push({n: nN, feld: "name", zeig: String(z.name).trim()});
+  if (!staemme.length){ toast("No number in name or tag."); return; }
   const key = spielerKey(z.besitzer), dep = feindDepot(key);
-  const da = new Set();
-  for (const d of dep){
-    /* both fields count: a number filed as a tag must not be filed again
-       as a name (Skeptiker HANDWERK, 13.09.2026) */
-    for (const q of [atNummer(d.tag), atNummer(d.name)])
-      if (q && q.stamm === n.stamm) da.add(q.zahl);
+  const neu = [], teile = [], gruende = [];
+  for (const {n, feld, zeig} of staemme){
+    if (n.zahl < 2){ gruende.push("Nothing before 1."); continue; }
+    if (n.zahl > AT_NUMMER_MAX){ gruende.push(`Above ${AT_NUMMER_MAX} - no placeholders.`); continue; }
+    const da = new Set();
+    for (const d of dep){
+      /* both fields count: a number filed as a tag must not be filed again
+         as a name (Skeptiker HANDWERK, 13.09.2026) */
+      for (const q of [atNummer(d.tag), atNummer(d.name)])
+        if (q && q.stamm === n.stamm) da.add(q.zahl);
+    }
+    const fehlt = [];
+    for (let k = 1; k < n.zahl; k++)
+      if (!da.has(k)) fehlt.push(n.stamm + String(k).padStart(n.stellen, "0"));
+    if (!fehlt.length){ gruende.push(`Nothing missing below ${zeig}.`); continue; }
+    if (fehlt.length > AT_LUECKEN_MAX){ gruende.push(`More than ${AT_LUECKEN_MAX} gaps - not filled.`); continue; }
+    for (const t of fehlt)
+      neu.push(Object.assign({id: Math.random().toString(36).slice(2,9), ung: 1, verm: 1},
+                             feld === "tag" ? {name: "", tag: t} : {name: t, tag: ""}));
+    teile.push({n: fehlt.length, stamm: n.stamm.trim()});
   }
-  const fehlt = [];
-  for (let k = 1; k < n.zahl; k++)
-    if (!da.has(k)) fehlt.push(n.stamm + String(k).padStart(n.stellen, "0"));
-  if (!fehlt.length){ toast(`Nothing missing below ${imTag ? tag : String(z.name).trim()}.`); return; }
-  if (fehlt.length > AT_LUECKEN_MAX){ toast(`More than ${AT_LUECKEN_MAX} gaps - not filled.`); return; }
-  const neu = fehlt.map(t => Object.assign({id: Math.random().toString(36).slice(2,9), k: "infantry", ung: 1, verm: 1},
-                                           imTag ? {name: "", tag: t} : {name: t, tag: ""}));
+  if (!neu.length){ toast(gruende[0]); return; }
   setFeindTeil(key, {v: dep.concat(neu)});
-  toast(`${neu.length} placeholder${neu.length === 1 ? "" : "s"} added for ${n.stamm.trim()}`);
+  toast(teile.length === 1
+    ? `${teile[0].n} placeholder${teile[0].n === 1 ? "" : "s"} added for ${teile[0].stamm}`
+    : teile.map(t => `${t.n} for ${t.stamm}`).join(", "));
 }
 /* REGISTERED SHORTCUTS from the small browser extension (erweiterung/):
    Alt+Up confirms the shown unit, Alt+Left steps one unit back, Alt+Right
@@ -28008,7 +28114,9 @@ function kbBehalten(){
   const liste = (((S.spot || {})[spotK] && S.spot[spotK].v) || []).slice();
   for (const z of zeilen){
     const kand = z.typ ? [z.typ] : kbTypKandidaten(z.hp);
-    const k = kand[0] || "infantry";
+    /* S7 (5.55, 16.09.2026): no candidate, no type - the record and the
+       sighting go in without k; the confirmation in Intel sets it */
+    const k = kand[0];
     const unbestaetigt = !(z.typ || kand.length === 1);
     const seite = (z.seite !== null && z.seite !== undefined) ? z.seite : null;
     if (z.besitzer){
@@ -28046,7 +28154,7 @@ function kbBehalten(){
         if (sl && treffer.length < (imBlatt.get(sl) || 1)) weitere = true;
         /* 2 or none of the ones on file could have got here in the time */
         else {
-          const arten = new Set([k]);
+          const arten = new Set(k ? [k] : []);
           for (const d of treffer) if (d.k) arten.add(d.k);
           weitere = treffer.every(d =>
             d.o !== undefined && d.o !== null && d.o !== ort && d.t
@@ -28054,8 +28162,9 @@ function kbBehalten(){
         }
       }
       if (!treffer.length || weitere){
-        depot.push(Object.assign({id: Math.random().toString(36).slice(2,9), k, name: neu.name, tag: neu.tag,
+        depot.push(Object.assign({id: Math.random().toString(36).slice(2,9), name: neu.name, tag: neu.tag,
                                   o: ort, t: jetztS},
+                                 k ? {k} : {},
                                  /* on an attack line the unit is not IN the town - it stands on
                                     the line named by the letter, attacking it */
                                  KB.linie ? {l: KB.linie} : {},
@@ -28098,7 +28207,7 @@ function kbBehalten(){
       const idx = liste.findIndex(u => u.k === k && u.f === seite && (u.owner || "") === (z.besitzer || ""));
       const stZ = (z.hp && z.hp.length) ? z.hp.map(h => h ? [h[0], h[1]] : null) : null;
       if (idx >= 0) liste[idx] = Object.assign({}, liste[idx], {n: (liste[idx].n || 0) + 1}, stZ ? {st: (liste[idx].st || []).slice(-40).concat([stZ])} : {});
-      else liste.push(Object.assign(z.besitzer ? {k, n: 1, f: seite, owner: z.besitzer} : {k, n: 1, f: seite}, stZ ? {st: [stZ]} : {}));
+      else liste.push(Object.assign(z.besitzer ? {n: 1, f: seite, owner: z.besitzer} : {n: 1, f: seite}, k ? {k} : {}, stZ ? {st: [stZ]} : {}));
       sicht++;
     }
     z.gespeichert = true;
@@ -28107,7 +28216,9 @@ function kbBehalten(){
      well. Every number below the highest of one stem gets a record -
      ung:1 (not confirmed, like a hand-made placeholder, so every list
      treats it as one) and verm:1 (assumed from the numbering, never
-     seen). A number already on file - real or placeholder - is never
+     seen), and NO TYPE since 16.09.2026 (5.55, ENNO: "Unbekannte ATs sind
+     komplett unbekannt, wir vermuten nur den Namen und die Menge, nicht
+     mehr."). A number already on file - real or placeholder - is never
      touched; more than AT_LUECKEN_MAX gaps in one stem are left alone,
      as the hand path does. Through setFeindTeil, not setFeindDepot: an
      assumption is no find and earns no credit. */
@@ -28129,7 +28240,7 @@ function kbBehalten(){
       for (let i = 1; i < st.max; i++) if (!st.da.has(i)) fehlend++;
       if (!fehlend || fehlend > AT_LUECKEN_MAX) continue;
       for (let i = 1; i < st.max; i++)
-        if (!st.da.has(i)) neuV.push({id: Math.random().toString(36).slice(2,9), k: "infantry", name: "",
+        if (!st.da.has(i)) neuV.push({id: Math.random().toString(36).slice(2,9), name: "",   // no type (5.55, 16.09.2026)
                                       tag: stamm + String(i).padStart(st.stellen, "0"), ung: 1, verm: 1});
     }
     if (neuV.length){ setFeindTeil(key, {v: dep.concat(neuV)}); vermutet += neuV.length; }
@@ -29309,7 +29420,7 @@ function pgEtikett(name){
   if (dep.length){
     const je = new Map();
     for (const d of dep) je.set(d.k, (je.get(d.k) || 0) + 1);
-    const arten = [...je].map(([k, n]) => atKurz(k) + (n > 1 ? " \u00d7" + n : "")).join(", ");
+    const arten = [...je].map(([k, n]) => (k ? atKurz(k) : "?") + (n > 1 ? " \u00d7" + n : "")).join(", ");
     teile.push(`${dep.length} team${dep.length === 1 ? "" : "s"} scouted: ${arten}`);
   }
   const text = clan || (dep.length ? `${dep.length} team${dep.length === 1 ? "" : "s"}` : seite || "on record");
@@ -34890,7 +35001,11 @@ function atVonKarte(quelle, klein, tr, feld){
     /* Was fuer eine Marke das ist - einzelne Einheit oder Stapel, und wie
        gross der Stapel - wird nicht mehr gelesen. Es zaehlt, dass dort
        eine steht (ENNO 12.09.2026). */
-    marker.push({ort, seite, eigen, art:"marke", ortAbstand, mx, my});
+    /* the bearing of the foot to its town (5.31), none on the town itself */
+    const w = ortAbstand >= AT_LAGE_MIN
+      ? ((Math.round(Math.atan2(my - MAP.n[ort][2], mx - MAP.n[ort][1]) * 180/Math.PI) % 360) + 360) % 360
+      : null;
+    marker.push({ort, seite, eigen, art:"marke", ortAbstand, mx, my, w});
   }
   return marker;
 }
@@ -34961,23 +35076,33 @@ function atEintragen(marker){
   for (const [ort, z] of atEintragen.ged)
     if (nunAT - z.t > AT_PULS_FRIST) atEintragen.ged.delete(ort);
   for (const [ort, liste] of proOrt){
-    const texte = [];
+    /* one row per side AND sector (5.31): two marks of one side in the
+       same sector, or both on the town, are one row - as one mark was;
+       in different sectors two rows with their own w. The key text|sector
+       is what memory and the write comparison look at. */
+    const zeilen = [], schluessel = new Set();
     for (const m of liste){
       const wer = m.seite === null ? "Unknown side" : FACTIONS[m.seite].tag;
-      texte.push(`${wer} assault team(s)`);
       gesehen++;
+      const text = `${wer} assault team(s)`, s = atSektor(m.w), sl = text + "|" + (s === null ? "" : s);
+      if (schluessel.has(sl)) continue;
+      schluessel.add(sl);
+      zeilen.push({text, w: s === null ? null : m.w, sl});
     }
     /* Zeigt das Bild gerade WENIGER als vor kurzem, gilt das Gemerkte -
        eine Marke verschwindet nicht dadurch, dass sie blinkt. Zeigt es
        mehr oder anderes, ist das Bild die Wahrheit und das Gedaechtnis
        wird nachgezogen. */
     const gem = atEintragen.ged.get(ort);
-    let endTexte = texte;
-    if (gem && gem.texte.length > texte.length
-        && texte.every(t => gem.texte.includes(t)))
-      endTexte = gem.texte;
-    atEintragen.ged.set(ort, {texte: endTexte, t: nunAT});
-    if (!endTexte.length) continue;
+    let endZeilen = zeilen;
+    if (gem && gem.zeilen.length > zeilen.length
+        && zeilen.every(z => gem.zeilen.some(g => g.sl === z.sl)))
+      endZeilen = gem.zeilen;
+    /* the mark count of this place rides along for the "UNITS SEEN"
+       counter below - rows are fewer than marks since two marks of one
+       side in one sector make one row */
+    atEintragen.ged.set(ort, {zeilen: endZeilen, marken: endZeilen === zeilen ? liste.length : gem.marken, t: nunAT});
+    if (!endZeilen.length) continue;
     /* Zu den eigenen Schaetzungen dazu, ohne fremde anzufassen. Geraeumt
        wird am Merkmal auto:1, nicht am Wortlaut: der reine Textfilter
        loeschte jede von Hand getippte Notiz mit, in der "assault team"
@@ -34990,7 +35115,7 @@ function atEintragen(marker){
        hier beim naechsten Schreiben heraus. */
     const MASCHINE = /^(US|GE|USSR|Unknown side) .*assault team/;
     const alt = myEst(ort).filter(e => !e.auto && !MASCHINE.test(e.text || ""));
-    const neu = alt.concat(endTexte.map(tx => ({text: tx, auto: 1, t: jetzt()})));
+    const neu = alt.concat(endZeilen.map(z => Object.assign({text: z.text, auto: 1, t: jetzt()}, z.w === null ? {} : {w: z.w})));
     /* Nur schreiben, was sich wirklich geaendert hat - dieselbe Regel wie
        beim Besitz (besitzUebernehmen) und bei den Adern. Der Vergleich
        fehlte nur auf diesem Schreibweg: bei stehendem Bild ging alle
@@ -35002,7 +35127,7 @@ function atEintragen(marker){
        gleicher Reihenfolge heisst: nichts zu schreiben. */
     const ist = myEst(ort);
     if (ist.length === neu.length
-        && ist.every((e, x) => (e.text || "") === (neu[x].text || ""))) continue;
+        && ist.every((e, x) => (e.text || "") === (neu[x].text || "") && atSektor(e.w) === atSektor(neu[x].w))) continue;
     setEst(ort, neu);
   }
   /* ORTE, DIE GANZ AUSFALLEN, brauchen hier nichts: sie stehen nicht in
@@ -35016,7 +35141,7 @@ function atEintragen(marker){
   const jeOrt = new Map();
   for (const [ort, liste] of proOrt) jeOrt.set(ort, liste.length);
   for (const [ort, z] of atEintragen.ged)
-    if (z.texte.length > (jeOrt.get(ort) || 0)) jeOrt.set(ort, z.texte.length);
+    if (z.marken > (jeOrt.get(ort) || 0)) jeOrt.set(ort, z.marken);
   return {gesehen, fern, orte: proOrt.size, jeOrt};
 }
 
@@ -39731,6 +39856,28 @@ function ortBei(x, y, maxAbstand){
    90-Prozent-Punkt 2,04 - und dann eine saubere Luecke bis 3,21, wo die
    vier Begegnungsgefechte beginnen. */
 const AT_AUF_STADT = 2.5;
+/* WHERE AROUND THE TOWN (5.31, Nachzuegler-2, FABLE 16.09.2026). ENNO
+   16.09.2026: "Die Stapel sollen natuerlich auch dort im Tool stehen wo
+   sie im Spiel auch sind. Wenn eine Seite aus zwei Richtungen angreift
+   ist das ja relevant." Every mark carries the angle of its foot to the
+   town (w, degrees: 0 east, 90 south, 270 north - y grows downwards on the
+   screen, toScr scales and shifts only, K7), in twelve sectors of thirty
+   degrees. Below AT_LAGE_MIN the mark sits ON the town: of the 45 foreign
+   marks of the hand list (g_at_kern.json, 12.09.2026) 26 stand at the
+   centre (0,22..0,73 units), none between 0,73 and 1,37, 15 on the rim
+   (1,37..2,04 - the second side's stack, the game sets it towards where
+   it came from), 4 beyond 3,2 (encounters). A vector that short jitters
+   between two frames, and every sector change would go out to the whole
+   clan - so no angle there, the stack stands above the disc as before
+   (S3). Measured stability (16.09.2026): 0 sector changes in 77 frame
+   pairs of one rim mark (1,68 units, 3 degrees off a sector edge) and in
+   the two rim marks of the frame pair f089/f090. The distance itself is not stored (ENNO 16.09.2026, 5.32: "ist mir
+   die Entfernung egal"). */
+const AT_LAGE_MIN = 1.2;
+const AT_SEKTOREN = 12;
+const atSektor = w => (typeof w !== "number" || !Number.isFinite(w) || w < 0) ? null : Math.round(w / (360/AT_SEKTOREN)) % AT_SEKTOREN;   // foreign rows: a number or nothing
+/* eight points of the compass from w, 270 = north */
+const atHimmel = w => ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][Math.round(((w % 360) + 360) % 360 / 45) % 8];
 /* Wie nah sich zwei Marken verschiedener Fraktion sein muessen, damit
    es eine Begegnung ist. Gemessen liegen die Paare der vier
    Begegnungen 3,2 bis 6,7 Karteneinheiten auseinander. */
@@ -41663,7 +41810,7 @@ function intelDialog(tab, seite){
       const key = spielerKey(u.owner);
       const d = proSpieler.get(key) || {name:u.owner, f:u.f, teams:0, arten:new Map(), orte:new Set(), t:0};
       d.teams += u.n; d.orte.add(town); d.t = Math.max(d.t, e.t||0);
-      d.arten.set(u.k, (d.arten.get(u.k)||0) + u.n);
+      if (u.k) d.arten.set(u.k, (d.arten.get(u.k)||0) + u.n);
       if (u.f != null) d.f = u.f;
       proSpieler.set(key, d);
     }
@@ -41729,7 +41876,7 @@ function intelDialog(tab, seite){
     let t = 0, gesehen = 0;
     for (const p of cl.spieler){
       t = Math.max(t, p.t || 0);
-      for (const d of feindDepot(p.key)) kompo.set(d.k, (kompo.get(d.k)||0) + 1);
+      for (const d of feindDepot(p.key)) if (d.k && !d.ung && !d.verm) kompo.set(d.k, (kompo.get(d.k)||0) + 1);   // typed and seen only (5.55)
       const s = proSpieler.get(p.key);
       if (s){ gesehen += s.teams; t = Math.max(t, s.t || 0); }
     }
@@ -50130,7 +50277,7 @@ function schlachtAbschnitt(i){
     for (const u of g.list){
       if (u.f == null){ ohne += u.n || 0; continue; }
       if (u.f === meine) continue;
-      je.set(u.k, (je.get(u.k) || 0) + (u.n || 0));
+      if (u.k) je.set(u.k, (je.get(u.k) || 0) + (u.n || 0));
     }
     for (const [k, n] of je) feind.set(k, Math.max(feind.get(k) || 0, n));
     if (je.size) tSicht = Math.max(tSicht, g.t || 0);
@@ -50344,9 +50491,9 @@ function feindDialog(key, name){
       <div style="display:flex;flex-direction:column;gap:4px">
         ${zeig.map(({d,i})=>`<div class="unit z1" style="--f:${vermutet(d)?"var(--dim2)":(f!=null?col(FACTIONS[f]):"var(--dim2)")};${
               vermutet(d)?"opacity:.62":""}">
-          <span class="sym${vermutet(d)?" frage":""}" title="${esc(vermutet(d)?(d.verm?"assumed from the numbering":"placeholder — not scouted yet"):atName(d.k))}">${vermutet(d)?"?":symbolSVG(d.k, c)}</span>
+          <span class="sym${vermutet(d)?" frage":""}" title="${esc(vermutet(d)?(d.verm?"assumed from the numbering":"placeholder — not scouted yet"):(d.k ? atName(d.k) : "type ?"))}">${vermutet(d)?"?":symbolSVG(d.k, c)}</span>
           <span class="n" dir="auto"><b>${esc(d.tag||"")}</b><span style="overflow:hidden;text-overflow:ellipsis">${esc(d.name || (vermutet(d) ? "not scouted yet" : ""))}${
-              feindCutMarke(d)}</span><em><span class="vt">${esc(atKurz(d.k))}</span>${
+              feindCutMarke(d)}</span><em><span class="vt">${d.k ? esc(atKurz(d.k)) : "type ?"}</span>${
               stText(d)?` · ${stText(d)}`:""}${wannText(d)?` · ${wannText(d)}`:""}${woText(d)?` · ${woText(d)}`:""}</em></span>
           <button class="x" data-frm="${i}" title="Remove">×</button></div>`).join("")}
         ${zeig.length ? "" : `<div class="empty">Nothing of this kind on record.</div>`}
@@ -50610,9 +50757,8 @@ function feindDialog(key, name){
         `${tag} suggests ${fehlt.length} earlier team${fehlt.length===1?"":"s"} exist:\n`
         + fehlt.join(", ")
         + `\n\nAdd them as placeholders? They will be marked as NOT scouted yet.`)){
-      for (const ft of fehlt)
-        neu = neu.concat([{id: Math.random().toString(36).slice(2,9), k:"infantry",
-                           name:"", tag:ft, ung:1}]);
+      for (const ft of fehlt)   /* no type (5.55, 16.09.2026) */
+        neu = neu.concat([{id: Math.random().toString(36).slice(2,9), name:"", tag:ft, ung:1}]);
     }
     /* Den Typ ueber den Neuaufbau retten. */
     feindDialog.typ = k;
@@ -51313,6 +51459,18 @@ function leuteZeichnen(liste){
      (ENNO 07.09.2026: "Befoerderung durch Leader/autorisierte Offiziere").
      Der Server laesst meta:rang fuer dieselben durch. 13.09.2026 */
   const darfBefoerdern = darfRollen || darf("befoerdern");
+  /* 5.59 (Nachzuegler-2), ENNO 16.09.2026: "Man soll sich natuerlich nicht
+     selbst befoerdern koennen denk doch einfach mal nach. Und auch nicht
+     hoeher als man selbst ist." For a promoter who is not the leader: no
+     select on the own row, no rank above the own height offered (a smaller
+     list place is higher), no select on anyone standing higher today. The
+     leader keeps everything. Height = the smallest list place over the
+     effective ranks (K5); no rank = below the list. The server's side of
+     this rule (warmap_rang_grenzen) is Teil B. */
+  const rangHoehe = p => { const h = rollenVon(p).map(r => R.findIndex(x => x.id === r.id)).filter(q => q >= 0); return h.length ? Math.min(...h) : R.length; };
+  const meineHoehe = darfRollen ? 0 : rangHoehe(S.me);
+  const darfHier = p => darfBefoerdern && (darfRollen || (p !== S.me && rangHoehe(p) >= meineHoehe));
+  const stdErlaubt = darfRollen || !standardRang() || R.findIndex(x => x.id === standardRang().id) >= meineHoehe;
   const mein = wunschVon(S.me) || {text:"", zweige:[]};
   const teamsVon = p => { const d = depotIdx.get(p); return d ? d.list.length : 0; };
   /* the rank editor on the clan's own list (rangEditorHtml, 13.09.2026):
@@ -51408,11 +51566,11 @@ function leuteZeichnen(liste){
               ${m.approved===false?` <span style="color:var(--su);font-size:10px">locked</span>`:""}</td>
             <td style="text-align:left">${spielerAbz(m.player, 18)}${fuehrt
               ? `<b style="color:var(--accent)">Leader</b>`
-              : (darfBefoerdern
+              : (darfHier(m.player)
                  ? `<select data-rangfuer="${esc(m.player)}" style="font-size:11px">
-                      <option value="">— ${esc(standardRang() ? rangTitel(standardRang()) : "none")} —</option>
-                      ${R.map(r=>`<option value="${esc(r.id)}" ${r.id===ist?"selected":""}
-                        >${esc(rangTitel(r))}</option>`).join("")}</select>${quelle === "auto"
+                      <option value="" ${stdErlaubt ? "" : "disabled"}>— ${esc(standardRang() ? rangTitel(standardRang()) : "none")} —</option>
+                      ${R.map((r, q) => (darfRollen || q >= meineHoehe) ? `<option value="${esc(r.id)}" ${r.id===ist?"selected":""}
+                        >${esc(rangTitel(r))}</option>` : "").join("")}</select>${quelle === "auto"
                     ? ` <span title="promoted by points" style="font-size:10px;color:var(--dim)">· points</span>` : ""}${darfRollen
                     ? ` <select data-fokusfuer="${esc(m.player)}" title="Focus" style="font-size:11px">
                         <option value="">— focus —</option>
@@ -52502,10 +52660,10 @@ function sicherungZurueck(){
 }
 
 async function saveFile(){
-  /* Die oertliche Kopie der Kampfeinheiten-Namen faehrt mit: seit dem
-     12.09.2026 stehen Name und Kuerzel zwar in der Depotzeile (also in S),
-     aber die gelesene Staerke (st, stT, stO) und der Vorrat fuer eine Zeile
-     ohne Namen liegen nur hier. */
+  /* Die oertliche Kopie der Kampfeinheiten-Namen faehrt mit: Name und
+     Kuerzel stehen in der Depotzeile (also in S), die gelesene Staerke
+     (st, stT, stO) liegt nur hier. Zurueck kommt aus _namen seit dem
+     16.09.2026 nur die Staerke (namenNurStaerke, 5.39). */
   const text = JSON.stringify({...S, _namen: eigenNamen}, null, 1);
   const host = (typeof claude !== "undefined" && claude.use) ? await claude.use("downloads") : null;
   if (host){
@@ -52828,7 +52986,10 @@ document.getElementById("b-war").addEventListener("click", ()=>{
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;flex-direction:column;gap:8px">
         <span style="font-size:12px;color:var(--dim)">Supply per 10 min</span>
         ${versorgungTabelle(verw)}
-        <span class="note" style="font-size:11px">Empty = game value.</span>
+        <div class="row" style="align-items:center">
+          <span class="note" style="font-size:11px;flex:1">Empty = game value.</span>
+          <button class="btn" id="set-save2" ${verw?"":"disabled"}>Save</button>
+        </div>
       </div>
       ${/* the operator's default for every clan (PKT-3 Teil B, 13.09.2026):
            only he sees the section, the server decides who that is */
@@ -52870,7 +53031,19 @@ document.getElementById("b-war").addEventListener("click", ()=>{
     if (f) return JSON.parse(await f.text());
     return null;
   };
-  document.getElementById("d-close").addEventListener("click", closeDlg);
+  /* 5.52 (Nachzuegler-2; ENNO 16.09.2026: "ist mir egal" - FABLE, K13):
+     Save also under the supply block, and Close with changed fields asks
+     instead of dropping them - the war name, the capitals, the start towns
+     and the supply figures are read as they stand when the window opens
+     and again on Close. Yes runs Save (which validates and closes), no
+     closes. Only the admin has fields to lose. */
+  const stand = () => JSON.stringify([...document.querySelectorAll("#dlg #set-war, #dlg #set-sieg, #dlg [data-vers], #dlg [data-hin]")].map(f => f.value));
+  let standAlt = "";
+  document.getElementById("set-save2")?.addEventListener("click", () => document.getElementById("set-save").click());
+  document.getElementById("d-close").addEventListener("click", () => {
+    if (verw && stand() !== standAlt && confirm("Unsaved changes. Save them?")){ document.getElementById("set-save").click(); return; }
+    closeDlg();
+  });
   document.getElementById("set-vorgabe")?.addEventListener("click", vorgabeDialog);
 
   let startNeu = startStaedte();
@@ -52903,6 +53076,7 @@ document.getElementById("b-war").addEventListener("click", ()=>{
     }));
   };
   startZeichnen();
+  standAlt = stand();
 
   document.getElementById("set-save").addEventListener("click", ()=>{
     /* Jede Zeile nur, wenn der Betreffende sie auch schreiben darf. Vorher
@@ -52953,7 +53127,7 @@ document.getElementById("b-war").addEventListener("click", ()=>{
       const entschaerft = importEntschaerfen(o);
       const {state, neuer} = merge(S, o);
       S = Object.assign(neu(), state, {me:S.me});
-      if (o._namen){ eigenNamen = Object.assign(eigenNamen, o._namen); namenSichern(); }
+      if (o._namen){ eigenNamen = Object.assign(eigenNamen, namenNurStaerke(o._namen)); namenSichern(); }
       /* Sonst steht der uebernommene Stand nur auf diesem Bildschirm: weder
          merge noch replace merkt etwas in dirty vor, und die Nachfuell-
          Schleife in syncStart laeuft nur bei !offenGeladen - seit dem
@@ -52973,7 +53147,7 @@ document.getElementById("b-war").addEventListener("click", ()=>{
       if (!o){ toast("Paste a link or pick a file first."); return; }
       const entschaerftR = importEntschaerfen(o);
       S = Object.assign(neu(), o, {me:S.me});
-      if (o._namen){ eigenNamen = Object.assign(eigenNamen, o._namen); namenSichern(); }
+      if (o._namen){ eigenNamen = Object.assign(eigenNamen, namenNurStaerke(o._namen)); namenSichern(); }
       const geteiltR = importVormerken();   // siehe IMPORT_TEILT
       after(); closeDlg();
       toast(`Replaced — ${geteiltR} map entries go out to the clan. `
@@ -53099,7 +53273,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 61cda428fa</span></p></div>
+         installation. <span style="color:var(--dim2)">· build ee494255de</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -53327,7 +53501,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "61cda428fa";
+const BAU = "ee494255de";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -54095,14 +54269,8 @@ async function syncStart(){
   syncRunde = runde;
   syncTimer = setTimeout(runde, syncTakt());
   await syncPull();
-  /* ERST HOLEN, DANN EINBRINGEN, DANN SCHIEBEN. namenEinbringen setzt die
-     eigene Depotzeile auf dirty, und dirty schlaegt in applyRemote alles,
-     was vom Server kommt. Liefe es vor dem ersten Abgleich, stuende hier
-     die ZWISCHENGESPEICHERTE Zeile dieses Browsers als offene Aenderung
-     fest - ein zweites Geraet, das laenger nicht lief, ueberschriebe damit
-     still, was auf dem ersten inzwischen angelegt, geloescht oder
-     hochgestuft wurde. Dieselbe Klasse Vorfall, die offenLaden beschreibt. */
-  namenEinbringen();
+  /* namenEinbringen() stood between pull and push until 16.09.2026 - gone
+     with 5.39, see the names block: no copy writes into the row. */
   await syncPush();
   /* Auch hier uebernehmen. Wer "angemeldet bleiben" angehakt hat, sieht die
      Passwortmaske nie - und damit lief anmeldungNachtragen nie, das den Wert
@@ -54543,12 +54711,8 @@ async function mitgliederDialog(meldung){
      sobald ein Browser den Schnitt nicht kennt. */
   gefegt += altlastFegen();
   if (gefegt) save();
-  /* Ohne eingebauten Server (Vorlage, Probe): einmal beim Start die Namen
-     aus der oertlichen Kopie in die geteilte Zeile bringen, wo sie dort
-     fehlen. Mit Server laeuft das in syncStart HINTER dem ersten Abgleich,
-     siehe dort - und !CFG heisst dort nicht "ohne Server", sondern
-     "abgemeldet": das Tor steht davor, die Anmeldung fuehrt in syncStart. */
-  if (!hatBuiltin()) namenEinbringen();
+  /* "if (!hatBuiltin()) namenEinbringen();" stood here until 16.09.2026 -
+     gone with 5.39, see the names block. */
   rebuildUnits(); kopfzeile(); tally(); tips(); depotZeichnen(); boardZahl(); ordersZahl();
   kraftLeiste(); resize();
   mitgliederKnopf();
