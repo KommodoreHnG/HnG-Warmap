@@ -3987,6 +3987,7 @@ const TOPFTAFEL = {
      from the game screen. Same shapes as their neighbours. */
   stat:   {wer:1, recht:"", krieg:0},              // Anwesenheit: Active / Inactive / Offline / RTS only / Mobile
   grp:    {wer:1, recht:"", krieg:1},              // eigene AT-Gruppen
+  tpl:    {wer:1, recht:"", krieg:1},              // eigene Anforderungs-Vorlagen (BEF-10; ENNO 16.09.2026, 5.7: "Am konto")
   units:  {wer:2, recht:"", krieg:0},              // eigene Einheiten am Ort
   join:   {wer:2, recht:"", krieg:0},              // Zusage an einem Pfeil
   zuord:  {wer:2, recht:"", krieg:0},              // Einheit oder Gruppe an einem Befehl (zuord:<art>-<id>:<spieler>)
@@ -6619,27 +6620,38 @@ function zuordZahlen(b){
    16.09.2026). ENNO 16.09.2026: "Wenn die Truppenstaerke den Grenzwert von
    288/72 uebersteigt ist der Parablock spielbar. Darunter kann keine
    Schlacht zustandekommen, der Parablock ist dann rein strategisch."
-   Counted from the NOMINAL strength of the airborne teams assigned to the
-   block (crew 72 paras + 18 planes per Paratroopers team, 36 + 9 per
-   Pathfinders - warmap_daten.json); the read strength (st) lives only in
-   the owner's browser and is unknown to the clan (S4/S5), so the line says
-   "nominal". Accepted rows (st 1) when there are any, else every row - an
-   acceptance is no required step on a block. 288 of 288 counts as
-   playable (K8; the sheet of 16.09. says playable from 288/72, as the
-   ticket reckoner counts). A
-   line of text in the block window and the orders list; no gate, no
-   toast, no points. */
+   Counted from the READ strength of the airborne teams assigned to the
+   block where the depot row carries one (st: one [now, full] pair per
+   crew slot, read from the game by the picture reader; since 16.09.2026
+   Teil B it travels with the row - S5), else from the NOMINAL crew (72
+   paras + 18 planes per Paratroopers team, 36 + 9 per Pathfinders -
+   warmap_daten.json). "(nominal)" is said only where "playable" rests on
+   at least one crew slot counted nominally; "strategic only" needs no
+   word. A read above the nominal number counts as the nominal number -
+   the game never has more than the slot holds, such a read is a misread.
+   Accepted rows (st 1)
+   when there are any, else every row - an acceptance is no required step
+   on a block. 288 of 288 counts as playable (K8; the sheet of 16.09. says
+   playable from 288/72, as the ticket reckoner counts). A line of text in
+   the block window and the orders list; no gate, no toast, no points. */
 const PARA_SPIELBAR = {paras: 288, planes: 72};
 function paraStaerke(i){
   const alle = zuordVon({art: "para", id: i}), fest = alle.filter(z => z.st === 1);
-  const raus = {paras: 0, planes: 0, teams: 0, zusagen: alle.length};
+  const raus = {paras: 0, planes: 0, teams: 0, nominal: 0, zusagen: alle.length};
   for (const z of (fest.length ? fest : alle)){
     const d = depotIdx.get(z.who), liste = d ? d.list : [];
     for (const id of z.ats){
       const t = liste.find(x => x && x.id === id), a = t && AT[t.k];
       if (!a || zweigVon(t.k) !== LUFT_ZWEIG) continue;
       raus.teams++;
-      for (const [nm, n] of (a.crew || [])){ if (/plane/i.test(String(nm))) raus.planes += +n || 0; else raus.paras += +n || 0; }
+      (a.crew || []).forEach(([nm, n], j) => {
+        const h = Array.isArray(t.st) ? t.st[j] : null;
+        const ist = (Array.isArray(h) && (typeof h[0] === "number" || typeof h[0] === "string") && h[0] !== "" && Number.isFinite(+h[0]))
+          ? Math.min(Math.max(0, +h[0]), +n || 0) : null;   // a number or a number as text - not [], true or "" (round 2)
+        if (ist === null) raus.nominal++;
+        const zahl = ist === null ? (+n || 0) : ist;
+        if (/plane/i.test(String(nm))) raus.planes += zahl; else raus.paras += zahl;
+      });
     }
   }
   raus.spielbar = raus.paras >= PARA_SPIELBAR.paras && raus.planes >= PARA_SPIELBAR.planes;
@@ -6653,7 +6665,7 @@ function paraSpielbarText(i){
   try { s = paraStaerke(i); } catch(e){ return ""; }
   if (!s.zusagen) return `No teams on it yet \u2014 <span style="color:var(--dim2)">strategic only</span>`;
   return `<b>${s.paras}</b> of ${PARA_SPIELBAR.paras} paras \u00b7 <b>${s.planes}</b> of ${PARA_SPIELBAR.planes} planes \u2014 ${
-    s.spielbar ? `<span style="color:var(--accent)">playable (nominal)</span>` : `<span style="color:var(--dim2)">strategic only</span>`}`;
+    s.spielbar ? `<span style="color:var(--accent)">playable${s.nominal ? " (nominal)" : ""}</span>` : `<span style="color:var(--dim2)">strategic only</span>`}`;
 }
 /* the shield's "ist": accepted teams when there are any, else what the
    caller has (the commitments on an arrow) */
@@ -7238,14 +7250,15 @@ let ordersFilter = {art: "", by: "", byN: "", zs: ""};   // byN: der Anzeigename
 let ordersVorlageName = "";
 /* die sieben Arten, mit den Namen, die befehlArtName vergibt */
 const ORDERS_ARTEN = ["Attack", "Drop", "Defence", "Line", "Recon", "Area", "Para-block"];
-/* DIE PRIVATEN VORLAGEN LIEGEN IM BROWSER, NICHT AM KONTO. Nachgesehen am
+/* DIE PRIVATEN FILTER-VORLAGEN LIEGEN IM BROWSER, NICHT AM KONTO (5.48,
+   ENNO 16.09.2026: "keine ahnung." - der Stand bleibt). Nachgesehen am
    11.09.2026 (fable/Listen/ANSCHLUSS-ORDERS.md, Abschnitt 5): kein Topf
-   der TOPFTAFEL traegt persoenliche Einstellungen - depot, sold, priv,
-   wish, stat, grp haben je eine feste Bedeutung -, und ein neuer Topf
-   waere eine Serverwanderung. Also wie LAY_KEY und THEMA_KEY: je Browser,
-   mit der Kontokennung im Schluessel, damit zwei Konten im selben Browser
-   sich nichts ueberschreiben. Auf dem Telefon sind es darum andere
-   Vorlagen als am Rechner. */
+   der TOPFTAFEL trug persoenliche Einstellungen. Seit dem 16.09.2026 gibt
+   es einen - tpl, die Anforderungs-Vorlagen (BEF-10) liegen am Konto
+   (5.7: "Am konto"), siehe dort; die Filter hier bleiben wie LAY_KEY und
+   THEMA_KEY je Browser, mit der Kontokennung im Schluessel, damit zwei
+   Konten im selben Browser sich nichts ueberschreiben. Auf dem Telefon
+   sind es darum andere Filter-Vorlagen als am Rechner. */
 const ORDERS_FILTER = "hng-warmap-orders-filter";
 const ordersFilterKey = () => ORDERS_FILTER + ":" + (S.me || "");
 function ordersVorlagen(){
@@ -7450,7 +7463,7 @@ function ordersDetail(b, st, hab, alle){
   if (strecke) teile.push(strecke);
   const kette = ketteStelle(b, alle);
   if (kette) teile.push(kette);
-  /* 5.1: the block's nominal strength against 288/72 */
+  /* 5.1: the block's strength against 288/72 - read where the row carries one, else nominal (16.09.2026) */
   if (b.art === "para" && !fremdeSeite(b.v)) teile.push(paraSpielbarText(b.id));
   /* the priority as a word (BEF-16); the dot in the row above says the same */
   teile.push(`priority <b>${prioEintrag(b.v).name}</b>`);
@@ -10477,8 +10490,8 @@ const unitsAt = i => unitIdx.get(i) || [];
    die Arbeit"
    THE ROW IS THE ONLY SOURCE (Nachzuegler-2, 16.09.2026) - for the own
    teams as well. ENNO 16.09.2026: "Der Serverstand soll immer das einzige
-   sein was man sieht." The browser copy (eigenNamen) is not read for a
-   name any more, on no device. */
+   sein was man sieht." There is no browser copy any more (Teil B): name,
+   tag, cut mark and the read strength all sit in the row. */
 function teamNameVon(who, id){
   if (!id) return "";
   const d = depotIdx.get(who);
@@ -10525,91 +10538,46 @@ const aufSeite = (liste, f) => (liste || []).filter(d => {
 });
 /* Alle drei Depots zusammen - nur zum Schreiben, nie zum Anzeigen. */
 function myDepotAlle(){
-  return depotListe(S.depot[S.me] && S.depot[S.me].v).map(namenAn);
+  return depotListe(S.depot[S.me] && S.depot[S.me].v);
 }
 /* ---- Namen der eigenen Kampfeinheiten --------------------------------
    Sie gehen mit der Depotzeile an den Clan (ENNO 12.09.2026, siehe
-   teamNameVon). Daneben liegt eine oertliche Kopie unter einem eigenen
-   Schluessel in diesem Browser - ausserhalb des synchronisierten Zustands.
-   Seit dem 16.09.2026 (5.39, ENNO: "Der Serverstand soll immer das
-   einzige sein was man sieht.") liefert sie nur noch die gelesene Staerke
-   (st, stT, stO), die weiter nur hier steht; Name, Kuerzel und Marke
-   kommen allein aus der Zeile, die Kopie folgt ihr in beide Richtungen
-   (namenAbstreifen). Kein Weg fuehrt mehr aus einer Kopie in die Zeile -
-   der Umzug vom 12.09. (namenEinbringen) ist gestrichen, das Tool wird
-   bisher nicht genutzt (ENNO 16.09.2026, 5.28). Die Sicherungsdatei nimmt
-   die Kopie mit, zurueck kommt daraus nur die Staerke. */
-const NAMEN_STORE = "hng-warmap-namen";
-let eigenNamen = {};
-function namenLaden(){
-  try { eigenNamen = JSON.parse(localStorage.getItem(NAMEN_STORE) || "{}") || {}; }
-  catch(e){ eigenNamen = {}; }
-}
-function namenSichern(){
-  try { localStorage.setItem(NAMEN_STORE, JSON.stringify(eigenNamen)); } catch(e){}
-}
-function namenAn(d){
-  const n = eigenNamen[d.id];
-  if (!n) return d;
-  const raus = {...d};
-  /* THE ROW IS THE ONLY SOURCE (ENNO 16.09.2026: "Der Serverstand soll
-     immer das einzige sein was man sieht."). Until 16.09.2026 the copy
-     filled a name, its cut mark and the tag where the row lacked them -
-     so a name cleared in the depot came back on the same device at the
-     next drawing. Nothing of that any more; only the strength read from
-     the map, which lives only here (see namenAbstreifen). */
-  if (n.st){ raus.st = n.st; raus.stT = n.stT; raus.stO = n.stO; }
-  return raus;
-}
-/* namenEinbringen stood here until 16.09.2026: the one-time move of the
-   names from this browser's copy into the row (12.09.2026, the day the
-   names began to travel with the row). Gone with 5.39 (ENNO 16.09.2026:
-   "Der Serverstand soll immer das einzige sein was man sieht.") and the
-   rule of 5.28 (ENNO 16.09.2026: "Das Tool wird nicht genutzt, bisher") -
-   a second device
-   must not put a name back that the first one cleared, and there is no
-   old stock to move. */
-/* 5.39: a backup file brings no names back - only the read strength
-   (st, stT, stO) is taken from its copy (merge and replace below) */
-function namenNurStaerke(o){
-  const raus = {};
-  for (const [id, n] of Object.entries(o || {}))
-    if (n && n.st) raus[id] = {st: n.st, stT: n.stT, stO: n.stO};
-  return raus;
-}
-/* Beim Schreiben in die geteilte Zeile bleiben Name, Kuerzel und die Marke
-   "abgeschnitten" DRIN (ENNO 12.09.2026: "Lass uns diese einfach mit an den
-   Clan uebergeben"); abgestreift wird nur noch die vom Kartenleser gelesene
-   Staerke (st, stT, stO), die hier liegen bleibt. Die oertliche Kopie wird
-   nebenher nachgefuehrt - IN BEIDE RICHTUNGEN (5.39, 16.09.2026): ein Name
-   oder ein Kuerzel, das die Zeile nicht mehr traegt, faellt auch aus der
-   Kopie, sonst kaeme es auf demselben Geraet zurueck. Das ist die eine
-   Stelle, an der das passieren muss - alle Depotschreibwege laufen durch
+   teamNameVon) - und seit dem 16.09.2026 (Nachzuegler-2 Teil B, S5) auch
+   die vom Kartenleser gelesene Staerke (st je Besatzungsplatz [ist, soll],
+   stT Sekunden, stO Ort): ENNO 16.09.2026 (5.39): "Der Serverstand soll
+   immer das einzige sein was man sieht." Der Server nimmt die Zeile bis
+   160 000 jsonb-Byte (Wanderung 2026-09-16_depotdeckel.sql) und bucht fuer
+   eine Lesung keinen Punkt (2026-09-16_umbenennen_ohne_punkte.sql).
+   Bis zum 16.09.2026 lag hier eine oertliche Kopie (eigenNamen, Schluessel
+   "hng-warmap-namen"): erst fuer Name, Kuerzel und Marke, seit Teil A nur
+   noch fuer die Staerke. Sie ist ganz gestrichen - eine Kopie, die nichts
+   mehr liefert, aber gesichert, exportiert und importiert wird, waere ein
+   zweiter Stand neben dem Serverstand. Der Umzug vom 12.09. (namenEinbringen)
+   ist seit Teil A fort; das Tool wird bisher nicht genutzt (ENNO
+   16.09.2026, 5.28), es gibt nichts zu tragen. */
+/* Beim Schreiben in die geteilte Zeile bleiben Name, Kuerzel, die Marke
+   "abgeschnitten" (ENNO 12.09.2026: "Lass uns diese einfach mit an den
+   Clan uebergeben") UND die gelesene Staerke DRIN - abgestreift wird seit
+   dem 16.09.2026 nichts mehr, der Name bleibt der Funktion aus ihrer
+   Geschichte. Was sie tut: die Abschneide-Regeln des Spiels auf Name und
+   Kuerzel, die Marke nur neben einem Namen. Das ist die eine Stelle, an
+   der das passieren muss - alle Depotschreibwege laufen durch
    depotSchreiben. */
 function namenAbstreifen(liste){
-  let geaendert = false;
-  const raus = (liste || []).map(d => {
-    if (!d || (!d.name && !d.tag && !d.cut && d.st === undefined && !eigenNamen[d.id])) return d;
-    const alt = eigenNamen[d.id] || {};
+  return (liste || []).map(d => {
+    if (!d || (!d.name && !d.tag && !d.cut)) return d;
     const k = {...d};
     /* THE GAME'S LIMIT BELONGS IN THE FUNNEL. The two ways a hand can reach
        a name - the field in the depot and the picture reader's button -
        each carry the bolt already, but this is the place the file itself
        names as the one every write must pass. What is caught here is caught
        on ways not yet built. */
-    if (d.name) alt.name = k.name = atNameSauber(d.name); else delete alt.name;
-    if (d.tag)  alt.tag  = k.tag  = atTagSauber(d.tag);  else delete alt.tag;
-    if (d.st !== undefined){ alt.st = d.st; alt.stT = d.stT; alt.stO = d.stO; }
-    /* OWN NAMES CUT OFF: the mark rides with the name, in the row as in
-       the copy */
-    if (d.cut && k.name) alt.cut = k.cut = 1; else { delete alt.cut; delete k.cut; }
-    if (Object.keys(alt).length) eigenNamen[d.id] = alt; else delete eigenNamen[d.id];
-    geaendert = true;
-    delete k.st; delete k.stT; delete k.stO;
+    if (d.name) k.name = atNameSauber(d.name);
+    if (d.tag)  k.tag  = atTagSauber(d.tag);
+    /* OWN NAMES CUT OFF: the mark rides with the name */
+    if (d.cut && k.name) k.cut = 1; else delete k.cut;
     return k;
   });
-  if (geaendert) namenSichern();
-  return raus;
 }
 
 function myDepot(){
@@ -13631,29 +13599,43 @@ function anfVerdrahten(){
    durchklicken muss." ENNO 12.09.2026 (BEF-10): "Die
    koennen wir erstmal als privat bauen, damit man sich gegenseitig nicht
    mit Vorlagen vollmuellt."
-   PRIVAT HEISST HIER IM BROWSER, JE KONTO - derselbe Weg wie die
-   Filter-Vorlagen (ORDERS_FILTER): kein Topf traegt persoenliche
-   Einstellungen, ein neuer waere eine Serverwanderung. Auf dem Telefon
-   sind es darum andere Vorlagen als am Rechner (FABLE 13.09.2026,
-   vorzulegen). Eine Vorlage ist {n: Name, req: {at, cls}} wie a.req und
-   geht beim Lesen durch anfLesen, damit nur 1..99 und bekannte Typen und
-   Klassen stehen bleiben; was danach keine Zahl traegt, ist keine Vorlage.
-   Hoechstens ANF_VORLAGEN_MAX je Konto.
+   PRIVAT HEISST HIER AM KONTO (ENNO 16.09.2026, 5.7, Browser oder Konto:
+   "Am konto"): die Vorlagen liegen im eigenen Topf tpl:<spieler> = {v:
+   [{n, req}], t, by, n} (TOPFTAFEL tpl; Server warmap_may_write und
+   warmap_raum_leeren, Wanderung 2026-09-16_topf_tpl.sql) und folgen dem
+   Konto aufs Telefon. Bis zum 16.09.2026 lagen sie im localStorage je
+   Konto - wie die Filter-Vorlagen (ORDERS_FILTER) heute noch (5.48);
+   nichts wird umgezogen, das Tool wird bisher nicht genutzt (ENNO
+   16.09.2026, 5.28, S6). Eine Vorlage ist {n: Name, req: {at, cls}} wie
+   a.req und geht beim Lesen durch anfLesen, damit nur 1..99 und bekannte
+   Typen und Klassen stehen bleiben; was danach keine Zahl traegt, ist
+   keine Vorlage. Hoechstens ANF_VORLAGEN_MAX je Konto (~2 KB, weit unter
+   dem Deckel 18 000 des Topfs). VOR DEM ERSTEN ABRUF ist die Zeile leer
+   wie das Depot - wer dann speichert, schriebe eine Liste von einer ueber
+   die des Servers; darum bis dahin nichts (wie gruppenBereit).
    LADEN FUELLT NUR DIE FELDER. An den Pfeil schreibt weiter allein das
    Save des Fensters - hier wird nichts gespeichert und nichts neu
    gezeichnet, getippte Zahlen und die Klassenwahl bleiben stehen. */
-const ANF_VORLAGEN = "hng-warmap-anf-vorlagen", ANF_VORLAGEN_MAX = 20;
-const anfVorlagenKey = () => ANF_VORLAGEN + ":" + (S.me || "");
+const ANF_VORLAGEN_MAX = 20;
+const anfVorlagenBereit = () => !(CFG && !ersterAbrufDurch);
 function anfVorlagen(){
   try {
-    const l = JSON.parse(lies(anfVorlagenKey(), "[]") || "[]");
+    const e = S.tpl && S.tpl[S.me], l = e && e.v;
     if (!Array.isArray(l)) return [];
     return l.filter(v => v && typeof v.n === "string" && v.req && typeof v.req === "object")
       .map(v => ({n: v.n, req: anfLesen({req: v.req})}))
       .filter(v => Object.keys(v.req.at).length || Object.keys(v.req.cls).length);
   } catch (e){ return []; }
 }
-function anfVorlagenSchreiben(liste){ schreib(anfVorlagenKey(), JSON.stringify(liste)); }
+function anfVorlagenSchreiben(liste){
+  if (!anfVorlagenBereit()){ toast("Map still loading."); return false; }
+  const rein = (liste || []).filter(v => v && v.req).slice(0, ANF_VORLAGEN_MAX)
+    .map(v => ({n: String(v.n == null ? "" : v.n).slice(0, 40), req: v.req}));
+  if (!S.tpl) S.tpl = {};
+  if (!stamp("tpl", S.me, rein.length ? rein : null, {n: S.name || ""})) return false;
+  save();
+  return true;
+}
 /* die Eintraege des Auswahlfelds; der leere ist die Beschriftung */
 const anfVorlagenOptionen = name => `<option value="">Templates …</option>` + anfVorlagen().map((v, i) =>
   `<option value="${i}"${v.n === name ? " selected" : ""}>${esc(v.n)}</option>`).join("");
@@ -13687,6 +13669,7 @@ function anfVorlagenVerdrahten(){
     });
   });
   document.getElementById("a-anfv-save").addEventListener("click", ()=>{
+    if (!anfVorlagenBereit()){ toast("Map still loading."); return; }
     const req = anfFelderLesen();
     if (!req){ toast("Nothing to save."); return; }
     const liste = anfVorlagen();
@@ -13700,6 +13683,7 @@ function anfVorlagenVerdrahten(){
     sel.innerHTML = anfVorlagenOptionen(name);
   });
   document.getElementById("a-anfv-del").addEventListener("click", ()=>{
+    if (!anfVorlagenBereit()){ toast("Map still loading."); return; }
     const v = gewaehlt();
     if (!v) return;
     if (!confirm(`Delete the template "${v.n}"?`)) return;
@@ -14670,10 +14654,10 @@ function depotSchreiben(felder){
   const f = aktiveSeite();
   const hf = Object.assign({}, alt.hf);
   hf[f] = verlaufFort(alt, aufSeite(depotListe(liste), f), f);
-  /* Name, Kuerzel und die Marke "abgeschnitten" gehen MIT (ENNO
-     12.09.2026: "Vermutlich macht es keinen Sinn, die Namen zu verstecken.
-     Lass uns diese einfach mit an den Clan uebergeben."). namenAbstreifen
-     nimmt nur noch die gelesene Staerke heraus. */
+  /* Name, Kuerzel, die Marke "abgeschnitten" (ENNO 12.09.2026: "Vermutlich
+     macht es keinen Sinn, die Namen zu verstecken. Lass uns diese einfach
+     mit an den Clan uebergeben.") und seit dem 16.09.2026 die gelesene
+     Staerke gehen MIT; namenAbstreifen nimmt nichts mehr heraus. */
   /* TWO ROWS. Only the half this call actually touched is rewritten and
      queued - that is the point of the split. Changing one weapon used to
      push the whole team list back up as well, and the other way round.
@@ -51270,6 +51254,9 @@ function rangEditorHtml(o){
                   <span style="margin-left:6px">arrows ${rz(r, "arrow", g(r).arrow)} lines ${rz(r, "line", g(r).line)}
                     areas ${rz(r, "area", g(r).area)}</span>
                   <span style="margin-left:6px">promote at ${rz(r, "ab", r.ab)} points</span>
+                  <span>or at ${rz(r, "atn", r.atn)} teams of <select class="mini" data-rz="${esc(r.id)}"
+                    data-rzk="atk" style="font-size:11px"><option value="">any type</option>${
+                    MAP.at.map(a => `<option value="${esc(a.k)}" ${r.atk === a.k ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></span>
                 </div>`
               : (grenzeText(r)
                   ? `<div style="font-size:11px;color:var(--dim);margin-top:3px">${grenzeText(r)}</div>`
@@ -51313,7 +51300,11 @@ function rangEditorVerdrahten(feld, o){
   }));
   /* rank / group / arrows / lines / areas / promote at - one field per role;
      empty takes the field out of the row. Limits 0..999 (0 = no limit, as
-     markenGrenzen), rank 1..99, promote at 1..999999. 13.09.2026 */
+     markenGrenzen), rank 1..99, promote at 1..999999. 13.09.2026
+     5.14 (16.09.2026): "or at [atn] teams of [atk]" - atn 1..999, atk a
+     type key of MAP.at or empty (any type); the server counts the teams on
+     the clan's side in the player's depot (warmap_befoerdern_pruefen) and
+     promotes when ab OR atn is reached. */
   feld.querySelectorAll("[data-rz]").forEach(i => i.addEventListener("change", ()=>{
     const L = o.liste().map(r => ({...r}));
     const r = L.find(x => x.id === i.dataset.rz);
@@ -51321,11 +51312,12 @@ function rangEditorVerdrahten(feld, o){
     r.grenze = {...(r.grenze || {})};         // only this role gets a copy
     const k = i.dataset.rzk, w = i.value.trim();
     if (k === "von"){ if (w) r.von = w.slice(0, 12); else delete r.von; }
+    else if (k === "atk"){ if (w && AT[w]) r.atk = w; else delete r.atk; }
     else {
       const n = w === "" ? null : Math.round(+w);
       const ok = n !== null && Number.isFinite(n);
       if (MARKEN_GRENZE[k]){ if (ok && n >= 0 && n <= 999) r.grenze[k] = n; else delete r.grenze[k]; }
-      else if (ok && n >= 1 && n <= (k === "ab" ? 999999 : 99)) r[k] = n;
+      else if (ok && n >= 1 && n <= (k === "ab" ? 999999 : k === "atn" ? 999 : 99)) r[k] = n;
       else delete r[k];
     }
     if (!Object.keys(r.grenze).length) delete r.grenze;
@@ -51571,7 +51563,7 @@ function leuteZeichnen(liste){
                       <option value="" ${stdErlaubt ? "" : "disabled"}>— ${esc(standardRang() ? rangTitel(standardRang()) : "none")} —</option>
                       ${R.map((r, q) => (darfRollen || q >= meineHoehe) ? `<option value="${esc(r.id)}" ${r.id===ist?"selected":""}
                         >${esc(rangTitel(r))}</option>` : "").join("")}</select>${quelle === "auto"
-                    ? ` <span title="promoted by points" style="font-size:10px;color:var(--dim)">· points</span>` : ""}${darfRollen
+                    ? ` <span title="promoted by rule (points or teams)" style="font-size:10px;color:var(--dim)">· auto</span>` : ""}${darfRollen
                     ? ` <select data-fokusfuer="${esc(m.player)}" title="Focus" style="font-size:11px">
                         <option value="">— focus —</option>
                         ${ZWEIGWAHL.map(([k,n])=>`<option value="${k}" ${k===fokusVon(m.player)?"selected":""}>${esc(n)}</option>`).join("")}</select>`
@@ -51800,9 +51792,8 @@ function clanDialog(tab){
              draws its teams; the side is the one this tab looks at. Own
              groups are edited in the Depot window, not here. */
           const bl = aktiveSeite();
-          /* the tag: from the row; for S.me the local copy fills what the
-             row lacks (namenAn), as the depot window does */
-          const kz = (p, t) => (p.mine ? namenAn(t) : t).tag || "";
+          /* the tag: from the row (the only source, 16.09.2026) */
+          const kz = (p, t) => t.tag || "";
           const bloecke = leute.map(p => ({p, gr: gruppenVon(p.who)})).filter(x => x.gr.length);
           return `<h3 style="margin:18px 0 6px;font-size:11px;letter-spacing:.12em;
                    text-transform:uppercase;color:var(--dim2)">Groups</h3>
@@ -52618,7 +52609,6 @@ function kitWahl(host, art, ctx, beiWahl){
 /* ---------------- persistence, sharing, merging ---------------- */
 function load(){
   try { const s = localStorage.getItem(STORE); if (s) S = Object.assign(neu(), JSON.parse(s)); } catch(e){}
-  namenLaden();
 }
 function b64url(b){
   let s = "";
@@ -52644,7 +52634,7 @@ const SICHER_STORE = "hng-warmap-sicherung";
 function sicherungAnlegen(grund){
   try {
     localStorage.setItem(SICHER_STORE, JSON.stringify(
-      {t: jetzt(), grund, s: S, namen: eigenNamen}));
+      {t: jetzt(), grund, s: S}));
   } catch(e){}
 }
 function sicherungStand(){
@@ -52655,16 +52645,15 @@ function sicherungZurueck(){
   const o = sicherungStand();
   if (!o) return false;
   S = Object.assign(neu(), o.s, {me: S.me});
-  if (o.namen){ eigenNamen = o.namen; namenSichern(); }
   return true;
 }
 
 async function saveFile(){
-  /* Die oertliche Kopie der Kampfeinheiten-Namen faehrt mit: Name und
-     Kuerzel stehen in der Depotzeile (also in S), die gelesene Staerke
-     (st, stT, stO) liegt nur hier. Zurueck kommt aus _namen seit dem
-     16.09.2026 nur die Staerke (namenNurStaerke, 5.39). */
-  const text = JSON.stringify({...S, _namen: eigenNamen}, null, 1);
+  /* Everything of the own teams - name, tag, cut mark, read strength -
+     sits in the depot row, so in S; there is no local copy to carry
+     (16.09.2026, 5.39). An older file's _namen is dropped on import (merge
+     never takes it, replace deletes it). */
+  const text = JSON.stringify(S, null, 1);
   const host = (typeof claude !== "undefined" && claude.use) ? await claude.use("downloads") : null;
   if (host){
     try { await host.save({filename:"warmap.json", data:text}); closeDlg(); toast("Saved"); }
@@ -53127,7 +53116,6 @@ document.getElementById("b-war").addEventListener("click", ()=>{
       const entschaerft = importEntschaerfen(o);
       const {state, neuer} = merge(S, o);
       S = Object.assign(neu(), state, {me:S.me});
-      if (o._namen){ eigenNamen = Object.assign(eigenNamen, namenNurStaerke(o._namen)); namenSichern(); }
       /* Sonst steht der uebernommene Stand nur auf diesem Bildschirm: weder
          merge noch replace merkt etwas in dirty vor, und die Nachfuell-
          Schleife in syncStart laeuft nur bei !offenGeladen - seit dem
@@ -53146,8 +53134,8 @@ document.getElementById("b-war").addEventListener("click", ()=>{
       const o = await hole();
       if (!o){ toast("Paste a link or pick a file first."); return; }
       const entschaerftR = importEntschaerfen(o);
+      delete o._namen;   // an older file's browser copy (before 16.09.2026): nothing reads it, it does not ride along
       S = Object.assign(neu(), o, {me:S.me});
-      if (o._namen){ eigenNamen = Object.assign(eigenNamen, namenNurStaerke(o._namen)); namenSichern(); }
       const geteiltR = importVormerken();   // siehe IMPORT_TEILT
       after(); closeDlg();
       toast(`Replaced — ${geteiltR} map entries go out to the clan. `
@@ -53273,7 +53261,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build ee494255de</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 891a82174b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -53501,7 +53489,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "ee494255de";
+const BAU = "891a82174b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -53884,20 +53872,23 @@ async function syncPushInner(){
                    : tf.recht || "!sonst");
       continue;
     }
-    /* The database caps a row in BYTES - not in JavaScript characters,
-       where an umlaut counts as one and takes two.
-       Since 01.09.2026 the cap is per pot. A depot holds a whole player -
-       30 soldiers and up to 300 teams, measured at 41 382 bytes - and
-       could never fit under the flat 20 000, so depot: and anon: were
-       raised to 64 000 on the server. Every other pot stayed where it was,
-       because a blanket raise would have loosened all of them.
-       The numbers here sit below the server's, so the page stops first and
-       can say what happened. */
-    /* Each half on its own now: 30 soldiers come to 16 225 bytes, 300 teams
-       to 25 091. The caps sit above those and below the server's, so the
-       page stops first and can say what happened. */
+    /* The database caps a row in jsonb BYTES (pg_column_size, policies
+       warmap_insert / warmap_update): depot below 160 000 since 16.09.2026
+       (5.38, ENNO 16.09.2026: "Es koennen prinzipiell mehr als 290 ATs pro Spieler
+       vorliegen, daher muss das definitiv hoeher." - was 40 000; the old
+       comment here said 64 000, which was never true), sold and anon below
+       32 000, everything else below 20 000. The page measures TEXT bytes
+       (an umlaut counts one character and takes two bytes; jsonb takes
+       about 1,64 times the text) and stops first, so it can say what
+       happened: depot 90 000 (90 000 x 1,64 = 147 600 < 160 000), sold /
+       anon 28 000, the rest 18 000. Since 16.09.2026 the depot row also
+       carries the read strength of every team (st, stT, stO - S5); the
+       worst case of 300 teams - the longest type keys, full names, tags,
+       cut marks, strengths and three full histories - measures 64 936 text
+       bytes (Cyrillic names 73 936), well under the 90 000. TEAM_MAX 300
+       stays. */
     const deckel = (bucket === "sold" || bucket === "anon") ? 28000
-                 : bucket === "depot"                       ? 36000
+                 : bucket === "depot"                       ? 90000
                  : 18000;
     if (byteLaenge(JSON.stringify(val)) > deckel){
       dirty.delete(k);
