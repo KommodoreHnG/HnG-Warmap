@@ -254,6 +254,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 #b-sync{display:flex;align-items:center;gap:6px}
 #b-sync .dot{width:7px;height:7px;border-radius:50%;background:var(--dim2);flex:0 0 auto}
+#b-sync .als{margin-left:-3px}                        /* T3: "as <name>" - the flex gap of 6 px is twice a word space */
+#b-sync .als:empty{display:none}                       /* only while signed in */
 #b-sync[data-state="ok"] .dot{background:var(--us)}
 #b-sync[data-state="err"] .dot{background:var(--su)}
 #b-sync[data-state="wait"] .dot{background:var(--accent)}
@@ -2050,6 +2052,10 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
      wo der PC steht. Und "Sync" ist der Knopf, mit dem man sich ueberhaupt
      erst mit dem Raum verbindet. Beide waren nur ein Kreis und ein Punkt. */
   #top-right #b-radar .txt,#top-right #b-sync .txt{display:inline;font-size:11px}
+  /* T3: "Signed in" without the name - the gear must stay on a 375 px
+     screen (measured: the old label 93 px, "Signed in as Kommodore" 190,
+     "Sign in" and "Signed in" about 96) */
+  #top-right #b-sync .als{display:none}
   #top-right #b-radar{background:linear-gradient(180deg,#e8b856,#c8912f);
     color:#1a1204;border-color:#8a5f16;font-weight:600;padding:7px 10px;order:-1}
   #top-right #b-radar svg{stroke:#1a1204}
@@ -2416,7 +2422,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn danger" id="b-reset" style="display:none">Start a new war …</button>
       <div id="menubar"></div>
       <button class="btn" id="b-burger" aria-label="Menu" aria-expanded="false">☰</button>
-      <button class="btn" id="b-sync"><span class="dot"></span><span class="txt">Sync off</span></button>
+      <button class="btn" id="b-sync"><span class="dot"></span><span class="txt">Sign in</span><span class="als"></span></button>
       <button class="btn" id="b-members" style="display:none"
         title="Hand out codes and manage who is in this room">Members</button>
       <!-- Holt die Seite wirklich vom Server statt aus dem Zwischenspeicher
@@ -2538,9 +2544,9 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <!-- The Aufmarsch, next to the binoculars: both live off what was last
            seen - this one shows WHAT stood there, not only WHEN. -->
       <button class="tool row" id="b-aufmarsch" aria-pressed="false"
-        title="Aufmarsch — what was last seen in each town: sightings, enemy records and own teams; ring coloured by side and sized by count, the outer ring says how fresh (green under an hour, red older than two days).">
+        title="Last seen — sightings, enemy records and own teams in each town; ring coloured by side and sized by count, the outer ring says how fresh (green under five minutes, red after an hour).">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.1" fill="currentColor" stroke="none"/><path d="M12 3.4a8.6 8.6 0 0 1 8.6 8.6"/><path d="M20.6 12a8.6 8.6 0 0 1-8.6 8.6" stroke-dasharray="2.6 2.6"/><path d="M12 20.6A8.6 8.6 0 0 1 3.4 12"/></svg>
-        <span class="lbl" data-txt="view.aufmarsch">Aufmarsch</span></button>
+        <span class="lbl" data-txt="view.aufmarsch">Last seen</span></button>
       <button class="tool row" id="b-names" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M4.4 7.6V5.2h15.2v2.4"/><path d="M12 5.2v13.6"/><path d="M8.9 18.8h6.2"/></svg>
         <span class="lbl" data-txt="view.names">Labels</span></button>
@@ -11883,6 +11889,7 @@ function draw(){
       ctx.textAlign = "center";
     }
   }
+  clanPinsZeichnen(rAussen);              // T3: the clan pin at every town with own teams, above the stack
 
   /* --- board notes pinned to a town --- */
   const angeheftet = new Map();
@@ -52389,14 +52396,18 @@ function setWunsch(text, zweige){
    Geblieben ist der Bilduebergabeweg darunter. Wer kein Bild hochlaedt,
    bekommt sein Kuerzel in einem schlichten Feld - das braucht keine
    Wappendaten und unterscheidet die Clans immer noch voneinander. */
-function kuerzelFeld(c, gr = 34){
+/* Die Farbe aus dem Kuerzel selbst, damit zwei Clans nebeneinander
+   nicht gleich aussehen - dieselbe Eingabe ergibt immer dieselbe
+   Farbe, ohne dass irgendwo etwas gespeichert werden muss. One rule for
+   the field on the board and the pin on the map (T3). */
+function kuerzelVon(c){
   const t = String((c && (c.tag || c.name)) || "?").trim().slice(0, 2).toUpperCase();
-  /* Die Farbe aus dem Kuerzel selbst, damit zwei Clans nebeneinander
-     nicht gleich aussehen - dieselbe Eingabe ergibt immer dieselbe
-     Farbe, ohne dass irgendwo etwas gespeichert werden muss. */
   let h = 0;
   for (let i = 0; i < t.length; i++) h = (h*31 + t.charCodeAt(i)) & 255;
-  const ton = 20 + (h * 340 / 255);
+  return {t, ton: 20 + (h * 340 / 255)};
+}
+function kuerzelFeld(c, gr = 34){
+  const {t, ton} = kuerzelVon(c);
   return `<div style="width:${gr}px;height:${gr}px;flex:none;border-radius:3px;
     background:hsl(${ton.toFixed(0)} 32% 26%);border:1px solid hsl(${ton.toFixed(0)} 32% 38%);
     display:flex;align-items:center;justify-content:center;
@@ -52505,6 +52516,123 @@ function abzVerkleinern(datei){
     };
     leser.readAsDataURL(datei);
   });
+}
+
+/* ---- THE CLAN PIN (ToDo 16.9., T3 - ENNO 18.09.2026: "Ueberall dort,
+   wo Clanmitglieder ihre eigenen ATs melden, bzw. platzieren soll ein
+   kleiner Pin sitzen, in dessen oberen Bereich ein runder Ausschnitt des
+   Clan-Logos enthalten ist. [...] Primaer geht es jetzt erstmal darum,
+   dass man auf einen Schlag sehen kann, wo die anderen sind.")
+   The register is read ONCE after sign-in (verzeichnisLaden, the same RPC
+   the "Other clans" tab uses) and again when the leader saves the clan
+   card. Every clan in it gets a round pin picture (clanPinBauen): the
+   logo when it passes LOGO_FORM - what comes from the database is foreign
+   matter, checked before it is drawn - else the tag on a disc with the
+   colour rule of kuerzelFeld. The pictures sit in clanPinBilder by the
+   clan's key (room); the own clan is the row with `ich`, its key in
+   clanPinEigen. Other clans later: the same place, only the key (his
+   "bei spaeterer Integration mit anderen Clans"). Without a register
+   (not signed in, clan not listed) the pin carries the tag of clanName().
+   The picture is a 48 px canvas, cut round once here - draw() does ONE
+   drawImage per pin and computes nothing per frame (the lesson of 5.71). */
+let verzeichnisCache = null, clanPinEigen = "";
+const clanPinBilder = new Map();
+const PIN_PX = 48;
+async function clanPinBauen(c){
+  const cv2 = document.createElement("canvas");
+  cv2.width = cv2.height = PIN_PX;
+  const k = cv2.getContext("2d");
+  k.beginPath(); k.arc(PIN_PX/2, PIN_PX/2, PIN_PX/2, 0, 6.2832); k.clip();
+  let bild = null;
+  if (c && typeof c.logo === "string" && LOGO_FORM.test(c.logo))
+    bild = await new Promise(f => { const im = new Image(); im.onload = () => f(im); im.onerror = () => f(null); im.src = c.logo; });
+  const {t, ton} = kuerzelVon(c);
+  if (bild){
+    k.imageSmoothingQuality = "high";
+    const q = Math.min(bild.width, bild.height) || 1;
+    k.drawImage(bild, (bild.width - q)/2, (bild.height - q)/2, q, q, 0, 0, PIN_PX, PIN_PX);
+  } else {
+    k.fillStyle = `hsl(${ton.toFixed(0)} 32% 26%)`; k.fillRect(0, 0, PIN_PX, PIN_PX);
+    k.strokeStyle = `hsl(${ton.toFixed(0)} 32% 38%)`; k.lineWidth = 4;
+    k.beginPath(); k.arc(PIN_PX/2, PIN_PX/2, PIN_PX/2 - 1, 0, 6.2832); k.stroke();
+    k.fillStyle = "#e6ecf4"; k.textAlign = "center"; k.textBaseline = "middle";
+    k.font = `600 ${Math.round(PIN_PX*0.42)}px ui-monospace,Consolas,monospace`;
+    k.fillText(t, PIN_PX/2, PIN_PX/2 + 1);
+  }
+  return {bild: cv2, logo: !!bild, tag: t};
+}
+/* the picture for a clan key; without one, the tag of this room (built
+   once, rebuilt when the clan's name changes) */
+function clanPinVon(key){
+  const p = key ? clanPinBilder.get(key) : null;
+  if (p) return p;
+  const t = kuerzelVon({tag: clanName()}).t, alt = clanPinBilder.get("");
+  if (alt && alt.tag === t) return alt;
+  if (alt && alt.bau) return alt;                       // on its way
+  const platz = {bild: null, logo: false, tag: t, bau: true};
+  clanPinBilder.set("", platz);
+  clanPinBauen({tag: clanName()}).then(p2 => { clanPinBilder.set("", p2); draw(); }).catch(() => { clanPinBilder.delete(""); });
+  return alt || platz;
+}
+async function verzeichnisUebernehmen(liste){
+  verzeichnisCache = Array.isArray(liste) ? liste : null;
+  const meiner = (verzeichnisCache || []).find(c => c && c.ich) || null;
+  for (const c of (verzeichnisCache || [])){
+    if (!c || !c.room) continue;
+    try { clanPinBilder.set(String(c.room), await clanPinBauen(c)); } catch(e){}
+  }
+  clanPinEigen = meiner ? String(meiner.room || "") : "";
+  draw();
+}
+/* Silent on failure, like vorgabeLaden: the map shows the teams anyway,
+   the pin only says whose they are. */
+async function verzeichnisLaden(){
+  if (!CFG || !CFG.code) return;
+  let liste = null;
+  try { liste = await rpc("warmap_verzeichnis"); } catch(e){ return; }
+  await verzeichnisUebernehmen(liste);
+}
+/* draw(), after the stack: a pin at every town where a member of this
+   room has own teams standing (unitIdx - NOT at sightings or enemy
+   records, SOLL-5). Needle of 16 style points with a round head of
+   radius 6, the tip 2 points above the highest piece at the town (the own
+   count, the plate chain in plattenKante, the stack boxes in stapelVon);
+   style = uiScale, growing with the zoom like the stack's plate. From
+   z > 0,8, like the stack's number. One path and one drawImage per pin. */
+function clanPinsZeichnen(rAussen){
+  const z = view.z;
+  if (!(z > .8) || !unitIdx.size) return;
+  const WW = cv.width/dpr, HH = cv.height/dpr;
+  const s = uiScale*Math.max(1, 0.8*Math.sqrt(z));
+  const R = 6*s, H = 16*s, rand = 1.2*s, zahl = Math.max(9, 8*Math.sqrt(z))*uiScale + 2;
+  const pin = clanPinVon(clanPinEigen);
+  const w0 = 0.6435, w1 = Math.PI - 0.6435;         // where the needle meets the head (cos = 6/10)
+  ctx.save();
+  ctx.setLineDash([]); ctx.lineJoin = "round"; ctx.globalAlpha = 1;
+  ctx.lineWidth = 1.4*s; ctx.strokeStyle = "rgba(5,8,12,.9)"; ctx.fillStyle = "#f3ecd8";
+  for (const [town, gruppen] of unitIdx){
+    let teams = 0;
+    for (const g of gruppen) for (const u of g.list) teams += u.s || 0;
+    if (!teams) continue;
+    const n = MAP.n[town];
+    if (!n) continue;
+    const [x, y] = toScr(n[1], n[2]);
+    if (x < -40 || y < -40 || x > WW+40 || y > HH+40) continue;
+    let fuss = y - rAussen(town) - 4 - zahl;
+    const decke = plattenKante.get(town);
+    if (decke !== undefined && decke - 1 < fuss) fuss = decke - 1;
+    const kaesten = stapelVon.get(town);
+    if (kaesten) for (const k of kaesten) if (k.y0 < fuss) fuss = k.y0;
+    const spitze = fuss - 2*s, cy = spitze - H + R;
+    ctx.beginPath();
+    ctx.moveTo(x, spitze);
+    ctx.lineTo(x + 0.8*R, cy + 0.6*R);
+    ctx.arc(x, cy, R, w0, w1, true);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    if (pin && pin.bild) ctx.drawImage(pin.bild, x - (R - rand), cy - (R - rand), 2*(R - rand), 2*(R - rand));
+  }
+  ctx.restore();
 }
 
 /* ---- Der Reiter "Other clans" ----
@@ -52648,6 +52776,7 @@ async function clansFuellen(){
         p_logo:  bild});
       toast("Your clan card is up to date");
       clansFuellen();
+      verzeichnisLaden();                // T3: the pin follows the new logo
     } catch(e){
       /* Erst warten, dann melden. Frueher stand die Erfolgsmeldung im Code
          VOR der Antwort und lief auch bei einer Abweisung durch. */
@@ -54270,7 +54399,7 @@ document.getElementById("b-radar").addEventListener("click", radarAuf);
 const IMPORT_HTML = `
       <details style="margin-top:12px">
         <summary style="cursor:pointer;font-size:12px;color:var(--dim)">Load a shared state …</summary>
-        <div class="note" style="margin:6px 0">Only needed without live sync. <b>Merge</b> keeps
+        <div class="note" style="margin:6px 0">Only needed when not signed in. <b>Merge</b> keeps
           both sides, the newer edit per town wins.</div>
         <textarea id="in-link" placeholder="Paste a shared link …" style="min-height:56px"></textarea>
         <div class="row"><input type="file" id="in-file" accept=".json,application/json"
@@ -54735,7 +54864,7 @@ document.getElementById("b-war").addEventListener("click", ()=>{
                + (offen ? `${offen} change${offen === 1 ? "" : "s"} here ${offen === 1 ? "has" : "have"} `
                         + `not reached the server yet and will be lost.\n\n` : "")
                + "Depots, the arsenal, the player "
-               + "list and the enemy depot are kept. With live sync on, the rest comes back from "
+               + "list and the enemy depot are kept. Signed in, the rest comes back from "
                + "the server on the next connect.")) return;
     sicherungAnlegen("forget local copy");
     const behalten = {};
@@ -54778,7 +54907,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 2211081106</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 46c7553987</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -54865,8 +54994,8 @@ function hilfeDialog(){
           depots, arsenals and soldiers, members, ranks and roles, points, notes, and who is at the
           map right now. Every row carries who wrote it and when.</div>
         <div class="note"><b>It goes to one server: your clan's room.</b> ${hatBuiltin()
-            ? "Its address is built into this page — live sync asks only for your invite code."
-            : "Its address is the project URL you enter under live sync."} Nothing goes to the
+            ? "Its address is built into this page — signing in asks only for your invite code."
+            : "Its address is the project URL you enter when signing in."} Nothing goes to the
           game, to Reto-Moto or to a third party. The text recogniser is no exception: it sits in a
           folder beside this page, is fetched only when text is actually read, and costs about
           45 MB the first time.</div>
@@ -55006,7 +55135,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "2211081106";
+const BAU = "46c7553987";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -55068,10 +55197,18 @@ const heads = extra => {
   if (/^eyJ/.test(CFG.key)) h["Authorization"] = `Bearer ${CFG.key}`;
   return Object.assign(h, extra || {});
 };
-function syncMark(text, kind){
+/* T3 (ENNO 18.09.2026 asked what "Live sync" is): the button says
+   whether this browser is signed in, and as whom. The name sits in its own
+   span (.als) so that the phone can drop it - "Signed in as Kommodore" is
+   twice as wide as the old label and pushed the gear off a 375 px screen;
+   every other state clears it. */
+function syncMark(text, kind, als){
   const b = document.getElementById("b-sync");
   b.dataset.state = kind; b.querySelector(".txt").textContent = text;
+  const a = b.querySelector(".als");
+  if (a) a.textContent = als || "";
 }
+const angemeldetZeigen = () => syncMark("Signed in", "ok", ` as ${(CFG && (CFG.name || S.name || S.me)) || "…"}`);   // the leading space: the button reads "Signed in as X" as text too
 /* ---- Zeitstempel aus der Zukunft --------------------------------------
    Jeder Zeitstempel kommt vom Rechner dessen, der schreibt, und die
    Zusammenfuehrung ist "neuester gewinnt". Eine Zeile mit dem Jahr 2100
@@ -55300,7 +55437,7 @@ async function syncPull(){
       toast(`${zukunftGesehen} entr${zukunftGesehen===1?"y was":"ies were"} dated in the `
           + `future and set back to now. Either a clock is wrong, or somebody faked a date.`);
     }
-    syncMark(n ? `+${n}` : "Live", "ok");
+    if (n) syncMark(`+${n}`, "ok"); else angemeldetZeigen();
   } catch(e){ syncMark("Offline", "err"); }
   finally { pulling = false; }
 }
@@ -55475,7 +55612,7 @@ async function syncPushInner(){
       await senden(teil);
       teil.forEach((_, j) => abhaken(ab + j));
     }
-    syncMark("Live", "ok");
+    angemeldetZeigen();
   } catch(e){
     gescheitert = e;
   }
@@ -55516,12 +55653,12 @@ async function syncPushInner(){
       toast(`The server refused ${weg} entr${weg === 1 ? "y" : "ies"} (${welche}). `
           + `${weg === 1 ? "It stays" : "They stay"} on your screen only. `
           + `Usually that means you do not have the right for it.`);
-    } else syncMark(durch ? "Live" : "Offline", durch ? "ok" : "err");
+    } else if (durch) angemeldetZeigen(); else syncMark("Offline", "err");
   }
 }
 async function syncStart(){
   if (syncTimer) clearInterval(syncTimer);
-  if (!CFG){ syncMark("Sync off", "off"); return; }
+  if (!CFG){ syncMark("Sign in", "off"); return; }
   syncMark("Connecting", "wait");
   let ich;
   try {
@@ -55611,6 +55748,7 @@ async function syncStart(){
   /* the operator's flag and the default for every clan (13.09.2026): both
      asked in the background, the page does not wait for them */
   betreiberPruefen(); vorgabeLaden();
+  verzeichnisLaden();                    // T3: the clan pins' pictures, once per sign-in
   /* Hat dieser Mensch schon einmal ein Passwort vergeben? Das entscheidet
      auf einem ZWEITEN Geraet darueber, ob nach dem alten gefragt wird oder
      ein neues vergeben werden darf - ein neues verriegelt alles, was unter
@@ -55825,7 +55963,7 @@ function syncStop(){
   if (syncTimer) clearTimeout(syncTimer);
   syncTimer = null; CFG = null;
   localStorage.removeItem(CFG_KEY);
-  syncMark("Sync off", "off"); mitgliederKnopf();
+  syncMark("Sign in", "off"); mitgliederKnopf(); clanPinEigen = ""; verzeichnisCache = null;   // T3: the pin falls back to the tag until the next sign-in
 }
 /* ZURUECKKEHREN HOLT SOFORT NACH. Ohne das saehe jemand, der zum Fenster
    zurueckwechselt, bis zu dreissig Sekunden lang einen alten Stand - und
@@ -55852,8 +55990,8 @@ document.getElementById("b-sync").addEventListener("click", ()=>{
         style="width:100%;margin-top:3px;background:var(--panel2);border:1px solid var(--line);
           border-radius:var(--r);padding:6px 7px;outline:0"></label>`;
   openDlg(`
-    <div class="dlg-h"><h2>Live sync</h2>
-      <p>${CFG ? `Connected as <b>${esc(CFG.name || S.name || S.me)}</b>${CFG.admin?" (admin)":""}.`
+    <div class="dlg-h"><h2>Sign in</h2>
+      <p>${CFG ? `Signed in as <b>${esc(CFG.name || S.name || S.me)}</b>${CFG.admin?" (admin)":""}.`
                : "Enter the invite code you were given."}</p></div>
     <div class="dlg-b">
       ${/* Der eigene Code stand hier frueher offen im Feld - ein Blick ueber
@@ -55957,7 +56095,7 @@ const einladungsText = (name, code) =>
   `${clanName()} — Lagekarte\n`
   + `${location.origin}${location.pathname}\n\n`
   + `Dein persoenlicher Code: ${code}\n\n`
-  + `Oben rechts auf "Sync off" klicken, den Code eintragen, Connect.\n`
+  + `Oben rechts auf "Sign in" klicken, den Code eintragen, Connect.\n`
   + `Der Code ist nur fuer dich — nicht weitergeben, nicht oeffentlich posten.`;
 
 document.getElementById("b-members").addEventListener("click", ()=>mitgliederDialog());
@@ -56252,7 +56390,7 @@ async function mitgliederDialog(meldung){
     else torZeigen();
   }
   else {
-    if (CFG) syncStart(); else syncMark("Sync off", "off");
+    if (CFG) syncStart(); else syncMark("Sign in", "off");
     /* Zuletzt, damit die Karte dahinter schon steht. */
     if (!beigetreten()) setTimeout(beitrittDialog, 400);
   }
