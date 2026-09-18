@@ -5684,6 +5684,66 @@ function setClanBefehl(txt){
   stamp("meta", "befehl", String(txt || "").trim() || null, {n: S.name || ""});
   save(); kopfzeile();
 }
+/* WITHHOLD - THE LEADER'S ORDER FOR A WHOLE WAR (ToDo 16.9.2026, T11 - ENNO
+   18.09.2026: "„Withhold“ = Für den gesamten Krieg ist das Einsetzen der
+   eigenen Kampfeinheiten zu unterlassen, bzw. wird nicht empfohlen.
+   Lediglich zur Aufklärung können Aufklärungsaufträge vergeben werden.").
+   No map order, one state row meta:withhold = {v: {an: 1, t, by}} - the
+   server lets only the leader write it (warmap_may_write: meta:% ->
+   warmap_fuehrt). It holds while the row is younger than the war's cut
+   (imKrieg): a new war lifts it by itself, meta rows survive the cut.
+   Effect while it stands: the tile in the top bar (tally), the drawing
+   tools for attack, defence line, planned para-block and area are dimmed
+   for the clan's own side (withholdSperrt - another side's arrow is a
+   sighting and stays drawable, that is recon), a fresh para-block of our
+   side is not saved, and setting a team out of the depot asks ONCE per
+   session (withholdPlatzierenOk) - a hint, not a bar: his "bzw. wird nicht
+   empfohlen" (FABLE, Offen 5). Recon requests and role requests stay.
+   Running orders stay as they are - the leader ends them himself. */
+const withholdSteht = () => { const e = S.meta.withhold; return !!(e && e.v && e.v.an && imKrieg(e)); };
+/* "Withhold since 18.09. · <name>" - the one line every window shows */
+const withholdSeit = () => {
+  const e = S.meta.withhold;
+  if (!e) return "";
+  const d = new Date((e.v && e.v.t) || e.t || 0);
+  const dd = String(d.getDate()).padStart(2, "0"), mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `Withhold since ${dd}.${mm}. \u00b7 ${e.by === S.me ? (S.name || "you") : (e.n || e.by || "?")}`;
+};
+const withholdAbsatz = () => withholdSteht() ? `<p><b style="color:var(--accent)">${esc(withholdSeit())}</b></p>` : "";
+function setWithhold(an){
+  if (!istLeader()) return false;
+  if (!stamp("meta", "withhold", an ? {an: 1, t: jetzt(), by: S.me} : null, {n: S.name || ""})) return false;
+  save(); tally(); werkzeugeAuffrischen();
+  toast(an ? "Withhold set" : "Withhold lifted");
+  return true;
+}
+/* the tools that CREATE an order of our side; T15 appends "gather" here */
+const WITHHOLD_WERKZEUGE = ["arrow", "line", "para", "area"];
+/* does withhold bar this tool right now? Only for the clan's own side:
+   drawn for another side the same tools record sightings. */
+const withholdSperrt = t => withholdSteht() && WITHHOLD_WERKZEUGE.includes(t) && faction === clanFaktion();
+const WITHHOLD_TIPP = `<b>Withhold</b> \u00b7 `;
+/* the top-bar tile, while it stands */
+function withholdKachel(){
+  if (!withholdSteht()) return "";
+  return `<div class="tile" id="withhold-tile" style="--f:var(--accent)" title="${esc(withholdSeit())}">
+      <span class="k">withhold</span><span class="v">\u2298</span>
+      <span class="u">no combat teams this war</span></div>`;
+}
+/* SETTING A TEAM OUT OF THE DEPOT ASKS ONCE PER SESSION. Yes is remembered
+   for this withhold row (a lifted and re-set withhold asks anew, E6); No
+   refuses and asks again at the next grip - a whole batch of the depot
+   reader after one No is refused without asking each team. */
+let withholdJa = 0, withholdNein = 0, withholdGezeigt = false;
+function withholdPlatzierenOk(){
+  if (!withholdSteht()) return true;
+  const t = (S.meta.withhold.v && S.meta.withhold.v.t) || S.meta.withhold.t || 0;   // v.t: the server restamps only the row's t
+  if (withholdJa === t) return true;
+  if (jetzt() - withholdNein < 1500) return false;
+  if (confirm("Withhold stands \u2013 place anyway?")){ withholdJa = t; return true; }
+  withholdNein = jetzt();
+  return false;
+}
 /* Wer die Karte allein benutzt, darf alles - sonst koennte niemand anfangen.
    Mit Anschluss entscheidet der Zugangscode. */
 /* ---- Zwei Aemter ------------------------------------------------------
@@ -8046,6 +8106,7 @@ function ordersDialog(tab){
 
   openDlg(`
     <div class="dlg-h"><h2>Orders</h2>
+      ${withholdAbsatz()}
       <p>${teams.length ? `<b>${teams.length}</b> team${teams.length === 1 ? "" : "s"}, <b>${frei}</b> free${
         wartend ? `, <b>${wartend}</b> waiting for your word` : ""}.` : "No teams in your depot yet."}
         <b>${offen.length}</b> open order${offen.length === 1 ? "" : "s"} on our side.${
@@ -15131,6 +15192,7 @@ function paraDialog(i){
   let seite = pb ? pb.f : clanFaktion();
   openDlg(`
     <div class="dlg-h"><h2>Para-block \u00b7 ${esc(MAP.n[i][0])}</h2>
+      ${fremd ? "" : withholdAbsatz()}
       <p>${pb ? zustandText(key, pb, e && (e.n || e.by)) : "No block here yet."}</p>
       ${pb && !fremd ? streckeAbsatz(b) : ""}
       ${fremd ? "" : `<p>${paraTextSicher(() => paraErfuellbarText(luftTypen().map(t => t.k), {art: "para", id: i}))}</p>`}
@@ -15192,6 +15254,10 @@ function paraDialog(i){
     const prioEl = document.getElementById("pd-prio");
     const prio = prioEl ? befehlPrio({prio: prioEl.value}) : (pb ? pb.prio : undefined);
     if (seite === null){ if (pb) setPara(i, null, false); closeDlg(); if (sel === i) side(); draw(); tally(); return; }
+    /* T11: no NEW PLANNED block of our side while withhold stands; an active
+       block reports what stands (like the tool), one that already stands is
+       edited as before, another side's is a sighting */
+    if (!pb && plan && withholdSteht() && seite === clanFaktion()){ toast("Withhold stands."); return; }
     if (!setPara(i, seite, plan, {label, soll: soll || undefined, farbe: farbe || undefined, prio})) return;
     closeDlg(); if (sel === i) side(); draw(); tally(); toast("Saved");
   });
@@ -15816,6 +15882,9 @@ function deployTeam(town, id){
   if (!team) return false;
   const alt = townOfTeam(id);
   if (alt === town) return false;
+  /* T11: set out of the depot under withhold - asked once per session, a
+     hint and no bar; a march from town to town is no placing (DEP-3 A4) */
+  if (alt === null && !kannAufklaeren(team.k) && !withholdPlatzierenOk()) return false;   // scouts go out: "Lediglich zur Aufklaerung"
   /* DEP-3 A4 (FABLE 15.09.2026): a march from town to town is no placing -
      in the game a team joins the queue when it is set out of the depot, not
      when it moves. The queue mark (q, qt) travels with the entry; the
@@ -16794,8 +16863,9 @@ function werkzeugeAuffrischen(){
   document.querySelectorAll(".tool[data-t]").forEach(b => {
     const r = WERKZEUG_RECHT[b.dataset.t];
     const zu = !!r && !darf(r);
-    b.disabled = zu;
-    b.title = zu ? rechtSatz(r) : (b.dataset.tip || "");
+    const wh = !zu && withholdSperrt(b.dataset.t);         // T11: no new orders of our side
+    b.disabled = zu || wh;
+    b.title = zu ? rechtSatz(r) : wh ? "Withhold" : (b.dataset.tip || "");
   });
   /* UND NICHT AM TOTEN WERKZEUG KLEBEN BLEIBEN. Faellt das Recht fuer das
      gerade gewaehlte weg - der Leiter stellt Rollen um, waehrend jemand die
@@ -16804,7 +16874,10 @@ function werkzeugeAuffrischen(){
      am unteren Rand, und der Klick auf die Karte liefe in den stillen
      Riegel. Inspect zeigt nur an und braucht nie ein Recht. */
   const jetztRecht = WERKZEUG_RECHT[tool];
-  if (jetztRecht && !darf(jetztRecht)) setTool("inspect");
+  if ((jetztRecht && !darf(jetztRecht)) || withholdSperrt(tool)) setTool("inspect");
+  /* the state line follows a withhold that came or went with a pull */
+  const whJetzt = withholdSteht();
+  if (whJetzt !== withholdGezeigt){ withholdGezeigt = whJetzt; tips(); }
 }
 function setTool(t){
   /* DIE ERSTE LINIE. Die Vorgabe: wer etwas nicht darf, soll die Option
@@ -16816,6 +16889,7 @@ function setTool(t){
   if (t === "op"){ opDialog(null); return; }
   const noetig = WERKZEUG_RECHT[t];
   if (noetig && !darf(noetig)) return darfNicht(noetig);
+  if (withholdSperrt(t)){ toast("Withhold stands."); return false; }   // T11: the number keys run through here too
   /* UND die Menge, schon hier. Sonst erfaehrt man es erst NACH der Arbeit:
      man zieht eine Linie ueber zwanzig Staedte, laesst los, und sie ist
      weg. Dieselbe Vorgabe wie bei den Rechten, nur auf Mengen angewandt -
@@ -17082,6 +17156,7 @@ function setFaction(f){
   faktionSelbstGewaehlt = true;   // ab jetzt nicht mehr nachziehen
   document.querySelectorAll(".fac").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.f === f)));
   tips(); if (sel !== null) side();
+  werkzeugeAuffrischen();          // T11: withhold dims for our side only
   draw();                          // die Farbe des halben Befehls haengt daran
 }
 /* THE OWN SIDE STANDS FIRST. The buttons are drawn again once the clan's
@@ -17127,6 +17202,7 @@ function tips(){
               : "<b>Clear</b> — removes your own teams and arrows here. "
               + "Control and battles stay as they are."
   }[tool];
+  if (withholdSteht()) document.getElementById("tip").insertAdjacentHTML("afterbegin", WITHHOLD_TIPP);   // T11
   document.getElementById("tip-rueck")?.addEventListener("click", pinselZurueck);
 }
 document.getElementById("b-obj").addEventListener("click", function(){
@@ -18169,7 +18245,8 @@ function tally(){
       <span class="u">of ${MAP.n.length}</span></div>`
     + (kampf ? `<div class="tile" style="--f:var(--accent)">
       <span class="k">battles</span><span class="v">${kampf}</span>
-      <span class="u">contested</span></div>` : "");
+      <span class="u">contested</span></div>` : "")
+    + withholdKachel();                                    // T11: while the leader's withhold stands
 }
 
 /* ---------------- side panel ---------------- */
@@ -18742,6 +18819,7 @@ function arrowDialog(a, frisch){
   const anfW = fremd ? "" : anfText(a);
   openDlg(`
     <div class="dlg-h"><h2>${esc(MAP.n[a.from][0])} → ${esc(MAP.n[a.to][0])}</h2>
+      ${fremd ? "" : withholdAbsatz()}
       ${frisch ? "" : `<p>${zustandText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>`}
       ${fremd || frisch ? "" : streckeAbsatz({art: "arrow", id: a.id, v: a})}
       ${!fremd && a.luft ? `<p>${paraTextSicher(paraVorratText)}</p>` : ""}
@@ -42003,6 +42081,7 @@ function areaDialog(id, e, neuGezogen){
   const a = e.v, meins = e.by === S.me, fremd = fremdeSeite(a);   // another side's area is a sighting
   openDlg(`
     <div class="dlg-h"><h2>${a.aufkl ? "Reconnaissance \u00b7 " + esc(aufklZiele(a)) : (neuGezogen ? "What is in there?" : "Marked area")}</h2>
+      ${fremd || a.aufkl ? "" : withholdAbsatz()}
       ${neuGezogen && !a.aufkl ? "" : `<p>${zustandText(id, a, e.n || e.by) + " · " + alterText(e.t)}</p>`}${
       fremd || neuGezogen ? "" : streckeAbsatz({art: "area", id, v: a})}${
       a.aufkl && !fremd ? aufklFensterZeilen(a, id) : ""}</div>
@@ -42112,6 +42191,7 @@ function lineDialog(id, e){
   const l = e.v, fremd = fremdeSeite(l);   // another side's line is a sighting
   openDlg(`
     <div class="dlg-h"><h2>${istEinzelLinie(l) ? "Defence" : "Defence line"}</h2>
+      ${fremd ? "" : withholdAbsatz()}
       <p>${zustandText(id, l, e.n || e.by)}</p>
       ${fremd ? "" : streckeAbsatz({art: "line", id, v: l})}
       <p>${istEinzelLinie(l) ? "Single city" : l.pts.length + " towns"} · ${alterText(e.t)}</p></div>
@@ -52765,6 +52845,19 @@ function clanDialog(tab){
                 <button class="btn" id="cl-bf-clear" style="font-size:11px">Clear</button></div>`
               : `<div class="note" style="font-size:11px">Only the clan leader writes these.</div>`}
           </div>
+          ${(leiter || withholdSteht()) ? (() => {
+            /* T11 Withhold: the leader's switch for the whole war; while it
+               stands, everybody sees the line. Nothing set and no leader:
+               nothing to show. */
+            const wh = withholdSteht();
+            return `<div style="border-top:1px solid var(--line);margin-top:11px;padding-top:9px">
+            <div style="font-size:12px;color:var(--dim);margin-bottom:5px">Withhold</div>
+            ${wh ? `<div style="border-left:3px solid var(--accent);padding:6px 10px;
+                background:var(--panel2);border-radius:var(--r);font-size:13px">${esc(withholdSeit())}</div>`
+                 : `<div style="font-size:11px;color:var(--dim2)">Nothing set.</div>`}
+            ${leiter ? `<div class="row"><button class="btn" id="cl-withhold">${wh ? "Lift withhold" : "Withhold this war"}</button></div>` : ""}
+          </div>`;
+          })() : ""}
           <div class="note">The side sets which depot is shown, what the <b>Arsenal</b> offers, and
             the side of new teams.${leiter?"":" The leader sets it."}${
             verw?"":" The clan's name is changed by the admin — the leader asks on the board."}</div>`;
@@ -53011,6 +53104,7 @@ The depot of that side becomes the active one.`)) return;
       faction = f;
       faktionSelbstGewaehlt = false;
       fraktionenZeichnen(); tips();
+      werkzeugeAuffrischen();   // T11: withhold dims the tools on the clan's side
     }
     rebuildUnits(); kopfzeile(); side(); draw(); tally(); depotZeichnen(); kraftLeiste();
     clanDialog("clan"); toast(`Now fighting as ${FACTIONS[f].tag}`);
@@ -53021,6 +53115,9 @@ The depot of that side becomes the active one.`)) return;
   });
   document.getElementById("cl-bf-clear")?.addEventListener("click", ()=>{
     setClanBefehl(""); clanDialog("clan");
+  });
+  document.getElementById("cl-withhold")?.addEventListener("click", ()=>{
+    if (setWithhold(!withholdSteht())) clanDialog("clan");     // T11
   });
   /* Blick aufs Depot einer anderen Seite - reine Ansichtssache. */
   document.querySelectorAll("#dlg [data-blick]").forEach(b => b.addEventListener("click", ()=>{
@@ -54292,7 +54389,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build a449ea86d8</span></p></div>
+         installation. <span style="color:var(--dim2)">· build d0ac5e256f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -54520,7 +54617,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "a449ea86d8";
+const BAU = "d0ac5e256f";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
