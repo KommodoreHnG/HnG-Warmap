@@ -1930,6 +1930,13 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 .op-k .op-z3 .strecke{margin:0}
 .op-k.op-fertig{opacity:.55}
 .op-k.op-entwurf{border-style:dashed}
+.op-k.op-neu{border-color:var(--accent)}
+.op-k.op-neu .op-z1{padding-right:16px}
+.op-k.op-neu .op-z1 b{min-width:0}
+.op-neu-x{position:absolute;right:3px;top:2px;border:0;background:none;color:var(--dim);font-size:14px;line-height:1;cursor:pointer;padding:0 3px}
+.op-neu-x:hover{color:var(--text)}
+#op-kanten path.op-neu-kante{stroke-dasharray:2 3;stroke:var(--accent);opacity:.8}
+#pb-menu-op-u[hidden]{display:none}
 .op-k.op-kampf{box-shadow:0 0 10px 2px rgba(230,150,50,.55)}
 .op-k.op-hervor{box-shadow:0 0 0 2px var(--accent)}
 .op-k.op-kampf.op-hervor{box-shadow:0 0 0 2px var(--accent),0 0 10px 4px rgba(230,150,50,.55)}
@@ -5015,6 +5022,8 @@ const factionOf = i => { const o = ownerOf(i); return o >= 0 ? FACTIONS[o] : NEU
 const noteOf    = i => (imKrieg(S.notes[i]) && S.notes[i].v) || "";
 const fightAt   = i => !!(imKrieg(S.fight[i]) && imZeit(S.fight[i]) && S.fight[i].v);
 const starAt    = i => !!(imKrieg(S.star[i]) && S.star[i].v);
+/* P5-A: why a town is marked - the para block writes it (grund) next to the mark; a hand mark has none */
+const starGrund = i => (starAt(i) && S.star[i].grund) ? String(S.star[i].grund) : "";
 const lebt      = (id, e) => imKrieg(e) && e.v && !(S.gone[id] && S.gone[id].t >= (e.t||0));
 const liveArrows= () => S.arrows.filter(a => a && MAP.n[a.from] && MAP.n[a.to]
   && (a.t||0) >= epoche() && imZeit(a) && !(S.gone[a.id] && S.gone[a.id].t >= (a.t||0)))
@@ -7116,7 +7125,9 @@ function opVerbinden(vonKey, zuKey){
   if (opErreicht(g, zuKey, vonKey)){ toast("That would loop."); return false; }
   const meinP = eigenerBefehl(P), meinX = eigenerBefehl(X);
   if (!meinX && !meinP){ toast("Neither order is yours."); return false; }
-  const op = opOpVon(g, vonKey) || opOpVon(g, zuKey) || null;
+  /* P5-B: a standing operation keeps its op - the op a loose order carries (a draft's) is only the fallback (FABLE 19.09.2026) */
+  const opFest = k => { const c = g.comp.get(k); return (c !== undefined && g.opVon.get(c)) || null; };
+  const op = opFest(vonKey) || opFest(zuKey) || opOpVon(g, vonKey) || opOpVon(g, zuKey) || null;
   if (meinX) opVorSchreiben(X, [...opVorTraeger(g, zuKey), vonKey]);
   else opNachSchreiben(P, [...opNachTraeger(g, vonKey), zuKey]);
   opNachziehen([vonKey, zuKey], op);
@@ -7676,7 +7687,59 @@ function ordersDetail(b, st, hab, alle){
    aber nichts. Der Zustand liegt ausserhalb, weil das Fenster nach jeder
    Aenderung neu gebaut wird (wie ordersFilter); behalten = Neubau, die
    Lagen bleiben. */
-let opStand = {hervor: null, pan: {x: 0, y: 0}, lage: new Map(), kante: null};
+let opStand = {hervor: null, pan: {x: 0, y: 0}, lage: new Map(), kante: null, neu: null};
+/* ---- P5-B: AN OPERATION FROM ITS TARGET OR ORIGIN (KAR-5, BEF-15;
+   ENNO 12.09.2026, PAR-2: "eine Operation auch vom Ziel heraus aufziehen
+   kann, und den Ausgangspunkt erst am Ende definiere"). opStand.neu =
+   {art: "ziel"|"start", ort, op} is a draft box in the planner and lives
+   only in this browser. An order dropped on it takes the draft's op (v.op, the
+   field the chain carries today); once two of them are linked, opNachziehen
+   carries that op through the operation and the draft is spent - every
+   order still loose loses the op again (opEntwurfLoesen), as it does when
+   the × discards the draft: on the server a shared op alone already makes
+   a chain (FABLE 19.09.2026). */
+const OP_NEU_KEY = "op-neu";
+function opEntwurfNeu(art, i){
+  if (!MAP.n[i]) return;
+  opStand.neu = {art: art === "start" ? "start" : "ziel", ort: i, op: "op" + pfeilId()};
+  opDialog(null);
+}
+const opEntwurfName = () => {
+  const e = opStand.neu;
+  if (!e || !MAP.n[e.ort]) return "";
+  return e.art === "ziel" ? `New operation \u2192 ${MAP.n[e.ort][0]}` : `${MAP.n[e.ort][0]} \u2192 \u2026`;
+};
+/* the draft goes: every order of mine that still carries its op loose gets it taken off */
+function opEntwurfLoesen(e, g){
+  if (!e) return;
+  g = g || opGraph(alleBefehle(true));
+  let n = 0;
+  for (const b of g.knoten.values()){
+    if (!b.v || b.v.op !== e.op || g.comp.has(b.key) || !eigenerBefehl(b)) continue;
+    befehlSchreiben(b, {op: undefined}); n++;
+  }
+  if (n) save();
+}
+/* the draft, or null - and null for good once its op stands on a linked operation (or its town is gone) */
+function opEntwurfGilt(g){
+  const e = opStand.neu;
+  if (!e) return null;
+  if (!MAP.n[e.ort] || [...g.opVon.values()].includes(e.op)){ opEntwurfLoesen(e, g); opStand.neu = null; return null; }
+  return e;
+}
+/* an order dropped on the draft box: mine, not yet in an operation - it takes the draft's op */
+function opEntwurfAufnehmen(b){
+  const e = opStand.neu;
+  if (!e || !b || !b.v) return false;
+  if (!darf("operationen")) return darfNicht("operationen");
+  if (!eigenerBefehl(b)){ toast("That order is not yours."); return false; }
+  if (b.v.op === e.op) return false;
+  if (opGraph(alleBefehle(true)).comp.has(b.key)){ toast("Already in an operation."); return false; }
+  befehlSchreiben(b, {op: e.op}); save();
+  opStand.lage.delete(b.key); opStand.lage.delete(OP_NEU_KEY);   // both find their place in the draft row at the next build
+  toast(`${b.name} \u2014 ${opEntwurfName()}`);
+  return true;
+}
 /* die Zeile "Operation" in den vier Befehlsfenstern (ENNO 07.09.2026 Satz
    6: "Absprungfeld in den Operationsplaner") - an der Stelle des alten
    Selects "Chain after" (Satz 5) */
@@ -7697,7 +7760,10 @@ function opDialog(hervorKey, behalten){
   const gezeigt = alle.filter(b => !b.fremd && (b.zs !== "fertig" || g.comp.has(b.key)));
   const aktiv = c => g.glieder.get(c).some(k => g.knoten.get(k).zs !== "fertig") ? 0 : 1;
   const ops = [...g.glieder.keys()].sort((p, q) => (aktiv(p) - aktiv(q)) || String(g.name.get(p)).localeCompare(String(g.name.get(q))));
-  const lose = gezeigt.filter(b => !g.comp.has(b.key));
+  const lose0 = gezeigt.filter(b => !g.comp.has(b.key));
+  const neuE = opEntwurfGilt(g);                 // P5-B: the draft box, if one stands
+  const neuGl = neuE ? lose0.filter(b => b.v && b.v.op === neuE.op) : [];
+  const lose = neuE ? lose0.filter(b => !(b.v && b.v.op === neuE.op)) : lose0;
   openDlg(`
     <div class="dlg-h"><h2>Operations</h2>
       <p><b>${ops.length}</b> operation${ops.length === 1 ? "" : "s"} \u00b7 <b>${lose.length}</b> order${lose.length === 1 ? "" : "s"} not in one${
@@ -7712,6 +7778,12 @@ function opDialog(hervorKey, behalten){
      x = Stufe, y = erste freie Zeile der Spalte ab der Zeile des ersten
      Vorgaengers. Nur Schluessel ohne Lage werden gesetzt. */
   let y0 = RAND + ETI;
+  if (neuE){                                     // P5-B: the draft row first - target box right of its orders, origin box at the left
+    const rechts = neuE.art === "ziel";
+    if (!lage.has(OP_NEU_KEY)) lage.set(OP_NEU_KEY, {x: RAND + (rechts ? Math.min(4, Math.max(1, neuGl.length)) : 0) * SX, y: y0});
+    neuGl.forEach((b, k) => { if (!lage.has(b.key)) lage.set(b.key, {x: RAND + ((rechts ? 0 : 1) + (k % 4)) * SX, y: y0 + Math.floor(k / 4) * SY}); });
+    y0 += Math.max(0, Math.ceil(neuGl.length / 4) - 1) * SY + BH + LUFT + ETI;
+  }
   for (const c of ops){
     const glieder = g.glieder.get(c), zeile = new Map(), belegt = new Map();
     const nachName = keys => keys.slice().sort((p, q) => String(g.knoten.get(p).name || "").localeCompare(String(g.knoten.get(q).name || "")));
@@ -7765,8 +7837,17 @@ function opDialog(hervorKey, behalten){
     if (!l.length) return "";
     return `<div class="op-etikett" style="left:${Math.min(...l.map(p => p.x))}px;top:${Math.min(...l.map(p => p.y)) - ETI}px">${text}</div>`;
   };
+  const neuKasten = () => {
+    const l = lage.get(OP_NEU_KEY), n = neuGl.length, nm = esc(opEntwurfName());
+    return `<div class="op-k op-entwurf op-neu" data-key="${OP_NEU_KEY}" style="left:${l.x}px;top:${l.y}px">
+      <div class="op-z1">${symbol("op")}<b title="${nm}">${nm}</b></div>
+      <div class="op-z2">${n ? `${n} order${n === 1 ? "" : "s"}` : "no order yet"}</div>
+      <div class="op-z3"></div>
+      <button type="button" class="op-neu-x" title="Discard">\u00d7</button></div>`;
+  };
   welt.insertAdjacentHTML("beforeend",
-    ops.map(c => etikett(`Operation <b>${esc(g.name.get(c))}</b> \u00b7 ${g.glieder.get(c).length} order${g.glieder.get(c).length === 1 ? "" : "s"}`, g.glieder.get(c))).join("")
+    (neuE ? etikett(esc(opEntwurfName()), [OP_NEU_KEY, ...neuGl.map(b => b.key)]) + neuKasten() : "")
+    + ops.map(c => etikett(`Operation <b>${esc(g.name.get(c))}</b> \u00b7 ${g.glieder.get(c).length} order${g.glieder.get(c).length === 1 ? "" : "s"}`, g.glieder.get(c))).join("")
     + (lose.length ? etikett("Not in an operation", lose.map(b => b.key)) : "")
     + gezeigt.map(kasten).join(""));
   /* DIE KANTEN: kubischer Pfad von P rechts-mitte nach X links-mitte, die
@@ -7794,6 +7875,16 @@ function opDialog(hervorKey, behalten){
         xEl.style.left = mx + "px"; xEl.style.top = my + "px";
       }
     }
+    if (neuE){                                   // P5-B: dotted edge between the draft box and every order it holds
+      const B = lage.get(OP_NEU_KEY);
+      for (const b of neuGl){
+        const l = lage.get(b.key);
+        if (!l || !B) continue;
+        const [p, q] = neuE.art === "ziel" ? [l, B] : [B, l];
+        const x1 = p.x + BW, y1 = p.y + BH / 2, x2 = q.x, y2 = q.y + BH / 2, dx = Math.max(40, Math.abs(x2 - x1) / 2);
+        t.push(`<path class="op-kante op-neu-kante" d="M${x1} ${y1}C${x1 + dx} ${y1},${x2 - dx} ${y2},${x2} ${y2}" marker-end="url(#op-pfeil)"/>`);
+      }
+    }
     svg.innerHTML = DEFS + t.join("");
     if (xEl) welt.appendChild(xEl);
   };
@@ -7809,6 +7900,7 @@ function opDialog(hervorKey, behalten){
     if (ev.pointerType === "mouse" && ev.button !== 0) return;
     const ziel = ev.target instanceof Element ? ev.target : null;
     if (!ziel) return;
+    if (ziel.closest(".op-neu-x")){ ev.preventDefault(); opEntwurfLoesen(opStand.neu); opStand.neu = null; neu(); return; }   // P5-B: the draft is discarded, its orders are loose again
     const x = ziel.closest(".op-x");
     if (x){
       ev.preventDefault();
@@ -7868,6 +7960,10 @@ function opDialog(hervorKey, behalten){
     if (gummi){ gummi.remove(); gummi = null; }
     if (z.ziel) z.ziel.classList.remove("op-ziel");
     if (ev.type !== "pointerup" || !z.ziel) return;
+    if (z.ziel.dataset.key === OP_NEU_KEY){        // P5-B: dropped on the draft box
+      if (opEntwurfAufnehmen(g.knoten.get(z.key))){ draw(); ordersZahl(); neu(); }
+      return;
+    }
     const P = g.knoten.get(z.key), X = g.knoten.get(z.ziel.dataset.key);
     if (P && X && opVerbinden(P.key, X.key)){ toast(`${X.name} after ${P.name}`); draw(); ordersZahl(); neu(); }
   };
@@ -12876,15 +12972,16 @@ function paraWahlSetzen(modus, typ){
   schreib(PARA_WAHL_KEY, JSON.stringify(paraWahl));
   paraFlussAbbruch(); tips(); draw();
 }
-const paraFlussAktiv = () => !!(paraFluss && (paraFluss.start !== null || paraFluss.ziel !== null));
+const paraFlussAktiv = () => !!(paraFluss && (paraFluss.start !== null || paraFluss.ziel !== null || (paraFluss.ziele && paraFluss.ziele.size)));
 /* the marks go; the caller redraws. The chain of drops made in this flow
    closes here - the one place every way out passes: the last drop without
    Ctrl, Escape, the right button, a tool change, a click on empty ground,
    a mode change in the para menu (BEF-12, FABLE 13.09.2026) */
 function paraFlussAbbruch(){
   if (!paraFluss) return;
-  const kette = paraFluss.kette || [];
+  const kette = paraFluss.kette || [], offen = paraFluss.ziele ? paraFluss.ziele.size : 0;
   paraFluss = null; tips();
+  if (offen && kette.length) toast(`${offen} airfield${offen === 1 ? "" : "s"} without a drop.`);   // P5-A: the block ended early
   ketteAbschliessen(kette);
 }
 /* THE CHAIN CLOSES (BEF-12). ENNO 12.09.2026: "es oeffnet sich am Ende
@@ -12915,6 +13012,98 @@ function ketteAbschliessen(kette){
 function paraFlussNeu(){
   if (!paraFluss) paraFluss = {start: null, ziel: null, felder: new Set(), ring: null, drin: [], kette: []};
   return paraFluss;
+}
+/* ---- P5-A: THE CAPITAL'S PARA BLOCK AS ONE ORDER (Blatt 16.09., Nr. 6).
+   ENNO 17.09.2026: "... 2a ist richtig. Die Angriffsreichweite meint aber
+   die von schweren Jagdflugzeugen ..." - the targets are every airfield
+   within JAEGER_WEIT of the capital that is not ours (unknown ownership
+   counts); the starts are picked on the map, one click per airfield, each
+   click drops on every open target the field reaches (luftReichweite of
+   the para tool's type). ENNO 17.09.2026: "1a ist richtig" - no order to
+   take the airfield; a target no field of ours reaches gets the objective
+   mark with its reason (ENNO 12.09.2026, PAR-2: "liegt der entsprechende
+   Zielflughafen einfach als Objective fuer den Clan vor ... was die
+   Priorisierung dieses Ortes bedingt"). The marks are written with the
+   FIRST drop of the block, not with the button (FABLE 19.09.2026): a look
+   and Escape marks nothing for everyone. The chain closes as today:
+   ketteAbschliessen, one window. */
+function paraBlockZiele(cap){
+  const meine = clanFaktion(), typ = {sym: paraTyp()}, r = luftReichweite(typ);
+  const ziele = flugplaetzeNach(cap, JAEGER_WEIT).filter(k => ownerOf(k) !== meine);
+  const erreichbar = new Set(), fehlt = [];
+  for (const z of ziele){
+    let eigen = false, kand = null, kd = Infinity;
+    for (let k = 0; k < MAP.n.length; k++){
+      if (k === z || !istFlugplatz(k)) continue;
+      const w = ortAbstand(k, z);
+      if (w > r) continue;
+      if (ownerOf(k) === meine) eigen = true;
+      else if (w < kd){ kd = w; kand = k; }      // the nearest field to take first
+    }
+    if (eigen) erreichbar.add(z); else fehlt.push({ziel: z, kand});
+  }
+  return {ziele, erreichbar, fehlt, r, typ};
+}
+/* the button in the capital's window: the flow with the fixed list; the marks wait for the first drop (F.marken) */
+function paraBlockStarten(cap){
+  if (!darf("befehl")) return darfNicht("befehl");
+  if (withholdSperrt("para")){ toast("Withhold stands."); return; }   // T11: the same bar setTool holds
+  const Z = paraBlockZiele(cap);
+  if (!Z.ziele.length){ toast("No enemy airfield within fighter range."); return; }
+  if (tool !== "para") setTool("para");
+  if (tool !== "para") return;                  // refused: the arrow cap
+  paraFlussAbbruch();                            // whatever the tool was doing closes first
+  const F = paraFlussNeu();
+  F.ziele = new Set(Z.ziele); F.hs = cap; F.marken = null;
+  if (Z.fehlt.length && darf("aufklaerung")){
+    const wo = MAP.n[cap][0];
+    F.marken = Z.fehlt.map(({ziel, kand}) => kand !== null
+      ? {k: kand, grund: `take first \u00b7 para start for the ${wo} block`, von: ziel}
+      : {k: ziel, grund: `para target of the ${wo} block \u00b7 out of para reach`, von: ziel});
+  }
+  sel = cap;
+  paraPulsStart(); tips(); side(); draw();
+  toast(`${Z.ziele.length} airfield${Z.ziele.length === 1 ? "" : "s"}.`);
+}
+/* one click while the target list stands: the field drops on every open target it reaches */
+function paraBlockKlick(i, typ, r){
+  const F = paraFluss;
+  if (!istFlugplatz(i)){ toast(luftPruefen(typ, i, i).grund); return; }
+  const treffer = [...F.ziele].filter(z => z !== i && ortAbstand(i, z) <= r);
+  if (!treffer.length){ toast(`No open airfield of the block within ${Math.round(r)} map units of ${MAP.n[i][0]}.`); return; }
+  paraFeldFragen(i, () => {
+    if (paraFluss !== F) return;                // the flow ended while the question stood
+    let n = 0, deckel = false;
+    for (const z of treffer){
+      if (!darfIchNochMalen("arrow")){ deckel = true; break; }
+      const a = pfeilAnlegen(i, z);
+      a.luft = 1; a.sym = paraTyp();
+      luftBoardAnfordern(a);
+      pfeilGeaendert(a);
+      F.kette.push(a.id); F.ziele.delete(z); n++;
+      luftSprungStart(a);
+    }
+    /* the first drop of the block writes the marks; the toast names them as
+       the state they are now. A draft (entwurfModus) stays private: no mark
+       for the clan until a drop is really given - F.marken waits */
+    const marken = n && !entwurfModus ? F.marken : null, gesetzt = [];
+    if (marken){
+      F.marken = null;
+      for (const m of marken){
+        if (!MAP.n[m.k]) continue;
+        if (!(starAt(m.k) && S.star[m.k].grund === m.grund)) stamp("star", m.k, 1, {grund: m.grund, von: m.von});
+        gesetzt.push(MAP.n[m.k][0]);
+      }
+    }
+    save();
+    const rest = F.ziele.size;
+    if (!rest) paraFlussAbbruch(); else tips();
+    if (!deckel) toast(`${n} drop${n === 1 ? "" : "s"} from ${MAP.n[i][0]}${rest ? ` \u00b7 ${rest} airfield${rest === 1 ? "" : "s"} left` : ""}${
+      gesetzt.length ? ` \u00b7 ${gesetzt.join(", ")} marked as key objective${gesetzt.length === 1 ? "" : "s"}` : ""}${
+      n && entwurfModus && F.marken ? " \u00b7 draft, no marks" : ""}.`);   // the cap's own toast stays when it stopped the loop
+    paraVorratWarnung();
+    side(); draw(); tally();
+  });
 }
 /* the marks breathe while they stand: a slow loop that stops itself as
    soon as nothing is marked any more */
@@ -12954,6 +13143,7 @@ function paraStartSetzen(i, r){
 function paraFlussKlick(i, mehr){
   const typ = {sym: paraTyp()}, r = luftReichweite(typ);
   const F = paraFlussNeu();
+  if (F.ziele){ paraBlockKlick(i, typ, r); return; }   // P5-A: the list is fixed, every click is a start
   if (paraWahl.modus === "start"){
     if (F.start === null){
       if (!istFlugplatz(i)){ toast(luftPruefen(typ, i, i).grund); return; }
@@ -12972,9 +13162,11 @@ function paraFlussKlick(i, mehr){
   paraZielSetzen(i, r);
 }
 /* the field is not ours: ask once, in a small window in the middle */
-function paraPfeilFragen(von, bis, mehr){
+function paraPfeilFragen(von, bis, mehr){ paraFeldFragen(von, () => paraPfeilAnlegen(von, bis, mehr)); }
+/* the question itself; dann runs on yes, or at once when the field is ours or was confirmed in this flow (P5-A shares it) */
+function paraFeldFragen(von, dann){
   const o = ownerOf(von), F = paraFluss;
-  if (o === faction || (F && F.bestaetigt === von)){ paraPfeilAnlegen(von, bis, mehr); return; }
+  if (o === faction || (F && F.bestaetigt === von)){ dann(); return; }
   const wer = o >= 0 ? `This airfield is held by <b>${esc(FACTIONS[o].name)}</b>.`
                      : "This airfield is held by nobody.";
   openDlg(`<div class="dlg-h"><h2>${esc(MAP.n[von][0])}</h2></div>
@@ -12987,7 +13179,7 @@ function paraPfeilFragen(von, bis, mehr){
   document.getElementById("para-ja").addEventListener("click", () => {
     closeDlg();
     if (paraFluss) paraFluss.bestaetigt = von;     // once per flow, not once per target
-    paraPfeilAnlegen(von, bis, mehr);
+    dann();
   });
 }
 /* the drop itself: an ordinary arrow with luft:1 and the unit sign, the
@@ -13079,11 +13271,11 @@ function paraMarkeLage(i){
 function paraMarkeTreffer(sx, sy){
   const F = paraFluss;
   if (!F) return null;
-  const kand = F.ziel !== null ? [...F.felder] : (F.start !== null ? [F.start] : []);
+  const kand = F.ziele ? [...F.ziele] : F.ziel !== null ? [...F.felder] : (F.start !== null ? [F.start] : []);
   for (const i of kand){
     if (!MAP.n[i]) continue;
     const L = paraMarkeLage(i);
-    if (Math.hypot(sx - L.x, sy - (L.y + L.g*0.3)) <= L.g*1.4) return i;
+    if (!F.ziele && Math.hypot(sx - L.x, sy - (L.y + L.g*0.3)) <= L.g*1.4) return i;   // a block's targets carry a ring, no canopy (P5-A)
     if (Math.hypot(sx - L.ox, sy - L.oy) <= L.r + 4) return i;
   }
   return null;
@@ -13093,7 +13285,7 @@ function paraMarkeTreffer(sx, sy){
    start-first drop can reach */
 function paraFlussZeichnen(){
   const F = paraFluss;
-  if (!F || (F.ziel === null && F.start === null)) return;
+  if (!F || (F.ziel === null && F.start === null && !(F.ziele && F.ziele.size))) return;
   const r0 = ortRadius(), fc = col(FACTIONS[faction]);
   const WW = cv.width/dpr, HH = cv.height/dpr;
   const puls = 0.5 + 0.5*Math.sin(performance.now()/360);
@@ -13117,20 +13309,32 @@ function paraFlussZeichnen(){
     ctx.strokeStyle = light() ? "#1a1409" : "#f4ead9";
     fallschirmZeichnen(ctx, x, my, g, null);
   };
+  /* the target's ring with four ticks - one drawing for the single target and for every open target of a block (P5-A); dim = ownership unread */
+  const zielRing = (i, dim) => {
+    if (!MAP.n[i]) return;
+    const [x,y] = toScr(MAP.n[i][1], MAP.n[i][2]);
+    if (x < -60 || y < -60 || x > WW+60 || y > HH+60) return;
+    const rr = r0 + 9*uiScale + puls*2*uiScale, t = 4*uiScale;
+    ctx.globalAlpha = dim ? .45 : .9; ctx.strokeStyle = fc; ctx.lineWidth = 2*uiScale;
+    ctx.beginPath(); ctx.arc(x, y, rr, 0, 6.284); ctx.stroke();
+    ctx.beginPath();
+    for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      ctx.moveTo(x + dx*(rr - t), y + dy*(rr - t));
+      ctx.lineTo(x + dx*(rr + t*1.5), y + dy*(rr + t*1.5));
+    }
+    ctx.stroke();
+  };
+  if (F.ziele && F.ziele.size){
+    if (F.hs !== undefined && MAP.n[F.hs]){        // the capital's fighter reach, faint and dashed
+      const [x,y] = toScr(MAP.n[F.hs][1], MAP.n[F.hs][2]);
+      ctx.globalAlpha = .35; ctx.strokeStyle = fc; ctx.lineWidth = 1.2*uiScale; ctx.setLineDash([6,5]);
+      ctx.beginPath(); ctx.arc(x, y, JAEGER_WEIT*view.z, 0, 6.284); ctx.stroke(); ctx.setLineDash([]);
+    }
+    for (const i of F.ziele) zielRing(i, ownerOf(i) < 0);
+  }
   if (F.ziel !== null){
     for (const i of F.felder) marke(i);
-    if (MAP.n[F.ziel]){
-      const [x,y] = toScr(MAP.n[F.ziel][1], MAP.n[F.ziel][2]);
-      const rr = r0 + 9*uiScale + puls*2*uiScale, t = 4*uiScale;
-      ctx.globalAlpha = .9; ctx.strokeStyle = fc; ctx.lineWidth = 2*uiScale;
-      ctx.beginPath(); ctx.arc(x, y, rr, 0, 6.284); ctx.stroke();
-      ctx.beginPath();
-      for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-        ctx.moveTo(x + dx*(rr - t), y + dy*(rr - t));
-        ctx.lineTo(x + dx*(rr + t*1.5), y + dy*(rr + t*1.5));
-      }
-      ctx.stroke();
-    }
+    zielRing(F.ziel, false);
   }
   if (F.start !== null){
     ctx.globalAlpha = .35; ctx.strokeStyle = fc; ctx.lineWidth = 1.2*uiScale;
@@ -13223,6 +13427,10 @@ function lineMenueAuf(knopf){
 function paraTipp(){
   const typ = paraTyp(), was = `${atName(typ)}, ${Math.round(luftReichweite({sym: typ}))} map units.`;
   const F = paraFluss;
+  if (F && F.ziele && F.hs !== undefined && MAP.n[F.hs]){
+    const n = F.ziele.size;
+    return `${MAP.n[F.hs][0]}: ${n} airfield${n === 1 ? "" : "s"} left \u2014 click the airfield the drops start from. Escape ends. ${was}`;
+  }
   if (F && F.ziel !== null) return `Now click one of the marked airfields. ${was}`;
   if (F && F.start !== null) return `Now click a town inside the ring. Hold Ctrl to add more targets from this airfield. ${was}`;
   return (paraWahl.modus === "start" ? "Start first: click the airfield, then the target. "
@@ -16937,7 +17145,7 @@ function hoverZeigen(i, mx, my){
     <div class="h-sub">${esc(MAP.typen[n[3]])}${isCap(i)?" · capital":""}
       · <span style="color:${col(f)}">${f.name}</span></div>
     ${starAt(i)||fightAt(i)||pb ? `<div class="h-tags">
-      ${starAt(i)?'<span class="chip">key</span>':""}
+      ${starAt(i)?`<span class="chip">key${starGrund(i) ? " \u00b7 " + esc(starGrund(i)) : ""}</span>`:""}
       ${fightAt(i)?'<span class="chip fight">⚔ contested</span>':""}
       ${(e => e ? `<span class="chip" id="h-ot" style="border-color:#f0a030;color:#f0a030">${overtimeKurz(e)}</span>` : "")(overtimeAn(i))}
       ${(g => { if (!g) return ""; const sc = gefKurz(g), rt = gefRestZeigen(g, i);
@@ -17367,7 +17575,7 @@ function menueAn(x, y, innen){
 }
 /* Die Stadt: der Fallschirmblock als kleines Menue an der Maus, damit
    niemand dafuer die Detailspalte aufmachen muss. */
-function pbMenue(i, x, y, standVorher){
+function pbMenue(i, x, y, standVorher, opOffen){
   const pb = paraAt(i);
   /* VORWAHL DER CLANSEITE. Der Haken "Only planned" weiter unten legt ohne
      Block einen an; ohne diese Zeile haette der keine Seite. Ein bestehender
@@ -17380,7 +17588,14 @@ function pbMenue(i, x, y, standVorher){
      Ruecknahme; beim Neuzeichnen wandert der Stand mit. */
   if (standVorher === undefined) standVorher = pb;
   const verteidigt = einzelLinieAn(i);
-  const m = menueAn(x, y, `<div class="t">Para-block · <b>${esc(MAP.n[i][0])}</b></div>
+  const m = menueAn(x, y, `<div class="t"><b>${esc(MAP.n[i][0])}</b></div>
+    ${darf("befehl") ? `<button type="button" class="btn" id="pb-menu-angriff" style="width:100%;font-size:11px">Start attack from here</button>` : ""}
+    ${darf("operationen") ? `<button type="button" class="btn" id="pb-menu-op" style="width:100%;font-size:11px;margin-top:4px">Operations \u2026</button>
+    <div id="pb-menu-op-u" ${opOffen ? "" : "hidden"} style="margin:4px 0 0 10px">
+      <button type="button" class="btn" id="pb-menu-op-ziel" style="width:100%;font-size:11px">Set as target for a new operation</button>
+      <button type="button" class="btn" id="pb-menu-op-start" style="width:100%;font-size:11px;margin-top:4px">Set as origin for a new operation</button>
+    </div>` : ""}
+    <div class="t" style="margin-top:9px">Para-block</div>
     <div style="font-size:11px;color:var(--dim);margin:0 2px 6px;max-width:200px">${
       pb ? zustandText(`para:${i}`, pb, S.para[i] && (S.para[i].n || S.para[i].by)) : "No block here yet."}</div>
     <div class="own4">
@@ -17394,11 +17609,27 @@ function pbMenue(i, x, y, standVorher){
     <button type="button" class="btn" id="pb-menu-def" style="width:100%;font-size:11px">${verteidigt ? "Defence window \u2026" : "Defend this city"}</button>`);
   m.querySelectorAll("[data-pb]").forEach(k => k.addEventListener("click", () => {
     const v = k.dataset.pb, plan = m.querySelector("#pb-menu-plan").checked;
+    if (v !== "" && plan && +v === clanFaktion() && withholdSteht() && !paraAt(i)){ toast("Withhold stands."); return; }   // T11: no new planned block of ours
     setPara(i, v === "" ? null : +v, plan);
     pbMenueZu(); if (sel === i) side(); draw(); tally();
   }));
   m.querySelector("#pb-menu-fenster").addEventListener("click", () => { pbMenueZu(); paraDialog(i); });
-  m.querySelector("#pb-menu-def").addEventListener("click", () => { pbMenueZu(); lineEinzelAnlegen(i); });
+  m.querySelector("#pb-menu-def").addEventListener("click", () => {
+    if (!verteidigt && withholdSperrt("line")){ toast("Withhold stands."); return; }   // T11: no new line of ours; the window of a standing one opens
+    pbMenueZu(); lineEinzelAnlegen(i);
+  });
+  /* KAR-5 (ENNO 12.09.2026): "Start Attack from here" - the arrow tool with this town as origin, the next click is the target */
+  m.querySelector("#pb-menu-angriff").addEventListener("click", () => {
+    if (withholdSperrt("arrow")){ toast("Withhold stands."); return; }   // T11: the same bar setTool holds
+    pbMenueZu();
+    if (tool !== "arrow") setTool("arrow");
+    if (tool !== "arrow") return;              // refused: the arrow cap
+    arrowFrom = i; tips(); draw();
+  });
+  const opU = m.querySelector("#pb-menu-op-u");
+  m.querySelector("#pb-menu-op")?.addEventListener("click", () => { opU.hidden = !opU.hidden; });
+  m.querySelector("#pb-menu-op-ziel")?.addEventListener("click", () => { pbMenueZu(); opEntwurfNeu("ziel", i); });
+  m.querySelector("#pb-menu-op-start")?.addEventListener("click", () => { pbMenueZu(); opEntwurfNeu("start", i); });
   m.querySelector("#pb-menu-plan").addEventListener("change", ev => {
     const steht = paraAt(i);
     /* Der Haken legt ohne Block einen geplanten an, auf der Clanseite. Ihn
@@ -17406,6 +17637,7 @@ function pbMenue(i, x, y, standVorher){
        die Rueckgaengig-Geste den eben selbst angelegten Plan in Kraft setzen,
        und das ist die staerkste Aussage, die es hier gibt. Ein Block, der
        beim Oeffnen schon stand, wird wie bisher in Kraft gesetzt. */
+    if (ev.target.checked && !steht && vorwahl === clanFaktion() && withholdSteht()){ toast("Withhold stands."); ev.target.checked = false; return; }   // T11
     if (ev.target.checked) setPara(i, steht ? steht.f : vorwahl, true);
     else if (steht && standVorher) setPara(i, steht.f, false);
     else if (steht) setPara(i, null, false);
@@ -17413,7 +17645,7 @@ function pbMenue(i, x, y, standVorher){
     /* Neu zeichnen: sonst stehen Zustandszeile und "none" auf dem Stand von
        vorher. Der Stand beim Oeffnen wandert mit, sonst faengt das
        Gedaechtnis nach dem ersten Haken von vorn an. */
-    pbMenue(i, x, y, standVorher);
+    pbMenue(i, x, y, standVorher, !!(opU && !opU.hidden));
   });
 }
 /* Das Menue an einem gezeichneten Befehl - Pfeil, Verteidigungslinie,
@@ -18654,7 +18886,7 @@ function side(){
     <div class="s-head">
       <h2>${esc(n[0])}</h2>
       <div class="meta">
-        ${starAt(i) ? `<span class="chip" style="border-color:#fff;color:#fff">! key objective</span>` : ""}
+        ${starAt(i) ? `<span class="chip" style="border-color:#fff;color:#fff" title="${esc(starGrund(i))}">! key objective</span>` : ""}
         ${isCap(i) ? `<span class="chip" style="border-color:var(--accent);color:var(--accent)">★ Capital</span>` : ""}
         ${capHome(i) ? `<span class="chip" style="--f:${col(capHome(i))};border-color:var(--f);color:var(--f)">home ${capHome(i).tag}</span>` : ""}
         <span class="chip">${esc(MAP.typen[n[3]])}</span>
@@ -18677,6 +18909,7 @@ function side(){
       ${gefEndeZeile(i)}
       <label class="toggle"><input type="checkbox" id="star-cb" ${starAt(i)?"checked":""}>
         <span>Key objective — highlight for everyone</span></label>
+      ${starGrund(i) ? `<div class="hint" id="star-grund">${esc(starGrund(i))}${S.star[i].von !== undefined && S.star[i].von !== i && MAP.n[S.star[i].von] ? ` \u00b7 reaches ${esc(MAP.n[S.star[i].von][0])}` : ""}</div>` : ""}
     </div>
     ${schlachtAbschnitt(i)}
     ${(() => {
@@ -18716,6 +18949,15 @@ function side(){
             unbekannt ? `, ${unbekannt} of unknown ownership` : ""}.
         </div>
         ${(() => {
+          /* P5-A: the block as one order (ENNO 17.09.2026: "2a ist richtig") - right befehl, the marks need aufklaerung */
+          if (!darf("befehl")) return "";
+          const Z = paraBlockZiele(i), nz = Z.ziele.length, me = Z.erreichbar.size, ke = Z.fehlt.length;
+          if (!nz) return "";
+          return `<div class="row" style="margin-top:6px;align-items:center">
+            <button class="btn" id="pb-block" style="font-size:11px">Block these airfields</button>
+            <span class="hint">${nz} ${wort(nz)} \u00b7 ${me} reachable${ke ? ` \u00b7 ${ke} need${ke === 1 ? "s" : ""} an airfield first` : ""}</span></div>`;
+        })()}
+        ${(() => {
           /* WAS DER BLOCK KOSTET. Der Punkt: "Minimale Anzahl der noetigen
              Fallschirmspringer hierfuer."
              Ein Trupp legt einen Flugplatz still - er verwickelt ihn in eine
@@ -18751,7 +18993,7 @@ function side(){
               : "No airborne teams in the clan depot yet."}</div>
           <div class="hint" style="color:var(--dim);opacity:.8">
             Paras have to start from an airfield you hold, within
-            ${Math.round(atRadius(billig.k)/SPIEL_MASS)} map units.</div>`;
+            ${Math.round(luftReichweite({sym: paraTyp()}))} map units.</div>`;
         })()}
         ${feindWeit.length > 6 ? `<div class="hint" style="color:var(--dim)">
           Blocking every one of them is unlikely — the para drop only pays off
@@ -18939,6 +19181,7 @@ function side(){
   });
   el.querySelectorAll("[data-sf]").forEach(b => b.addEventListener("click", ()=> sichtFilterKlick(b.dataset.sf)));
   el.querySelector("[data-leiste]")?.addEventListener("click", ()=> leisteOeffnen(i));
+  el.querySelector("#pb-block")?.addEventListener("click", ()=> paraBlockStarten(i));   // P5-A
   el.querySelectorAll("[data-pb]").forEach(b => b.addEventListener("click", ()=>{
     const v = b.dataset.pb;
     setPara(i, v === "" ? null : +v, pb ? pb.plan : false);
@@ -54910,7 +55153,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 671b505c44</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 67aab0dbe7</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -55138,7 +55381,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "671b505c44";
+const BAU = "67aab0dbe7";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
