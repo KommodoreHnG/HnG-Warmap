@@ -4888,7 +4888,7 @@ function darfIchSchieben(bucket, id){
      13.09.2026): the page never pushes it - not even the leader's local
      copy on the first connect (syncStart, !offenGeladen), which would turn
      a promotion back to whatever the browser kept. */
-  if (bucket === "meta" && id === "rangauto") return false;
+  if (bucket === "meta" && (id === "rangauto" || id === "expsockel")) return false;   // P2: meta:expsockel is the server's too (warmap_rang_sockel)
   if (v.recht === "meta") return istLeader() || istAdmin()
     || (bucket === "meta" && id === "rang" && darf("befoerdern"));
   if (bucket === "owner" && darf("pinsel")) return true;
@@ -6184,17 +6184,45 @@ const rangKarte  = () => (S.meta.rang && S.meta.rang.v) || {};
    whoever reaches "promote at N points" of a rank climbs to it, upward
    only - and only from the clan's own list (FABLE: the leader sets the
    thresholds). It writes its own row meta:rangauto ({player: id}) - never
-   meta:rang, which stays the hand's. Reading order: hand, then this, then
-   the default; so a rank set by hand stands, a demotion included, until the
-   leader clears it (question F4). This page never writes the row (see
-   darfIchSchieben). */
+   meta:rang, which stays the hand's. Reading order until P2: hand, then
+   this, then the default. Since P2 (Blatt 16.09., 18.09.2026) the reading
+   takes the HIGHER of hand and this (rollenVon), "promote at N" counts in
+   clan EXP (warmap_punkte_exp), and a hand rank sets the player's EXP to
+   the rank's value through meta:expsockel (warmap_rang_sockel) - so a
+   demotion by hand holds because the EXP fell, not because the hand is a
+   stop. This page never writes either row (see darfIchSchieben). */
 const rangAuto   = () => (S.meta.rangauto && S.meta.rangauto.v) || {};
 /* where the rank on show comes from: "hand" (meta:rang), "auto"
    (meta:rangauto) or "" (the default) */
 function rangQuelle(player){
   const L = rollenListe(), ids = rangKarte()[player];
-  if (Array.isArray(ids) && ids.some(id => L.some(r => r.id === id))) return "hand";
-  return L.some(r => r.id === rangAuto()[player]) ? "auto" : "";
+  const hand = Array.isArray(ids) ? ids.map(id => L.findIndex(r => r.id === id)).filter(i => i >= 0) : [];
+  const auto = L.findIndex(r => r.id === rangAuto()[player]);
+  /* P2 (18.09.2026): "auto" when the rule's rank stands above the hand's
+     best (or there is no hand) - the reading takes the higher (rollenVon) */
+  if (hand.length && (auto < 0 || Math.min(...hand) <= auto)) return "hand";
+  return auto >= 0 ? "auto" : "";
+}
+/* P2 (Runde 2, E-G): the place the server's warmap_rang_sockel measures a
+   new hand rank against - the smaller place of the highest hand RANK (an
+   id with a numeric ab >= 1; roles without ab are no rank there) and the
+   rule's rank; neither: Infinity (nothing resets). A rank with ab below
+   this place resets the player's EXP to its ab - the select says so. */
+function expWirkPlatz(player){
+  const L = rollenListe(), ids = rangKarte()[player];
+  const hand = Array.isArray(ids) ? ids.map(id => L.findIndex(r => r.id === id)).filter(i => i >= 0 && Number.isFinite(+L[i].ab) && +L[i].ab >= 1) : [];
+  const auto = L.findIndex(r => r.id === rangAuto()[player]);
+  const p = hand.concat(auto >= 0 ? [auto] : []);
+  return p.length ? Math.min(...p) : Infinity;
+}
+/* P2 (Runde 3, F-1): the rank the hand already holds - the id of the
+   highest hand RANK (numeric ab >= 1) the list knows, else "". Choosing it
+   again writes the same entry, and the server resets nothing (E-A) - so
+   the select says "set by hand" there, never "resets". */
+function expHandRang(player){
+  const L = rollenListe(), ids = rangKarte()[player];
+  const hand = Array.isArray(ids) ? ids.map(id => L.findIndex(r => r.id === id)).filter(i => i >= 0 && Number.isFinite(+L[i].ab) && +L[i].ab >= 1) : [];
+  return hand.length ? L[Math.min(...hand)].id : "";
 }
 /* position of the effective rank in the list (0 = the top), -1 without */
 const rangStufe = player => { const r = rollenVon(player)[0]; return r ? rollenListe().indexOf(r) : -1; };
@@ -6231,10 +6259,18 @@ function rollenVon(player){
   const ids = rangKarte()[player];
   const L = rollenListe();
   const eigen = Array.isArray(ids) ? ids.map(id => L.find(r => r.id === id)).filter(Boolean) : [];
-  if (eigen.length) return eigen;
   /* promoted by points - an id the list does not know is read over */
   const auto = L.find(r => r.id === rangAuto()[player]);
-  if (auto) return [auto];
+  /* P2 (Blatt 16.09., Nr. 4, 18.09.2026): THE HIGHER of hand and rule by
+     list place - the hand's roles when their best place is at or above the
+     rule's (or there is no rule), else the rule's one. A hand rank is an
+     EXP stand now (meta:expsockel, warmap_rang_sockel), no longer a stop
+     for the automatic; the server reads the same way (warmap_meine_raenge
+     6a/6b, 2026-09-18_clan_exp.sql; 5.100 b). */
+  if (eigen.length && (!auto || Math.min(...eigen.map(r => L.indexOf(r))) <= L.indexOf(auto))) return eigen;
+  /* Runde 2 (E-C): the rule's rank first, the hand's roles behind it - a
+     role the leader gave keeps its right (server: array[auto] || hand) */
+  if (auto) return [auto].concat(eigen.filter(r => r !== auto));
   const s = standardRang();
   return s ? [s] : [];
 }
@@ -9299,7 +9335,12 @@ const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
   /* P1, 17.09.2026: order/stift, recon/aufkl_done (2026-09-17_punkte_e.sql) */
   stift: "Teams given", aufkl_done: "Recon requests done",
   /* PUNKTE-D, 13.09.2026: order/battle, leader/aufkl, logistic/soldier */
-  battle: "Battles fought", aufkl: "Battles in a recon request", soldier: "Soldiers kept"});
+  battle: "Battles fought", aufkl: "Battles in a recon request",
+  /* P7 (Blatt 16.09., Nr. 10) - ENNO 17.09.2026: "Fuer das sichtbare Protokoll
+     reicht es eigentlich, wenn man sieht dass derjenige sein Arsenal
+     geupdatet hat." The number stays the points (the rate soldier_kept per
+     changed soldier and day), the soldiers stay anonymous. */
+  soldier: "Arsenal updated"});
 /* 'done' wird zweimal gebucht, fuer denselben Befehl: auf order fuer jeden,
    der ihn erfuellt hat, auf leader fuer den, der ihn erteilt hat. Gleiche
    Aktion, zwei Bedeutungen - also entscheidet das Konto ueber den Namen.
@@ -9340,7 +9381,7 @@ function punkteSacheName(z){
   }
   if (z.aktion === "soldier"){
     const wer = (depotIdx.get(teil[0]) || {}).name || teil[0];
-    return wer + " \u00b7 soldier" + (tag(teil[teil.length-1]) ? " \u00b7 " + teil[teil.length-1] : "");
+    return wer + " \u00b7 arsenal updated" + (tag(teil[teil.length-1]) ? " \u00b7 " + teil[teil.length-1] : "");   // P7: the hash stays out
   }
   if (z.aktion === "fight" || z.aktion === "map"){
     const i = +teil[0], n = MAP.n[i];
@@ -9457,6 +9498,10 @@ function punkteZeichnen(zeilen){
   const mein = k => ich ? ich.summe[k] : 0;
   const nz = n => (n || 0).toLocaleString("en");
   const darfBuch = p => istLeader() || istAdmin() || p === S.me;
+  /* P2: the clan EXP by the room's factors (meta:punkte) - the same sum
+     the server promotes by (warmap_punkte_exp) */
+  const expAlle = expRechnen(zeilen, punkteRegeln(), null);
+  const meinExp = expAlle.get(S.me) ? expAlle.get(S.me).exp : 0;
   const spalte = konto => {
     const liste = [...leute.values()].filter(p => p.summe[konto.k] > 0)
       .sort((a, b) => b.summe[konto.k] - a.summe[konto.k] || b.letzte - a.letzte
@@ -9482,7 +9527,7 @@ function punkteZeichnen(zeilen){
   feld.innerHTML = `
     <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
       <b style="font-family:var(--schmal);text-transform:uppercase;letter-spacing:.08em;color:var(--accent)"
-        >You: ${PUNKTE_KONTEN.map(k => `${esc(k.kurz)} ${nz(mein(k.k))}`).join(" / ")}</b>
+        >You: ${PUNKTE_KONTEN.map(k => `${esc(k.kurz)} ${nz(mein(k.k))}`).join(" / ")} \u00b7 EXP ${nzExp(meinExp)}</b>
       <span style="flex:1"></span>
       <span style="font-size:11px;color:var(--dim2)">${leute.size} ${
         leute.size === 1 ? "player has" : "players have"} points on record</span>
@@ -9491,7 +9536,8 @@ function punkteZeichnen(zeilen){
       ${PUNKTE_KONTEN.map(spalte).join("")}
     </div>
     <div class="note"><b>Recon</b> - first finds, battles marked, map kept. <b>Logistic</b> - depot.
-      <b>Orders</b> - orders done. <b>Leader</b> - your orders, once done.</div>`;
+      <b>Orders</b> - orders done. <b>Leader</b> - your orders, once done.
+      <b>EXP</b> - the four accounts by the clan's factors, plus a rank set by hand.</div>`;
   feld.querySelectorAll("tr[data-pk]").forEach(tr => tr.addEventListener("click", () => {
     const d = tr.nextElementSibling;
     if (!d || d.dataset.pd === undefined) return;
@@ -9526,10 +9572,23 @@ async function punkteBuch(spieler, name){
   const koerper = document.querySelector("#dlg .dlg-b");
   if (!koerper || !document.getElementById("pb-zu")) return;   // window already closed
   zeilen = Array.isArray(zeilen) ? zeilen : [];
-  koerper.innerHTML = zeilen.length ? `<div class="tw"><table>
+  /* P2: the base a hand rank set (meta:expsockel, the server's row) as the
+     first line - it is no booking, the ledger itself is untouched. ENNO
+     17.09.2026: "ein von Hand gesetzter Rang soll die Clan-EXP des Spielers
+     dann entsprechend anheben." */
+  const sockel = +expSockelKarte()[spieler];
+  const sockelZeile = Number.isFinite(sockel) && sockel !== 0 ? `<tr>
+        <td></td>
+        <td style="text-align:left">EXP</td>
+        <td style="text-align:left">rank set by hand</td>
+        <td style="text-align:left;color:var(--dim)"></td>
+        <td>${sockel > 0 ? "+" : ""}${nzExp(sockel)} EXP</td>
+        <td style="text-align:left;color:var(--dim2)">meta:expsockel</td>
+      </tr>` : "";
+  koerper.innerHTML = (zeilen.length || sockelZeile) ? `<div class="tw"><table>
       <thead><tr><th>When</th><th style="text-align:left">Account</th><th style="text-align:left">Action</th>
         <th style="text-align:left">Item</th><th>Points</th><th style="text-align:left">Source</th></tr></thead>
-      <tbody>${zeilen.map(z => `<tr>
+      <tbody>${sockelZeile}${zeilen.map(z => `<tr>
         <td>${esc(z.wann ? new Date(z.wann).toLocaleString() : "")}</td>
         <td style="text-align:left">${esc(punkteKontoName(z.konto))}</td>
         <td style="text-align:left">${esc(punkteAktionName(z.aktion, z.konto))}</td>
@@ -48718,7 +48777,7 @@ const PUNKTE_REGEL_FELDER = [
   {k:"aufkl_fight_own", n:"... and our side fights there", std:0,
    d:"On top of the line above, when the town is ours or one of our attacks aims at it."},
   {k:"soldier_kept", n:"A soldier changed in the arsenal", std:1,
-   d:"One per changed soldier and day, like the depot. The list itself stays anonymous."},
+   d:"Per changed soldier and day; the clan only sees that the arsenal was updated."},
   /* P1 (Blatt 16.09., 17.09.2026): paid by warmap_punkte_abschluss once
      2026-09-17_punkte_e.sql has been run. stift 1 / 2 are the FABLE proposal
      he took (ENNO 17.09.2026: "2a passt so erstmal ..."), the recon rates
@@ -48745,7 +48804,88 @@ const PUNKTE_REGEL_FELDER = [
    d:"On top, per identified unit in his report."},
   {k:"aufkl_at_platz", n:"Recon request: per placeholder", std:0.5, dez:1,
    d:"On top, per unit reported without a type; the town's sum is rounded."},
+  /* P2 (Blatt 16.09., Nr. 4, 18.09.2026): THE CLAN EXP - ENNO 17.09.2026:
+     "Wir koennen die Punkte auch in eine gemeinsame Waehrung, naemlich bspw.
+     'Clan-Exp' umrechnen, die dann den Stufenaufstieg bedingt. Dadurch
+     koennen wir die einzelnen Handlungen innerhalb der Punkteklasse
+     balancen, aber auch gegen die anderen Klassen an sich." The four
+     factors weigh the accounts against each other; exp_radar sits on the
+     one booking that made 1366 of his 1446 points (recon/map, the
+     ownership change from the radar or by hand). "promote at N" in the
+     rank list is read in EXP by the server (warmap_punkte_exp,
+     2026-09-18_clan_exp.sql); this page adds the same sum up for the
+     header, the preview and the ledger. dez 2: step 0.01, read to two
+     places. 1.00 / 0.10 are FABLE's numbers (Offen 6), never his. elite
+     (Vorgabe 0) is the surcharge of Abschnitt 3 - ENNO 05.09.2026: "Mehr
+     Punkte, wenn die Rolle schwieriger ist: Flugabwehr oder Pilot gegen
+     Elite-Piloten der Gegner oder bei deutlicher Uebermacht ist
+     schwieriger."; ENNO 17.09.2026: "Das ist was fuer den
+     Punktekonfigurator." - outnumbered only (Offen 5); elite_ab (Vorgabe
+     1.50, E-D) is the head-count ratio from which it counts. */
+  {k:"exp_recon",    n:"EXP per recon point", std:1, dez:2,
+   d:"Factor on every recon booking."},
+  {k:"exp_logistic", n:"EXP per logistic point", std:1, dez:2,
+   d:"Factor on every logistic booking."},
+  {k:"exp_order",    n:"EXP per order point", std:1, dez:2,
+   d:"Factor on every order booking."},
+  {k:"exp_leader",   n:"EXP per leader point", std:1, dez:2,
+   d:"Factor on every leader booking."},
+  {k:"exp_radar",    n:"EXP per map point (ownership changes)", std:0.1, dez:2,
+   d:"On top of the recon factor, for recon / map only - the radar's and the hand's ownership changes."},
+  {k:"elite",        n:"Outnumbered: extra on a battle read", std:0,
+   d:"Added to the battle rate when the reader's scoreboard showed the enemy outnumbering us."},
+  {k:"elite_ab",     n:"Outnumbered from", std:1.5, dez:2,
+   d:"Enemy head count per one of ours; at this ratio or more the extra is paid."},
 ];
+/* P2: the EXP of one player from the rows of warmap_punkte_stand (spieler,
+   name, konto, aktion, punkte, letzte, n) - the same sum as the server's
+   warmap_punkte_exp: betrag x F(konto) x (recon/map ? F_radar : 1) + the
+   base (meta:expsockel, the server's row, set by a hand rank). With a NEW
+   rule against the OLD one (the preview, KANN-4) a booking that has ONE
+   rate scales by new rate / old rate (the old rate 0: n rows x the new
+   rate); composite bookings (stift, aufkl_done, leader/aufkl) and the fixed
+   ones (first finds, ownership, battle marks, depot) keep their betrag -
+   a ratio would be a guess there (Bauer, E1). The base stays as it is
+   under a new rule (KANN-4). Two places, like the server. */
+const EXP_SATZ_VON = {"recon:attr": "attr_ok", "logistic:soldier": "soldier_kept",
+                      "order:done": "order_done", "leader:done": "leader_done", "order:battle": "battle_done"};
+const expSockelKarte = () => (S.meta.expsockel && S.meta.expsockel.v) || {};
+const nzExp = n => (Math.round((+n || 0) * 100) / 100).toLocaleString("en", {maximumFractionDigits: 2});
+function expRechnen(zeilen, neu, alt){
+  const satz = (p, k) => {
+    /* a rate counts only as a number (typeof), like the server's
+       warmap_punkte_satz_dez (jsonb_typeof); anything else: the default */
+    const f = PUNKTE_REGEL_FELDER.find(x => x.k === k), w = p ? p[k] : undefined;
+    return (typeof w !== "number" || !Number.isFinite(w) || w < 0 || w > 99) ? (f ? +f.std : 1) : w;
+  };
+  const leute = new Map();
+  const nimm = (wer, name) => {
+    let p = leute.get(wer);
+    if (!p){ p = {spieler: wer, name: name || (depotIdx.get(wer) || {}).name || wer, exp: 0}; leute.set(wer, p); }
+    return p;
+  };
+  for (const z of zeilen || []){
+    if (!z || !z.spieler || !PUNKTE_KONTEN.some(k => k.k === z.konto)) continue;
+    const p = nimm(z.spieler, z.name);
+    let betrag = +z.punkte || 0;
+    const rk = EXP_SATZ_VON[z.konto + ":" + z.aktion];
+    if (rk && alt && neu !== alt){
+      const sn = satz(neu, rk), sa = satz(alt, rk);
+      betrag = sa > 0 ? betrag * sn / sa : (+z.n || 0) * sn;
+    }
+    p.exp += betrag * satz(neu, "exp_" + z.konto) * (z.konto === "recon" && z.aktion === "map" ? satz(neu, "exp_radar") : 1);
+  }
+  for (const [wer, so] of Object.entries(expSockelKarte())){
+    if (!Number.isFinite(+so)) continue;
+    nimm(wer).exp += +so;
+  }
+  for (const p of leute.values()) p.exp = Math.round(p.exp * 100) / 100;
+  return leute;
+}
+/* the rank the list's thresholds (ab, in EXP) would give: the highest entry
+   whose ab (>= 1) is reached, like warmap_befoerdern_pruefen (5) - without
+   the team rule and without the hand */
+const expRang = exp => rollenListe().find(r => Number.isFinite(+r.ab) && +r.ab >= 1 && +r.ab <= exp) || null;
 /* the battle requirement is ON unless the leader wrote a 0 (PUNKTE-D):
    a missing field is the default, and the default is on */
 const gefechtPflichtAn = p => !(p && p.gefecht_pflicht !== undefined && p.gefecht_pflicht !== null
@@ -48823,7 +48963,7 @@ function regelnDialog(tab){
           <tbody>${PUNKTE_REGEL_FELDER.map(f => `<tr>
             <td style="text-align:left">${esc(f.n)}
               <div style="font-size:11px;color:var(--dim2)">${esc(f.d)}</div></td>
-            <td>${feld(`rg-p-${f.k}`, p[f.k] === undefined || p[f.k] === null ? "" : p[f.k], f.std, 99, f.dez ? "0.1" : "")}</td>
+            <td>${feld(`rg-p-${f.k}`, p[f.k] === undefined || p[f.k] === null ? "" : p[f.k], f.std, 99, f.dez ? (f.dez >= 2 ? "0.01" : "0.1") : "")}</td>
           </tr>`).join("")}</tbody>
         </table></div>
         <div class="row" style="align-items:center;gap:8px">
@@ -48846,6 +48986,8 @@ function regelnDialog(tab){
         </div>
         <div class="note">Empty box = grey default. <b>0</b> = not booked.</div>
         <div class="note">The server pays these out, not this page.</div>
+        <div class="note" style="margin-top:10px"><b>With these numbers today</b></div>
+        <div id="rg-vorschau"></div>
       </div>
 
     </div>
@@ -48856,6 +48998,48 @@ function regelnDialog(tab){
       <button class="btn primary" id="rg-save">Save</button>
     </div>`, "wide");
   tabsAktiv(document.getElementById("dlg"), tab);
+  /* P2 (Blatt 16.09., Nr. 4): THE PREVIEW "With these numbers today" -
+     every member's EXP by the numbers IN THE BOXES, live while typing
+     (the input event of the tab), from warmap_punkte_stand (punkteLaden,
+     one minute of memory, now with n) and meta:expsockel; the rank the
+     list's thresholds would give beside it. Nothing is written, Save is
+     Save. ENNO 17.09.2026: "... das ist ja auch Sinn des
+     Admin-Konfigurators, das ich in der Testphase ein paar Szenarien
+     durchspielen kann." A box outside 0..99 counts as the default here
+     (Save says so itself). At most 50 rows, highest first. */
+  const vorschauZeichnen = () => {
+    const el = document.getElementById("rg-vorschau");
+    if (!el) return;
+    if (!punkteCache.zeilen){
+      el.innerHTML = `<div class="empty">${CFG ? "Loading points ..." : "Sign in to see points."}</div>`;
+      return;
+    }
+    const neu = {};
+    for (const f of PUNKTE_REGEL_FELDER){
+      const b = document.getElementById(`rg-p-${f.k}`);
+      const roh = b ? String(b.value || "").trim() : "";
+      if (!roh) continue;
+      const w = f.dez ? Math.round(+roh * 100) / 100 : Math.round(+roh);
+      if (Number.isFinite(w) && w >= 0 && w <= 99) neu[f.k] = w;
+    }
+    const liste = [...expRechnen(punkteCache.zeilen, neu, punkteRegeln()).values()]
+      .sort((a, b) => b.exp - a.exp || String(a.name).localeCompare(String(b.name))).slice(0, 50);
+    el.innerHTML = liste.length ? `<div class="tw"><table>
+      <thead><tr><th style="text-align:left">Member</th><th>EXP</th>
+        <th style="text-align:left" title="by the rank list's thresholds (promote at N EXP)">Rank</th></tr></thead>
+      <tbody>${liste.map(p => { const r = expRang(p.exp); return `<tr${p.spieler === S.me ? ' class="me"' : ''}>
+        <td style="text-align:left">${esc(p.name)}</td>
+        <td><b>${nzExp(p.exp)}</b></td>
+        <td style="text-align:left;color:var(--dim)">${r ? esc(rangTitel(r)) : "\u2014"}</td></tr>`; }).join("")}</tbody>
+      </table></div>`
+      : `<div class="empty">Nothing booked yet.</div>`;
+  };
+  document.querySelector('#dlg .tabp[data-tab="punkte"]').addEventListener("input", vorschauZeichnen);
+  vorschauZeichnen();
+  if (CFG && (!punkteCache.zeilen || jetzt() - punkteCache.zeit >= 60000))
+    punkteLaden().then(() => { if (document.getElementById("rg-vorschau")) vorschauZeichnen(); })
+      .catch(e => { const el = document.getElementById("rg-vorschau");
+                    if (el) el.innerHTML = `<div class="empty">Could not read the points: ${esc(String(e.message || e).slice(0, 140))}</div>`; });
   document.getElementById("d-close").addEventListener("click", closeDlg);
   document.getElementById("rg-save").addEventListener("click", ()=>{
     if (regelnSpeichern()){ closeDlg(); toast("Saved for the whole clan"); }
@@ -51724,7 +51908,7 @@ function rangEditorHtml(o){
                     data-rzk="von" value="${esc(r.von || "")}" maxlength="12" style="width:56px;font-size:11px">
                   <span style="margin-left:6px">arrows ${rz(r, "arrow", g(r).arrow)} lines ${rz(r, "line", g(r).line)}
                     areas ${rz(r, "area", g(r).area)}</span>
-                  <span style="margin-left:6px">promote at ${rz(r, "ab", r.ab)} points</span>
+                  <span style="margin-left:6px">promote at ${rz(r, "ab", r.ab)} EXP</span>
                   <span>or at ${rz(r, "atn", r.atn)} teams of <select class="mini" data-rz="${esc(r.id)}"
                     data-rzk="atk" style="font-size:11px"><option value="">any type</option>${
                     MAP.at.map(a => `<option value="${esc(a.k)}" ${r.atk === a.k ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select></span>
@@ -52023,6 +52207,13 @@ function leuteZeichnen(liste){
              (with a hint); the default stays the empty line (13.09.2026) */
           const quelle = rangQuelle(m.player);
           const ist = quelle ? rollenVon(m.player)[0].id : "";
+          /* P2 (Runde 2, E-G): a rank with ab below the player's effective
+             place resets his EXP to that ab (warmap_rang_sockel) - the
+             option says so; ENNO 17.09.2026: "Degradieren sollte aber
+             etwas wirklich seltenes sein." Runde 3 (F-1): the rank the
+             hand already holds says "set by hand" instead - choosing it
+             again changes nothing on the server. */
+          const wirk = expWirkPlatz(m.player), handR = expHandRang(m.player);
           const fuehrt = m.player === leaderId();
           return `<tr${m.player===S.me?' class="me"':''}>
             <td>${statusPunkt(m.player)}${esc(m.name||m.player)}${m.player===S.me?" <em>you</em>":""}
@@ -52033,7 +52224,7 @@ function leuteZeichnen(liste){
                  ? `<select data-rangfuer="${esc(m.player)}" style="font-size:11px">
                       <option value="" ${stdErlaubt ? "" : "disabled"}>— ${esc(standardRang() ? rangTitel(standardRang()) : "none")} —</option>
                       ${R.map((r, q) => (darfRollen || q >= meineHoehe) ? `<option value="${esc(r.id)}" ${r.id===ist?"selected":""}
-                        >${esc(rangTitel(r))}</option>` : "").join("")}</select>${quelle === "auto"
+                        >${esc(rangTitel(r))}${q > wirk && Number.isFinite(+r.ab) && +r.ab >= 1 ? (r.id === handR ? " \u00b7 set by hand" : ` \u00b7 resets to ${nzExp(+r.ab)} EXP`) : ""}</option>` : "").join("")}</select>${quelle === "auto"
                     ? ` <span title="promoted by rule (points or teams)" style="font-size:10px;color:var(--dim)">· auto</span>` : ""}${darfRollen
                     ? ` <select data-fokusfuer="${esc(m.player)}" title="Focus" style="font-size:11px">
                         <option value="">— focus —</option>
@@ -53732,7 +53923,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f8c78c111b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 23beafa80e</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -53960,7 +54151,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f8c78c111b";
+const BAU = "23beafa80e";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
