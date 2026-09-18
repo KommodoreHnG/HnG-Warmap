@@ -2404,9 +2404,10 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-cl-deploy" data-clantab="deploy" title="Where the clan's teams stand">In the field</button>
       <button class="btn" id="b-cl-people" data-clantab="people" title="Members and their roles">Roles</button>
       <button class="btn" id="b-cl-punkte" data-clantab="punkte" title="Who has earned which points">Points</button>
+      <button class="btn" id="b-cl-tpl"    data-clantab="tpl"    title="Group templates shared with the clan">Templates</button>
       <button class="btn" id="b-cl-arsenal" title="What the whole clan can field, and where the gaps are">Clan arsenal</button>
       <button class="btn" id="b-arms">Arsenal</button>
-      <button class="btn" id="b-mydepot" title="Your assault teams — the column on the right (D)">Depot</button>
+      <button class="btn" id="b-mydepot" title="Your assault teams — manage, group, read from the game">Depot</button>
       <button class="btn" id="b-note" title="Encrypted — nobody else can read it">Notebook</button>
       <button class="btn" id="b-intel">Intel</button>
       <button class="btn" id="b-front" title="Slide the map back through the war">Front replay</button>
@@ -4038,7 +4039,7 @@ const TOPFTAFEL = {
      from the game screen. Same shapes as their neighbours. */
   stat:   {wer:1, recht:"", krieg:0},              // Anwesenheit: Active / Inactive / Offline / RTS only / Mobile
   grp:    {wer:1, recht:"", krieg:1},              // eigene AT-Gruppen
-  tpl:    {wer:1, recht:"", krieg:1},              // eigene Anforderungs-Vorlagen (BEF-10; ENNO 16.09.2026, 5.7: "Am konto")
+  tpl:    {wer:1, recht:"", krieg:1},              // own request templates (BEF-10; ENNO 16.09.2026, 5.7: "Am konto") and group templates (T4)
   units:  {wer:2, recht:"", krieg:0},              // eigene Einheiten am Ort
   join:   {wer:2, recht:"", krieg:0},              // Zusage an einem Pfeil
   zuord:  {wer:2, recht:"", krieg:0},              // Einheit oder Gruppe an einem Befehl (zuord:<art>-<id>:<spieler>)
@@ -13857,7 +13858,8 @@ function anfVorlagen(){
 function anfVorlagenSchreiben(liste){
   if (!anfVorlagenBereit()){ toast("Map still loading."); return false; }
   const rein = (liste || []).filter(v => v && v.req).slice(0, ANF_VORLAGEN_MAX)
-    .map(v => ({n: String(v.n == null ? "" : v.n).slice(0, 40), req: v.req}));
+    .map(v => ({n: String(v.n == null ? "" : v.n).slice(0, 40), req: v.req}))
+    .concat(gvorlEigene());              // T4 (SOLL-4): the group templates share the row and ride along, sifted by gvorlEigene
   if (!S.tpl) S.tpl = {};
   if (!stamp("tpl", S.me, rein.length ? rein : null, {n: S.name || ""})) return false;
   save();
@@ -13918,6 +13920,314 @@ function anfVorlagenVerdrahten(){
     anfVorlagenSchreiben(liste);
     sel.innerHTML = anfVorlagenOptionen("");
   });
+}
+
+/* ---- GROUP TEMPLATES (ToDo 16.9.2026, Z18 - T4 (3)) ----
+   ENNO 18.09.2026 (ToDo 16.9.2026.docx, Depot): "Groups: Hier fehlt mir noch
+   die Template-Funktion. Diese soll man auch aus bestehenden Gruppen
+   erstellen können, oder auch direkt an den Clan schicken als Vorlage, die
+   dann in einem Unterreiter im Clanmenü allen anderen im Clan angezeigt
+   werden, mit Ersteller, Anzahl der ATs, und genau wie oben einem
+   Zeilendropdown mit Ansicht der Zusammensetzung. Hier kann man dann die
+   Vorlage in das eigene Depot kopieren. Natürlich kann hier auch wieder
+   gefiltert werden bei allen Spalten"
+   A template is a recipe {n, grp: {type: count}, clan: 0|1, t} - types and
+   counts, no team ids (his "Zusammensetzung"). It lives in the OWN tpl row
+   beside the request templates (BEF-10; ENNO 16.09.2026, 5.7: "Am konto"): same row, same cap of
+   18 000 - one group template is ~120 bytes, twenty of them 2.4 KB. Every
+   row of the room is read by everybody (syncPull), so "private" only ever
+   meant the display: clan:1 shows it under Clan -> Templates, clan:0 keeps
+   it to the Groups tab of the depot window. anfVorlagenSchreiben passes the
+   group templates through (SOLL-4), gvorlSchreiben passes the request
+   templates through. Two ways in: from a group (its teams counted by type)
+   or typed by hand ("New template"). Anybody copies; only the creator
+   sends, withdraws or deletes - the row is his (warmap_may_write). No new
+   pot, no migration (FABLE 18.09.2026). */
+const GVORL_MAX = 20;
+/* the group templates of a member's row, sieved: a name, at least one known
+   type with a count 1..99; the flag 0/1; t as written */
+function gvorlVon(who){
+  try {
+    const e = who && S.tpl ? S.tpl[who] : null, l = e && e.v;
+    if (!Array.isArray(l)) return [];
+    const raus = [];
+    for (const v of l){
+      if (!v || typeof v.n !== "string" || !v.grp || typeof v.grp !== "object" || Array.isArray(v.grp)) continue;
+      const grp = {};
+      for (const k of Object.keys(v.grp)){
+        const n = Math.round(+v.grp[k]);
+        if (AT[k] && n >= 1 && n <= 99) grp[k] = n;
+      }
+      if (!Object.keys(grp).length) continue;
+      raus.push({n: v.n.trim().slice(0, GRUPPE_NAME_MAX), grp, clan: v.clan ? 1 : 0, t: +v.t || 0});
+    }
+    return raus.slice(0, GVORL_MAX);
+  } catch (e){ return []; }
+}
+function gvorlEigene(){ return gvorlVon(S.me); }
+const gvorlTeams = v => Object.keys(v.grp).reduce((s, k) => s + v.grp[k], 0);
+/* writes the own list; the request templates of the row ride along untouched */
+function gvorlSchreiben(liste){
+  if (!anfVorlagenBereit()){ toast("Map still loading."); return false; }
+  const e = S.tpl && S.tpl[S.me];
+  const req = (e && Array.isArray(e.v) ? e.v : []).filter(v => v && v.req);
+  const grp = (liste || []).filter(v => v && v.grp && typeof v.grp === "object").slice(0, GVORL_MAX)
+    .map(v => ({n: String(v.n == null ? "" : v.n).trim().slice(0, GRUPPE_NAME_MAX), grp: v.grp,
+                clan: v.clan ? 1 : 0, t: +v.t || jetzt()}));
+  const rein = req.concat(grp);
+  if (!S.tpl) S.tpl = {};
+  if (!stamp("tpl", S.me, rein.length ? rein : null, {n: S.name || ""})) return false;
+  save();
+  return true;
+}
+/* the recipe of a group: its teams counted by type */
+function gvorlAusGruppe(g){
+  const teamVon = new Map(myDepotAlle().map(d => [d.id, d]));
+  const grp = {};
+  for (const id of (g && g.ats) || []){
+    const d = teamVon.get(id);
+    if (d && AT[d.k]) grp[d.k] = (grp[d.k] || 0) + 1;
+  }
+  return grp;
+}
+/* "Save as template" / "Send to clan" from a group. Same name = the template
+   is replaced (the group is its source); the clan flag stays unless set here. */
+function gvorlAusGruppeSpeichern(gid, anClan){
+  const g = gruppenListe().find(x => x.id === gid);
+  if (!g) return false;
+  const grp = gvorlAusGruppe(g);
+  if (!Object.keys(grp).length){ toast("No teams in it yet."); return false; }
+  const name = gruppeName(g);
+  const liste = gvorlEigene();
+  const k = liste.findIndex(v => v.n === name);
+  const alt = k >= 0 ? liste[k] : null;
+  if (!alt && liste.length >= GVORL_MAX){ toast(`${GVORL_MAX} templates at most.`); return false; }
+  const neu = {n: name, grp, clan: anClan ? 1 : (alt ? alt.clan : 0), t: jetzt()};
+  if (alt) liste[k] = neu; else liste.push(neu);
+  if (!gvorlSchreiben(liste)) return false;
+  toast(anClan ? `${name} sent to the clan` : (alt ? `${name} updated` : `${name} saved`));
+  return true;
+}
+/* "New template" typed by hand (his "auch aus bestehenden Gruppen" - the
+   other way needs no group and no teams). Same name as an own template =
+   "Name taken." - here the name is not a group. Private at first; "Send to
+   clan" on its row like any other. */
+function gvorlNeuSpeichern(name, grp){
+  name = String(name || "").trim().slice(0, GRUPPE_NAME_MAX);
+  if (!name){ toast("Give the template a name first."); return false; }
+  const rein = {};
+  for (const k of Object.keys(grp || {})){
+    const n = Math.round(+grp[k]);
+    if (AT[k] && n >= 1 && n <= 99) rein[k] = n;
+  }
+  if (!Object.keys(rein).length){ toast("Count 1 to 99."); return false; }
+  const liste = gvorlEigene();
+  if (liste.some(v => v.n === name)){ toast("Name taken."); return false; }
+  if (liste.length >= GVORL_MAX){ toast(`${GVORL_MAX} templates at most.`); return false; }
+  liste.push({n: name, grp: rein, clan: 0, t: jetzt()});
+  if (!gvorlSchreiben(liste)) return false;
+  toast(`${name} saved`);
+  return true;
+}
+/* "Copy to my depot" / "Use": a new own group of that name, filled with the
+   OWN free teams of each type - in the depot, in no group (one group per
+   team) and not on the map; never anybody else's team (ENNO 08.09.2026:
+   "eine AT-Gruppe wird von jedem User selber erstellt nur aus dem eigenen
+   Depot."). The group is made even when nothing fits - the name is the
+   plan, the shortfall is said. Returns {gid, ats, fehlt, text} or null. */
+function gvorlKopieren(v){
+  if (!gruppenBereit()){ toast("Map still loading."); return null; }
+  const liste = gruppenListe();
+  if (liste.length >= GRUPPE_MAX){ toast(`${GRUPPE_MAX} groups is the ceiling. Delete one before adding another.`); return null; }
+  const belegt = new Set();
+  for (const g of liste) for (const id of g.ats) belegt.add(id);
+  const frei = myDepot().filter(d => AT[d.k] && !belegt.has(d.id) && townOfTeam(d.id) === null);
+  const ats = [], fehlt = [];
+  for (const k of Object.keys(v.grp)){
+    const soll = v.grp[k];
+    const da = frei.filter(d => d.k === k).slice(0, soll);
+    for (const d of da) ats.push(d.id);
+    if (da.length < soll) fehlt.push([k, soll - da.length, soll]);
+  }
+  const id = Math.random().toString(36).slice(2, 9);
+  liste.push({id, n: String(v.n || "").trim().slice(0, GRUPPE_NAME_MAX), ats});
+  if (!gruppeSchreiben(liste)) return null;
+  const text = fehlt.length
+    ? fehlt.map(([k, f, soll]) => `${f} of ${soll} ${atName(k).toLowerCase()}`).join(", ") + " missing"
+    : `${ats.length} team${ats.length === 1 ? "" : "s"}`;
+  return {gid: id, ats: ats.length, fehlt, text};
+}
+/* one type-and-count pair of the "New template" row */
+function gvorlNeuTeilHtml(feldStil){
+  return `<span class="gv-nteil" style="display:inline-flex;align-items:center;gap:4px">
+      <select data-gvntyp style="${feldStil}">${MAP.at.map(a => `<option value="${esc(a.k)}">${esc(a.name)}</option>`).join("")}</select>
+      <input type="number" data-gvnn min="1" max="99" value="1" style="width:52px;${feldStil}"></span>`;
+}
+/* the own templates under the groups (depot window, tab Groups), and the
+   "New template" row */
+function gvorlEigeneHtml(c, klein, feldStil){
+  const eig = gvorlEigene();
+  const n = v => gvorlTeams(v);
+  const zeile = (v, i) => `<div class="row" style="align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--line);font-size:11.5px;flex-wrap:wrap">
+      <b style="min-width:110px" dir="auto">${esc(v.n)}</b>
+      <span style="color:var(--dim);flex:1 1 180px;min-width:0;white-space:normal">${n(v)} team${n(v) === 1 ? "" : "s"} · ${
+        Object.keys(v.grp).map(k => `<span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle">${
+          symbolSVG(k, c, 18, 13)}${esc(atName(k))} ×${v.grp[k]}</span>`).join(" · ")}</span>
+      <span style="font-size:11px;color:${v.clan ? "var(--accent)" : "var(--dim2)"}">${v.clan ? "clan" : "private"}</span>
+      <button class="btn" data-gvclan="${i}" ${klein}>${v.clan ? "Withdraw" : "Send to clan"}</button>
+      <button class="btn" data-gvuse="${i}" ${klein} title="A new group of this name from your free teams">Use</button>
+      <button class="btn" data-gvdel="${i}" ${klein}>Delete</button>
+    </div>`;
+  return `<h3 style="margin:14px 0 4px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim2)">Templates</h3>
+    ${eig.length ? eig.map(zeile).join("") : `<div class="empty">No templates yet.</div>`}
+    <div class="row" id="gv-neu" style="align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
+      <input id="gv-nname" placeholder="New template" maxlength="${GRUPPE_NAME_MAX}" spellcheck="false"
+             style="flex:1;min-width:160px;${feldStil}">
+      ${gvorlNeuTeilHtml(feldStil)}
+      <button class="btn" id="gv-nplus" ${klein}>+ type</button>
+      <button class="btn" id="gv-nsave" ${klein}${eig.length >= GVORL_MAX ? ` disabled title="${GVORL_MAX} templates at most"` : ""}>Save</button>
+    </div>`;
+}
+/* ---- Clan -> Templates: everything shared (clan:1) ----
+   Sorted by a click on Creator / Name / Teams / Age as the players table
+   (th[data-ps]): the same column turns the order round, a new column starts
+   descending for numbers and ascending for text. Default: Age, youngest
+   first. */
+let gvorlSuche = "", gvorlTyp = null, gvorlAngezeigt = [], gvorlSort = "t", gvorlAb = true;
+const GVORL_SORT = {who: v => gvorlErsteller(v.who).toLowerCase(), n: v => v.n.toLowerCase(), teams: gvorlTeams, t: v => v.t};
+function gvorlListe(){
+  const raus = [];
+  for (const who of Object.keys(S.tpl || {}))
+    for (const v of gvorlVon(who)) if (v.clan) raus.push(Object.assign({who, mine: who === S.me}, v));
+  const key = GVORL_SORT[gvorlSort] || GVORL_SORT.t;
+  raus.sort((a, b) => {
+    const ka = key(a), kb = key(b);
+    const r = typeof ka === "string" ? ka.localeCompare(kb) : ka - kb;
+    return (gvorlAb ? -r : r) || b.t - a.t;
+  });
+  return raus;
+}
+const gvorlErsteller = who => (depotIdx.get(who) || {}).name || (S.tpl && S.tpl[who] && S.tpl[who].n) || who;
+function gvorlTafelHtml(){
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const alle = gvorlAngezeigt = gvorlListe();
+  const klein = `style="font-size:11px;padding:3px 8px"`;
+  if (!alle.length) return `<div id="gv-tafel"><div class="empty">Nothing shared yet.</div></div>`;
+  const proTyp = new Map();
+  for (const v of alle) for (const k of Object.keys(v.grp)) proTyp.set(k, (proTyp.get(k) || 0) + 1);
+  const typen = MAP.at.filter(a => proTyp.has(a.k));
+  const zeile = (v, i) => {
+    /* the one text filter reaches every column: creator, name, teams, type names, age */
+    const heu = `${gvorlErsteller(v.who)} ${v.n} ${gvorlTeams(v)} ${Object.keys(v.grp).map(atName).join(" ")} ${v.t ? alterText(v.t) : ""}`.toLowerCase();
+    return `<tr data-gv="${i}" data-gvsuch="${esc(heu)}" data-typen="${esc(Object.keys(v.grp).join(" "))}"${
+        v.mine ? ' class="me"' : ""} style="cursor:pointer">
+      <td><span class="gv-pf" style="display:inline-block;width:12px;color:var(--dim2)">▸</span>${nameMitClan(gvorlErsteller(v.who))}${v.mine ? " <em>you</em>" : ""}</td>
+      <td style="text-align:left" dir="auto">${esc(v.n)}</td>
+      <td>${gvorlTeams(v)}</td>
+      <td style="text-align:left">${Object.keys(v.grp).map(k => `<span title="${esc(atName(k))} ×${v.grp[k]}">${symbolSVG(k, c, 20, 14)}</span>`).join("")}</td>
+      <td>${v.t ? alterText(v.t) : "—"}</td>
+      <td><button class="btn" data-gvcopy="${i}" ${klein}>Copy to my depot</button></td></tr>
+    <tr data-gvu="${i}" style="display:none">
+      <td colspan="6" style="text-align:left;white-space:normal;background:var(--panel2)">
+        <div class="row" style="align-items:center;gap:14px;flex-wrap:wrap">
+          ${Object.keys(v.grp).map(k => `<span style="display:inline-flex;align-items:center;gap:5px">${
+            symbolSVG(k, c, 22, 16)} ${esc(atName(k))} <b>×${v.grp[k]}</b></span>`).join("")}
+          ${v.mine ? `<span style="margin-left:auto;display:flex;gap:5px">
+            <button class="btn" data-gvback="${i}" ${klein} title="Take it off the clan's list">Withdraw</button>
+            <button class="btn" data-gvwegc="${i}" ${klein}>Delete</button></span>` : ""}
+        </div></td></tr>`;
+  };
+  const kopf = (k, name, stil) => `<th data-gvs="${k}" style="cursor:pointer${stil ? ";" + stil : ""}" title="Sort by ${name}">${name}${
+    gvorlSort === k ? (gvorlAb ? " ▼" : " ▲") : ""}</th>`;
+  return `<div id="gv-tafel">
+    <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+      <input id="gv-such" value="${esc(gvorlSuche)}" placeholder="Filter by creator, name, teams, type or age" spellcheck="false"
+        style="flex:1;min-width:160px;background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:2px 5px;outline:0;font-size:11.5px">
+      <div class="sp-filter" style="margin:0">${typen.map(a => `<button data-gvtyp="${esc(a.k)}" aria-pressed="${gvorlTyp === a.k}"
+        title="${esc(a.name)}">${symbolSVG(a.k, c, 20, 14)}<b>${proTyp.get(a.k)}</b></button>`).join("")}</div>
+    </div>
+    <div class="tw"><table>
+      <thead><tr>${kopf("who", "Creator")}${kopf("n", "Name", "text-align:left")}${kopf("teams", "Teams")}<th style="text-align:left">Types</th>${kopf("t", "Age")}<th></th></tr></thead>
+      <tbody>${alle.map(zeile).join("")}</tbody></table></div>
+    <div id="gv-stand" class="hint" style="min-height:14px"></div>
+  </div>`;
+}
+/* rebuilds the table in place (sorting, withdraw, delete) - the window stays */
+function gvorlTafelNeu(){
+  const host = document.getElementById("gv-tafel");
+  if (!host) return;
+  const t = document.createElement("template");
+  t.innerHTML = gvorlTafelHtml().trim();
+  host.replaceWith(t.content.firstElementChild);
+  const neu = document.getElementById("gv-tafel");
+  if (neu) tabellenkoepfeAusrichten(neu);
+  gvorlTafelVerdrahten();
+}
+function gvorlTafelVerdrahten(){
+  const host = document.getElementById("gv-tafel");
+  if (!host) return;
+  const alle = gvorlAngezeigt;
+  const unter = i => host.querySelector(`tr[data-gvu="${i}"]`);
+  /* the filter hides rows, it never rebuilds the table - the field would
+     lose its caret at every keystroke (as depotDialog) */
+  const anwenden = () => {
+    const q = gvorlSuche.trim().toLowerCase();
+    host.querySelectorAll("tr[data-gv]").forEach(tr => {
+      const passt = (!q || tr.dataset.gvsuch.includes(q))
+                 && (!gvorlTyp || tr.dataset.typen.split(" ").includes(gvorlTyp));
+      tr.hidden = !passt;
+      const u = unter(tr.dataset.gv);
+      if (u && !passt){ u.style.display = "none"; const pf = tr.querySelector(".gv-pf"); if (pf) pf.textContent = "▸"; }
+    });
+  };
+  const such = document.getElementById("gv-such");
+  if (such) such.addEventListener("input", ()=>{ gvorlSuche = such.value; anwenden(); });
+  host.querySelectorAll("[data-gvtyp]").forEach(b => b.addEventListener("click", ()=>{
+    gvorlTyp = gvorlTyp === b.dataset.gvtyp ? null : b.dataset.gvtyp;
+    host.querySelectorAll("[data-gvtyp]").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.gvtyp === gvorlTyp)));
+    anwenden();
+  }));
+  /* sorting by the column heads, as the players table */
+  host.querySelectorAll("th[data-gvs]").forEach(h => h.addEventListener("click", ()=>{
+    const k = h.dataset.gvs;
+    if (gvorlSort === k) gvorlAb = !gvorlAb;
+    else { gvorlSort = k; gvorlAb = !(k === "who" || k === "n"); }
+    gvorlTafelNeu();
+  }));
+  /* the row drop-down, as the points table (data-pk / data-pd) */
+  host.querySelectorAll("tr[data-gv]").forEach(tr => tr.addEventListener("click", ev => {
+    if (ev.target.closest("button")) return;
+    const u = unter(tr.dataset.gv);
+    if (!u) return;
+    const auf = u.style.display === "none";
+    u.style.display = auf ? "" : "none";
+    const pf = tr.querySelector(".gv-pf"); if (pf) pf.textContent = auf ? "▾" : "▸";
+  }));
+  const stand = t => { const el = document.getElementById("gv-stand"); if (el) el.textContent = t; };
+  host.querySelectorAll("[data-gvcopy]").forEach(b => b.addEventListener("click", ()=>{
+    const v = alle[+b.dataset.gvcopy];
+    if (!v) return;
+    const r = gvorlKopieren(v);
+    if (!r) return;
+    depotZeichnen();
+    stand(`${v.n}: ${r.text}`); toast(`${v.n}: ${r.text}`);
+  }));
+  host.querySelectorAll("[data-gvback]").forEach(b => b.addEventListener("click", ()=>{
+    const v = alle[+b.dataset.gvback];
+    if (!v || !v.mine) return;
+    const liste = gvorlEigene(), k = liste.findIndex(x => x.n === v.n);
+    if (k < 0) return;
+    liste[k].clan = 0;
+    if (gvorlSchreiben(liste)){ toast(`${v.n} withdrawn`); gvorlTafelNeu(); }
+  }));
+  host.querySelectorAll("[data-gvwegc]").forEach(b => b.addEventListener("click", ()=>{
+    const v = alle[+b.dataset.gvwegc];
+    if (!v || !v.mine) return;
+    if (!confirm(`Delete the template "${v.n}"?`)) return;
+    const liste = gvorlEigene().filter(x => x.n !== v.n);
+    if (gvorlSchreiben(liste)){ toast(`${v.n} deleted`); gvorlTafelNeu(); }
+  }));
+  anwenden();
 }
 
 /* ---------------- gathering time ----------------
@@ -16258,6 +16568,7 @@ function teamHochstufen(id, zu){
    Geschrieben wird ausschliesslich ueber setMyDepot, teamUmbenennen,
    teamHochstufen, withdrawTeam und teamLoeschen. */
 let depotDlgFilter = "all", depotDlgSuche = "";
+let depotLeserBehalten = null;   // T4 (2): the reader tab carried over a rebuild from within the window (wieder)
 function depotDialog(tab){
   const c = light() ? "#1a2029" : "#e9e2d5";
   const alleD = myDepotAlle();
@@ -16308,11 +16619,13 @@ function depotDialog(tab){
   const grBlock = g => {
     const mit = g.ats.map(id => teamVon.get(id)).filter(Boolean);
     return `<div style="border:1px solid var(--line);border-radius:var(--r);padding:7px 8px;margin-bottom:6px">
-      <div class="row" style="align-items:center;gap:8px">
+      <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
         <input data-gname="${esc(g.id)}" value="${esc(g.n || "")}" placeholder="Group name"
-               maxlength="${GRUPPE_NAME_MAX}" spellcheck="false" style="flex:1;min-width:0;${feldStil}">
+               maxlength="${GRUPPE_NAME_MAX}" spellcheck="false" style="flex:1;min-width:160px;${feldStil}">
         <span style="font-size:11px;color:var(--dim)">${mit.length} team${mit.length === 1 ? "" : "s"}</span>
         <button class="btn" data-gmit="${esc(g.id)}" ${klein}>Members …</button>
+        <button class="btn" data-gvsave="${esc(g.id)}" ${klein} title="Types and counts of this group">Save as template</button>
+        <button class="btn" data-gvsend="${esc(g.id)}" ${klein} title="Show it under Clan · Templates">Send to clan</button>
         <button class="btn" data-gweg="${esc(g.id)}" ${klein}>Delete</button>
       </div>
       <div style="font-size:11px;color:var(--dim2);margin-top:4px">${
@@ -16326,6 +16639,7 @@ function depotDialog(tab){
     <div class="tabs">
       <button data-tab="teams"  aria-pressed="true">Teams</button>
       <button data-tab="groups" aria-pressed="false">Groups</button>
+      <button data-tab="read"   aria-pressed="false">Read from game</button>
     </div>
     <div class="dlg-b">
       <div class="tabp on" data-tab="teams">
@@ -16351,15 +16665,28 @@ function depotDialog(tab){
           <button class="btn" id="gr-neu" ${klein}${gruppen.length >= GRUPPE_MAX
             ? ` disabled title="${GRUPPE_MAX} groups is the ceiling"` : ""}>Add group</button>
         </div>
-        <div class="note">One group per team. The clan sees your groups.</div>`
+        <div class="note">One group per team. The clan sees your groups.</div>
+        ${gvorlEigeneHtml(c, klein, feldStil)}`
         : `<div class="empty">Waiting for the first sync.</div>`}
       </div>
+      <div class="tabp" data-tab="read">${depotLeserHtml()}</div>
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
+  /* T4 (2): a rebuild from within the window (wieder) carries the reader tab
+     over - capture, rows read, ticks - the listeners and the closure of
+     depotLeserVerdrahten travel with the element. A fresh opening starts
+     empty: only wieder() sets depotLeserBehalten. */
+  const behalten = depotLeserBehalten; depotLeserBehalten = null;
+  if (behalten){
+    const frisch = document.querySelector('#dlg .tabp[data-tab="read"]');
+    if (frisch){ frisch.replaceWith(behalten); behalten.classList.remove("on"); }
+  }
   tabsAktiv(document.getElementById("dlg"), tab || "teams");
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  if (!behalten) depotLeserVerdrahten();                    // T4 (2): the reader tab
   const wieder = () => {
     const akt = document.querySelector("#dlg .tabs button[aria-pressed='true']");
+    depotLeserBehalten = document.querySelector('#dlg .tabp[data-tab="read"]');
     depotDialog(akt ? akt.dataset.tab : "teams");
   };
 
@@ -16421,6 +16748,51 @@ function depotDialog(tab){
   document.querySelectorAll("#dlg [data-gmit]").forEach(b => b.addEventListener("click", ()=>{
     gruppeMitgliederWahl(b.dataset.gmit, ()=>depotDialog("groups"));
   }));
+  /* T4 (3): group templates - from a group, by hand, and the own list below the groups */
+  document.querySelectorAll("#dlg [data-gvsave]").forEach(b => b.addEventListener("click", ()=>{
+    if (gvorlAusGruppeSpeichern(b.dataset.gvsave, false)) wieder();
+  }));
+  document.querySelectorAll("#dlg [data-gvsend]").forEach(b => b.addEventListener("click", ()=>{
+    if (gvorlAusGruppeSpeichern(b.dataset.gvsend, true)) wieder();
+  }));
+  document.querySelectorAll("#dlg [data-gvclan]").forEach(b => b.addEventListener("click", ()=>{
+    const liste = gvorlEigene(), v = liste[+b.dataset.gvclan];
+    if (!v) return;
+    v.clan = v.clan ? 0 : 1;
+    if (gvorlSchreiben(liste)){ toast(v.clan ? `${v.n} sent to the clan` : `${v.n} withdrawn`); wieder(); }
+  }));
+  document.querySelectorAll("#dlg [data-gvdel]").forEach(b => b.addEventListener("click", ()=>{
+    const liste = gvorlEigene(), v = liste[+b.dataset.gvdel];
+    if (!v) return;
+    if (!confirm(`Delete the template "${v.n}"?`)) return;
+    liste.splice(+b.dataset.gvdel, 1);
+    if (gvorlSchreiben(liste)){ toast(`${v.n} deleted`); wieder(); }
+  }));
+  document.querySelectorAll("#dlg [data-gvuse]").forEach(b => b.addEventListener("click", ()=>{
+    const v = gvorlEigene()[+b.dataset.gvuse];
+    if (!v) return;
+    const r = gvorlKopieren(v);
+    if (!r) return;
+    depotZeichnen(); toast(`${v.n}: ${r.text}`); wieder();
+  }));
+  /* "New template": a recipe typed by hand, no teams needed (W-2) */
+  document.getElementById("gv-nplus")?.addEventListener("click", ()=>{
+    document.getElementById("gv-nplus").insertAdjacentHTML("beforebegin", gvorlNeuTeilHtml(feldStil));
+  });
+  const gvNeuSpeichern = () => {
+    const feld = document.getElementById("gv-nname");
+    const grp = {};
+    let schlecht = false;   /* one pair out of 1..99 stops the save - nothing falls away in silence */
+    document.querySelectorAll("#gv-neu .gv-nteil").forEach(t => {
+      const k = t.querySelector("[data-gvntyp]").value, n = Math.round(+t.querySelector("[data-gvnn]").value);
+      if (AT[k] && n >= 1 && n <= 99) grp[k] = (grp[k] || 0) + n; else schlecht = true;
+    });
+    if (schlecht){ toast("Count 1 to 99."); return; }
+    if (gvorlNeuSpeichern(feld ? feld.value : "", grp)) wieder();
+    else if (feld && !feld.value.trim()) feld.focus();
+  };
+  document.getElementById("gv-nsave")?.addEventListener("click", gvNeuSpeichern);
+  document.getElementById("gv-nname")?.addEventListener("keydown", ev => { if (ev.key === "Enter") gvNeuSpeichern(); });
   document.querySelectorAll("#dlg [data-gweg]").forEach(b => b.addEventListener("click", ()=>{
     const g = gruppenListe().find(x => x.id === b.dataset.gweg);
     if (!g) return;
@@ -17316,7 +17688,13 @@ document.getElementById("b-key").addEventListener("click", function(){
   if (showKey) drawKey();
 });
 document.getElementById("b-depot").addEventListener("click", () => depotAuf(!showDepot));
-document.getElementById("b-mydepot").addEventListener("click", () => depotAuf(!showDepot));
+/* T4 (1): Personal -> Depot opens the depot window itself. ENNO 18.09.2026
+   (ToDo 16.9.2026.docx, Personal - Depot): "Hier soll sich das Manage Teams
+   and groups Menü öffnen." The column on the right stays reachable by key
+   D, the column button (b-depot) and its grip; dragging a team onto the
+   map still happens there - the window sits over the veil, the column
+   behind it. */
+document.getElementById("b-mydepot").addEventListener("click", () => depotDialog("teams"));
 
 /* ================= Die Breite der rechten Spalte ziehen ==================
    DIE ZOOMFALLE: #rechts traegt zoom:calc(var(--ui) * var(--f-rechts)). Eine
@@ -43219,16 +43597,23 @@ function massenDialog(){
   });
 }
 
-document.getElementById("dep-shot").addEventListener("click", ()=>{
-  openDlg(`
-    <div class="dlg-h"><h2>Read your assault teams</h2>
-      <p>On the war map, open the assault team list down the right-hand side — then capture.</p></div>
-    <div class="dlg-b">
-      ${/* capture only - no file picker any more; paste and drop still work
-           quietly, bildQuelle listens on the window */
+document.getElementById("dep-shot").addEventListener("click", ()=>depotDialog("read"));   // T4 (2): the reader is a tab of the depot window
+/* T4 (2) - THE READER IS THE THIRD TAB OF THE DEPOT WINDOW. ENNO 18.09.2026
+   (ToDo 16.9.2026.docx, Personal - Depot): "Btw. Soll hier auch der
+   AT-Reader für die eigenen Einheiten über einen Unterreiter gestartet
+   werden können." What used to be the window "Read your assault teams"
+   (capture, frame, sheet, take-over) is now depotLeserHtml - the tab's
+   content - and depotLeserVerdrahten - its wiring, run by depotDialog right
+   after openDlg. The ids ds-* stay, depotLesen writes into them as before.
+   One window less. One line of state instead of the two old instruction
+   lines (ENNO 18.09.2026: "Ich brauche aber in der Oberfläche keine
+   Kommentare."). */
+function depotLeserHtml(){
+  return `
+      ${/* capture only - no file picker any more */
         bildAufnahmeMoeglich()
-        ? `<div class="row"><button class="btn primary mit-ico" data-bild="grab">${ICO_CAPTURE}Capture the game …</button></div>
-           <div class="hint" data-bild="hint"><b>Capture</b> asks which window it may see — pick the Heroes &amp; Generals window.</div>`
+        ? `<div class="hint">Capture the war map with the team list open.</div>
+           <div class="row"><button class="btn primary mit-ico" data-bild="grab">${ICO_CAPTURE}Capture the game …</button></div>`
         : `<div class="hint">Capturing a window needs the page to run over https; on a local file the browser does not allow it.</div>`}
       <div id="ds-status" style="font-size:12px;color:var(--dim)">Waiting for a capture …</div>
       <div id="ds-crop" style="display:none;flex-direction:column;gap:6px">
@@ -43257,15 +43642,15 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
         <pre id="ds-rohtext" style="white-space:pre-wrap;word-break:break-word;margin:6px 0 0;
           font-size:11px;max-height:24vh;overflow:auto"></pre>
       </details>
-    </div>
-    <div class="dlg-f">
-      <button class="btn" id="d-close">Cancel</button>
-      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);cursor:pointer">
-        <input type="checkbox" id="ds-stellen"> Publish depot for clan
-      </label>
-      <button class="btn primary" id="ds-go" disabled>Add ticked</button>
-    </div>`, true);
-  document.getElementById("d-close").addEventListener("click", closeDlg);
+      <div class="row" style="align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);cursor:pointer">
+          <input type="checkbox" id="ds-stellen"> Publish depot for clan
+        </label>
+        <button class="btn primary" id="ds-go" disabled>Add ticked</button>
+      </div>`;
+}
+function depotLeserVerdrahten(){
+  if (!document.getElementById("ds-bild")) return;         // no reader tab in this window
 
   /* Der Rahmen wird in Bruchteilen des Bildes gefuehrt, nicht in Pixeln - dann
      stimmt er unabhaengig davon, wie stark die Vorschau verkleinert ist. */
@@ -43376,7 +43761,7 @@ document.getElementById("dep-shot").addEventListener("click", ()=>{
        set out of the depot. */
     schlangeFragen(gestellt.map(([id, tw]) => ({id, town: tw})));
   });
-});
+}
 
 
 /* ---- Das Fenster zur Schlachtanalyse --------------------------------- */
@@ -47815,7 +48200,7 @@ const MENUES = [
   /* "Personal": what is yours alone - your soldiers, your depot, your
      notebook. The clan group keeps what is really clan-wide. */
   {id:"pers",  titel:"Personal",  knoepfe:["b-arms","b-mydepot","b-note"]},
-  {id:"clan",  titel:"Clan",      knoepfe:["b-cl-card","b-cl-depot","b-cl-growth","b-cl-over","b-cl-deploy","b-cl-people","b-cl-punkte","b-cl-arsenal"]},
+  {id:"clan",  titel:"Clan",      knoepfe:["b-cl-card","b-cl-depot","b-cl-growth","b-cl-over","b-cl-deploy","b-cl-people","b-cl-punkte","b-cl-tpl","b-cl-arsenal"]},
   /* "Situation" musste erklaert werden - dann ist der Name falsch. Was hier
      steckt, meldet man oder sieht man nach: Gegner, Schlacht, Brett. */
   /* The board stays in the top bar itself - its "new" badge must be seen
@@ -52788,6 +53173,7 @@ function clanDialog(tab){
       <button data-tab="deploy" aria-pressed="false">In the field</button>
       <button data-tab="people" aria-pressed="false">Roles</button>
       <button data-tab="punkte" aria-pressed="false">Points</button>
+      <button data-tab="tpl"    aria-pressed="false">Templates</button>
     </div>
     <div class="dlg-b">
 
@@ -53041,6 +53427,8 @@ function clanDialog(tab){
       <div class="tabp" data-tab="punkte"><div id="cl-punkte">
         <div class="empty">Loading points ...</div></div></div>
 
+      <div class="tabp" data-tab="tpl">${gvorlTafelHtml()}</div>
+
     </div>
     <div class="dlg-f">
       ${leute.length ? `<button class="btn" id="cl-copy">Copy as table</button>` : ""}
@@ -53073,6 +53461,7 @@ function clanDialog(tab){
   document.querySelectorAll("#dlg .tabs button[data-tab]").forEach(b =>
     b.addEventListener("click", () => clFuellen(b.dataset.tab)));
   document.getElementById("d-close").addEventListener("click", closeDlg);
+  gvorlTafelVerdrahten();                                   // T4 (3): Clan -> Templates
   /* Clan-Reiter: Name, Seite, Krieg, Befehle. */
   document.getElementById("cl-save")?.addEventListener("click", ()=>{
     if (!istAdmin()){ toast("Only the admin writes the clan's name."); return; }
@@ -54389,7 +54778,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d0ac5e256f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 2211081106</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -54617,7 +55006,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d0ac5e256f";
+const BAU = "2211081106";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
