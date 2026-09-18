@@ -18,43 +18,9 @@
             "Arial Narrow","Segoe UI",system-ui,sans-serif;
   --schmal:"Bahnschrift Condensed","Bahnschrift","Arial Narrow","Segoe UI",system-ui,sans-serif;
 }
-:root[data-theme="light"]{
-  --ground:#ded7c9; --panel:#f0ebe0; --panel2:#e5ded0; --line:#c2b8a4;
-  /* Dasselbe im hellen Thema, nur andersherum: hier muessen die Toene
-     DUNKLER werden. Gemessen: 3,28 -> 4,63 und 6,07 -> 7,01. */
-  --text:#221c14; --dim:#554d3f; --dim2:#70685a;
-  --accent:#8a6314; --accent-dk:#d9a441;
-  --us:#1f8c38; --ge:#4a3fae; --su:#b8241c; --none:#7b7565;
-}
-
-/* ---- Hell: die Flaechen, die ihre Farbe fest eingebaut hatten -----------
-   Die Farbwerte oben schalten mit, die Verlaeufe von Kopfzeile, Leiste,
-   Spalte und Fenstern nicht - die standen als feste Dunkeltoene im Stil.
-   Solange sich das helle Aussehen gar nicht einschalten liess, ist das nie
-   jemandem aufgefallen. */
-:root[data-theme="light"] #top{
-  background:linear-gradient(180deg,#efe9dc 0%,#e3dccd 100%);
-  box-shadow:0 2px 8px rgba(90,75,50,.18)}
-:root[data-theme="light"] #bar{
-  background:linear-gradient(180deg,#ebe4d6 0%,#e2dacb 100%)}
-:root[data-theme="light"] #rechts,
-:root[data-theme="light"] #side{
-  background:linear-gradient(180deg,#efe9dc,#e6dfd1)}
-:root[data-theme="light"] #mapwrap{background:#cfc8b8}
-:root[data-theme="light"] .dlg{
-  background:linear-gradient(180deg,#f4efe4,#ece5d7)}
-:root[data-theme="light"] .dlg-h{
-  background:linear-gradient(180deg,#ece5d7,transparent)}
-:root[data-theme="light"] .dlg-f{background:var(--panel)}
-:root[data-theme="light"] .tool[aria-pressed="true"]{
-  background:linear-gradient(180deg,#f0dcae,#e6cf98);
-  box-shadow:inset 0 0 12px rgba(138,99,20,.16)}
-:root[data-theme="light"] #menus .menu{background:var(--panel);
-  box-shadow:0 10px 30px rgba(90,75,50,.25)}
-:root[data-theme="light"] #veil{background:rgba(120,105,80,.42)}
-:root[data-theme="light"] kbd{background:#e0d8c7;border-color:#c2b8a4;color:#3a3226}
-/* Der Radarraum bleibt gruener Phosphor. Ein helles Radar gibt es nicht, und
-   ein weisser Schirm mit gruenen Zahlen sieht aus wie ein Fehler. */
+/* One look only, the dark one (T7 - ENNO 18.09.2026: "Bitte den bright mode
+   entfernen, der sieht eh blöd aus und die meisten nutzen darkmode
+   sowieso."). The light palette and its surfaces stood here. */
 /* Zwei Regler. Der erste vergroessert die ganze Oberfläche - die Karte selbst
    bleibt aussen vor, sie skaliert ueber devicePixelRatio und wuerde nur
    unscharf.
@@ -366,7 +332,6 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
 #cv.griff{cursor:move}
 .float{position:absolute;background:rgba(22,18,13,.94);border:1px solid var(--line);
   border-radius:var(--r);backdrop-filter:blur(6px);box-shadow:0 4px 18px rgba(0,0,0,.5)}
-:root[data-theme="light"] .float{background:rgba(240,235,224,.95)}
 #searchbox{top:10px;left:10px;display:flex;gap:5px;align-items:center;padding:4px 6px}
 #search{background:transparent;border:0;outline:0;width:170px;font-size:12px}
 #search::placeholder{color:var(--dim2)}
@@ -477,7 +442,6 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
 #schlacht .sf-tafel th.sf-block{border-top:0;text-align:left;padding-left:.3em}
 #schlacht .sf-tafel th.sf-seite,#schlacht .sf-tafel td.sf-seite{text-align:left;padding-right:.5em;min-width:2.6em}
 #schlacht .sf-tafel .sf-raute{width:1.4em;height:1.4em;display:block;margin:0 auto;filter:invert(1);opacity:.9}
-:root[data-theme="light"] #schlacht .sf-tafel .sf-raute{filter:none}
 #schlacht .sf-tafel td{min-width:2.2em}
 #schlacht .sf-tafel td.null{color:var(--dim2)}
 #schlacht .sf-note{font-size:.85em;color:var(--dim)}
@@ -782,7 +746,6 @@ body.zieht #mapwrap canvas{pointer-events:none}
 .own4 button{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
   padding:6px 2px;cursor:pointer;font-size:10px;color:var(--dim)}
 .own4 button[aria-pressed="true"]{background:var(--f);border-color:var(--f);color:#0d1116;font-weight:600}
-:root[data-theme="light"] .own4 button[aria-pressed="true"]{color:#fff}
 .unit{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;
   background:var(--panel2);border-radius:var(--r);padding:5px 7px;border-left:3px solid var(--f)}
 .unit .sym{width:26px;height:18px;flex:0 0 auto}
@@ -1011,12 +974,6 @@ i.prio{margin-right:5px;vertical-align:-1px}
   border:1px solid var(--accent);border-radius:var(--r);padding:7px 11px;
   box-shadow:0 8px 26px rgba(0,0,0,.6);font-size:11.5px;zoom:var(--ui,1)}
 #txt-bar.an{display:flex}
-#meld-bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:82;
-  display:none;align-items:center;gap:11px;background:var(--panel);
-  border:1px solid var(--accent);border-radius:var(--r);padding:7px 11px;
-  box-shadow:0 8px 26px rgba(0,0,0,.6);font-size:11.5px;zoom:var(--ui,1)}
-#meld-bar.an{display:flex}
-body.meld-modus{cursor:help}
 /* ---------- Radarraum ----------
    Ein eigenes Fenster ohne den ganzen Kartenkram drumherum: wer hier sitzt,
    arbeitet an einer Sache, alles andere waere im Weg. Gruener Phosphor, weil
@@ -2442,6 +2399,16 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="btn" id="b-view">View</button>
       <button class="btn" id="b-war">War settings …</button>
       <button class="btn danger" id="b-reset" style="display:none">Start a new war …</button>
+      <!-- T7 (ENNO 18.09.2026: "Die Adminspezifischen Felder kannst du bitte
+           hier rausziehen und in den Reiter Admin integrieren"): the three
+           admin entries of the gear menu sit in the Admin group now.
+           mitgliederKnopf shows them, todoKnopf keeps the count. -->
+      <button class="btn" id="b-aufsicht" style="display:none"
+        title="Who has been changing what, and how to take it back">Changes by member …</button>
+      <button class="btn" id="b-txt" style="display:none"
+        title="Renaming changes it for everyone">Edit labels …</button>
+      <button class="btn" id="b-todo" style="display:none"
+        title="Everything anybody flagged in the tool">Open points …<span class="marke" hidden></span></button>
       <div id="menubar"></div>
       <button class="btn" id="b-burger" aria-label="Menu" aria-expanded="false">☰</button>
       <button class="btn" id="b-sync"><span class="dot"></span><span class="txt">Sign in</span><span class="als"></span></button>
@@ -2681,8 +2648,6 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   <button class="rd-zu" id="krieg-bar-zu" title="Close">&times;</button></div>
 <div id="txt-bar" data-fest><span>Editing labels — click any wording to change it.</span>
   <button class="btn primary" id="txt-fertig">Done</button></div>
-<div id="meld-bar" data-fest><span>Point at whatever is wrong — click it and say what you mean.</span>
-  <button class="btn primary" id="meld-fertig">Done</button></div>
 <div id="ghost"></div>
 <div id="hover"></div>
 <div id="toast"></div>
@@ -7482,8 +7447,8 @@ const ORDERS_ARTEN = ["Attack", "Drop", "Defence", "Line", "Recon", "Area", "Par
    11.09.2026 (fable/Listen/ANSCHLUSS-ORDERS.md, Abschnitt 5): kein Topf
    der TOPFTAFEL trug persoenliche Einstellungen. Seit dem 16.09.2026 gibt
    es einen - tpl, die Anforderungs-Vorlagen (BEF-10) liegen am Konto
-   (5.7: "Am konto"), siehe dort; die Filter hier bleiben wie LAY_KEY und
-   THEMA_KEY je Browser, mit der Kontokennung im Schluessel, damit zwei
+   (5.7: "Am konto"), siehe dort; die Filter hier bleiben wie LAY_KEY
+   je Browser, mit der Kontokennung im Schluessel, damit zwei
    Konten im selben Browser sich nichts ueberschreiben. Auf dem Telefon
    sind es darum andere Filter-Vorlagen als am Rechner. */
 const ORDERS_FILTER = "hng-warmap-orders-filter";
@@ -11266,7 +11231,10 @@ function fit(){
 }
 const toScr = (x,y) => [x*view.z+view.x, y*view.z+view.y];
 const toMap = (x,y) => [(x-view.x)/view.z, (y-view.y)/view.z];
-const light = () => document.documentElement.getAttribute("data-theme") === "light";
+/* T7 (ENNO 18.09.2026: "Bitte den bright mode entfernen ..."): the light look
+   is gone. Nothing sets data-theme any more; every caller of light() keeps
+   choosing the dark colour. Clearing the callers one by one is cosmetics. */
+const light = () => false;
 /* Eine unbekannte Fraktion darf das Zeichnen nicht abbrechen. Sechsundzwanzig
    Stellen rufen col(FACTIONS[...]), und eine einzige Zeile mit unsinniger
    Fraktionsangabe reichte, um draw() zu werfen - und damit den ganzen
@@ -49644,7 +49612,7 @@ const MENUES = [
   /* Hilfe darf jeder - sie hat unter "Admin" nichts verloren. Solange sie
      dort stand, bekam die Gruppe fuer JEDEN einen Titel, und ein einfaches
      Mitglied sah "ADMIN" in der Leiste. */
-  {id:"verw",  titel:"Admin",    knoepfe:["b-war", "b-reset", "b-members", "b-frisch"]},
+  {id:"verw",  titel:"Admin",    knoepfe:["b-war", "b-reset", "b-aufsicht", "b-txt", "b-todo", "b-members", "b-frisch"]},   // T7: the gear's admin entries live here
 ];
 let menuOffen = null;
 function menueSchliessen(){
@@ -49969,33 +49937,13 @@ function abmelden(){
    muessen. Das Unterfenster sperrt die Karte nicht - man dreht an einem
    Regler und sieht dabei zu. */
 const ZR_SEITEN = [
-  {k:"aussehen",n:"Look",    d:"Light or dark"},
+  /* "Look" (light or dark) stood first until T7 - ENNO 18.09.2026: "Bitte den
+     bright mode entfernen, der sieht eh blöd aus und die meisten nutzen
+     darkmode sowieso." One look, nothing to choose. */
   {k:"layout",  n:"Layout",  d:"Columns, and the order of the buttons"},
   {k:"groesse", n:"Size",    d:"Everything, map labels — and per section"},
   {k:"konto",   n:"Account", d:"Staying signed in, logging out"},
 ];
-/* Das helle Aussehen war vollstaendig gebaut - ueber vierzig Regeln unter
-   :root[data-theme="light"] und light() an jeder Zeichenstelle - aber nichts
-   im Programm hat data-theme je GESETZT. Es war also nur zu sehen, wenn man
-   es sich von Hand in die Entwicklerwerkzeuge schrieb.
-   Wie hell oder dunkel jemand arbeitet, geht den Clan nichts an: das liegt im
-   Browser, nicht in meta. */
-const THEMA_KEY = "hng-warmap-thema";
-function themaSetzen(w){
-  const el = document.documentElement;
-  if (w === "auto") el.removeAttribute("data-theme");
-  else el.setAttribute("data-theme", w);
-  try { localStorage.setItem(THEMA_KEY, w); } catch(e){}
-  requestAnimationFrame(()=>{ resize(); draw(); side(); depotZeichnen(); });
-}
-function themaLaden(){
-  let w = "dark";
-  try { w = localStorage.getItem(THEMA_KEY) || "dark"; } catch(e){}
-  themaSetzen(w);
-}
-const themaJetzt = () => {
-  try { return localStorage.getItem(THEMA_KEY) || "dark"; } catch(e){ return "dark"; }
-};
 let zwOffen = null;
 
 function zahnradZu(){
@@ -50064,18 +50012,6 @@ function zrOrdListe(k){
 }
 
 function zwInhalt(k){
-  if (k === "aussehen"){
-    const w = themaJetzt();
-    return `
-      <div class="zr-wahl">
-        ${[["dark","Dark",""],
-           ["light","Light",""],
-           ["auto","Follow the system",""]].map(([v,n,d])=>`
-          <label class="zr-schalt"><input type="radio" name="thema" value="${v}"
-            ${w===v?"checked":""}> <span>${n}${d?` <em style="font-style:normal;
-            color:var(--dim2)">— ${d}</em>`:""}</span></label>`).join("")}
-      </div>`;
-  }
   if (k === "layout") return `
     <label class="zr-schalt"><input type="checkbox" id="zr-zwei" ${LAY.zwei ? "checked" : ""}>
       Tool bar in two columns</label>
@@ -50134,8 +50070,6 @@ function zwInhalt(k){
 
 function zwVerdrahten(k){
   const el = document.getElementById("zw");
-  el.querySelectorAll('input[name="thema"]').forEach(r =>
-    r.addEventListener("change", ()=>{ if (r.checked) themaSetzen(r.value); }));
   /* ---- Das Passwort wechseln ----
      Bis heute gab es dafuer gar keinen Weg: das Passwort stand fest, sobald
      es einmal vergeben war. Und die Notizbuch-Huelle wurde NIE erneuert -
@@ -50342,7 +50276,6 @@ function zwNachziehen(){
 
 function zahnradZeichnen(){
   const el = document.getElementById("zahnrad");
-  const offen = meldungen().filter(([,e]) => !e.v.st).length;
   el.innerHTML = `
     <div class="zr-kopf"><b>Settings</b>
       <button id="zr-zu" title="Close">&times;</button></div>
@@ -50359,23 +50292,21 @@ function zahnradZeichnen(){
     <h3>Something wrong?</h3>
     <div class="note" style="margin-top:0">Lands on the admin's list with your name.</div>
     <button class="btn" id="zr-meld">Report or suggest …</button>
-    <button class="btn" id="zr-zeig">Report by pointing at it</button>
 
     ${istLeader() && CFG ? `
       <h3>Clan rules</h3>
       <button class="btn" id="zr-regeln">Rules and points …</button>` : ""}
 
-    ${(istLeader() || istAdmin()) && CFG ? `
+    ${/* T7: the admin's entries (Changes by member, Edit labels, Open points)
+         moved to the Admin menu - ENNO 18.09.2026: "Die Adminspezifischen
+         Felder kannst du bitte hier rausziehen und in den Reiter Admin
+         integrieren". A leader without admin rights has no Admin menu, so
+         "Changes by member" stays here for him (Anschlussliste, Offen 9). */
+      CFG && istLeader() && !istAdmin() ? `
       <h3>Oversight</h3>
       <div class="note" style="margin-top:0">Who has been changing what, and how to
         take it back.</div>
-      <button class="btn" id="zr-aufsicht">Changes by member …</button>` : ""}
-
-    ${istAdmin() ? `
-      <h3>Admin</h3>
-      <div class="note" style="margin-top:0">Renaming changes it for everyone.</div>
-      <button class="btn" id="zr-txt">Edit labels …</button>
-      <button class="btn" id="zr-todo">Open points${offen ? ` · ${offen}` : ""} …</button>` : ""}`;
+      <button class="btn" id="zr-aufsicht">Changes by member …</button>` : ""}`;
 
   el.querySelector("#zr-zu").addEventListener("click", zahnradZu);
   el.querySelector("#zr-hilfe").addEventListener("click", ()=>{ zahnradZu(); hilfeDialog(); });
@@ -50383,10 +50314,7 @@ function zahnradZeichnen(){
     b.addEventListener("click", ()=>zwZeigen(b.dataset.zw)));
   el.querySelector("#zr-regeln")?.addEventListener("click", ()=>{ zahnradZu(); regelnDialog(); });
   el.querySelector("#zr-aufsicht")?.addEventListener("click", ()=>{ zahnradZu(); aufsichtFenster(); });
-  el.querySelector("#zr-meld").addEventListener("click", ()=>meldeFenster(""));
-  el.querySelector("#zr-zeig").addEventListener("click", ()=>meldeModusSetzen(true));
-  el.querySelector("#zr-txt")?.addEventListener("click", ()=>textModusSetzen(true));
-  el.querySelector("#zr-todo")?.addEventListener("click", todoFenster);
+  el.querySelector("#zr-meld").addEventListener("click", ()=>{ zahnradZu(); meldeFenster(); });   // like its neighbours: the gear closes first
 }
 document.getElementById("b-gear").addEventListener("click", ev => {
   ev.stopPropagation(); zahnradAuf();
@@ -50861,8 +50789,10 @@ async function codeOeffnen(schloss, passwort){
 
 /* ---- Meldungen ---------------------------------------------------------
    Wer im Werkzeug etwas sieht, das stoert, soll es dort melden koennen, wo
-   es stoert - nicht spaeter aus dem Gedaechtnis in einem Chat. Man zeigt auf
-   die Stelle, schreibt zwei Saetze, fertig.
+   es stoert - nicht spaeter aus dem Gedaechtnis in einem Chat. Zwei Saetze
+   aus dem Zahnrad, fertig. (Pointing at the spot went with T7 - ENNO
+   18.09.2026: "Den „Report by pointing at it” Teil brauchen wir eigentlich
+   nicht mehr.")
 
    Beim Verwalter sammelt sich daraus eine Liste, die sich als Text ausgeben
    laesst. Damit haengt der Informationsfluss nicht daran, dass gerade jemand
@@ -50918,6 +50848,7 @@ function meldungSenden(art, text, wo){
                     von: (S.name || S.me || "").slice(0,60)},
                 t: jetzt(), by: S.me, n: S.name || ""};
   dirty.add(`todo:${id}`); save();
+  todoKnopf();                                  // T7: the count on the Admin menu
   toast("Sent — it is on the admin's list now");
 }
 /* ---- DER RAUM DES LEITERS --------------------------------------------
@@ -51417,43 +51348,23 @@ function meldungStand(id, st){
   if (!e || !e.v) return;
   S.todo[id] = {...e, v: {...e.v, st}, t: jetzt()};
   dirty.add(`todo:${id}`); save();
+  todoKnopf();                                  // T7: the count on the Admin menu
 }
 
-/* ---- Zeigen statt beschreiben ---- */
-let meldeModus = false;
-function meldeModusSetzen(an){
-  meldeModus = !!an;
-  document.body.classList.toggle("meld-modus", meldeModus);
-  document.getElementById("meld-bar").classList.toggle("an", meldeModus);
-  if (meldeModus) zahnradZu();
-}
-function meldeKlick(ev){
-  if (!meldeModus || textModus) return;
-  const el = ev.target;
-  if (!el || txtTabu(el)) return;
-  ev.preventDefault(); ev.stopPropagation();
-  let wo = "";
-  for (const n of (el.childNodes || []))
-    if (n.nodeType === 3 && n.nodeValue.trim()){ wo = n.nodeValue.trim(); break; }
-  if (!wo) wo = (el.textContent || "").trim().slice(0, 60);
-  if (el.id) wo = wo ? `${wo} (${el.id})` : el.id;
-  meldeModusSetzen(false);
-  meldeFenster(wo);
-}
-function meldeFenster(wo){
+/* "Report or suggest" alone - T7, ENNO 18.09.2026: "„Report or Suggest“ als
+   alleinige Reportfunktion behalten." The pointing mode - its flag, its
+   click catcher on document and its strip at the bottom - stood here. */
+function meldeFenster(){
   openDlg(`
     <div class="dlg-h"><h2>Tell the admin</h2>
       <p>Broken, in the way, or missing — it lands on his list with your name on it.</p></div>
     <div class="dlg-b">
-      ${wo ? `<div class="note" style="margin-top:0">About: <b>${esc(wo)}</b></div>` : ""}
       <div class="row" style="flex-wrap:wrap;gap:5px">
         ${TODO_ART.map(([k,n],i)=>`<button class="btn" data-art="${k}"
           aria-pressed="${i===0}" style="font-size:11px;padding:3px 9px">${esc(n)}</button>`).join("")}
       </div>
       <textarea id="md-text" style="min-height:96px" dir="auto"
         placeholder="What did you expect, and what happened instead? One or two sentences are plenty."></textarea>
-      ${wo ? "" : `<div class="note">Want to point at it instead? Close this and pick
-        <b>Report by pointing</b> in the gear menu — then click the thing itself.</div>`}
     </div>
     <div class="dlg-f">
       <button class="btn" id="d-close">Cancel</button>
@@ -51470,8 +51381,8 @@ function meldeFenster(wo){
   document.getElementById("md-go").addEventListener("click", ()=>{
     const txt = document.getElementById("md-text").value.trim();
     if (txt.length < 4){ toast("A sentence, please — otherwise nobody can act on it."); return; }
-    meldungSenden(art, txt, wo);
-    closeDlg(); zahnradZeichnen();
+    meldungSenden(art, txt, "");
+    closeDlg();
   });
   setTimeout(()=>document.getElementById("md-text")?.focus(), 60);
 }
@@ -51548,8 +51459,6 @@ function todoFenster(){
     setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
   });
 }
-document.getElementById("meld-fertig").addEventListener("click", ()=>meldeModusSetzen(false));
-document.addEventListener("click", meldeKlick, true);
 
 /* ---- Privates Notizbuch ----------------------------------------------
    Jeder hat eines, der Leiter wie jedes Mitglied. Was darin steht, geht
@@ -56337,7 +56246,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 525f773129</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 7ea832b042</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -56565,7 +56474,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "525f773129";
+const BAU = "7ea832b042";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -56861,7 +56770,7 @@ async function syncPull(){
       toast("A new war has started — the old map is gone.");
       spangenErinnern();
     }
-    if (n){ rebuildUnits(); befehlAutoAbschluss(); save(); side(); tally(); draw(); kopfzeile(); boardZahl(); ordersZahl();
+    if (n){ rebuildUnits(); befehlAutoAbschluss(); save(); side(); tally(); draw(); kopfzeile(); boardZahl(); ordersZahl(); todoKnopf();
       /* the chain move waits until this pull has let go of its flag */
       setTimeout(() => { try { if (zuordNachruecken()) draw(); ordersZahl(); } catch(e){} }, 0);
             kraftLeiste(); if (showDepot) depotZeichnen(); statusLeiste(); }
@@ -57513,6 +57422,17 @@ function mitgliederKnopf(){
   if (f) f.style.display = (CFG && CFG.admin) ? "" : "none";
   const r = document.getElementById("b-reset");
   if (r) r.style.display = (CFG && CFG.admin) ? "" : "none";
+  /* T7: the three entries that came out of the gear menu. "Changes by
+     member" is the admin's here (a leader without admin rights keeps it in
+     the gear); labels and open points follow istAdmin() exactly as the
+     gear sections did - visible without a sign-in as well. */
+  const au = document.getElementById("b-aufsicht");
+  if (au) au.style.display = (CFG && CFG.admin) ? "" : "none";
+  for (const id of ["b-txt", "b-todo"]){
+    const k = document.getElementById(id);
+    if (k) k.style.display = istAdmin() ? "" : "none";
+  }
+  todoKnopf();
   /* Der Knopf allein reicht nicht - der Gruppentitel "Admin" stand sonst
      auch fuer ein einfaches Mitglied in der Leiste. */
   if (typeof menueTitelPruefen === "function") menueTitelPruefen();
@@ -57540,6 +57460,20 @@ const einladungsText = (name, code) =>
   + `Der Code ist nur fuer dich — nicht weitergeben, nicht oeffentlich posten.`;
 
 document.getElementById("b-members").addEventListener("click", ()=>mitgliederDialog());
+/* T7: the gear's admin entries, now in the Admin menu. The count of open
+   points sits in the .marke badge like on the board and orders buttons -
+   the button text stays "Open points …", so the label editor keeps its key. */
+function todoKnopf(){
+  const b = document.getElementById("b-todo");
+  if (!b) return;
+  let n = 0;
+  try { n = meldungen().filter(([,e]) => !e.v.st).length; } catch(e){}
+  const m = b.querySelector(".marke");
+  if (m){ m.textContent = String(n); m.hidden = !n; }
+}
+document.getElementById("b-aufsicht")?.addEventListener("click", ()=>aufsichtFenster());
+document.getElementById("b-txt")?.addEventListener("click", ()=>textModusSetzen(true));
+document.getElementById("b-todo")?.addEventListener("click", ()=>todoFenster());
 /* FRISCH LADEN - der Punkt: "ein felsenfester Weg, die Seite neu zu laden
    mit dem neuen Code, damit ich nicht jedes Mal an drei Stellen irgendwas
    zuruecksetzen muss."
@@ -57817,7 +57751,7 @@ async function mitgliederDialog(meldung){
     if (ev.ctrlKey) ev.preventDefault();
   }, {passive:false, capture:true});
   document.addEventListener("click", textKlick, true);
-  themaLaden();
+  try { localStorage.removeItem("hng-warmap-thema"); } catch(e){}   // T7: the old light/dark choice, gone for good
   soldatenUmziehen();
   faction = clanFaktion();     // zeichnen in der Farbe, in der man spielt
   fraktionenZeichnen();        // the tick and the order follow that side
@@ -57880,7 +57814,5 @@ if (window.ResizeObserver && cv.parentElement){
     if (!eingepasst) fit();
   }).observe(cv.parentElement);
 }
-new MutationObserver(()=>{ draw(); side(); tally(); if (showKey) drawKey(); if (showDepot) depotZeichnen(); })
-  .observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
 </script>
 </body></html>
