@@ -165,6 +165,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .abz-reihe{display:flex;flex-wrap:wrap;gap:3px;align-items:center;margin-top:2px}
 .abz-kl{flex:1 0 100%;font-family:var(--schmal);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-top:5px}
 .abz-frak{font-size:11px;font-weight:600;color:var(--accent);margin-top:8px}
+.abz-gitter .sp-filter{margin:6px 0 0}   /* P6: the two filter rows (faction, rank band) need their gap above, not below */
 .abz-k{display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:42px;padding:2px;
   background:var(--panel2);border:2px solid transparent;border-radius:2px;cursor:pointer;line-height:0;color:var(--text)}
 .abz-k img{height:36px;width:auto;max-width:76px;object-fit:contain}   /* a wide shoulder board keeps its shape inside 76 x 36 */
@@ -5919,8 +5920,16 @@ function abzListe(){
 /* the game's rank title (MAP.rangt, texts/HnG_Strategy_en.xml) and class name (MAP.cls) */
 const abzTitel  = (f, r) => { const t = MAP.rangt && MAP.rangt[String(f)]; return (t && t[r]) || `rank ${r}`; };
 const abzKlasse = z => { const c = CLS[(MAP.klnr || {})[String(z)]]; return c ? c.name : `class ${z}`; };
-/* which rank's picker is open, the "All factions" tick, the numbers line after an upload */
-let abzOffen = null, abzAlle = false, abzHinweis = null;
+/* which rank's picker is open, its filter, the numbers line after an upload.
+   The filter (P6, Blatt 16.09.) - ENNO 17.09.2026: "Gerne sollte dieser
+   Editor auch eine Filtermoeglichkeit fuer die Fraktionen und der
+   Unterscheidung der Offiziersklassen also Rang 12-14 und 15-17
+   bereithalten." - f: null = the clan's faction, 0 = all three, 1-3 = that
+   one; band: null = all, else an index into ABZ_BAND (his two officer bands
+   plus the two edges, so no rank is out of reach). Kept for the session
+   only, nothing saved. */
+const ABZ_BAND = [[0, 11], [12, 14], [15, 17], [18, 22]];
+let abzOffen = null, abzWahl = {f: null, band: null}, abzHinweis = null;
 /* ---- COMBINE (PKT-13 stage 3, 15.09.2026) ----
    ENNO 07.09.2026: "Hier ist tatsaechlich ein kleiner Bildeditor cool,
    indem man die Rangabzeichen aus dem Spiel mit eigenen Uploads
@@ -6138,20 +6147,25 @@ function abzEditorVerdrahten(g, id, o, kopie, gitterAuf, eintrag, abzSetzen){
   });
 }
 /* the picker under a rank's row: None, the own picture (a button of its
-   own as soon as a row lies - whatever abz says), Upload, Remove, All
-   factions, then one row per class of the clan's faction (the other two
-   after the tick), ranks 0-22 in order, the chosen one framed. ENNO
-   07.09.2026: "aus dem Spiel ueber die Raenge der einzelnen Soldaten". The
-   pictures load only while the picker is open. */
-function abzGitterHtml(r, alle){
+   own as soon as a row lies - whatever abz says), Upload, Remove, the
+   editor, then two filter rows (P6: faction US/GE/USSR/All, the clan's by
+   default; rank band All/0-11/12-14/15-17/18-22) and one row per class of
+   the shown faction(s), ranks in order, the chosen one framed - a class
+   without a rank in the band shows no row. ENNO 07.09.2026: "aus dem Spiel
+   ueber die Raenge der einzelnen Soldaten". The pictures load only while
+   the picker is open. */
+function abzGitterHtml(r, wahl){
   const eigene = spielFrak(clanFaktion());
-  const fraks = alle ? [eigene, ...[1, 2, 3].filter(f => f !== eigene)] : [eigene];
+  const f0 = wahl && wahl.f != null ? wahl.f : eigene;                        // 0 = all three
+  const fraks = f0 ? [f0] : [eigene, ...[1, 2, 3].filter(f => f !== eigene)];
+  const band = wahl && wahl.band != null ? (ABZ_BAND[wahl.band] || null) : null;
+  const chip = (k, w, text, an) => `<button type="button" data-${k}="${w}" aria-pressed="${an ? "true" : "false"}">${esc(text)}</button>`;
   const von = abzVon(r);                        // under a combined picture: its game picture, dashed
   const knopf = a => `<button type="button" class="abz-k${r.abz === a.name ? " on" : a.name === von ? " von" : ""}" data-abz="${a.name}"
       title="${esc(abzTitel(a.f, a.r))} · ${esc(abzKlasse(a.z))}"><img src="${esc(RANG_ORT + a.name + ".png")}" alt=""></button>`;
   const reihen = f => {
     const je = new Map();
-    for (const a of abzListe()) if (a.f === f){ if (!je.has(a.z)) je.set(a.z, []); je.get(a.z).push(a); }
+    for (const a of abzListe()) if (a.f === f && (!band || (a.r >= band[0] && a.r <= band[1]))){ if (!je.has(a.z)) je.set(a.z, []); je.get(a.z).push(a); }
     return [...je.entries()].map(([z, liste]) =>
       `<div class="abz-reihe"><span class="abz-kl">${esc(abzKlasse(z))}</span>${liste.map(knopf).join("")}</div>`).join("");
   };
@@ -6165,11 +6179,12 @@ function abzGitterHtml(r, alle){
         <input type="file" data-abzup="${esc(r.id)}" accept="image/png,image/webp,image/jpeg" hidden></label>`}
       ${liegt ? `<button class="btn" data-abzweg="${esc(r.id)}" style="font-size:10.5px;padding:2px 8px">Remove</button>` : ""}
       ${abzGrund(r) ? `<button class="btn" data-abzed="${esc(r.id)}" aria-pressed="${abzEd && abzEd.id === r.id ? "true" : "false"}" style="font-size:10.5px;padding:2px 8px">Combine …</button>` : ""}
-      <label class="toggle" style="margin-left:auto;font-size:11px"><input type="checkbox" data-abzalle ${alle ? "checked" : ""}><span>All factions</span></label>
     </div>
     ${abzHinweis && abzHinweis.id === r.id ? `<div style="font-size:11px;color:var(--dim);margin-top:4px">${esc(abzHinweis.text)}</div>` : ""}
     ${abzEd && abzEd.id === r.id && abzGrund(r) ? abzEditorHtml(r) : ""}
-    ${fraks.map(f => `${fraks.length > 1 ? `<div class="abz-frak">${esc((FACTIONS[f-1] || {}).name || "")}</div>` : ""}${reihen(f)}`).join("")}`;
+    <div class="sp-filter">${chip("abzfrak", 0, "All", f0 === 0)}${[1, 2, 3].map(f => chip("abzfrak", f, (FACTIONS[f-1] || {}).tag || String(f), f0 === f)).join("")}</div>
+    <div class="sp-filter">${chip("abzband", "", "All", !band)}${ABZ_BAND.map((b, i) => chip("abzband", i, `${b[0]}–${b[1]}`, band === b)).join("")}</div>
+    ${fraks.map(f => { const z = reihen(f); return z ? `${fraks.length > 1 ? `<div class="abz-frak">${esc((FACTIONS[f-1] || {}).name || "")}</div>` : ""}${z}` : ""; }).join("")}`;
 }
 const rollenListe = () => {
   const e = S.meta.rollen && S.meta.rollen.v;
@@ -52043,7 +52058,7 @@ function rangEditorVerdrahten(feld, o){
     const gitterAuf = id => {
       const g = gitter(id), r = eintrag(id);
       if (!g || !r) return;
-      g.innerHTML = abzGitterHtml(r, abzAlle);
+      g.innerHTML = abzGitterHtml(r, abzWahl);
       g.hidden = false;
       abzOffen = id;
       g.querySelectorAll("[data-abz]").forEach(b => b.addEventListener("click", ()=>{
@@ -52055,7 +52070,9 @@ function rangEditorVerdrahten(feld, o){
         abzSetzen(id, e => { if (n === "own") e.abz = "own"; else if (abzName(n)) e.abz = n; else delete e.abz; });
         o.neu();
       }));
-      g.querySelector("[data-abzalle]")?.addEventListener("change", ev => { abzAlle = !!ev.target.checked; gitterAuf(id); });
+      /* P6: the filter chips - the choice lives in abzWahl for the session, nothing is saved; a click redraws the picker */
+      g.querySelectorAll("[data-abzfrak]").forEach(b => b.addEventListener("click", ()=>{ abzWahl.f = +b.dataset.abzfrak; gitterAuf(id); }));
+      g.querySelectorAll("[data-abzband]").forEach(b => b.addEventListener("click", ()=>{ abzWahl.band = b.dataset.abzband === "" ? null : +b.dataset.abzband; gitterAuf(id); }));
       g.querySelector("[data-abzup]")?.addEventListener("change", async ev => {
         const datei = ev.target.files && ev.target.files[0];
         if (!datei) return;
@@ -53923,7 +53940,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 23beafa80e</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 5d98c8a4d9</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -54151,7 +54168,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "23beafa80e";
+const BAU = "5d98c8a4d9";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
