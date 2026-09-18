@@ -34914,6 +34914,18 @@ function gefLesen(bild, z){
    loses nothing of the course, and in between only a move of two points or
    more is worth a word at all. */
 const GEF_SCHREIB_MS = 15000, GEF_SPRUNG = 2;
+/* ONE WRITER PER TOWN (ToDo 16.9.2026, T14 - ENNO 18.09.2026: "Alle
+   Clanspieler eines Gefechts sollen die Fensterfreigabe machen, der Code
+   nimmt sich dann aber die Bilder nur von einem (falls einer rausfliegt
+   etc. haben wir Redundanz)"). Every reader reads its own window in its own
+   browser - no picture ever leaves the machine -, but only ONE of them
+   writes the clan row gefecht:<town>. The first to write holds the row as
+   long as it writes at least once in this many milliseconds: three writing
+   intervals (GEF_SCHREIB_MS), so a single missed look or a slow line does
+   not hand the row over. Should the writer fall silent for longer - dropped out,
+   window closed, game crashed -, the next reader writes with its next look
+   and holds the row from then on (FABLE 19.09.2026: 45 s, Offen 6). */
+const GEF_SCHREIBER_HALT = 45000;
 /* the reading is the state of a battle going on now, not a record: shown
    while the battle mark stands and the line is younger than a quarter of an
    hour. Nobody reads a battle for longer without the number moving. */
@@ -35392,6 +35404,34 @@ function gefOrtSetzen(i){
   const V = GEF.uhrVorschlag;
   if (V && V.ort !== null && V.ort !== undefined && V.ort !== i) GEF.uhrVorschlag = null;
 }
+/* WHO HOLDS THE CLAN ROW OF THIS TOWN (T14). The reader of the standing
+   reading: bat.by with bat.t when a hand on the clock or the mark stamped
+   the row anew and froze the reader into it (gefAlterHalten), else the
+   row's author and the row's server time - the same two the side panel
+   reads (gefSatz, gefStand). null when the row is this reader's own, when
+   no reading stands in it (a clock alone holds nobody up), when it belongs
+   to an older war, or when its reader has been silent for longer than
+   GEF_SCHREIBER_HALT - then the row is free. */
+function gefSchreiber(i){
+  if (i === null || i === undefined) return null;
+  const e = S.gefecht[i];
+  const b = (e && e.t && imKrieg(e) && imZeit(e) && e.v && e.v.bat && typeof e.v.bat === "object") ? e.v.bat : null;
+  if (!b) return null;
+  if (b.li === undefined && !b.rest && !b.kp) return null;   // a table-only row (HUD never seen) is no reading with a reader: a hand at the clock must not hold both
+  const by = b.by !== undefined ? b.by : e.by, n = b.by !== undefined ? b.n : e.n, t = b.t || e.t;
+  if (!by || by === S.me) return null;
+  if ((zeitReise || jetzt()) - t > GEF_SCHREIBER_HALT) return null;
+  return {by: by, n: n || "", t: t};
+}
+/* the desk's state line: whose row it is - only while this reader could
+   write at all (capture running, a town with the mark, the right); the
+   sheet says the rest ("Pick a town ...", the right's sentence) */
+function gefSchreiberZeile(){
+  const i = GEF ? GEF.ort : null;
+  if (!GEF || !GEF.live || i === null || i === undefined || !darf("aufklaerung") || !fightAt(i)) return "";
+  const H = gefSchreiber(i);
+  return `<div id="gf-schreiber" style="color:#9aa4ae;font-size:11.5px;line-height:1.5;padding:0 2px 6px">Clan line \u00b7 ${H ? `${esc(H.n || H.by)} writes` : "yours"}</div>`;
+}
 function gefMelden(){
   if (!GEF || !GEF.stand) return;
   const i = GEF.ort;
@@ -35457,6 +35497,16 @@ function gefMelden(){
     else if (gefTafelKennung(alt.tafel) !== gefTafelKennung(neu.tafel)) bewegt = true;
   }
   if (!(sofort || (weit && bewegt))) return;
+  /* THE GATE (T14): another reader holds this town's row and wrote within
+     GEF_SCHREIBER_HALT - then nothing is written here, whatever moved. The
+     first writer keeps the row; this reader reads on (BAT-13) and takes the
+     row with its next look once the writer has fallen silent. Behind
+     sofort/bewegt on purpose: GEF.geschrieben stays empty for a reader that
+     never wrote, so the first look after the hold writes - it does not wait
+     for a move of its own. The end-screen finding does not pass here: it
+     goes gefEndbildMelden -> gefLageEnde -> gefSchreiben and writes always
+     (BAT-4), leaving the other reader's reading with his name in the row. */
+  if (gefSchreiber(i)){ GEF.geschrieben = null; return; }   // a held reader forgets its own last row: its end-screen finding must not write a stale reading as fresh (Skeptiker Handwerk SOLL-1)
   gefSchreiben(i, neu);
 }
 
@@ -35814,6 +35864,7 @@ function gefPult(){
     <div class="kb-abstand"></div>
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="gf-klang">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
+    ${gefSchreiberZeile()}
     <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">Only the town picked on the left is written to: the score, the
       countdown, the objective row and the scoreboard.</div>`;
   document.getElementById("gf-kraft").addEventListener("click", () => {
@@ -56508,7 +56559,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5f94bcb309</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 3250052004</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -56736,7 +56787,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "5f94bcb309";
+const BAU = "3250052004";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
