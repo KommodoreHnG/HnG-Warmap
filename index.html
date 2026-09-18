@@ -483,6 +483,7 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
 #schlacht .sf-seite{min-width:0}
 #schlacht .sf-sh{display:flex;align-items:center;gap:.5em;margin-bottom:.25em;font-size:.95em;color:var(--dim)}
 #schlacht .sf-sh b{font-size:1.15em;color:var(--text)}
+#schlacht .sf-check{font-style:normal;font-size:.85em;color:var(--accent);white-space:nowrap}
 #schlacht .sf-namen{column-gap:1.2em;column-fill:balance}
 #schlacht .sf-namen div{break-inside:avoid;white-space:nowrap;line-height:1.3}
 #schlacht .sf-namen small{font-size:.8em;color:var(--dim2);margin-left:.45em}
@@ -1034,7 +1035,7 @@ body.meld-modus{cursor:help}
   text-transform:uppercase;color:#7a6a48;display:flex;align-items:center;gap:6px}
 .sp-liste h4 b{color:#2b2416;font-size:13px;letter-spacing:0}
 .sp-n{margin-left:auto;font-size:11px;color:#8a7a52}
-.sp-z{display:grid;grid-template-columns:26px 1fr auto 20px;gap:6px;align-items:center;
+.sp-z{display:grid;grid-template-columns:26px 1fr auto auto;gap:6px;align-items:center;
   border-top:1px solid rgba(122,106,72,.28);padding:3px 0;font-size:13px;min-height:24px}
 .sp-z.leer{color:#a2937012}
 .sp-z .nr{font-size:10px;color:#8a7a52;text-align:right}
@@ -1052,6 +1053,13 @@ body.meld-modus{cursor:help}
 /* a line that two models read differently - one click swaps the reading */
 .sp-tausch{cursor:pointer;color:#b98a2c;font-size:12px;padding:0 3px;border-radius:2px}
 .sp-tausch:hover{background:#3a2b12;color:#f0b13a}
+/* the two grips of a row (T9 (d), ToDo 16.9.2026): tick = confirm, arrow =
+   read again; the tick stands green once the row is confirmed or kept */
+.sp-griff{cursor:pointer;color:#7a6a48;font-size:12px;padding:0 3px;border-radius:2px}
+.sp-griff:hover{background:#3a2b12;color:#f0b13a}
+.sp-griff.an,.sp-griff.an:hover{color:#4f7a3a;background:none;cursor:default}
+/* the dictionary's proposal behind a reading (T9 (c)) */
+.sp-vor{font-size:10px;color:#7a6a48;margin-left:6px}
 /* the strength table off the battle window (BAT-2): three blocks, eighteen
    columns with the game's diamonds, one row per side */
 .sp-staerke{margin:0 0 12px;overflow-x:auto}
@@ -1135,7 +1143,8 @@ body.meld-modus{cursor:help}
    two to a line 232, stacked 758 at twice the height, strip over field 293 at
    half again the height); the mark column takes "us · on record" whole (70) */
 .gf-tf .sp-liste{flex:1 1 400px;min-width:min(400px,100%)}
-.gf-tf .sp-z{grid-template-columns:22px 96px minmax(0,280px) 44px 72px 30px}
+.gf-tf .sp-z{grid-template-columns:22px 96px minmax(0,280px) 44px 72px 34px 30px}
+.gf-tf .sp-z .gr{white-space:nowrap}
 .gf-tf .sp-z img{height:16px;max-width:96px;image-rendering:pixelated;background:#2b2e33;border-radius:2px;display:block}
 .gf-tf .sp-z input{width:100%;font:inherit;font-size:12px;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 4px;min-width:0}
 .gf-tf .sp-z input.unsicher{color:#6d5410;border-color:#d1b45a;background:#fff3c4}
@@ -1324,6 +1333,14 @@ body.kb-zieht{user-select:none}
 /* the reading line (P3 (e)): score and time left, one line in 340 x 96; dimmed while held */
 .gf-schwebe .gf-lesung{font-size:26px;font-weight:700;letter-spacing:.06em;color:#e8d9a8;line-height:1.2;padding:22px 0 0;text-align:center;white-space:nowrap}
 .gf-schwebe .gf-lesung.gf-halt{color:#6b7078}
+/* the board's rows under the reading line (T9 (d)): 14 px a row, the name,
+   the tick, the arrow; an unsure name in the held colour */
+.gf-schwebe .gf-sz-block{margin-top:4px}
+.gf-schwebe .gf-sz{display:flex;align-items:center;gap:6px;height:14px;font-size:12px;line-height:14px;white-space:nowrap}
+.gf-schwebe .gf-sz .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:#e8d9a8}
+.gf-schwebe .gf-sz.un .n{color:#c9a85a}
+.gf-schwebe .gf-sz .g{cursor:pointer;color:#a9b0b8;padding:0 4px;flex:none}
+.gf-schwebe .gf-sz .g:hover{color:#f0b13a}
 /* the sheet */
 .kb-blatt{background:#e9dfc6;color:#2b2416;border-radius:2px;padding:14px 18px 18px;
   box-shadow:0 8px 30px rgba(0,0,0,.5), inset 0 0 0 1px #d7ccb0;
@@ -11396,6 +11413,13 @@ function draw(){
       if (kampf){
         glutKampf(ctx, x, y, r, !light());
         scheibeKampf(ctx, x, y, r, f);
+        /* T9 (e): a side of the battle window not full - a small hollow dot
+           on top of the white ring, in the colour of the window's "marked
+           contested" line; full, or no reading: nothing */
+        if (r >= 3 && pgCheckAgain(i)){
+          ctx.beginPath(); ctx.arc(x, y - r*0.78, Math.max(1.6, r*0.22), 0, 6.284);
+          ctx.lineWidth = Math.max(1, 0.09*r); ctx.strokeStyle = pgCheckFarbe(); ctx.stroke();
+        }
       } else {
         ctx.beginPath(); ctx.arc(x, y, r, 0, 6.284);
         ctx.fillStyle = f; ctx.fill();
@@ -29159,6 +29183,40 @@ async function gfLesen(quelle, ziel){
    two boxes, both preparations, all of them "" or "oo" at zero confidence -
    and counting the taken lines says the same thing more surely. */
 const GF_TINTE_MIN = 200;
+/* THE CHARACTER SET OF THE NAME FIELD (T9 (a), ToDo 16.9.2026 - ENNO
+   18.09.2026: "OCR ist noch zu ungenau, insbesondere bei normalen
+   Sonderzeichen und der Unterscheidung zu Fremdsprachen"). Counted by the
+   measurement (Listen/MESSUNG-PG-SONDERZEICHEN.md) over the 1128 truth
+   names in Latin script: the letters, the digits and space # $ - . : < =
+   [ ] ^ _ | and the bullet; the accented letters of the four language
+   files (deu/pol/ces/tur) so that none of them is forbidden - the model
+   reads them badly with or without the list (0 of 10), the dictionary
+   catches them. What the list takes away is what no name ever carried:
+   the en and em dashes (the hyphen stays), (c), +, >, (, *, quotes, (R),
+   ?, guillemets, % and the circled digits. Measured on 384 rows of the detail view: the raw-line mode on
+   the field cut at the ink, with this list, reads 322 against 302 today
+   (variant G) and never returns an empty Latin reading. */
+const GF_WEISSLISTE = " #$-.0123456789:<=ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_abcdefghijklmnopqrstuvwxyz|\u2022"
+  + "\u00e4\u00f6\u00fc\u00df\u00c4\u00d6\u00dc"                                                                            // deu
+  + "\u0105\u0107\u0119\u0142\u0144\u00f3\u015b\u017a\u017c\u0104\u0106\u0118\u0141\u0143\u00d3\u015a\u0179\u017b"          // pol
+  + "\u00e1\u010d\u010f\u00e9\u011b\u00ed\u0148\u0159\u0161\u0165\u00fa\u016f\u00fd\u017e"                                  // ces
+  + "\u00c1\u010c\u010e\u00c9\u011a\u00cd\u0147\u0158\u0160\u0164\u00da\u016e\u00dd\u017d"
+  + "\u00e7\u011f\u0131\u015f\u0130\u00c7\u011e\u015e"                                                                      // tur
+  + "\u028d";                                                                                                              // the one name with it
+/* the last column with a bright point in a row band, plus eight points of
+   air, at least forty - where the name's ink ends (T9 (a)); the reader's
+   frame is a canvas, the band is read off it */
+function gfTinteEnde(c, x0, y0, w, h){
+  let ende = 0;
+  try {
+    const d = c.getContext("2d", {willReadFrequently: true}).getImageData(x0, y0, w, h).data;
+    for (let x = 0; x < w; x++) for (let y = 0; y < h; y++){
+      const p = (y*w + x)*4;
+      if ((d[p] + d[p+1] + d[p+2])/3 > 120){ ende = x + 1; break; }
+    }
+  } catch(e){ return w; }
+  return Math.max(40, Math.min(w, ende + 8));
+}
 function gfZeileTinte(d, spalte, ay){
   const y0 = Math.max(GF_FENSTER.y, ay), y1 = Math.min(GF_FENSTER.y + GF_FENSTER.h, ay + 32);
   const bis = spalte === GF_SPALTE[2] ? GF_BAHN.links : spalte + GF_BREIT;
@@ -29194,7 +29252,12 @@ async function gfStadt(c){
    bottom stop the first row is clipped, so the frame is held inside the
    window. The third column ends where the track begins. */
 async function gfName(c, spalte, ay, melde){
-  const y0 = Math.max(GF_FENSTER.y, ay - 4);
+  /* T9 (a): four points of air over the window's edge as well - above it
+     lies the dialog ground, the counter band ends at 1136. Clamped at the
+     edge, the first row began ON its glyphs (anchor 1155) or three points
+     into them (anchor 1152): measured 12 of 28 and 0 of 6, with the air
+     17 of 28 and 4 of 6. */
+  const y0 = Math.max(GF_FENSTER.y - 4, ay - 4);
   const y1 = Math.min(GF_FENSTER.y + GF_FENSTER.h, ay + 34);
   if (y1 - y0 < 16) return null;
   /* six points of air to the left: a mark sitting hard against the column
@@ -29209,7 +29272,18 @@ async function gfName(c, spalte, ay, melde){
      pays off there and not here. */
   /* light letters on the dark list - the tool's own ink test counts bright
      points - so the preparation is told, not left to guess */
-  const beste = await unitsText(c, x0, y0, breit, y1 - y0, null, "hell");
+  /* T9 (a): THE FIELD ENDS WHERE THE INK ENDS, and the raw-line mode
+     reads it (psm 13, no line search) with the character set above -
+     measured (variant G): 322 of 384 against 302, no empty reading; the
+     whole road 320 against 310. psm 7 left 16 clean fields empty ("Neon",
+     "Hilon", "Meboed"), and an empty Latin reading sent the foreign models
+     in, which wrote "1 000" and "086" on the sheet; psm 13 on the whole
+     field read the empty right-hand part as "@ ~~ =". The foreign models
+     see the same cut field. */
+  const ende = gfTinteEnde(c, x0, y0, breit, y1 - y0);
+  const feld = await bildAufbereiten(c, unitsBox(x0, y0, ende, y1 - y0), false);
+  const rL = await ocrMitZuv(feld, 13, null, GF_WEISSLISTE);
+  const beste = {text: (rL.text || "").trim().replace(/\s+/g, " "), zuv: rL.zuv, symbole: rL.symbole, feld};
   /* THE OTHER ALPHABETS. Without this pass only the Latin model ever ran,
      and a Latin model cannot return anything but Latin letters - a Cyrillic
      name came back transliterated, every time. The pass costs nothing on a
@@ -29225,7 +29299,21 @@ async function gfName(c, spalte, ay, melde){
      unless the foreign one is clearly better AND the Latin one is really
      weak - and the other reading is carried along either way, one click
      away. */
-  const fremd = await unitsTextSchriften(c, x0, y0, breit, y1 - y0, beste, melde || null);
+  /* T9 (a), FABLE G-9 (18.09.2026): THE UNDERSCORE THE MODEL READ AS A GAP,
+     put back from the ink under the baseline - the cabin's unitsUnterstrich,
+     called here, nothing changed there. Measured A/B on the 384 rows (Bauer,
+     round 2): the plain call falls to 320 of 384 and the `_` names to 23 of
+     40 - it doubles an underscore next to one the reader did read
+     ("Michael__Chambers" five times, "Lt__Korn"), so a gap NEXT TO a read
+     underscore stays a gap here (the sheet's own cleanup closes it): 326
+     against 324, `_` 29 against 27, nothing lost; "matej 258" and "Psycho
+     Lee" come back as their names. */
+  { const t0 = beste.text, t1 = unitsUnterstrich(t0, rL.symbole, feld);
+    if (t1 !== t0 && t1.length === t0.length){ let aus = "";
+      for (let i = 0; i < t0.length; i++){ const v = t0[i - 1] || "", h = t0[i + 1] || "";
+        aus += (t0[i] === " " && t1[i] === "_" && (v === "_" || h === "_")) ? " " : t1[i]; }
+      beste.text = aus; } else beste.text = t1; }
+  const fremd = await unitsTextSchriften(c, x0, y0, ende, y1 - y0, beste, melde || null);
   /* WHICH ONE STANDS. Not decidable from the confidence figures - decidable
      from the SHAPES. A foreign reading that carries no foreign letters is
      no question of alphabet at all: then the more confident one simply
@@ -29240,6 +29328,12 @@ async function gfName(c, spalte, ay, melde){
   if (fremd.schrift && fremd.text){
     if (!unitsHatFremde(fremd.text)) nimmFremd = fremd.zuv > beste.zuv + 5;
     else nimmFremd = !unitsGleicheFormen(fremd.text, beste.text);
+    /* T9 (a): a Latin reading under forty against a foreign one of eighty
+       or more IS the foreign name - "Распутин" came back "PacnyTuu" at 0
+       while the Russian model read it exactly at 96, and the shapes folded
+       onto each other kept Latin in the field. Measured: 3 changes in 848
+       rows, all three right; from "under fifty" a wrong one would come. */
+    if (!nimmFremd && beste.zuv < 40 && fremd.zuv >= 80) nimmFremd = true;
   }
   const t = nimmFremd ? fremd : beste;
   const andere = (fremd.schrift && fremd.text && fremd.text !== beste.text)
@@ -29263,7 +29357,63 @@ async function gfName(c, spalte, ay, melde){
       .replace(/^[\s"'`´,;]+|[\s"'`´,;]+$/g, "").replace(/\s*_\s*/g, "_");
     if (n2.length >= 2 && n2 !== name) zweit = {name: n2, zuv: andere.zuv, schrift: andere.schrift};
   }
-  return {name, zuv: t.zuv, schrift: t.schrift || null, zweit};
+  /* T9 (a): the witness to unreadability - ENNO 03.09.2026: "Es reicht mir
+     schon, wenn der Algorithmus diese Unlesbarkeit klar benennt und dies
+     fuer den Nutzer markiert." It MARKS the row, it does not throw the name
+     away: measured, it names 17 of 22 nonsense readings and 13 of 310 right
+     ones. And the dictionary's word for this reading (T9 (c)). */
+  let unlesbar = false;
+  try { unlesbar = !!unitsUnlesbar(t.text, t.symbole, t.feld, t.schrift || null); } catch(err){ unlesbar = false; }
+  const bekannt = namenBekannt(name);
+  return {name, zuv: t.zuv, schrift: t.schrift || null, zweit, unlesbar, bekannt};
+}
+
+/* ================= THE DICTIONARY (T9 (c), ToDo 16.9.2026) ============
+   ENNO 18.09.2026: "Im besten Fall werden die richtigen Erkennungen auch
+   direkt zum Training genutzt. Ginge das?" - no model is trained here: the
+   reader is Tesseract with fixed language files. What the tool learns is
+   a DICTIONARY: every name the register holds (S.roster, the clan's
+   members, the depot owners, the own name - as the board's word book had
+   them) and every name confirmed in this session (the tick, Keep, a name
+   typed by hand). Each reading is held against it: the same key, else
+   exactly ONE name within one edit per six characters (the bound of
+   atPunkteErgaenzen). Measured on the 1128 readings of
+   MESSUNG-PG-SONDERZEICHEN with the truth as register: 401 wrong readings,
+   150 right proposals, 1 wrong (the Levenshtein-1 rule of BAT-1: 125 right,
+   the same 1 wrong); 60 readings with the right key and other characters
+   (an accent lost) get the register's spelling. A hit is a PROPOSAL -
+   "read: X · known: Y" - taken with the tick, never written over the
+   reading by itself. Built once a half-minute, at once after a tick. */
+let namenBestaetigtSatz = new Map(), namenWb = null, namenWbZeit = 0, namenWbVersion = 0, namenWbGebaut = -1;
+function namenBestaetigen(name){
+  const k = namKey(name || "");
+  if (k.length < 2) return false;
+  namenBestaetigtSatz.set(k, String(name));
+  namenWbVersion++;
+  return true;
+}
+function namenWoerterbuch(){
+  const nun = jetzt();
+  if (namenWb && namenWbGebaut === namenWbVersion && nun - namenWbZeit < 30000) return namenWb;
+  const m = new Map();
+  const nimm = n => { if (!n) return; const k = namKey(n); if (k.length >= 2 && !m.has(k)) m.set(k, String(n)); };
+  try { if (S && S.name) nimm(S.name); } catch(e){}
+  try { for (const p of (leuteListe || [])) nimm(p && p.name); } catch(e){}
+  try { for (const d of depotIdx.values()) nimm(d && d.name); } catch(e){}
+  try { for (const key of Object.keys(S.roster || {})){ const e = S.roster[key]; if (e && e.v && e.v.name) nimm(e.v.name); } } catch(e){}
+  for (const [k, n] of namenBestaetigtSatz) if (!m.has(k)) m.set(k, n);
+  namenWb = [...m.entries()]; namenWbZeit = nun; namenWbGebaut = namenWbVersion;
+  return namenWb;
+}
+function namenBekannt(name){
+  const k = namKey(name || "");
+  if (k.length < 2) return null;
+  const grenze = Math.max(1, Math.floor(k.length/6)), nah = [];
+  for (const [wk, wn] of namenWoerterbuch()){
+    if (wk === k) return wn;
+    if (Math.abs(wk.length - k.length) <= grenze && levenshtein(k, wk) <= grenze) nah.push(wn);
+  }
+  return nah.length === 1 ? nah[0] : null;
 }
 
 /* ================= THE PLAYERS' ROOM ================================ */
@@ -29273,6 +29423,7 @@ function pgNeu(){
           stadt: null, seiten: [], ende: {}, N: 0, erste: 0, anker: GF_FENSTER.y,
           sichtbar: 0, namen: new Map(), leer: new Set(), liest: null,
           fehl: new Map(), tippt: false,
+          abgelehnt: new Map(),                 // T9 (d): key -> the readings the arrow rejected
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …",
           /* the strength table (BAT-2): the last reading, the R it came
              from, its cost, its own status line, what was last written to
@@ -29298,9 +29449,55 @@ function pgSchriftTauschen(k){
   if (!v || !v.zweit) return;
   const alt = {name: v.name, zuv: v.zuv, schrift: v.schrift || null};
   pgDoppelWeg(v.zweit.name, v.f, k);
-  PG.namen.set(k, {name: v.zweit.name, zuv: v.zweit.zuv, f: v.f,
-                   schrift: v.zweit.schrift || null, zweit: alt, gespeichert: false});
+  /* T9 (c)/(d), G-8: the swapped name gets its own look into the dictionary
+     (a rejected name is not proposed, G-1), and it stands unconfirmed -
+     another name is another question */
+  let bek = namenBekannt(v.zweit.name);
+  const ab = PG.abgelehnt.get(k);
+  if (bek && ab && ab.some(a => namKey(a) === namKey(bek))) bek = null;
+  PG.namen.set(k, pgEintrag({name: v.zweit.name, zuv: v.zweit.zuv, schrift: v.zweit.schrift || null, zweit: alt, unlesbar: false, bekannt: bek}, v.f));
   PG.status = `Line now reads ${v.zweit.name}.`;
+  pgZeichnen();
+}
+/* one row of the sheet from a reading of gfName (live beat and file alike) */
+function pgEintrag(g, f){
+  return {name: g.name, zuv: g.zuv, f, schrift: g.schrift || null, zweit: g.zweit || null,
+          unlesbar: !!g.unlesbar, bekannt: !!g.bekannt, vorschlag: g.bekannt && g.bekannt !== g.name ? g.bekannt : null};
+}
+/* THE TICK (T9 (d), ToDo 16.9.2026 - ENNO 18.09.2026: "... wo man die Namen
+   dann bestätigen kann oder eine erneute Prüfung anstößt"): the row is
+   fixed - the known name when one was proposed, else the reading - and
+   the name goes into the session's dictionary. Not into the register: that
+   is "Keep the sheet". */
+function pgBestaetigen(k){
+  const v = PG && PG.namen.get(k);
+  if (!v) return;
+  if (v.vorschlag){ pgDoppelWeg(v.vorschlag, v.f, k); v.name = v.vorschlag; v.vorschlag = null; v.bekannt = true; v.zuv = 100; v.gespeichert = false; }
+  v.bestaetigt = true; v.unlesbar = false;
+  namenBestaetigen(v.name);
+  PG.fehl.delete(k);
+  PG.status = `${v.name} confirmed.`;
+  pgZeichnen();
+}
+/* THE ARROW: the row goes back into the queue and the reading it carried is
+   REJECTED - ENNO 18.09.2026: "Eine zweite Prüfung muss dann den ersten
+   Namen auch als falsche Interpretation wahrnehmen." The next beat reads
+   the line anew; a reading equal to a rejected one is not taken (pgTick):
+   the other alphabet's reading stands in, else the try counts as no reading
+   and after PG_VERSUCHE the line is set aside for the hand. */
+function pgNeuLesen(k){
+  const v = PG && PG.namen.get(k);
+  if (!PG) return;
+  if (!v){   /* the "?" line: the tries start over */
+    PG.fehl.delete(k); PG.leer.delete(k);
+    PG.status = `Line ${(+k.split(":")[1] || 0) + 1} will be read again.`;
+    pgZeichnen(); return;
+  }
+  const ab = PG.abgelehnt.get(k) || [];
+  for (const n of [v.name, v.vorschlag]) if (n && !ab.includes(n)) ab.push(n);   // G-1: the proposal too - a rejected name never comes back
+  PG.abgelehnt.set(k, ab);
+  PG.namen.delete(k); PG.fehl.delete(k); PG.leer.delete(k);
+  PG.status = `Line ${(+k.split(":")[1] || 0) + 1} will be read again.`;
   pgZeichnen();
 }
 /* THE SAME PERSON, ONE LINE ONLY. A line is filed under its PLACE in the
@@ -29400,14 +29597,25 @@ async function pgTick(){
       PG.liest = pgKey(ziel.s.platz, ziel.i);
       PG.status = `Reading line ${ziel.i + 1} …`;
       pgZeichnen();
-      const g = await gfName(R.c, ziel.s.spalte, ay, t => { if (PG) PG.status = t; });
+      let g = await gfName(R.c, ziel.s.spalte, ay, t => { if (PG) PG.status = t; });
       if (!PG) return;
       PG.liest = null;
       const zk = pgKey(ziel.s.platz, ziel.i);
+      /* T9 (d): a reading the arrow rejected is not taken again (pgNeuLesen) */
+      let abgewiesen = null;
+      const ab = PG.abgelehnt.get(zk);
+      if (g && ab && ab.some(a => namKey(a) === namKey(g.name))){
+        abgewiesen = g.name;
+        if (g.zweit && !ab.some(a => namKey(a) === namKey(g.zweit.name)))
+          g = {name: g.zweit.name, zuv: g.zweit.zuv, schrift: g.zweit.schrift || null, unlesbar: false,
+               zweit: {name: g.name, zuv: g.zuv, schrift: g.schrift || null}, bekannt: namenBekannt(g.zweit.name)};
+        else g = null;
+      }
+      /* G-1: nor does a rejected name come back as the dictionary's proposal */
+      if (g && g.bekannt && ab && ab.includes(g.bekannt)) g.bekannt = null;
       if (g){
         pgDoppelWeg(g.name, ziel.s.f, zk);
-        PG.namen.set(zk, {name: g.name, zuv: g.zuv, f: ziel.s.f,
-                          schrift: g.schrift || null, zweit: g.zweit || null});
+        PG.namen.set(zk, pgEintrag(g, ziel.s.f));
         PG.fehl.delete(zk);
         PG.status = `${g.name} written down.`;
       } else {
@@ -29424,7 +29632,8 @@ async function pgTick(){
           PG.leer.add(zk);
           PG.status = `Line ${ziel.i + 1} could not be read in ${PG_VERSUCHE} tries — skipped. Click it to type the name.`;
         } else {
-          PG.status = `Line ${ziel.i + 1} could not be read — try ${n} of ${PG_VERSUCHE}.`;
+          PG.status = abgewiesen ? `Line ${ziel.i + 1} read as ${abgewiesen} again — rejected, try ${n} of ${PG_VERSUCHE}.`
+                                 : `Line ${ziel.i + 1} could not be read — try ${n} of ${PG_VERSUCHE}.`;
         }
       }
     } else {
@@ -29478,7 +29687,7 @@ async function pgBild(datei){
         if (gfTinte(R, s.spalte, R.anker + k*GF_ZEILE) < GF_TINTE_MIN){ PG.leer.add(key); break; }
         const g = await gfName(R.c, s.spalte, R.anker + k*GF_ZEILE);
         if (!PG) return;
-        if (g) PG.namen.set(key, {name: g.name, zuv: g.zuv, f: s.f});
+        if (g) PG.namen.set(key, pgEintrag(g, s.f));
         pgZeichnen();
       }
     }
@@ -29546,7 +29755,9 @@ function pgStaerkeHand(){
    13.09.2026): seiten: [{f, n, ca, text, spieler, namen, hand?}], q, src -
    namen the names the room's sheet lists for that side, in the sheet's
    order, as read, without the register's label; spieler what the head
-   shows (the rows seen with ink, PG.ende). typ and seit (kind of battle,
+   shows (the rows seen with ink, PG.ende); liste how long the side's list
+   is as far as it is known (T9 (e): the roll's count, or the side's end
+   once the row after it was seen empty). typ and seit (kind of battle,
    running time) are not read here - the head strip is not read at all -
    and may be missing. */
 const PG_TEILEN_TAKT = 15000;
@@ -29559,13 +29770,20 @@ function pgStaerkeTeilen(){
   if (St.zeilen.some(z => z.widerspruch)){ PG.staerkeZeile = "Sides do not match — nothing shared."; return; }
   /* the head's player count and the sheet's names for a side, at the time of writing - the sheet grows with every beat */
   const blatt = f => {
-    const s = PG.seiten.find(x => x.f === f), n = s ? Math.max(PG.ende[s.platz] || 0, PG.N || 0) : 0, namen = [];
+    const s = PG.seiten.find(x => x.f === f), ende = s ? (PG.ende[s.platz] || 0) : 0, n = s ? Math.max(ende, PG.N || 0) : 0, namen = [];
     for (let i = 0; i < n; i++){ const v = s && PG.namen.get(pgKey(s.platz, i)); if (v) namen.push(v.name); }
-    return {spieler: s ? (PG.ende[s.platz] || 0) : 0, namen};
+    /* T9 (e), FABLE G-3 (18.09.2026): how long the side's list is, as far
+       as it is known - the roll's count (ONE bar for the whole window, so
+       the longest list, gfBahnLesen), unless the row after the side's last
+       name was seen without ink (pgVerarbeiten puts it into PG.leer): then
+       the list ends there, and a shorter side does not say "check again"
+       for good. Without roll and without ink: 0. */
+    const zuEnde = !!s && PG.leer.has(pgKey(s.platz, ende));
+    return {spieler: ende, liste: s ? (zuEnde ? ende : n) : 0, namen};
   };
   const seiten = St.zeilen.map(z => {
     const b = blatt(z.f);
-    const e = {f: z.f, n: z.n, ca: z.ca, text: z.text, spieler: b.spieler, namen: b.namen};
+    const e = {f: z.f, n: z.n, ca: z.ca, text: z.text, spieler: b.spieler, liste: b.liste, namen: b.namen};
     if (z.hand && z.hand.length) e.hand = z.hand.map(i => GF_GRUPPEN[i].k);
     return e;
   });
@@ -29663,7 +29881,7 @@ function pgBehalten(){
   let n = 0, schon = 0;
   for (const [k, v] of PG.namen){
     if (v.gespeichert){ schon++; continue; }
-    if (merkeSpieler(v.name, v.f)){ v.gespeichert = true; n++; }
+    if (merkeSpieler(v.name, v.f)){ v.gespeichert = true; v.bestaetigt = true; namenBestaetigen(v.name); n++; }
   }
   if (PG.stadt !== null && n) boardZahl();
   toast(n ? `${n} player${n === 1 ? "" : "s"} on record${schon ? `, ${schon} were already` : ""}`
@@ -29738,9 +29956,12 @@ function pgZeichnen(){
         zeilen.push(`<div class="sp-z ${v ? "" : imFenster ? "wartet" : "leer"} ${
           PG.liest === k ? "schreibt" : ""}" data-k="${k}">
           <div class="nr">${i + 1}</div>
-          <div class="nm ${v && v.zuv < 60 ? "unsicher" : ""}" data-k="${k}"
-            title="${v && v.zuv < 60 ? "read with only " + v.zuv + " of 100 — click to correct" : "click to correct"}">${
-            v ? kbEsc(v.name)
+          <div class="nm ${v && !v.bestaetigt && (v.zuv < 60 || v.unlesbar) ? "unsicher" : ""}" data-k="${k}"
+            title="${v && v.bestaetigt ? "click to correct"
+                   : v && v.vorschlag ? "read: " + kbEsc(v.name) + " · known: " + kbEsc(v.vorschlag)
+                   : v && v.unlesbar ? "may be unreadable — click to correct"
+                   : v && v.zuv < 60 ? "read with only " + v.zuv + " of 100 — click to correct" : "click to correct"}">${
+            v ? kbEsc(v.name) + (v.vorschlag ? `<small class="sp-vor">known: ${kbEsc(v.vorschlag)}</small>` : "")
               : (PG.fehl.get(k) || 0) >= PG_VERSUCHE ? "?"
               : PG.leer.has(k) ? ""
               : PG.liest === k ? "reading …"
@@ -29749,7 +29970,10 @@ function pgZeichnen(){
           <div class="ok">${
             v && v.zweit ? `<span class="sp-tausch" data-k="${k}" title="Also read as &quot;${kbEsc(v.zweit.name)}&quot;${
               v.zweit.schrift ? " (" + kbEsc(v.zweit.schrift) + ")" : " (Latin)"} — click to use that one">⇄</span>` : ""
-            }${v && v.gespeichert ? "✓" : ""}</div></div>`);
+            }${v ? `<span class="sp-griff${v.bestaetigt || v.gespeichert ? " an" : ""}" data-ok="${k}" title="${
+              v.gespeichert ? "On record" : v.bestaetigt ? "Confirmed" : "Confirm"}">✓</span><span class="sp-griff" data-neu="${k}" title="Read again">↻</span>`
+              : (PG.fehl.get(k) || 0) >= PG_VERSUCHE ? `<span class="sp-griff" data-neu="${k}" title="Read again">↻</span>` : ""
+            }</div></div>`);
       }
       return `<div class="sp-liste"><h4>${kbEsc(kbSeiteName(s.f))}
         <span class="sp-n">${[...PG.namen.values()].filter(v => v.f === s.f).length} of ${n || "?"}</span></h4>
@@ -29803,8 +30027,9 @@ function pgBearbeiten(ev){
     const s = PG.seiten.find(x => x.platz === +k.split(":")[0]);
     if (neu.length >= 2){
       pgDoppelWeg(neu, s ? s.f : null, k);
-      PG.namen.set(k, {name: neu, zuv: 100, f: s ? s.f : null, gespeichert: false});
-      PG.fehl.delete(k); PG.leer.delete(k);
+      PG.namen.set(k, {name: neu, zuv: 100, f: s ? s.f : null, gespeichert: false, bestaetigt: true});
+      PG.fehl.delete(k); PG.leer.delete(k); PG.abgelehnt.delete(k);
+      namenBestaetigen(neu);                  // T9 (c): a typed name is the strongest confirmation there is
     } else PG.namen.delete(k);
     pgZeichnen();
   };
@@ -29843,6 +30068,15 @@ function spielerraumZu(){
 document.getElementById("b-spieler").addEventListener("click", spielerraumAuf);
 document.getElementById("sp-zu").addEventListener("click", spielerraumZu);
 document.getElementById("sp-blatt").addEventListener("click", ev => { if (PG) pgBearbeiten(ev); });
+/* the grips on pointerdown (T9 (d)): the sheet is rewritten at every beat,
+   and a click needs press and release on the same node */
+document.getElementById("sp-blatt").addEventListener("pointerdown", ev => {
+  if (!PG) return;
+  const g = ev.target.closest(".sp-griff[data-ok],.sp-griff[data-neu]");
+  if (!g) return;
+  ev.preventDefault(); ev.stopPropagation();
+  if (g.dataset.ok !== undefined) pgBestaetigen(g.dataset.ok); else pgNeuLesen(g.dataset.neu);
+});
 document.addEventListener("keydown", ev => { if (ev.key === "Escape" && pgOffen) spielerraumZu(); });
 
 async function kabineAuf(){
@@ -32104,6 +32338,16 @@ async function gefTafelLesen(T, job){
    a name. */
 function gefTafelLesung(T, e, L){
   e.versuche++;
+  /* T9 (d): a reading equal to one the arrow rejected is not taken - ENNO
+     18.09.2026: "Eine zweite Prüfung muss dann den ersten Namen auch als
+     falsche Interpretation wahrnehmen." The other alphabet's reading stands
+     in for it; without one the try counts as no reading. */
+  if (L.name && e.abgelehnt && e.abgelehnt.some(a => namKey(a) === namKey(L.name))){
+    if (L.zweit && !e.abgelehnt.some(a => namKey(a) === namKey(L.zweit.name)))
+      L = {name: L.zweit.name, unlesbar: false, zuv: L.zweit.zuv, schrift: L.zweit.schrift || null,
+           zweit: {name: L.name, zuv: L.zuv, schrift: L.schrift || null}};
+    else L = {name: null, unlesbar: false, zuv: 0, schrift: null, zweit: null};
+  }
   if (!L.name){ if (!e.name && (L.unlesbar || e.versuche >= PG_VERSUCHE)) e.unlesbar = true; return; }   // the verdict marks the row at once; it is still tried again
   e.lesungen.push(L);
   if (e.lesungen.length > 4) e.lesungen.shift();
@@ -32125,7 +32369,8 @@ function gefTafelLesung(T, e, L){
     if (o.name !== e.name){ const eB = /\s/.test(e.name), oB = /\s/.test(o.name);
       if (eB && !oB) e.name = o.name; else if (oB && !eB) o.name = e.name; }
   }
-  const bek = gefTafelBekannt(T, e.name);
+  let bek = gefTafelBekannt(T, e.name);
+  if (bek && e.abgelehnt && e.abgelehnt.some(a => namKey(a) === namKey(bek))) bek = null;   // G-1: a rejected name never comes back as the proposal
   e.bekannt = !!bek; e.vorschlag = bek && bek !== e.name ? bek : null;
   if (bek) e.sicher = true;
   e.unlesbar = false;
@@ -32151,29 +32396,17 @@ function gefTafelLesung(T, e, L){
    owners and the player's own name as well - both are names this tool
    already holds as players. Built once a half-minute. */
 function gefTafelWoerterbuch(T){
-  const nun = jetzt();
-  if (T.wb && nun - T.wbZeit < 30000) return T.wb;
-  const m = new Map();
-  const nimm = n => { if (!n) return; const k = namKey(n); if (k.length >= 2 && !m.has(k)) m.set(k, String(n)); };
-  try { if (S && S.name) nimm(S.name); } catch(e){}
-  try { for (const p of (leuteListe || [])) nimm(p && p.name); } catch(e){}
-  try { for (const d of depotIdx.values()) nimm(d && d.name); } catch(e){}
-  try { for (const key of Object.keys(S.roster || {})){ const e = S.roster[key]; if (e && e.v && e.v.name) nimm(e.v.name); } } catch(e){}
-  T.wb = [...m.entries()]; T.wbZeit = nun;
-  return T.wb;
+  return namenWoerterbuch();   // T9 (c): one dictionary for the board and the player room, the session's confirmed names in it
 }
-/* the one name of the register a reading meets: the same key, else exactly
-   one at Levenshtein 1 (measured with the truth as the register: 52 of 112
-   inexact readings right, none wrong, 60 without a candidate) */
+/* the one name of the dictionary a reading meets: the same key, else exactly
+   one within one edit per six characters (T9 (c) - measured on the 1128
+   readings of MESSUNG-PG-SONDERZEICHEN: 150 right proposals, 1 wrong; the
+   Levenshtein-1 rule that stood here since BAT-1: 125 right, the same 1
+   wrong - and on BAT-1's own board strips, with the truth as the register:
+   52 of 112 inexact readings right, none wrong, 60 without a candidate).
+   The register's name is PROPOSED, the reading stays the reading. */
 function gefTafelBekannt(T, name){
-  const k = namKey(name || "");
-  if (k.length < 2) return null;
-  const eins = [];
-  for (const [wk, wn] of gefTafelWoerterbuch(T)){
-    if (wk === k) return wn;
-    if (Math.abs(wk.length - k.length) <= 1 && levenshtein(k, wk) === 1) eins.push(wn);
-  }
-  return eins.length === 1 ? eins[0] : null;
+  return namenBekannt(name);
 }
 /* the role from the squad name: only the game's own five names, in its
    twelve languages, the number behind them dropped, two errors allowed on
@@ -32371,7 +32604,7 @@ function gefTafelBlatt(){
         ars.v.map(x => { const k = x && x.k ? x.k : x; return chip((VEH[k] && VEH[k].name) || k, "v", k); }).join("")}</div>` : ""}
       <div><button class="mini" data-kitzu>Done</button></div></div>`;
   };
-  const zeile = (l, k, sf) => {
+  const zeile = (l, k, sf, frueh) => {
       const e = l.eintrag;
       if (e.bild && !e.url){
         try {
@@ -32392,14 +32625,16 @@ function gefTafelBlatt(){
         <div class="rl">${l.r ? esc(kurz[l.r] || l.r) : ""}</div>
         <div class="mk">${l.e ? "us" : ""}${e.bekannt ? (l.e ? " · " : "") + "on record" : ""}${
           e.zweit ? ` <span class="sp-tausch" data-e="${e.id}" title="Also read as &quot;${esc(e.zweit.name)}&quot;${e.zweit.schrift ? " (" + esc(e.zweit.schrift) + ")" : " (Latin)"} — click to use that one">⇄</span>` : ""}${
-          e.gespeichert ? " ✓" : ""}</div>${kitKnopf(l, sf)}</div>${kitMaske(l, sf)}`;
+          ""}</div><div class="gr">${l.n ? `<span class="sp-griff${e.bestaetigt || e.gespeichert || (e.hand && !e.handGeerbt) ? " an" : ""}" data-ok="${e.id}" title="${
+            e.gespeichert ? "On record" : e.bestaetigt || (e.hand && !e.handGeerbt) ? "Confirmed" : "Confirm"}">✓</span>` : ""}${
+            !frueh && (l.n || e.versuche >= PG_VERSUCHE) ? `<span class="sp-griff" data-neu="${e.id}" title="Read again">↻</span>` : ""}</div>${kitKnopf(l, sf)}</div>${kitMaske(l, sf)}`;
   };
   const seiten = B.tafeln.map(t => gefTafelSeite(t, kam));
   let listen = seiten.map(s => `<div class="sp-liste"><h4>${esc(wort(s.farbe))} · ${s.f === 0 || s.f === 1 || s.f === 2 ? esc(FACTIONS[s.f].name) : "side not read"} · ${
       s.n !== null ? s.n + " players" : "players not counted"}${s.bots ? ` · ${s.bots} bots` : ""}</h4>${s.leute.map((l, k) => zeile(l, k, s.f)).join("")}</div>`).join("");
   /* the rows gone from the stand, sure or typed: kept with the others (SOLL 2) */
   const frueher = gefTafelFrueher(T, B, new Map(seiten.map(s => [s.lage, s.f])), kam);
-  if (frueher.length) listen += `<div class="sp-liste"><h4>Seen earlier · ${frueher.length}</h4>${frueher.map((l, k) => zeile(l, k, l.f)).join("")}</div>`;
+  if (frueher.length) listen += `<div class="sp-liste"><h4>Seen earlier · ${frueher.length}</h4>${frueher.map((l, k) => zeile(l, k, l.f, true)).join("")}</div>`;
   T.blatt = {schluessel, t: nun, namen, html: `${widerspruch}
     <div class="sp-listen">${listen}</div>
     <div style="margin-top:8px"><button class="mini" id="gf-tf-keep"${namen && gebunden && recht ? "" : " disabled"}>Keep ${namen} name${namen === 1 ? "" : "s"}</button></div>`};
@@ -32431,7 +32666,7 @@ function gefTafelVerdrahten(blatt){
          with a name that changed */
       if (e){ const v = el.value.trim(), vorher = gefTafelName(e);
               if (v === vorher && e.handGeerbt){ /* looked at, not changed: the inherited hand stays inherited (round 4) */ }
-              else if (v.length < 2 || v === (e.vorschlag || e.name || "")){ e.hand = null; e.handGeerbt = false; } else { e.hand = v; e.handGeerbt = false; }
+              else if (v.length < 2 || v === (e.vorschlag || e.name || "")){ e.hand = null; e.handGeerbt = false; } else { e.hand = v; e.handGeerbt = false; namenBestaetigen(v); }   // T9 (c), G-2: a typed name is a confirmation in the board as well
               if (gefTafelName(e) !== vorher) e.gespeichert = false; GEF.tafel.version++; }
       GEF.tafel.tippt = false;
       gefZeichnen();
@@ -32442,6 +32677,8 @@ function gefTafelVerdrahten(blatt){
       if (ev.key === "Escape"){ ev.stopPropagation(); ev.preventDefault(); if (el.dataset.vorher !== undefined) el.value = el.dataset.vorher; el.blur(); }
     });
     blatt.addEventListener("pointerdown", ev => {
+      const gr = ev.target.closest(".gf-tf .sp-griff[data-ok],.gf-tf .sp-griff[data-neu]");   // T9 (d)
+      if (gr){ ev.preventDefault(); ev.stopPropagation(); if (gr.dataset.ok !== undefined) gefTafelBestaetigen(+gr.dataset.ok); else gefTafelNeuLesen(+gr.dataset.neu); return; }
       const t = ev.target.closest(".gf-tf .sp-tausch[data-e]");
       if (t){ ev.preventDefault(); ev.stopPropagation(); gefTafelTauschen(+t.dataset.e); return; }
       if (ev.target.closest("#gf-tf-keep")){ ev.preventDefault(); gefTafelBehalten(); return; }
@@ -32502,8 +32739,45 @@ function gefTafelTauschen(id){
   if (!e || !e.zweit) return;
   const alt = {name: e.name, zuv: e.zuv, schrift: e.schrift};
   e.name = e.zweit.name; e.zuv = e.zweit.zuv; e.schrift = e.zweit.schrift; e.zweit = alt; e.gespeichert = false;
-  const bek = gefTafelBekannt(T, e.name);
+  let bek = gefTafelBekannt(T, e.name);
+  /* G-1 mirrored (FABLE 18.09.2026): a rejected name never comes back as the
+     proposal, and another name is unconfirmed until the tick */
+  if (bek && e.abgelehnt && e.abgelehnt.some(a => namKey(a) === namKey(bek))) bek = null;
   e.bekannt = !!bek; e.vorschlag = bek && bek !== e.name ? bek : null;
+  e.bestaetigt = false;
+  T.version++;
+  gefZeichnen();
+}
+/* THE TICK on a board row (T9 (d), ToDo 16.9.2026): the row is sure - the
+   name the sheet shows (gefTafelName: the hand, else the register's
+   proposal, else the reading) stays and goes into the session's dictionary.
+   Not into the register: that is "Keep N names". */
+function gefTafelBestaetigen(id){
+  const T = GEF && GEF.tafel, e = T && T.eintraege.find(x => x.id === id);
+  if (!e) return;
+  const n = gefTafelName(e);
+  if (!n) return;
+  e.sicher = true; e.bestaetigt = true; e.unlesbar = false;
+  namenBestaetigen(n);
+  T.version++;
+  gefZeichnen();
+}
+/* THE ARROW on a board row: the reading is rejected and the row is read
+   anew at the next look - gefTafelSchneiden queues a name job for a row
+   that is neither settled nor open, so everything that made it settled goes
+   (the readings, the hand, the tries). ENNO 18.09.2026: "Eine zweite
+   Prüfung muss dann den ersten Namen auch als falsche Interpretation
+   wahrnehmen." - gefTafelLesung holds the next reading against abgelehnt. */
+function gefTafelNeuLesen(id){
+  const T = GEF && GEF.tafel, e = T && T.eintraege.find(x => x.id === id);
+  if (!e) return;
+  const alt = gefTafelName(e);
+  e.abgelehnt = e.abgelehnt || [];
+  for (const n of [alt, e.name, e.vorschlag]) if (n && !e.abgelehnt.includes(n)) e.abgelehnt.push(n);   // the proposal too, even behind a hand name
+  e.lesungen = []; e.name = null; e.zuv = 0; e.schrift = null; e.zweit = null;
+  e.sicher = false; e.bestaetigt = false; e.unlesbar = false; e.versuche = 0;
+  e.bekannt = false; e.vorschlag = null; e.gespeichert = false;
+  e.hand = null; e.handGeerbt = false; e.handVon = null;
   T.version++;
   gefZeichnen();
 }
@@ -33495,14 +33769,58 @@ function gefSchwebeZu(){
    anew only when it changed - this runs at every tick of the desk. The memo
    of what stands is taken only after the write went through: a failed write
    is tried again at the next tick, not remembered as done. */
+/* the board's rows for the floating window (T9 (d), FABLE G-2/G-6): the
+   stand's rows in board order that carry a reading and are not confirmed
+   yet - the tick, Keep and a typed name all count as confirmed - name, id,
+   unsure; eighteen at most, so the second board's rows come in as well.
+   No row without a name: nothing to confirm there. */
+function gefSchwebeZeilen(){
+  const T = GEF && GEF.tafel, B = T && T.stand;
+  if (!B) return [];
+  const kam = gefTafelKameraden(), aus = [];
+  for (const t of B.tafeln) for (const l of gefTafelSeite(t, kam).leute){
+    const e = l.eintrag;
+    if (!l.n || e.bestaetigt || e.gespeichert || (e.hand && !e.handGeerbt)) continue;
+    aus.push({id: e.id, n: l.n, u: !!l.u});
+    if (aus.length >= 18) return aus;
+  }
+  return aus;
+}
 function gefSchwebeZeichnen(){
   if (!gefSchwebe) return;
   const K = gefEndeSatz();
   let html;
   if (K) html = `<div class="gf-satz" style="border-color:${K.rand};background:${K.grund};color:${K.farbe}">${K.text}</div>`;
   else { const L = gefLesungZeile(); html = `<div class="gf-lesung${L.gehalten ? " gf-halt" : ""}">${esc(L.text)}</div>`; }
+  /* T9 (d), ToDo 16.9.2026 - ENNO 18.09.2026: "Wie beim AT Grabber auch ein
+     Overlay Fenster, welches sich genau neben die Spielernamen im Spiel
+     setzt, und wo man die Namen dann bestätigen kann oder eine erneute
+     Prüfung anstößt." Under the reading line the board's rows with a
+     reading that are not confirmed yet (the tick, Keep or a typed name) -
+     the name, a tick, an arrow - 14 px a row, 18 at most (FABLE: 340 x
+     (96 + 14 a row)), so the second board's rows come in. The window is asked to grow with them (resizeBy;
+     the browser grants it on a gesture in the window, and a grip press is
+     one - refused, the rows are cut at the bottom until the next press).
+     The grips are read on the window's own document by delegation, set
+     once: the body is rewritten at every change. */
+  const zeilen = gefSchwebeZeilen();
+  if (zeilen.length) html += `<div class="gf-sz-block">${zeilen.map(z => `<div class="gf-sz${z.u ? " un" : ""}"><span class="n">${esc(z.n)}</span><span class="g" data-ok="${z.id}" title="Confirm">✓</span><span class="g" data-neu="${z.id}" title="Read again">↻</span></div>`).join("")}</div>`;
   if (html === gefSchwebeSatz) return;
-  try { gefSchwebe.document.body.innerHTML = html; gefSchwebeSatz = html; } catch(e){}
+  try {
+    const doc = gefSchwebe.document;
+    doc.body.innerHTML = html; gefSchwebeSatz = html;
+    if (!doc.body.dataset.griffe){
+      doc.body.dataset.griffe = "1";
+      doc.body.addEventListener("pointerdown", ev => {
+        const g = ev.target && ev.target.closest ? ev.target.closest(".gf-sz .g[data-ok],.gf-sz .g[data-neu]") : null;
+        if (!g) return;
+        ev.preventDefault();
+        if (g.dataset.ok !== undefined) gefTafelBestaetigen(+g.dataset.ok); else gefTafelNeuLesen(+g.dataset.neu);
+      });
+    }
+    const hoch = 96 + 14*zeilen.length;
+    if (gefSchwebe.innerHeight && Math.abs(gefSchwebe.innerHeight - hoch) > 2){ try { gefSchwebe.resizeBy(0, hoch - gefSchwebe.innerHeight); } catch(e){} }
+  } catch(e){}
 }
 function gefPult(){
   const pult = document.getElementById("gf-pult");
@@ -50618,6 +50936,38 @@ function setBattle(i, v){
   save();
   return true;
 }
+/* T9 (e), ToDo 16.9.2026 - ENNO 18.09.2026: "Wenn eine Seite noch nicht voll
+   ist, soll die Stadt mit einem entsprechenden Hinweis versehen werden,
+   später noch einmal zu checken". The row btl:<town> carries per side what
+   the head showed (spieler), how long the side's list is as far as it is
+   known (liste: the roll's count, or the side's end once seen) and what the
+   sheet read (namen) - pgStaerkeTeilen. A side with fewer names than the
+   greater of the two is not full: not every name of the list is read yet
+   (FABLE G-3, 18.09.2026, reading (1); reading (2), places free, needs the
+   head's counter 18/19 and comes with P8). The battle window, the town
+   window and the map ask here; read only. Nothing for a side with neither
+   count nor list. */
+function pgCheckAgain(i){
+  const e = battleStand(i), v = e && e.v;
+  if (!v || !Array.isArray(v.seiten)) return null;
+  const offen = [];
+  for (const sd of v.seiten){
+    const n = Array.isArray(sd.namen) ? sd.namen.length : 0, spieler = +sd.spieler || 0, liste = +sd.liste || 0, soll = Math.max(spieler, liste);
+    if (soll > n) offen.push({f: sd.f, namen: n, soll, spieler, liste});
+  }
+  return offen.length ? offen : null;
+}
+/* the colour of the window's "marked contested" line (--dim), once per theme */
+let pgCheckFarbeMerk = null;
+function pgCheckFarbe(){
+  const th = light() ? "l" : "d";
+  if (!pgCheckFarbeMerk || pgCheckFarbeMerk.th !== th){
+    let f = "";
+    try { f = getComputedStyle(document.documentElement).getPropertyValue("--dim").trim(); } catch(e){}
+    pgCheckFarbeMerk = {th, f: f || (th === "l" ? "#554d3f" : "#a89c88")};
+  }
+  return pgCheckFarbeMerk.f;
+}
 function ausRessourcen(vorrat){
   const raus = [];
   for (const a of MAP.at){
@@ -50722,6 +51072,7 @@ function schlachtFenster(i){
   });
   return `<div class="hint" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><b>Battle window</b></div>
       ${zeilen.join("")}
+      ${(pgCheckAgain(i) || []).map(o => `<div class="hint" style="color:var(--accent)">${esc(kbSeiteName(o.f))}: Names ${o.namen} of ${o.soll} \u00b7 check again</div>`).join("")}
       <div class="hint" style="color:var(--dim)">read from the battle window by ${esc(werWar(e))} ${esc(alterText(e.t))}</div>`;
 }
 /* ---- BAT-11: THE BATTLE WINDOW (ENNO 07.09.2026 / 12.09.2026) -------------
@@ -50886,7 +51237,8 @@ function schlachtAnsichtZeichnen(){
     const zahl = +sd.spieler || liste.length;
     const cols = Math.max(1, Math.ceil(liste.length / SCHLACHT_SPALTE));
     return `<div class="sf-seite">
-      <div class="sf-sh">${chipVon(sd.f)}${zahl ? `<b>${zahl}</b>${zahl !== liste.length && liste.length ? `<span>players \u00b7 ${liste.length} read</span>` : ""}` : `<span class="empty">not read</span>`}</div>
+      <div class="sf-sh">${chipVon(sd.f)}${zahl ? `<b>${zahl}</b>` : ""}${liste.length < Math.max(zahl, +sd.liste || 0) ? `<em class="sf-check">Names ${liste.length} of ${Math.max(zahl, +sd.liste || 0)} \u00b7 check again</em>`
+          : zahl && zahl !== liste.length && liste.length ? `<span>players \u00b7 ${liste.length} read</span>` : zahl ? "" : `<span class="empty">not read</span>`}</div>
       <div class="sf-namen" style="column-count:${cols}">${liste.map(nm => {
         const et = pgEtikett(nm);
         return `<div dir="auto">${esc(nm)}${et ? `<small title="${esc(et.tip)}">${esc(et.text)}</small>` : ""}</div>`;
@@ -53940,7 +54292,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5d98c8a4d9</span></p></div>
+         installation. <span style="color:var(--dim2)">· build a449ea86d8</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -54168,7 +54520,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "5d98c8a4d9";
+const BAU = "a449ea86d8";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
