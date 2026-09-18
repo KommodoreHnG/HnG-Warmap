@@ -1845,6 +1845,27 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 .tw th{background:var(--panel2);text-align:right;padding:5px 8px;font-size:10.5px;text-transform:uppercase;
   letter-spacing:.7px;color:var(--dim2);font-weight:600;white-space:nowrap;position:sticky;top:0}
 .tw th:first-child,.tw th[colspan]{text-align:left}
+/* T6 (3): a heading sits over its cells - text columns say so. ENNO
+   18.09.2026: "Auch hier bitte wieder die Position der
+   Spaltenueberschriften pruefen, das ist so quatsch" */
+.tw th[data-links]{text-align:left}
+/* T6 (2): the enemy arsenal by weapon type - one folding group per type,
+   a button per item, pressed = in the arsenal */
+.ars-grp{border:1px solid var(--line);border-radius:var(--r);padding:2px 8px}
+.ars-grp summary{cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--dim);display:flex;align-items:center;gap:6px;padding:3px 0}
+.ars-grp summary b{color:var(--accent);font-weight:600}
+.ars-grp summary small{margin-left:auto;color:var(--dim2);text-transform:none;letter-spacing:0}
+.ars-grp summary::before{content:"▸";color:var(--dim2);font-size:10px}
+.ars-grp[open] summary::before{content:"▾"}
+.ars-grp summary::-webkit-details-marker{display:none}
+.ars-grp .kn{display:flex;flex-wrap:wrap;gap:3px;padding:2px 0 6px}
+.ars-grp .kn .btn{font-size:11px;padding:2px 8px;opacity:.75}
+.ars-grp .kn .btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);opacity:1}
+/* T6 (3): the row under a clan - every AT on record, with its filters */
+.cl-unter>td{text-align:left;white-space:normal;padding:6px 10px 9px 28px;background:var(--panel)}
+.cl-unter .sp-filter button[data-clk]{padding:1px 4px;display:inline-flex;align-items:center}
+.cl-unter .sp-filter b{color:inherit}
 .tw td{padding:4px 8px;text-align:right;font-variant-numeric:tabular-nums;
   border-top:1px solid var(--line);white-space:nowrap}
 .tw td:first-child{text-align:left}
@@ -3451,6 +3472,75 @@ const ROLLEN = [
   {k:"parachute",   name:"Parachute"},    {k:"repair",      name:"Repair kit"},
 ];
 const rolleName = k => (ROLLEN.find(r => r.k === k) || {name: k}).name;
+/* T6 (2) - THE WEAPON TYPES IN THE ORDER OF THE LIST, the armory page as the source (ENNO 18.09.2026:
+   "Bitte das Arsenal genau wie das eigene strukturieren nach Waffentyp.
+   Als Inspiration hierfuer empfehle ich einmal die Datenextraktion dieser
+   Seite: https://hng-armory.top/."; the groups and their order in
+   Listen/QUELLE-HNG-ARMORY.md). Read off role and fam of the game files,
+   nothing copied from the page. Twelve groups: the page's rocket
+   launchers, AT weapons and both mines are our two roles at_launcher and
+   explosive and become one group; scoped rifles and flamethrowers, which
+   the page files under rifles, stand on their own (fam SniperRifle, role
+   flamethrower). Every one of the 104 weapons falls into exactly one
+   group; the first match wins, so the flamethrower (fam AssaultRifle) is
+   tested before the assault rifles. */
+const WAFFEN_GRUPPEN = [
+  {k:"semi",   name:"Semi-auto Rifles",    passt: a => a.fam === "SemiAutoRifle"},
+  {k:"bolt",   name:"Bolt-action Rifles",  passt: a => a.fam === "BoltActionRifle"},
+  {k:"sniper", name:"Sniper Rifles",       passt: a => a.fam === "SniperRifle"},
+  {k:"flame",  name:"Flamethrowers",       passt: a => a.role === "flamethrower"},
+  {k:"ar",     name:"Assault Rifles",      passt: a => a.fam === "AssaultRifle"},
+  {k:"smg",    name:"Sub Machine Guns",    passt: a => a.fam === "Submachinegun"},
+  {k:"lmg",    name:"Light Machine Guns",  passt: a => a.fam === "LightMachinegun"},
+  {k:"hg",     name:"Handguns",            passt: a => a.role === "pistol"},
+  {k:"at",     name:"AT Launchers & Mines",passt: a => a.role === "at_launcher" || a.role === "explosive"},
+  {k:"gren",   name:"Grenades",            passt: a => a.role === "grenade"},
+  {k:"melee",  name:"Melee",               passt: a => a.role === "melee"},
+  {k:"equip",  name:"Equipment",           passt: a => /^(medic|optics|parachute|repair)$/.test(String(a.role))},
+];
+/* the page shows the groups in THIS order, not in the order of the tests */
+const WAFFEN_GRUPPEN_FOLGE = ["semi", "bolt", "sniper", "ar", "smg", "lmg", "hg", "at", "gren", "flame", "melee", "equip"];
+const waffenGruppe = a => { const g = WAFFEN_GRUPPEN.find(x => x.passt(a || {})); return g ? g.k : "equip"; };
+/* the vehicle classes in the page's VEHICLE_CATEGORY_ORDER, keyed by our
+   res; Anti-air and Civilian have no res of their own here */
+const FZ_GRUPPEN = [
+  {k:"light_armor",               name:"Light Tanks"},
+  {k:"medium_armor",              name:"Medium Tanks"},
+  {k:"heavy_armor",               name:"Heavy Tanks"},
+  {k:"tank_destroyer",            name:"Tank Destroyers"},
+  {k:"heavy_tank_destroyer",      name:"Heavy Tank Destroyers"},
+  {k:"armoured_car",              name:"Recon Vehicles"},
+  {k:"armored_personnel_carrier", name:"Armored Personnel Carriers"},
+  {k:"fighter_plane",             name:"Fighter Planes"},
+  {k:"heavy_fighter_plane",       name:"Heavy Fighter Planes"},
+  {k:"recon_plane",               name:"Recon Planes"},
+  {k:"transport_plane",           name:"Transport Planes"},
+  {k:"terrain_vehicle",           name:"Terrain Vehicles"},
+  {k:"motorcycle",                name:"Motorbikes"},
+];
+/* weapons or vehicles sorted into their groups, in the page's order;
+   a res the list does not know goes last under its own name */
+function fzGruppen(liste, art){
+  const raus = [];
+  if (art === "w"){
+    for (const gk of WAFFEN_GRUPPEN_FOLGE){
+      const g = WAFFEN_GRUPPEN.find(x => x.k === gk);
+      const l = liste.filter(a => waffenGruppe(a) === gk);
+      if (l.length) raus.push({k: gk, name: g.name, liste: l});
+    }
+    return raus;
+  }
+  const rest = new Map();
+  for (const v of liste){
+    if (!FZ_GRUPPEN.some(g => g.k === v.res)) rest.set(v.res, (rest.get(v.res) || []).concat([v]));
+  }
+  for (const g of FZ_GRUPPEN){
+    const l = liste.filter(v => v.res === g.k);
+    if (l.length) raus.push({k: g.k, name: g.name, liste: l});
+  }
+  for (const [rk, l] of rest) raus.push({k: rk, name: resName(rk), liste: l});
+  return raus;
+}
 /* Die Gruppen aus vehicleupgradetemplate, Feld 4. */
 const UPG_GRP = {1: "Medical", 2: "Supply crate", 3: "Ammunition",
                  4: "Mounted gun", 5: "Camouflage & smoke"};
@@ -19316,9 +19406,9 @@ const AUFKL_IM_FENSTER = [
   "#en-add", "#en-bulk", "#bulk-go",                  // Spieler eintragen
   "#cl-neu", "#cl-neu-unbek",                         // Clan anlegen
   "[data-fac]", "[data-clanwahl]", "[data-reg]",      // Fraktion, Clan und Region je Zeile
-  "[data-clanname]", "[data-clanseite]", "[data-claneigen]", "[data-clanreg]",
+  "[data-clanname]", "[data-clanseite]", "[data-clanreg]",
   "[data-clanmit]", "[data-clanfusion]",              // Clan aendern
-  "#fd-add", "#fa-w-add", "#fa-v-add", "[data-addu]", // Feind: Einheiten, Arsenal
+  "#fd-add", "[data-faw]", "[data-fav]", "[data-addu]", // enemy: units, arsenal (T6: group buttons)
   "#fr-add", "[data-rset]",                           // Feind: Rollen
 ];
 /* Ein Durchgang ueber das offene Fenster. Wird am Ende der beiden grossen
@@ -44447,11 +44537,22 @@ function intelDialog(tab, seite){
     d.offenAt = atOffen(dep).length;
     d.atGesamt = Math.max(d.bekannt + d.offenAt, atMindestensJeStamm(dep));
     d.atTypen = new Set(echt.map(x => x.k).filter(Boolean));
+    /* T6 (1) - THE GAPS RIDE ON THE PLAYER (ENNO 18.09.2026: "Gaps bitte
+       als Filter in die Player-Liste integrieren, nicht als eigenen
+       Reiter"). The same numbers the Gaps tab had: recorded (atEcht), at
+       least (atMindestens - the highest tag), missing, placeholders
+       (atOffen). luecke is exactly the row the old tab listed: something
+       missing, or a placeholder, or nothing known at all; somebody who
+       plays with us now is never a gap. */
+    d.mind = atMindestens(dep);
+    d.fehlt = Math.max(0, d.mind - d.bekannt);
+    d.luecke = !uebergelaufen(key) && (d.fehlt > 0 || d.offenAt > 0 || (!d.bekannt && !d.teams));
     d.clan = clanIdVon(d.name); d.region = regionVon(d.name);
   }
   const PL_F = (intelDialog.plF === undefined) ? null : intelDialog.plF;
   const PL_R = intelDialog.plR || "", PL_C = intelDialog.plC || "";
   const PL_S = intelDialog.plS || "teams";
+  const PL_G = intelDialog.plG || "";                  /* T6 (1): "" all, gaps, platz */
   const PL_AB = (intelDialog.plAb === undefined) ? true : intelDialog.plAb;   /* true = descending */
   const PL_KEYS = {name: d => d.name.toLowerCase(), f: d => d.f == null ? -1 : d.f, clan: d => clanTitel(d.clan).toLowerCase(),
                    region: d => d.region || "", bekannt: d => d.bekannt, atges: d => d.atGesamt,
@@ -44474,7 +44575,8 @@ function intelDialog(tab, seite){
   if (!plAtZahl.has(intelDialog.plAt)) intelDialog.plAt = "";
   const PL_AT = intelDialog.plAt;
   const plZeig = liste.filter(([,d]) => (PL_F === null || d.f === PL_F) && (!PL_R || d.region === PL_R)
-      && (!PL_C || d.clan === PL_C) && (!PL_AT || d.atTypen.has(PL_AT)))
+      && (!PL_C || d.clan === PL_C) && (!PL_AT || d.atTypen.has(PL_AT))
+      && (!PL_G || (PL_G === "gaps" ? d.luecke : d.offenAt > 0)))
     .sort((a,b) => { const ka = PL_KEYS[PL_S](a[1]), kb = PL_KEYS[PL_S](b[1]);
       const r = typeof ka === "string" ? ka.localeCompare(kb) : ka - kb; return PL_AB ? -r : r; });
   const nz = n => n.toLocaleString("en");
@@ -44487,17 +44589,122 @@ function intelDialog(tab, seite){
      Spieler geraten - eine Automatik, die zwei falsch erfasste Mitglieder
      genuegen liessen, um einen ganzen Clan der falschen Seite zuzuschlagen. */
   const clans = clanListe().map(cl => {
-    const kompo = new Map();
     let t = 0, gesehen = 0;
     for (const p of cl.spieler){
       t = Math.max(t, p.t || 0);
-      for (const d of feindDepot(p.key)) if (d.k && !d.ung && !d.verm) kompo.set(d.k, (kompo.get(d.k)||0) + 1);   // typed and seen only (5.55)
       const s = proSpieler.get(p.key);
       if (s){ gesehen += s.teams; t = Math.max(t, s.t || 0); }
     }
-    return {...cl, kompo, t, gesehen};
+    return {...cl, t, gesehen};
   }).filter(cl => nurSeite === null || cl.f === nurSeite)
     .sort((a,b)=> b.spieler.length - a.spieler.length || b.teams - a.teams);
+  /* T6 (3) - THE ROW UNDER A CLAN (ENNO 18.09.2026: "'What they field'
+     raus, das ist AI slop. Stattdessen wie immer ein Zeilendropdown wo
+     alles aufgelistet wird, natuerlich mit Filter"): every entry of every
+     member's enemy depot - placeholders included, that is the number in
+     the Uncovered ATs column. Built only for open clans; open rows and
+     their filters survive the rebuild (clAuf, clFilt). */
+  const CL_AUF = intelDialog.clAuf || (intelDialog.clAuf = new Set());
+  const CL_FILT = intelDialog.clFilt || (intelDialog.clFilt = {});
+  const clanAtListe = cl => {
+    const raus = [];
+    for (const p of cl.spieler) for (const d of feindDepot(p.key)) raus.push({p, d});
+    return raus.sort((a, b) => (b.d.t || 0) - (a.d.t || 0) || String(a.d.tag || "").localeCompare(String(b.d.tag || "")));
+  };
+  const clanUnterzeile = cl => {
+    const ats = clanAtListe(cl), fi = CL_FILT[cl.id] || {q: "", k: ""};
+    const verm = d => !!(d.ung || d.verm);
+    const typText = d => verm(d) ? (d.verm ? "assumed" : "placeholder") : (d.k ? atName(d.k) : "type ?");
+    return `<tr class="cl-unter" data-clanunter="${esc(cl.id)}"><td colspan="8">
+      <div class="sp-filter" style="align-items:center;margin-bottom:5px">
+        <input type="text" class="mini" data-clq="${esc(cl.id)}" value="${esc(fi.q)}" placeholder="filter" style="width:150px;margin-right:6px" spellcheck="false">
+        <button data-clk="${esc(cl.id)}" data-k="" aria-pressed="${!fi.k}">all</button>
+        ${MAP.at.map(a => `<button data-clk="${esc(cl.id)}" data-k="${esc(a.k)}" aria-pressed="${fi.k === a.k}" title="${esc(a.name)}">${symbolSVG(a.k, c, 20, 14)}</button>`).join("")}
+        <span style="font-size:11px;color:var(--dim2);margin-left:auto" data-clzahl="${esc(cl.id)}"></span>
+      </div>
+      ${ats.length ? `<div class="tw"><table>
+        <thead><tr><th>Player</th><th data-links>Tag</th><th data-links>Name</th><th data-links>Type</th><th data-links>Last seen in</th></tr></thead>
+        <tbody>${ats.map(({p, d}) => `<tr data-clz="${esc(cl.id)}" data-typ="${esc(d.k || "")}"
+            data-such="${esc([p.name, d.tag, d.name, typText(d), d.o != null && MAP.n[d.o] ? MAP.n[d.o][0] : ""].join(" ").toLowerCase())}">
+          <td><a href="#" data-oeffne="${esc(p.key)}" style="color:var(--accent)">${esc(p.name)}</a></td>
+          <td style="text-align:left"><b>${esc(d.tag || "")}</b></td>
+          <td style="text-align:left">${esc(d.name || "")}${feindCutMarke(d)}</td>
+          <td style="text-align:left;white-space:nowrap">${verm(d)
+            ? `<span class="sym frage" style="display:inline-flex;width:20px;height:14px;font-size:11px;vertical-align:middle">?</span> <span style="color:var(--dim2)">${typText(d)}</span>`
+            : `${d.k ? symbolSVG(d.k, c, 20, 14) : ""} ${esc(d.k ? atKurz(d.k) : "type ?")}`}</td>
+          <td style="text-align:left">${d.o != null && MAP.n[d.o]
+            ? `<a href="#" data-go="${d.o}" style="color:var(--accent)">${esc(MAP.n[d.o][0])}</a>${d.t ? ` <span style="color:var(--dim2)">${alterText(d.t * 1000)}</span>` : ""}`
+            : "\u2014"}</td>
+        </tr>`).join("")}</tbody></table></div>` : `<div class="empty">Nothing on record.</div>`}
+    </td></tr>`;
+  };
+  /* T6 (4) - COMPARE (ENNO 18.09.2026: "Compare Funktion, um Clans mit
+     einander und dem eigenen zu vergleichen."): two or three columns, only
+     numbers that are on record - no judgement, no sentences (Widerspruch
+     11). Ours: members with a depot row and the teams in their depots; the
+     enemy measures (sightings, towns, region, last seen) are a dash for
+     us. 30 days for sightings and towns (VGL_FENSTER_MS, FABLE). */
+  const VGL = (Array.isArray(intelDialog.vgl) && intelDialog.vgl.length === 3) ? intelDialog.vgl : (intelDialog.vgl = ["", "", ""]);
+  const VGL_AUF = !!intelDialog.vglAuf;
+  const VGL_FENSTER_MS = 30 * 24 * 3600e3;
+  const clanVergleich = () => {
+    const ids = VGL.filter((x, i) => x && VGL.indexOf(x) === i);
+    if (ids.length < 2) return "";
+    const seit = jetzt() - VGL_FENSTER_MS;
+    const sichtJe = new Map();               // clan id -> {n, orte:Set}
+    for (const k of Object.keys(S.spot)){
+      const e = S.spot[k];
+      if (!e || !Array.isArray(e.v) || !((e.t || 0) >= seit)) continue;
+      const town = +k.slice(0, k.indexOf(":"));
+      for (const u of e.v){
+        if (!u || !u.owner) continue;
+        const id = clanIdVon(u.owner);
+        if (!id) continue;
+        const z = sichtJe.get(id) || {n: 0, orte: new Set()};
+        z.n += u.n || 0; if (MAP.n[town]) z.orte.add(town);
+        sichtJe.set(id, z);
+      }
+    }
+    const spalte = id => {
+      if (id === "*"){
+        const zw = {}; let ats = 0;
+        for (const [, d] of depotIdx) for (const t of d.list){ ats++; const z = zweigVon(t.k); zw[z] = (zw[z] || 0) + 1; }
+        return {id, titel: "Ours" + (clanGesetzt() ? " \u00b7 " + clanName() : ""), eigen: true,
+                spieler: depotIdx.size, ats, zw, platz: null, sicht: null, orte: null, region: "", t: 0};
+      }
+      const cl = clans.find(x => x.id === id) || clanListe().find(x => x.id === id);
+      if (!cl) return null;
+      const zw = {}; let ats = 0, platz = 0;
+      const z = sichtJe.get(id) || {n: 0, orte: new Set()};
+      const orte = new Set(z.orte);
+      for (const p of cl.spieler) for (const d of feindDepot(p.key)){
+        ats++;
+        if (d.ung) platz++;
+        if (d.k){ const b = zweigVon(d.k); zw[b] = (zw[b] || 0) + 1; }
+        if (d.o != null && MAP.n[d.o] && (d.t || 0) * 1000 >= seit) orte.add(d.o);
+      }
+      return {id, titel: cl.titel, eigen: false, spieler: cl.spieler.length, ats, zw, platz,
+              sicht: z.n, orte: orte.size, region: cl.region, t: cl.t || 0};
+    };
+    const sp = ids.map(spalte).filter(Boolean);
+    if (sp.length < 2) return "";
+    const strich = "\u2014";
+    const zahl = n => (n == null) ? strich : (n ? nz(n) : "0");
+    const zeilen = [
+      ["Players on record", x => zahl(x.spieler)],
+      ["Uncovered ATs", x => zahl(x.ats)],
+      ...ZWEIGE.filter(z => sp.some(x => x.zw[z.k])).map(z => ["\u00b7 " + z.name, x => zahl(x.zw[z.k] || 0)]),
+      ["Placeholders", x => zahl(x.platz)],
+      ["Sightings \u00b7 30 d", x => zahl(x.sicht)],
+      ["Towns seen in \u00b7 30 d", x => zahl(x.orte)],
+      ["Region", x => x.eigen ? strich : (x.region ? `${regionSVG(x.region, 13)}${esc((REGIONEN.find(r => r.k === x.region) || {name: x.region}).name)}` : strich)],
+      ["Last seen", x => x.eigen ? strich : (x.t ? alterText(x.t) : strich)],
+    ];
+    return `<div class="tw" style="margin-bottom:8px"><table>
+      <thead><tr><th></th>${sp.map(x => `<th>${x.eigen ? esc(x.titel) : clanEtikett(x.id)}</th>`).join("")}</tr></thead>
+      <tbody>${zeilen.map(([name, f]) => `<tr><td${name.startsWith("\u00b7") ? ' style="color:var(--dim2);padding-left:18px"' : ""}>${esc(name)}</td>${
+        sp.map(x => `<td>${f(x)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  };
 
   openDlg(`
     <div class="dlg-h"><h2>${nurSeite === null ? "Intel"
@@ -44510,7 +44717,6 @@ function intelDialog(tab, seite){
       <button data-tab="clans"   aria-pressed="true">Clans</button>
       <button data-tab="players" aria-pressed="false">Players</button>
       <button data-tab="supply"  aria-pressed="false">Supply</button>
-      <button data-tab="gaps"    aria-pressed="false">Gaps</button>
       <button data-tab="spots"   aria-pressed="false">Sightings</button>
     </div>
     <div class="dlg-b">
@@ -44525,7 +44731,7 @@ function intelDialog(tab, seite){
         <h4 style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;
           color:var(--dim2);margin:0 0 7px">Cut off — nobody can reinforce them</h4>
         ${nsAb.length ? `<div class="tw"><table>
-          <thead><tr><th>Town</th><th>Side</th><th>Neighbours</th><th>Why</th></tr></thead>
+          <thead><tr><th>Town</th><th>Side</th><th>Neighbours</th><th data-links>Why</th></tr></thead>
           <tbody>${nsAb.slice(0, 40).map(z => {
             const nb = nachbarn(z.i);
             const eigene = nb.filter(j => ownerOf(j) === z.f);
@@ -44553,7 +44759,7 @@ function intelDialog(tab, seite){
           A para-block puts a town into a battle, so it stops being a supply source for
           all of its neighbours. These are the towns where that costs the most.</p>
         ${nsHebel.length ? `<div class="tw"><table>
-          <thead><tr><th>Block here</th><th>Side</th><th>Cuts off</th><th>Which towns</th></tr></thead>
+          <thead><tr><th>Block here</th><th>Side</th><th>Cuts off</th><th data-links>Which towns</th></tr></thead>
           <tbody>${nsHebel.slice(0, 40).map(z => `<tr data-go="${z.i}" style="cursor:pointer">
             <td><b>${nsName(z.i)}</b></td>
             <td>${FACTIONS[z.f].tag}</td>
@@ -44572,16 +44778,26 @@ function intelDialog(tab, seite){
           <button class="btn" id="cl-neu-unbek" style="flex:1"
                   title="For a group you have seen together but cannot name yet">
             + They belong together (no name yet)</button>
+          ${clans.length ? `<button class="btn" id="cl-vgl" aria-pressed="${VGL_AUF}"${VGL_AUF ? ' style="border-color:var(--accent);color:var(--accent)"' : ""}>Compare \u2026</button>` : ""}
         </div>
+        ${VGL_AUF && clans.length ? `<div class="row" style="align-items:center;gap:6px;margin-bottom:8px">
+          ${[0, 1, 2].map(i => `<select data-vgl="${i}" class="mini" style="flex:1">
+            <option value="">\u2014</option>
+            <option value="*"${VGL[i] === "*" ? " selected" : ""}>Ours${clanGesetzt() ? " \u00b7 " + esc(clanName()) : ""}</option>
+            ${clans.map(cl => `<option value="${esc(cl.id)}"${VGL[i] === cl.id ? " selected" : ""}>${esc(cl.titel)}</option>`).join("")}
+          </select>`).join("")}
+        </div>${clanVergleich()}` : ""}
         ${clans.length ? `<div class="tw"><table>
-          <thead><tr><th>Clan</th><th>Side</th><th>Region</th><th>Ours?</th><th>Players</th><th>Known teams</th>
-            <th>Seen</th><th colspan="2">What they field</th><th>Last</th></tr></thead>
+          <thead><tr><th style="width:22px"></th><th data-links>Clan</th><th data-links>Side</th><th data-links>Region</th><th>Players</th><th>Uncovered ATs</th>
+            <th>Seen</th><th>Last</th></tr></thead>
           <tbody>${clans.map(cl=>`<tr class="fac-row"
               style="--f:${cl.f!=null?col(FACTIONS[cl.f]):"var(--dim2)"}">
+            <td style="padding:2px 4px"><button class="btn" data-clanauf="${esc(cl.id)}" aria-pressed="${CL_AUF.has(cl.id)}"
+                style="padding:0 5px;font-size:11px;line-height:16px">${CL_AUF.has(cl.id) ? "\u25be" : "\u25b8"}</button></td>
             <td style="text-align:left">${clanEtikett(cl.id)}
               ${cl.name && cl.tag ? `<small style="color:var(--dim2)">${esc(cl.name)}</small>` : ""}
               <button class="btn" data-clanname="${esc(cl.id)}"
-                style="padding:0 6px;font-size:10px;margin-left:4px">${cl.vorl ? "Name it" : "Rename"}</button>
+                style="padding:0 6px;font-size:10px;margin-left:4px">${cl.vorl ? "Enter name" : "Rename"}</button>
               ${clans.length > 1 ? `<button class="btn" data-clanfusion="${esc(cl.id)}"
                 style="padding:0 6px;font-size:10px;margin-left:2px"
                 title="This clan turned out to be the same as another one">Same as …</button>` : ""}</td>
@@ -44594,21 +44810,13 @@ function intelDialog(tab, seite){
                 style="padding:0 6px;font-size:10px;margin-left:3px"
                 title="Also move every recorded member to this side">→ ${cl.spieler.length}</button>` : ""}</td>
             <td style="text-align:left;white-space:nowrap">${regionSVG(cl.region)}${regionWahl(`data-clanreg="${esc(cl.id)}"`, cl.region)}</td>
-            <td><label class="toggle" style="justify-content:center"><input type="checkbox"
-                data-claneigen="${esc(cl.id)}"${cl.eigen?" checked":""}><span></span></label></td>
             <td>${cl.spieler.length}</td>
             <td>${cl.teams||"—"}</td>
             <td>${cl.gesehen||"—"}</td>
-            <td colspan="2" style="text-align:left;max-width:260px;white-space:normal">${
-              [...cl.kompo.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,v])=>
-                `<span title="${esc(atName(k))}" style="display:inline-flex;align-items:center;gap:2px;margin-right:6px">
-                   ${symbolSVG(k, c, 20, 14)}<small>${v}</small></span>`).join("") || "—"}</td>
             <td style="color:var(--dim2)">${cl.t?alterText(cl.t):"—"}</td>
-          </tr>`).join("")}</tbody></table></div>`
+          </tr>${CL_AUF.has(cl.id) ? clanUnterzeile(cl) : ""}`).join("")}</tbody></table></div>`
           : `<div class="empty">No clans yet. Create one above, or tick players on a battle
              screenshot and group them.</div>`}
-        <div class="note">A clan's side is set here, not guessed from its players. The
-          <b>→ n</b> button next to it also moves every recorded member — that one asks first.</div>
       </div>
 
       <div class="tabp" data-tab="players">
@@ -44628,6 +44836,10 @@ function intelDialog(tab, seite){
           <button data-plf="" aria-pressed="${PL_F===null}">all sides<b>${liste.length}</b></button>
           ${FACTIONS.map(q=>`<button data-plf="${q.id}" aria-pressed="${PL_F===q.id}">${q.tag}<b>${liste.filter(([,d])=>d.f===q.id).length}</b></button>`).join("")}
           <span style="width:10px"></span>
+          <button data-plg="" aria-pressed="${!PL_G}">all</button>
+          <button data-plg="gaps" aria-pressed="${PL_G==="gaps"}">with gaps<b>${liste.filter(([,d])=>d.luecke).length}</b></button>
+          <button data-plg="platz" aria-pressed="${PL_G==="platz"}">placeholders<b>${liste.filter(([,d])=>d.offenAt>0).length}</b></button>
+          <span style="width:10px"></span>
           <button data-plr="" aria-pressed="${!PL_R}">any region</button>
           ${REGIONEN.map(r=>`<button data-plr="${r.k}" aria-pressed="${PL_R===r.k}">${regionSVG(r.k, 13)}${r.name}<b>${liste.filter(([,d])=>d.region===r.k).length}</b></button>`).join("")}
           <select id="pl-clan" class="mini" style="margin-left:6px"><option value="">any clan</option>${
@@ -44637,13 +44849,16 @@ function intelDialog(tab, seite){
           <span style="font-size:11px;color:var(--dim2);margin-left:auto">${plZeig.length} of ${liste.length}</span>
         </div>` : ""}
         ${liste.length ? `<div class="tw"><table>
-          <thead><tr>${[["name","Player"],["clan","Clan"],["f","Fights for"],["region","Region"],["teams","Seen"],["orte","Towns"],["atges","Total ATs"]].map(([k,n])=>
-            `<th data-ps="${k}" style="cursor:pointer" title="Sort by ${n}">${n}${PL_S===k?(PL_AB?" ▼":" ▲"):""}</th>`).join("")}<th data-ps="t" style="cursor:pointer" title="Sort by last seen">Last${PL_S==="t"?(PL_AB?" ▼":" ▲"):""}</th></tr></thead>
+          <thead><tr>${[["name","Player"],["clan","Clan",1],["f","Fights for"],["region","Region",1],["teams","Seen"],["orte","Towns"],["atges","Total ATs"]].map(([k,n,l])=>
+            `<th data-ps="${k}"${l ? " data-links" : ""} style="cursor:pointer" title="Sort by ${n}">${n}${PL_S===k?(PL_AB?" ▼":" ▲"):""}</th>`).join("")}<th data-ps="t" style="cursor:pointer" title="Sort by last seen">Last${PL_S==="t"?(PL_AB?" ▼":" ▲"):""}</th></tr></thead>
           <tbody>${plZeig.map(([key,d])=>`<tr>
             <td><a href="#" data-oeffne="${esc(key)}" style="color:var(--accent)">${esc(d.name)}</a>${
               uebergelaufen(key) ? ` <em style="color:var(--accent);font-size:10px">ours</em>` : ""}${
               (S.roster[key] && S.roster[key].v && S.roster[key].v.aehnlich && S.roster[key].v.aehnlich.length)
-                ? ` <em title="looks like ${esc(S.roster[key].v.aehnlich.join(", "))}" style="color:var(--dim2);font-size:10px">≈</em>` : ""}</td>
+                ? ` <em title="looks like ${esc(S.roster[key].v.aehnlich.join(", "))}" style="color:var(--dim2);font-size:10px">≈</em>` : ""}${
+              (d.luecke && (d.fehlt || d.offenAt)) ? `<small style="display:block;font-size:10px;color:var(--dim2)">${
+                [["recorded", d.bekannt], ["at least", d.mind], ["missing", d.fehlt], ["placeholders", d.offenAt]]
+                  .filter(([,n]) => n).map(([w,n]) => `${w} ${n}`).join(" \u00b7 ")}</small>` : ""}</td>
             <td style="text-align:left">${clanWahlFeld("cw-" + key, clanIdVon(d.name))
                 .replace("<select", `<select class="mini" data-clanwahl="${esc(d.name)}"`)}</td>
             <td><select data-fac="${esc(key)}" class="mini">
@@ -44675,42 +44890,9 @@ function intelDialog(tab, seite){
         })()}
       </div>
 
-      <div class="tabp" data-tab="gaps">
-        ${(()=>{
-          const zeilen = [];
-          for (const [key, d] of proSpieler){
-            if (uebergelaufen(key)) continue;     // spielt jetzt mit uns
-            const dep = feindDepot(key);
-            const echt = atEcht(dep).length, offen = atOffen(dep).length;
-            const mind = atMindestens(dep);
-            const fehlt = Math.max(0, mind - echt);
-            if (!fehlt && !offen && echt) continue;      // vollstaendig, nichts zu tun
-            if (!fehlt && !offen && !echt && !d.teams) { zeilen.push({key, d, echt, offen, mind, fehlt:0, leer:true}); continue; }
-            if (!fehlt && !offen) continue;
-            zeilen.push({key, d, echt, offen, mind, fehlt, leer:false});
-          }
-          zeilen.sort((a,b)=> (b.fehlt+b.offen) - (a.fehlt+a.offen) || b.mind - a.mind);
-          if (!zeilen.length) return `<div class="empty">Nothing missing that we could tell.
-            Record a team with a numbered tag and the gaps show up here.</div>`;
-          return `<div class="tw"><table>
-            <thead><tr><th>Player</th><th>Clan</th><th>Recorded</th><th>At least</th>
-              <th>Missing</th><th>Placeholders</th></tr></thead>
-            <tbody>${zeilen.slice(0,300).map(z=>`<tr>
-              <td><a href="#" data-oeffne="${esc(z.key)}" style="color:var(--accent)">${esc(z.d.name)}</a></td>
-              <td style="color:var(--dim2)">${esc((S.roster[z.key]&&S.roster[z.key].v&&S.roster[z.key].v.clan)||"—")}</td>
-              <td>${z.echt||"—"}</td>
-              <td>${z.mind||"—"}</td>
-              <td style="color:${z.fehlt?"var(--accent)":"var(--dim2)"}"><b>${z.fehlt||"—"}</b></td>
-              <td style="color:var(--dim2)">${z.offen||"—"}</td>
-            </tr>`).join("")}</tbody></table></div>`;
-        })()}
-        <div class="note">The highest tag says how many they own — USSR-012 means twelve.
-          Missing is the difference.</div>
-      </div>
-
       <div class="tabp" data-tab="spots">
         ${sicht.length ? `<div class="tw"><table>
-          <thead><tr><th>Town</th><th>Faction</th><th>Teams</th><th>What</th><th>Clan</th><th>Reported</th></tr></thead>
+          <thead><tr><th>Town</th><th data-links>Faction</th><th>Teams</th><th data-links>What</th><th data-links>Clan</th><th>Reported</th></tr></thead>
           <tbody>${sicht.map(d=>`<tr data-go="${d.town}" style="cursor:pointer">
             <td>${esc(MAP.n[d.town][0])}</td>
             <td style="text-align:left">${fBadge(d.f)}</td>
@@ -44757,6 +44939,8 @@ function intelDialog(tab, seite){
     intelDialog.plF = b.dataset.plf === "" ? null : +b.dataset.plf; neuAuf("players"); }));
   document.querySelectorAll("#dlg [data-plr]").forEach(b => b.addEventListener("click", ()=>{
     intelDialog.plR = b.dataset.plr; neuAuf("players"); }));
+  document.querySelectorAll("#dlg [data-plg]").forEach(b => b.addEventListener("click", ()=>{
+    intelDialog.plG = b.dataset.plg; neuAuf("players"); }));
   { const plc = document.getElementById("pl-clan");
     if (plc) plc.addEventListener("change", ()=>{ intelDialog.plC = plc.value; neuAuf("players"); }); }
   { const pla = document.getElementById("pl-at");
@@ -44868,7 +45052,7 @@ function intelDialog(tab, seite){
   document.querySelectorAll("[data-clanfusion]").forEach(b => {
     b.addEventListener("click", ()=>{
       const von = b.dataset.clanfusion;
-      const andere = [...clans().keys()].filter(k => k !== von);
+      const andere = clanListe().map(c => c.id).filter(k => k !== von);   // T6: clans is the table's list here, not the function
       if (!andere.length) return;
       const wahl = prompt(
         `"${clanTitel(von)}" is the same clan as which one?\n\n`
@@ -44898,12 +45082,38 @@ function intelDialog(tab, seite){
     const fl = sel.parentElement.querySelector(".flagge"); if (fl) fl.remove();
     sel.insertAdjacentHTML("beforebegin", regionSVG(sel.value));
   }));
-  document.querySelectorAll("[data-claneigen]").forEach(cb => {
-    cb.addEventListener("change", ()=>{
-      clanSetzen(cb.dataset.claneigen, {eigen: cb.checked ? 1 : 0});
-      neuAuf("clans");
+  /* T6 (3): the row expander, and its two filters - those work in the DOM
+     without a rebuild and remember their state per clan */
+  document.querySelectorAll("#dlg [data-clanauf]").forEach(b => b.addEventListener("click", ()=>{
+    const id = b.dataset.clanauf;
+    if (CL_AUF.has(id)) CL_AUF.delete(id); else CL_AUF.add(id);
+    neuAuf("clans");
+  }));
+  const clFiltern = id => {
+    const fi = CL_FILT[id] || (CL_FILT[id] = {q: "", k: ""});
+    const q = fi.q.trim().toLowerCase();
+    let n = 0, ges = 0;
+    document.querySelectorAll(`#dlg tr[data-clz="${CSS.escape(id)}"]`).forEach(tr => {
+      ges++;
+      const zeig = (!q || tr.dataset.such.includes(q)) && (!fi.k || tr.dataset.typ === fi.k);
+      tr.hidden = !zeig; if (zeig) n++;
     });
+    document.querySelectorAll(`#dlg [data-clk="${CSS.escape(id)}"]`).forEach(k => k.setAttribute("aria-pressed", String(k.dataset.k === fi.k)));
+    const z = document.querySelector(`#dlg [data-clzahl="${CSS.escape(id)}"]`);
+    if (z) z.textContent = ges ? `${n} of ${ges}` : "";
+  };
+  document.querySelectorAll("#dlg [data-clq]").forEach(f => {
+    f.addEventListener("click", ev => ev.stopPropagation());
+    f.addEventListener("input", ()=>{ (CL_FILT[f.dataset.clq] || (CL_FILT[f.dataset.clq] = {q: "", k: ""})).q = f.value; clFiltern(f.dataset.clq); });
   });
+  document.querySelectorAll("#dlg [data-clk]").forEach(b => b.addEventListener("click", ()=>{
+    (CL_FILT[b.dataset.clk] || (CL_FILT[b.dataset.clk] = {q: "", k: ""})).k = b.dataset.k; clFiltern(b.dataset.clk); }));
+  for (const id of CL_AUF) clFiltern(id);
+  /* T6 (4): Compare - the button opens the three choices, a choice rebuilds */
+  { const kv = document.getElementById("cl-vgl");
+    if (kv) kv.addEventListener("click", ()=>{ intelDialog.vglAuf = !VGL_AUF; neuAuf("clans"); }); }
+  document.querySelectorAll("#dlg [data-vgl]").forEach(sel => sel.addEventListener("change", ()=>{
+    VGL[+sel.dataset.vgl] = sel.value; neuAuf("clans"); }));
   /* Frueher stand hier ein Freitextfeld, das den ROHEN Feldinhalt zeigte -
      nach der Umstellung also die nackte Kennung "c-4cmldaw8". Das sah nach
      kaputten Daten aus, und wer es daraufhin leerte, loeschte die Zuteilung
@@ -53330,21 +53540,39 @@ function feindDialog(key, name){
               aria-pressed="${arsF===q.id}">${q.tag}</button>`).join("")}
           </div>
         </div>
-        <div class="row">
-          <select id="fa-w" style="flex:1">${waffen.map(a=>
-            `<option value="${esc(a.k)}">${esc(a.name)}</option>`).join("")}</select>
-          <button class="btn" id="fa-w-add">Add weapon</button>
-        </div>
+        ${(() => {
+          /* T6 (2): twelve groups in the armory page's order, a button per
+             weapon of this side, pressed = in the arsenal. ENNO 18.09.2026:
+             "Bitte das Arsenal genau wie das eigene strukturieren nach
+             Waffentyp." Open groups survive the rebuild (grpAuf). */
+          const grpAuf = feindDialog.grpAuf || (feindDialog.grpAuf = new Set());
+          const drin = new Set(ars.w);
+          return `<div style="display:flex;flex-direction:column;gap:4px">${fzGruppen(waffen, "w").map(g => {
+            const n = g.liste.filter(a => drin.has(a.k)).length;
+            return `<details class="ars-grp" data-ag="w:${esc(g.k)}"${grpAuf.has("w:" + g.k) ? " open" : ""}>
+              <summary>${esc(g.name)}${n ? `<b>${n}</b>` : ""}<small>${g.liste.length}</small></summary>
+              <div class="kn">${g.liste.map(a => `<button class="btn" data-faw="${esc(a.k)}"
+                aria-pressed="${drin.has(a.k)}">${esc(a.name)}</button>`).join("")}</div>
+            </details>`; }).join("")}</div>`;
+        })()}
         ${ars.w.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${ars.w.map((k,i)=>{
           const a = MAP.arms.find(x=>x.k===k) || {name:k};
           return `<span class="chip">${esc(a.name)}<b data-wrm="${i}"
             style="cursor:pointer;padding:0 0 0 5px;font-size:12px">×</b></span>`;}).join("")}</div>`
           : `<div style="font-size:11px;color:var(--dim2)">No weapons recorded for this side.</div>`}
-        <div class="row" style="margin-top:8px">
-          <select id="fa-v" style="flex:1">${fahrz.map(v=>
-            `<option value="${esc(v.k)}">${esc(v.name)}</option>`).join("")}</select>
-          <button class="btn" id="fa-v-add">Add vehicle</button>
-        </div>
+        ${(() => {
+          /* T6 (2): thirteen vehicle groups by res in VEHICLE_CATEGORY_ORDER;
+             the modifications stay on the recorded vehicles below (BEF-8) */
+          const grpAuf = feindDialog.grpAuf || (feindDialog.grpAuf = new Set());
+          const drin = new Set(ars.v.map(e => e && e.k));
+          return `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px">${fzGruppen(fahrz, "v").map(g => {
+            const n = g.liste.filter(v => drin.has(v.k)).length;
+            return `<details class="ars-grp" data-ag="v:${esc(g.k)}"${grpAuf.has("v:" + g.k) ? " open" : ""}>
+              <summary>${esc(g.name)}${n ? `<b>${n}</b>` : ""}<small>${g.liste.length}</small></summary>
+              <div class="kn">${g.liste.map(v => `<button class="btn" data-fav="${esc(v.k)}"
+                aria-pressed="${drin.has(v.k)}">${esc(v.name)}</button>`).join("")}</div>
+            </details>`; }).join("")}</div>`;
+        })()}
         ${ars.v.length ? `<div style="display:flex;flex-direction:column;gap:5px">${ars.v.map((e,i)=>{
           const v = MAP.veh.find(x=>x.k===e.k) || {name:e.k, upg:[]};
           const drauf = Array.isArray(e.upg) ? e.upg : [];
@@ -53360,9 +53588,6 @@ function feindDialog(key, name){
               : `<div style="font-size:10px;color:var(--dim2);margin-top:3px">No modifications.</div>`}
           </div>`;}).join("")}</div>`
           : `<div style="font-size:11px;color:var(--dim2)">No vehicles recorded for this side.</div>`}
-        <div class="note">Straight out of the game files — every weapon and vehicle that side can
-          buy, and for each vehicle exactly the modifications it can carry. Three arsenals because
-          the same person plays different sides in different wars.</div>
       </div>
 
       <div class="tabp" data-ftab="role">
@@ -53415,18 +53640,21 @@ function feindDialog(key, name){
   {
     const a = feindArsenal(key, arsF);
     const schreib = w => { setFeindArsenal(key, arsF, w); feindDialog.reiter = "ars"; feindDialog(key, name); };
-    const wa = document.getElementById("fa-w-add");
-    if (wa) wa.addEventListener("click", ()=>{
-      const k = document.getElementById("fa-w").value;
-      if (a.w.includes(k)){ toast("Already recorded."); return; }
-      schreib({w: a.w.concat([k]), v: a.v});
-    });
-    const va = document.getElementById("fa-v-add");
-    if (va) va.addEventListener("click", ()=>{
-      const k = document.getElementById("fa-v").value;
-      if (a.v.some(x=>x.k===k)){ toast("Already recorded."); return; }
-      schreib({w: a.w, v: a.v.concat([{k, upg:[]}])});
-    });
+    /* T6 (2): a weapon button toggles - in the arsenal or out of it; the
+       write is the same setFeindArsenal that "Add weapon" used (the first
+       find is still credited there) */
+    document.querySelectorAll("#dlg [data-faw]").forEach(b => b.addEventListener("click", ()=>{
+      const k = b.dataset.faw;
+      schreib({w: a.w.includes(k) ? a.w.filter(x => x !== k) : a.w.concat([k]), v: a.v});
+    }));
+    document.querySelectorAll("#dlg [data-fav]").forEach(b => b.addEventListener("click", ()=>{
+      const k = b.dataset.fav;
+      schreib({w: a.w, v: a.v.some(x => x && x.k === k) ? a.v.filter(x => !(x && x.k === k)) : a.v.concat([{k, upg:[]}])});
+    }));
+    document.querySelectorAll("#dlg details[data-ag]").forEach(d => d.addEventListener("toggle", ()=>{
+      const g = feindDialog.grpAuf || (feindDialog.grpAuf = new Set());
+      if (d.open) g.add(d.dataset.ag); else g.delete(d.dataset.ag);
+    }));
     document.querySelectorAll("#dlg [data-wrm]").forEach(b => b.addEventListener("click", ()=>{
       const w = a.w.slice(); w.splice(+b.dataset.wrm, 1); schreib({w, v: a.v});
     }));
@@ -55507,12 +55735,12 @@ function kitWahl(host, art, ctx, beiWahl){
         border-radius:2px;padding:4px 6px;outline:0;font-size:11.5px"></div>`;
     let leer = true;
     if (art === "w"){
-      for (const r of ROLLEN){
-        const liste = MAP.arms.filter(w => w.role === r.k && passt(w)
-                                        && verfuegbar(w, frak, cls));
-        if (!liste.length) continue;
+      /* T6 (2): the same groups and order as the enemy arsenal - the
+         armory page's, see WAFFEN_GRUPPEN; the chips on the soldier stay */
+      for (const g of fzGruppen(MAP.arms.filter(w => passt(w) && verfuegbar(w, frak, cls)), "w")){
+        const liste = g.liste;
         leer = false;
-        html += `<div class="sw-h">${esc(r.name)}</div>` + liste.map(w =>
+        html += `<div class="sw-h">${esc(g.name)}</div>` + liste.map(w =>
           zeile(w.k, w.name, `${FT[w.f] || ""}${w.at ? " · AT" : ""}${w.aa ? " · AA" : ""}`,
                 w.fam ? `${rolleName(w.role)} · ${w.fam}` : rolleName(w.role))).join("");
       }
@@ -55520,9 +55748,10 @@ function kitWahl(host, art, ctx, beiWahl){
       const grp = {};
       for (const v of MAP.veh)
         if (passt(v) && verfuegbar(v, frak, cls)) (grp[v.res] = grp[v.res] || []).push(v);
-      for (const rk of Object.keys(grp).sort()){
+      for (const g of fzGruppen([].concat(...Object.values(grp)), "v")){   // T6 (2): the page's order
+        const rk = g.k;
         leer = false;
-        html += `<div class="sw-h">${esc(resName(rk))}</div>` + grp[rk].map(v =>
+        html += `<div class="sw-h">${esc(g.name)}</div>` + g.liste.map(v =>
           zeile(v.k, v.name, `${FT[v.f] || ""}${v.aa ? " · AA" : ""}${v.amph ? " · amph" : ""}`)).join("");
       }
     } else if (art === "u"){
@@ -56246,7 +56475,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 7ea832b042</span></p></div>
+         installation. <span style="color:var(--dim2)">· build ba4c1363a6</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -56474,7 +56703,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "7ea832b042";
+const BAU = "ba4c1363a6";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
