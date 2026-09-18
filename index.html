@@ -43759,7 +43759,10 @@ function depotLeserVerdrahten(){
        unberuehrt. */
     const stellen = document.getElementById("ds-stellen");
     if (!(stellen && stellen.checked)) gestellt = [];
-    for (const [id, tw] of gestellt) deployTeam(tw, id);
+    /* T11 (FABLE 19.09.2026): only the teams that were really set out -
+       under withhold a "No" refuses the whole batch, the toast must not
+       count them */
+    gestellt = gestellt.filter(([id, tw]) => deployTeam(tw, id));
     closeDlg(); depotZeichnen(); side(); draw(); tally();
     toast(`${n} team${n===1?"":"s"} added${gestellt.length?`, ${gestellt.length} placed`:""}`);
     /* DEP-3 A3: one window for all just placed teams that queue - AFTER
@@ -54907,7 +54910,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 46c7553987</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 671b505c44</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -55135,7 +55138,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "46c7553987";
+const BAU = "671b505c44";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
