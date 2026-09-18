@@ -6451,6 +6451,30 @@ function zustandSetzen(key, v, st, leise){
   if (b.art === "arrow"){
     if (st === 1){ okExtra.zb = ownerOf(w.to); aend.zb = okExtra.zb; }
     else aend.zb = st === 2 ? w.zb : undefined;
+    /* THE ATTACK ROUTE TRAVELS WITH THE ORDER (Blatt 16.09., Nr. 1 - ENNO
+       17.09.2026: "1b ist richtig. Jedes Gefecht ist ja relevant."). When
+       the arrow goes active, the route the map would draw for it
+       (angriffsWegNeu - town indices without the start, the target last)
+       is written on both roads like aktT, so that the server counts a
+       battle at any town on the way (warmap_befehl_orte in
+       2026-09-17_punkte_e.sql). The route of that moment holds: a later
+       change of ownership does not rewrite it, whoever sets the order
+       active again writes it anew (FABLE). Done carries it on, planned
+       drops it. An air drop, an arrow without a way or a search that
+       fails writes nothing - and never holds the activation up.
+       angriffsWegNeu and not angriffsWeg: the cache there serves active
+       arrows only, and at this moment the arrow is still planned. */
+    let weg;
+    if (st === 1 && !w.luft && w.from !== w.to && MAP.n[w.from] && MAP.n[w.to]){
+      try {
+        const z = angriffsWegNeu(w);
+        weg = z && Array.isArray(z.weg) && z.weg.length > 1 ? z.weg.slice(1) : undefined;
+      } catch (e){ weg = undefined; }
+    } else if (st === 2){
+      const eo = okEintrag(key);
+      weg = Array.isArray(w.weg) ? w.weg : (eo && Array.isArray(eo.weg) ? eo.weg : undefined);
+    }
+    aend.weg = weg; okExtra.weg = weg;
   }
   if (chef && !stamp("ok", key, st || null, okExtra)) return false;
   if (autor) befehlSchreiben(b, aend);
@@ -9272,6 +9296,8 @@ const PUNKTE_KONTEN = [
 const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
   fight: "Battles marked", map: "Map kept", unit: "Units kept", done: "Orders done",
   attr: "Notes confirmed",
+  /* P1, 17.09.2026: order/stift, recon/aufkl_done (2026-09-17_punkte_e.sql) */
+  stift: "Teams given", aufkl_done: "Recon requests done",
   /* PUNKTE-D, 13.09.2026: order/battle, leader/aufkl, logistic/soldier */
   battle: "Battles fought", aufkl: "Battles in a recon request", soldier: "Soldiers kept"});
 /* 'done' wird zweimal gebucht, fuer denselben Befehl: auf order fuer jeden,
@@ -9328,10 +9354,19 @@ function punkteSacheName(z){
     return wer + (rest ? " \u00b7 " + rest : "")
          + (tag(teil[teil.length-1]) ? " \u00b7 " + teil[teil.length-1] : "");
   }
-  if (z.aktion === "done"){
+  if (z.aktion === "aufkl_done"){
+    /* P1 (17.09.2026): <schluessel>|<stadt>|<spieler> - the request, then
+       the town, then the scout; the key may carry a colon itself */
+    const p2 = roh.lastIndexOf("|"), p1 = roh.lastIndexOf("|", p2 - 1);
+    if (p2 < 0 || p1 < 0) return roh;
+    const schl = roh.slice(0, p1), stadt = roh.slice(p1 + 1, p2), wer = roh.slice(p2 + 1);
+    const b = befehlVonSchluessel(schl), n = /^\d+$/.test(stadt) ? MAP.n[+stadt] : null;
+    return ((b && b.name) || schl) + " \u00b7 " + (n ? n[0] : stadt) + " \u00b7 " + ((depotIdx.get(wer) || {}).name || wer);
+  }
+  if (z.aktion === "done" || z.aktion === "stift"){
     /* <schluessel>|<spieler>, und der Schluessel kann selbst einen
        Doppelpunkt tragen (line:<id>:<autor>) - der Spieler steht hinter dem
-       LETZTEN senkrechten Strich. */
+       LETZTEN senkrechten Strich. stift (P1) has the same shape. */
     const p = roh.lastIndexOf("|");
     if (p < 0) return roh;
     const schl = roh.slice(0, p), wer = roh.slice(p + 1);
@@ -14432,6 +14467,30 @@ function griffeZeichnen(){
 }
 /* Dropped on a town it moves there; dropped on empty ground a line point is
    taken out — that is the one gesture people reach for anyway. */
+/* THE ROUTE FOLLOWS THE ORDER (P1 Runde 2, FABLE 18.09.2026, after the
+   Handwerk-Skeptiker: an active arrow moved by its handle kept the route
+   of the old target, and the server would have counted a battle there).
+   When an arrow that carries a route (weg - written when it went active)
+   is moved by an end or belly handle, or turned into an air drop, the
+   order row gets its route worked out afresh (none for the drop, none when
+   the search fails), and the ok row, when it carries a route and this
+   machine may confirm, is written again with the same v, aktT, zb and n -
+   NOT through zustandSetzen, which would set aktT anew. An arrow without a
+   route (planned) is left alone. */
+function pfeilWegNachziehen(a){
+  if (!a || !Array.isArray(a.weg)) return;
+  let weg;
+  if (!a.luft && a.from !== a.to && MAP.n[a.from] && MAP.n[a.to]){
+    try {
+      const z = angriffsWegNeu(a);
+      weg = z && Array.isArray(z.weg) && z.weg.length > 1 ? z.weg.slice(1) : undefined;
+    } catch (e){ weg = undefined; }
+  }
+  if (weg) a.weg = weg; else delete a.weg;
+  const eo = S.ok[a.id];
+  if (eo && Array.isArray(eo.weg) && darf("bestaetigen"))
+    stamp("ok", a.id, eo.v, {n: eo.n, aktT: eo.aktT, zb: eo.zb, weg});
+}
 function griffLoslassen(x, y){
   const ed = editing; editing = null;
   if (!ed) return;
@@ -14448,6 +14507,7 @@ function griffLoslassen(x, y){
       const b = bauchAusZeiger(ax, ay, bx, by, x, y);
       if (Math.abs(b - pfeilBauch(a)) < 0.005) return;
       a.bauch = Math.round(b*1000)/1000; a.t = jetzt();
+      pfeilWegNachziehen(a);                  // P1 Runde 2: the route follows the new curve
       dirty.add(`arrow:${a.id}`); save();
       toast(`Belly ${a.bauch > 0 ? "south" : a.bauch < 0 ? "north" : "straight"} — ${Math.abs(Math.round(a.bauch*100))} %`);
       return;
@@ -14458,6 +14518,7 @@ function griffLoslassen(x, y){
     if (von === bis){ toast("An arrow needs two different towns."); return; }
     if (von === a.from && bis === a.to) return;
     a.from = von; a.to = bis; a.t = jetzt();
+    pfeilWegNachziehen(a);                    // P1 Runde 2: the route follows the new end
     dirty.add(`arrow:${a.id}`); save();
     toast(`${MAP.n[von][0]} → ${MAP.n[bis][0]}`);
     return;
@@ -18764,7 +18825,7 @@ function arrowDialog(a, frisch){
       if (luftAn){
         const p = luftPruefen(a, a.from, a.to);
         if (!p.ok) toast(p.grund);
-        else { a.luft = 1; neu = true; luftBoardAnfordern(a); }
+        else { a.luft = 1; neu = true; luftBoardAnfordern(a); pfeilWegNachziehen(a); }   // P1 Runde 2: a drop has no route
       } else { delete a.luft; neu = true; }
     }
     const symEl = document.getElementById("a-sym");
@@ -18801,7 +18862,7 @@ function arrowDialog(a, frisch){
       if (entwEl.checked){
         const k = S.arrows.indexOf(a);
         if (k >= 0){ S.arrows.splice(k, 1); dropArrow(a.id); }
-        delete a.st; delete a.zb;                 // a draft has no state
+        delete a.st; delete a.zb; delete a.weg;   // a draft has no state (and no route, P1 Runde 2)
         a.entwurf = 1; a.id = pfeilId(); ENTWUERFE.push(a); entwuerfeSpeichern();
       } else pfeilFreigeben(a);
     }
@@ -30714,7 +30775,7 @@ const GEF_HUD_HALTEN = 15000;
    pair shows the last good reading dimmed for this long; "No score bars
    read." only after it. FABLE figure until the bar measurement (c2)
    replaces it; the clan line (gefMelden) keeps writing real readings only. */
-const GEF_BALKEN_HALTEN = 6000;         // the HUD seen this recently: the row may be read (counted below: 5 s lost 35 of 165 HUD looks of the hold-and-take recording)
+const GEF_BALKEN_HALTEN = 11000;   // measured 18.09.2026 (MESSUNG-BALKEN): 11 s cover 97,1 % of the missing time at 1 look/s, 6 s only 76,7 %         // the HUD seen this recently: the row may be read (counted below: 5 s lost 35 of 165 HUD looks of the hold-and-take recording)
 const GEF_KP_VERGESSEN = 30000;       // a place not seen for this long falls away
 /* the event thresholds. The sheet proposed 0,7 for the drain; counted on the
    Erfurt readings a FULL ring reads 0,68 for seconds at a time (132..138 s:
@@ -48541,11 +48602,41 @@ const PUNKTE_REGEL_FELDER = [
    d:"On top of the line above, when the town is ours or one of our attacks aims at it."},
   {k:"soldier_kept", n:"A soldier changed in the arsenal", std:1,
    d:"One per changed soldier and day, like the depot. The list itself stays anonymous."},
+  /* P1 (Blatt 16.09., 17.09.2026): paid by warmap_punkte_abschluss once
+     2026-09-17_punkte_e.sql has been run. stift 1 / 2 are the FABLE proposal
+     he took (ENNO 17.09.2026: "2a passt so erstmal ..."), the recon rates
+     his "Kannst du erstmal so bauen ..." (ENNO 17.09.2026); the chain
+     numbers are FABLE's (Offen 3). aufkl_at_platz is
+     the one box with a decimal (dez: step 0.1, read to two places - the
+     server reads it with warmap_punkte_satz_dez); the town's sum is rounded
+     there, not the rate (a placeholder alone would be floor(0,5) = 0). */
+  {k:"stift",        n:"Giving a team to somebody else's order", std:1,
+   d:"To the giver when that order gets done; once per order and player."},
+  {k:"stift_quote",  n:"... while that order still lacked units", std:2,
+   d:"Instead of the line above when the order's quota was still open before the assignment."},
+  {k:"kette_je_gefecht", n:"Chain link: multiplier per battle on it", std:1,
+   d:"Per battle read on the link's towns since it went active; 0 = flat rate."},
+  {k:"kette_gefecht_max", n:"Chain link: battles counted at most", std:5,
+   d:"Cap for the line above."},
+  {k:"aufkl_leer",   n:"Recon request: a town reported empty", std:1,
+   d:"To the assigned scout, per town he reported. Replaces the order rate."},
+  {k:"aufkl_voll",   n:"Recon request: a town reported with units", std:2,
+   d:"Instead of the line above."},
+  {k:"aufkl_gefecht", n:"Recon request: a battle marked there", std:3,
+   d:"Instead of both lines above."},
+  {k:"aufkl_at",     n:"Recon request: per unit reported", std:1,
+   d:"On top, per identified unit in his report."},
+  {k:"aufkl_at_platz", n:"Recon request: per placeholder", std:0.5, dez:1,
+   d:"On top, per unit reported without a type; the town's sum is rounded."},
 ];
 /* the battle requirement is ON unless the leader wrote a 0 (PUNKTE-D):
    a missing field is the default, and the default is on */
 const gefechtPflichtAn = p => !(p && p.gefecht_pflicht !== undefined && p.gefecht_pflicht !== null
                                 && +p.gefecht_pflicht === 0);
+/* the same reading for the two para switches (P1, 17.09.2026): on unless
+   the leader wrote a 0 - para_pflicht (the block pays only when sighted or
+   fought) and para_eigen (the own sighting counts) */
+const schalterAn = (p, k) => !(p && p[k] !== undefined && p[k] !== null && +p[k] === 0);
 function regelnDialog(tab){
   if (!istLeader()){ toast("Only the clan leader sets these."); return; }
   const r = clanRegeln(), p = punkteRegeln();
@@ -48567,8 +48658,8 @@ function regelnDialog(tab){
      GESETZTE Zahl waere damit fast unsichtbar gewesen, waehrend die Vorgabe
      als Platzhalter gut lesbar bleibt: genau umgekehrt zu dem, worum es hier
      geht. .tw input.zat macht das Feld dunkel und die Zahl hell. */
-  const feld = (id, wert, vorgabe, hoch) =>
-    `<input class="zat" type="number" id="${id}" min="0" max="${hoch}" value="${
+  const feld = (id, wert, vorgabe, hoch, schritt) =>
+    `<input class="zat" type="number" id="${id}" min="0" max="${hoch}"${schritt ? ` step="${schritt}"` : ""} value="${
       wert === null || wert === undefined || wert === "" ? "" : esc(String(wert))
     }" placeholder="${esc(String(vorgabe))}" style="width:66px">`;
   const mSetzt = (art, stufe) => {
@@ -48615,15 +48706,26 @@ function regelnDialog(tab){
           <tbody>${PUNKTE_REGEL_FELDER.map(f => `<tr>
             <td style="text-align:left">${esc(f.n)}
               <div style="font-size:11px;color:var(--dim2)">${esc(f.d)}</div></td>
-            <td>${feld(`rg-p-${f.k}`, p[f.k] === undefined || p[f.k] === null ? "" : p[f.k], f.std, 99)}</td>
+            <td>${feld(`rg-p-${f.k}`, p[f.k] === undefined || p[f.k] === null ? "" : p[f.k], f.std, 99, f.dez ? "0.1" : "")}</td>
           </tr>`).join("")}</tbody>
         </table></div>
         <div class="row" style="align-items:center;gap:8px">
           <span style="font-size:12px;color:var(--dim);flex:1">An attack or a defence only pays
             out when a clan member's Battlereader read the end of a battle on one of its towns.
-            Recon requests, chains and para-blocks are exempt.</span>
+            Recon requests are exempt; chains need one battle anywhere in the chain.</span>
           <label class="toggle"><input type="checkbox" id="rg-p-gefecht"${
             gefechtPflichtAn(p) ? " checked" : ""}><span></span></label>
+        </div>
+        <div class="row" style="align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--dim);flex:1">A para-block pays only when the
+            para team was sighted there or a battle was read there.</span>
+          <label class="toggle"><input type="checkbox" id="rg-p-para"${
+            schalterAn(p, "para_pflicht") ? " checked" : ""}><span></span></label>
+        </div>
+        <div class="row" style="align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--dim);flex:1">Own sighting counts</span>
+          <label class="toggle"><input type="checkbox" id="rg-p-paraeigen"${
+            schalterAn(p, "para_eigen") ? " checked" : ""}><span></span></label>
         </div>
         <div class="note">Empty box = grey default. <b>0</b> = not booked.</div>
         <div class="note">The server pays these out, not this page.</div>
@@ -48658,12 +48760,14 @@ function regelnSpeichern(){
      schlimmste Antwort auf einen Tippfehler - man sieht sein Fenster
      zugehen und glaubt, es stehe jetzt so. */
   let schlecht = "";
-  const lies = (id, hoch) => {
+  const lies = (id, hoch, dez) => {
     const el = document.getElementById(id);
     if (!el) return null;
     const roh = String(el.value || "").trim();
     if (!roh) return null;
-    const n = Math.round(+roh);
+    /* a box with a decimal (dez) is read to two places, like the server
+       (warmap_punkte_satz_dez); every other box to a whole number */
+    const n = dez ? Math.round(+roh * 100) / 100 : Math.round(+roh);
     if (!Number.isFinite(n) || n < 0 || n > hoch){
       if (!schlecht) schlecht = `${roh} — that box takes 0 to ${hoch}.`;
       return null;
@@ -48684,12 +48788,15 @@ function regelnSpeichern(){
 
   const punkte = {};
   for (const f of PUNKTE_REGEL_FELDER){
-    const w = lies(`rg-p-${f.k}`, 99);
+    const w = lies(`rg-p-${f.k}`, 99, f.dez);
     if (w !== null) punkte[f.k] = w;
   }
   /* both ways written out (PUNKTE-D, 13.09.2026): the server's default is
      ON, so only an explicit 0 turns the requirement off */
   punkte.gefecht_pflicht = document.getElementById("rg-p-gefecht")?.checked ? 1 : 0;
+  /* the two para switches the same way (P1, 17.09.2026) */
+  punkte.para_pflicht = document.getElementById("rg-p-para")?.checked ? 1 : 0;
+  punkte.para_eigen   = document.getElementById("rg-p-paraeigen")?.checked ? 1 : 0;
   if (schlecht){ toast(schlecht); return false; }
 
   /* Zwei Zeilen, zwei Stempel. Leer heisst leer: ein Grabstein, und
@@ -53508,7 +53615,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 1f9ee870ce</span></p></div>
+         installation. <span style="color:var(--dim2)">· build aa5c5c7c80</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -53736,7 +53843,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "1f9ee870ce";
+const BAU = "aa5c5c7c80";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
