@@ -110,6 +110,22 @@ button,input,select,textarea{font:inherit;color:inherit}
   font-family:var(--schmal);text-transform:uppercase;letter-spacing:.07em;font-size:12.5px}
 #me-status select option{background:var(--panel);color:var(--text);
   text-transform:none;letter-spacing:0}
+/* THE GAME WINDOW UNDER THE STATUS (Blatt 16.09., P4, SOLL-6): one state
+   line - shared or not - and the Share button that fetches the page's one
+   share the way the rooms do (statusTeilen). No question at the start
+   (Widerspruch 4): the share IS the sign that the game runs. A SECOND LINE
+   of the status box, not a wider box: the brand block beside it is two
+   lines tall anyway, and measured at 1400 the line beside the select pushed
+   the room bar into a row of its own (three rows instead of two). A grid,
+   not a wrapping flex row: a wrapping row still asks for the width of both
+   lines side by side (measured: the box grew to 330 points). */
+#me-status{display:grid;grid-template-columns:auto 1fr;column-gap:6px;row-gap:1px}   /* 1fr: the second line's surplus goes right of the select, not into the dot's column */
+#me-status select{justify-self:start}   /* its own width, not the cell's */
+#st-fenster{grid-column:1 / -1;display:flex;align-items:center;gap:6px;padding-top:2px;border-top:1px solid var(--line);
+  font-family:var(--schmal);font-size:10.5px;letter-spacing:0;color:var(--dim2);white-space:nowrap;line-height:1.3}
+#st-fenster .st-gw.an{color:var(--us)}
+#st-fenster .mini{padding:0 5px;font-size:10px;letter-spacing:0;cursor:pointer;line-height:1.5}
+@media (max-width: 760px){#st-fenster{display:none}}
 /* Auf dem Telefon steht in der ersten Zeile nur noch Marke, Status und die
    drei rechten Knoepfe - die Raumleiste ist seit heute die zweite Zeile.
    Enger, damit auf 375 Bildpunkten nichts hinausfaellt. */
@@ -827,6 +843,16 @@ body.txt-modus{cursor:text}
 #top-capture{display:flex;gap:6px;align-items:center;margin-right:10px;flex:0 0 auto}
 #top-capture .btn{display:flex;align-items:center;gap:8px;font-size:14px;padding:10px 15px}
 #top-capture .btn .ico{width:22px;height:22px;stroke-width:calc(var(--ico-strich)*24/22)}
+/* the Battlereader runs on with its desk hidden (Blatt 16.09., P3 (a)): the
+   head button carries the capture like the desk's own switch, and pulses
+   while another room holds the picture (GEF.pause) - state, no text */
+#b-gefstand.an{background:linear-gradient(180deg,#3d2a12,#2a1d0c);border-color:#8a6a2a;color:#f0c169;
+  box-shadow:inset 0 0 12px rgba(226,172,72,.25)}
+#b-gefstand.an.gf-pause{animation:gfKnopfPuls 1.6s ease-in-out infinite}
+@keyframes gfKnopfPuls{
+  0%,100%{box-shadow:inset 0 0 12px rgba(226,172,72,.25);color:#f0c169}
+  50%{box-shadow:inset 0 0 2px rgba(226,172,72,.05);color:#9a865a}}
+@media (prefers-reduced-motion:reduce){#b-gefstand.an.gf-pause{animation:none;color:#9a865a}}
 /* every capture button carries the same camera sign */
 .mit-ico{display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .mit-ico .ico{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;stroke-width:calc(var(--ico-strich)*24/15);
@@ -1098,6 +1124,10 @@ body.meld-modus{cursor:help}
 .gf-ton{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid #6a5f43;
   vertical-align:-1px;margin-right:5px}
 .gf-nichts{color:#6b6250;font-style:italic}
+/* the held reading (P3 (c)): the number dimmed, the fill paler - a state, no text */
+#gefstand .rd-kf .v.gf-halt{color:#6e8a72}
+.gf-balken .zahl.gf-halt{color:#9a9080}
+.gf-balken.gf-halt .kasten i{opacity:.55}
 /* the scoreboard block on the battle desk (BAT-1): strip, name field, role, mark.
    Two lists to a line, not three: with three the name field was 83 points wide at
    1920 and showed a third of "AldebaranMcArthur" (round 4, Skeptiker H3; measured
@@ -1290,6 +1320,9 @@ body.kb-zieht{user-select:none}
    border, ground and colour come from there, the same as in the desk). */
 .gf-schwebe{margin:0;padding:8px 10px;background:#0b0c10;color:#a9b0b8;font-family:var(--schmal);font-size:13px;line-height:1.45;overflow:hidden;user-select:none}
 .gf-schwebe .gf-satz{padding:7px 9px;border:1px solid;border-radius:3px}
+/* the reading line (P3 (e)): score and time left, one line in 340 x 96; dimmed while held */
+.gf-schwebe .gf-lesung{font-size:26px;font-weight:700;letter-spacing:.06em;color:#e8d9a8;line-height:1.2;padding:22px 0 0;text-align:center;white-space:nowrap}
+.gf-schwebe .gf-lesung.gf-halt{color:#6b7078}
 /* the sheet */
 .kb-blatt{background:#e9dfc6;color:#2b2416;border-radius:2px;padding:14px 18px 18px;
   box-shadow:0 8px 30px rgba(0,0,0,.5), inset 0 0 0 1px #d7ccb0;
@@ -2253,7 +2286,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
     <!-- Der eigene Status. Die Eintraege stehen NICHT hier, sondern in der
          Liste STATUS im Skript - sonst muesste man sie an zwei Stellen
          pflegen, und die eine wuerde vergessen. -->
-    <div id="me-status"><span class="dot"></span><select id="st-wahl" aria-label="Status"></select></div>
+    <div id="me-status"><span class="dot"></span><select id="st-wahl" aria-label="Status"></select><span id="st-fenster"></span></div>
     <!-- THE CAPTURE ROOMS AND THE BOARD STAND AT THE LEFT EDGE. They used
          to sit inside #top-right, whose margin-left:auto pushes that whole
          box to the right-hand side - an order:-1 then only sorted them to
@@ -30674,7 +30707,14 @@ const GEF_KP = {FENSTER_HALB: 220, FENSTER_Y0: 44, FENSTER_Y1: 96, KOERPER_Y0: 6
                 RAHMEN_UNRUHE: 0.25, RAHMEN_ABW: 35, ABSTAND: 60, ABSTAND_TOL: 5, MITTE_Y: 70,
                 RADIEN: [16, 18, 20], GEGEN_R: 24, WINKEL_SCHRITT: 6, RAUTE_DX: -14, RAUTE_DY: -14,
                 TAFEL_ANTEIL: 0.45, TAFEL_ZEILEN: 6, TAFEL_BLAU: [45, 85, 120, 85, 131, 164], TAFEL_ROT: [128, 24, 31, 168, 64, 71]};
-const GEF_HUD_HALTEN = 15000;         // the HUD seen this recently: the row may be read (counted below: 5 s lost 35 of 165 HUD looks of the hold-and-take recording)
+const GEF_HUD_HALTEN = 15000;
+/* THE BARS ARE HELD (Blatt 16.09., P3 (c)). ENNO 17.09.2026: "Die Balken
+   beim Battlestate verschwinden leider auch dauernd, wenn die Erfassung mal
+   etwas hakt. Das ist ja eigentlich nicht so gedacht." A look without the
+   pair shows the last good reading dimmed for this long; "No score bars
+   read." only after it. FABLE figure until the bar measurement (c2)
+   replaces it; the clan line (gefMelden) keeps writing real readings only. */
+const GEF_BALKEN_HALTEN = 6000;         // the HUD seen this recently: the row may be read (counted below: 5 s lost 35 of 165 HUD looks of the hold-and-take recording)
 const GEF_KP_VERGESSEN = 30000;       // a place not seen for this long falls away
 /* the event thresholds. The sheet proposed 0,7 for the drain; counted on the
    Erfurt readings a FULL ring reads 0,68 for seconds at a time (132..138 s:
@@ -31469,6 +31509,7 @@ function gefTafelKopfFertig(T, kopf){
   T.kopfOffen = false;
   if (T.geruht && !T.offen) return;   /* a head job from before the rest: the next battle reads its own head block (round 1, Skeptiker KANN 5) */
   for (const B of [T.geruht ? null : T.stand, T.offen]) if (B){ B.art = T.kopf.art; B.ort = T.kopf.ort; B.artText = T.kopf.artText; B.ortText = T.kopf.ortText; }   // a rested stand keeps its own head block: this one belongs to the next battle (Paket 20)
+  if (T.stand && !T.geruht) gefTafelOrtNehmen(T, T.stand);            // the board names the town, the desk takes it while none is picked (P3 (f))
   if (T.stand && !T.geruht) gefTafelBinden(T.ortGewaehlt, T.stand);   // the board's town line came in anew: the gate is asked again and held (Paket 20)
   T.version++;
   gefTafelStandSetzen(T);
@@ -31480,7 +31521,10 @@ function gefTafelKopfFertig(T, kopf){
    Returns what this look saw, for the desk's capture line. */
 function gefTafelBlick(bild, W, H, z){
   const K = GEF_TAFEL, fk = z.kpFaktor || 1;
-  if (!gefTafelGebunden(z)) return null;   // no town with the battle mark picked: the board is not looked at (5.16)
+  /* THE LOOK NEEDS NO TOWN (Blatt 16.09., P3 (f)). ENNO 17.09.2026: "Eine
+     Gefechtstafel sehe ich noch nicht." The gate of 5.16 stays for Keep, Kit
+     (gefTafelHaelt) and the clan line (gefTafelFuerClan); the board itself
+     is read whenever it stands, and its head block names the town. */
   const S0 = gefTafelSuchen(bild, W, H, fk);
   if (!S0 || !S0.tafeln.length) return null;
   const nun = jetzt();
@@ -31560,8 +31604,42 @@ function gefTafelStandSetzen(T){
   T.stand = P; T.offen = null; T.version++;
   if (neu){ const drin = new Set(); for (const t of P.tafeln) for (const zl of t.zeilen) drin.add(zl.e); T.eintraege = T.eintraege.filter(e => drin.has(e)); }
   T.geruht = false;
+  gefTafelOrtNehmen(T, P);                 // the board names the town, the desk takes it while none is picked (P3 (f))
   gefTafelBinden(T.ortGewaehlt, P);        // the gate, asked of the living mark now and held (Paket 20)
   return true;
+}
+/* THE BOARD NAMES THE TOWN (Blatt 16.09., P3 (f)). While no town is picked
+   on the left and the head block resolved one that carries the battle mark,
+   the desk takes it as its pick - the desk's choice, not the map's: no mark
+   is set or touched. A town already picked is never overwritten (the
+   contradiction line stays). Set directly, not through gefOrtSetzen: that
+   one drops the running reading and the board's queue, and this reading IS
+   this town's (E4). Only the live desk's own board (GEF.tafel === T). */
+function gefTafelOrtNehmen(T, B){
+  if (!GEF || GEF.tafel !== T || !B) return;
+  if (GEF.ort !== null && GEF.ort !== undefined) return;
+  if (B.ort === null || B.ort === undefined || !fightAt(B.ort)) return;
+  GEF.ort = B.ort;
+  T.ortGewaehlt = B.ort;
+}
+/* the mark by his hand (P3 (f)): the board's town carries no battle mark -
+   the button sets it as the click on the map does (setFight), then the
+   desk takes the town while none is picked. Nothing silent. */
+function gefTafelMarkieren(i){
+  if (!GEF || i === null || i === undefined || !MAP.n[i] || fightAt(i)) return;
+  if (!darf("aufklaerung")) return;
+  setFight(i, true); side(); draw(); tally();
+  const T = GEF.tafel;
+  if (GEF.ort === null || GEF.ort === undefined){ GEF.ort = i; if (T) T.ortGewaehlt = i; }
+  if (T && T.stand && GEF.ort === i) gefTafelBinden(i, T.stand);
+  gefZeichnen();
+}
+/* the state line of the board's town without a mark, with the button */
+function gefTafelMarkeZeile(B, recht){
+  if (!B || B.ort === null || B.ort === undefined || !MAP.n[B.ort] || fightAt(B.ort)) return "";
+  const name = MAP.n[B.ort][0];
+  return `<div class="note" style="margin-top:6px">Board: ${esc(name)} · no battle mark
+    <button class="mini" id="gf-tf-marke" data-ort="${B.ort}" style="margin-left:8px"${recht ? "" : ` disabled title="${esc(rechtSatz("aufklaerung"))}"`}>Mark battle at ${esc(name)}</button></div>`;
 }
 /* the town gate (E, 5.16): a board is looked at, held and kept only with a
    town that carries the battle mark picked on the left, and a stand only
@@ -31987,7 +32065,10 @@ const gefTafelArtWort = art => (GEF_TAFEL_ARTEN[art] && GEF_TAFEL_ARTEN[art][2])
    blue is ours - ENNO 05.09.2026: "blau (Verbuendete)". */
 function gefTafelBlatt(){
   const T = GEF && GEF.tafel, B = T && T.stand;
-  if (!B) return "";
+  /* no stand yet: one state line instead of nothing (P3 (f)) - ENNO
+     17.09.2026: "Wo finde ich den Kit Knopf?" - the Kit buttons stand on
+     the rows once a board stands */
+  if (!B) return `<div class="gf-tf"><div class="kb-titel">Scoreboard · not read yet</div></div>`;
   const gebunden = gefTafelHaelt(GEF, B);   // held on the stand, not the living mark (Paket 20)
   const kam = gefTafelKameraden();
   const i = GEF.ort, o = (i !== null && i !== undefined) ? ownerOf(i) : -1, cf = clanFaktion(), recht = darf("aufklaerung");
@@ -32073,6 +32154,7 @@ function gefTafelBlatt(){
   }
   return `<div class="gf-tf">
     <div class="kb-titel">Scoreboard${B.art ? " · " + esc(gefTafelArtWort(B.art) || B.art) : ""}${B.ort !== null && B.ort !== undefined && MAP.n[B.ort] ? " · " + esc(MAP.n[B.ort][0]) : ""} · seen ${esc(alterText(B.t))}</div>
+    ${gefTafelMarkeZeile(B, recht)}
     ${T.blatt.html}</div>`;
 }
 /* the sheet's wiring: typing holds the rebuild (GEF.tafel.tippt, as
@@ -32110,7 +32192,9 @@ function gefTafelVerdrahten(blatt){
     blatt.addEventListener("pointerdown", ev => {
       const t = ev.target.closest(".gf-tf .sp-tausch[data-e]");
       if (t){ ev.preventDefault(); ev.stopPropagation(); gefTafelTauschen(+t.dataset.e); return; }
-      if (ev.target.closest("#gf-tf-keep")){ ev.preventDefault(); gefTafelBehalten(); }
+      if (ev.target.closest("#gf-tf-keep")){ ev.preventDefault(); gefTafelBehalten(); return; }
+      const mk = ev.target.closest("#gf-tf-marke");
+      if (mk && !mk.disabled){ ev.preventDefault(); gefTafelMarkieren(+mk.dataset.ort); }
     });
     /* THE KIT MASK (Paket 20). Its state lives on GEF.tafel.kit and the block
        is rebuilt from it at every tick; a control of the mask holds the sheet
@@ -32323,7 +32407,7 @@ function gefLesen(bild, z){
   let kp = null;
   if (px){
     const nun = jetzt(), L = z.uhrZeile;
-    if (balken) z.balkenZuletzt = {li: balken.li, re: balken.re, t: nun};
+    if (balken) z.balkenZuletzt = {li: balken.li, re: balken.re, liTon: balken.liTon, reTon: balken.reTon, t: nun};   // the tones too: the held reading draws like a fresh one (P3 (c))
     if (balken || z.paarGesehen || (L && (L.kasten || gefBannerZeile(L)))) z.hudZeit = nun;
     if (z.hudZeit && nun - z.hudZeit <= GEF_HUD_HALTEN){
       try { kp = gefKpBlick(bild, W, z); } catch(e){ kp = null; }
@@ -32582,13 +32666,12 @@ function gefEndeFrisch(){
    THE GATE IS INSIDE THIS FUNCTION, not only at the place that calls it. The
    comment in radarZweiklang says what happens otherwise: that one was left
    entirely ungated and was silent only because its single caller turned back
-   first - a second caller would have made it ring with SOUND OFF. The battle
-   desk has no background watch (gefTick runs from the interval gefLiveStart
-   sets, and gefstandZu stops it), so the matching gate is: the switch is on,
-   the room is open, and a capture is running. A watch in the background is
-   always silent. */
+   first - a second caller would have made it ring with SOUND OFF. The gate
+   is: the switch is on and a capture is running. Since Blatt 16.09. (P3 (a))
+   the capture outlives the desk, so the chime rings with the desk hidden as
+   well - the confirmation is the reason the reader runs on. */
 function gefKlang(){
-  if (!kbTon || !gefOffen || !GEF || !GEF.live) return;
+  if (!kbTon || !GEF || !GEF.live) return;
   if (!kbKlangAuf()) return;
   try {
     let t = kbKlang.currentTime + 0.02;
@@ -32702,7 +32785,7 @@ function gefEndbildMelden(){
        the answer until it is there - the sync loop pushes on its own, this
        does not push again, or a dead line would bring "No connection" every
        second. The queue survives a stop of the capture (offenSichern); the
-       chime keeps its own gate (gefKlang: capture running, room open), frame
+       chime keeps its own gate (gefKlang: capture running), frame
        and floating line come regardless. */
 async function gefUebertragPruefen(){
   const E = GEF && GEF.ende;
@@ -32926,6 +33009,10 @@ function gefNeu(){
           tafel: null,
           endbild: null, ende: null, endbildGemeldet: null,
           geschrieben: null, gesendet: 0, orteSchluessel: null,
+          /* pause: another capture room holds the picture, the tick does not
+             look (Blatt 16.09., P3 (a)); schwebeLog: what the floating window
+             reported about itself - opened, hidden, visible, closed (P3 (e)) */
+          pause: 0, schwebeLog: [],
           status: "Waiting for the game window ..."};
 }
 function gefOrte(){
@@ -32982,8 +33069,34 @@ function gefLiveStop(auchFreigabe){
       && !(typeof PG !== "undefined" && PG && PG.live) && !wacheLaeuft()) bildFreigabeBeenden();
   gefZeichnen();
 }
+/* a capture that ended while the desk was hidden: nothing to show, nothing
+   to keep - unless the end-screen confirmation still stands (the window
+   shows the box until it is sent). Returns true when it cleared. */
+function gefTotRaeumen(){
+  if (!GEF || GEF.live || gefOffen) return false;
+  if (typeof gefEndeFrisch === "function" && gefEndeFrisch()) return false;
+  gefSchwebeZu();
+  GEF = null;
+  gefKopfKnopf();
+  return true;
+}
 async function gefTick(){
   if (!GEF || !GEF.live || GEF.laeuft) return;
+  /* PAUSED (Blatt 16.09., P3 (a)). ENNO 17.09.2026: "Solange ich aber einen
+     anderen raum nutze, muss der Battlereader aber natuerlich schweigen."
+     Radar, cabin or player room took the one share (raeumeSchliessen sets
+     the pause); the tick keeps its interval and reads nothing until the desk
+     is opened again. A share that died meanwhile ends the capture as the
+     catch below does - not while another room's new share (bildFreigabeNeu)
+     still has the question open (bildAnfrage). */
+  if (GEF.pause){
+    if (!bildAnfrage && (!bildStrom || !bildStrom.active)){ GEF.status = "Sharing ended."; gefLiveStop(false); gefTotRaeumen(); return; }
+    /* the last score must not stand as fresh while nothing is read (round 1,
+       Skeptiker Wort): no stand, and a drawing every tick, so the frame and
+       the floating line go dim and then to "-" like a held reading */
+    GEF.stand = null; gefZeichnen();
+    return;
+  }
   if (!bildNeu(GEF)) return;
   GEF.laeuft = true;
   let bild = null;
@@ -33007,7 +33120,7 @@ async function gefTick(){
       GEF.stand = null;
       /* a share the Kommodore ended, or a window that will not read: stop the
          tick instead of repeating the same error once a second */
-      if (!bildStrom || !bildStrom.active) gefLiveStop(false);
+      if (!bildStrom || !bildStrom.active){ gefLiveStop(false); if (gefTotRaeumen()) return; }
       gefZeichnen();
     }
   } finally {
@@ -33057,7 +33170,16 @@ function gefEndeSatz(){
    never opens it - requestWindow and getDisplayMedia both need a fresh user
    gesture and both consume it, so one click cannot do both (FABLE
    13.09.2026, BAT-12 Runde 2). Open the desk and share, then press the
-   button once; the window lives until the desk closes. */
+   button once; the window lives until the capture ends or the desk closes
+   without one (Blatt 16.09., P3 (a)/(e): it outlives a hidden desk).
+   NEVER EMPTY since Blatt 16.09. (P3 (e), Offen 7): without a confirmation
+   box it shows one reading line - the score and the time left as the head
+   strip shows them (gefLesungZeile), "-" while nothing is read. No state
+   sentence, no request (5.23 stays shut). And it reports on itself:
+   visibilitychange and pagehide of its document go into GEF.schwebeLog, the
+   desk shows the last entry - so his next battle says whether Chrome hides
+   the window over an exclusive full screen or keeps it up (SOLL-7: no advice
+   about the window mode in here). */
 let gefSchwebe = null, gefSchwebeSatz = null;
 async function gefSchwebeAuf(){
   if (gefSchwebe || !GEF || !("documentPictureInPicture" in window)) return false;
@@ -33079,24 +33201,54 @@ async function gefSchwebeAuf(){
   if (document.documentElement.dataset.theme) doc.documentElement.dataset.theme = document.documentElement.dataset.theme;
   doc.body.className = "gf-schwebe";
   doc.body.innerHTML = "";
+  /* the window's own report (P3 (e)): opened, hidden, visible, closed with
+     the time - at most 40 entries on GEF, the desk shows the last one */
+  const log = art => {
+    if (!GEF) return;
+    const L = GEF.schwebeLog = GEF.schwebeLog || [];
+    L.push({t: jetzt(), art});
+    if (L.length > 40) L.splice(0, L.length - 40);
+    gefPult();
+  };
+  log("opened");
+  doc.addEventListener("visibilitychange", () => log(doc.visibilityState === "hidden" ? "hidden" : "visible"));
   /* closed from its own corner or by the browser: forget it, relabel the desk */
-  w.addEventListener("pagehide", () => { if (gefSchwebe === w){ gefSchwebe = null; gefSchwebeSatz = null; gefPult(); } });
+  w.addEventListener("pagehide", () => { if (gefSchwebe === w){ gefSchwebe = null; gefSchwebeSatz = null; } log("closed"); gefPult(); });
   gefSchwebeZeichnen();
   gefPult();
   return true;
+}
+/* the last entry of the window's report as one state line for the desk:
+   "hidden 12:01–12:14" once it came back, "hidden since 12:01" while it is
+   away, "closed 12:14", "opened 12:01" */
+function gefSchwebeLogZeile(){
+  const L = GEF && GEF.schwebeLog;
+  if (!L || !L.length) return "";
+  const hm = t => gefUhrzeit(t).slice(0, 5);
+  const e = L[L.length - 1];
+  let satz;
+  if (e.art === "visible"){
+    let h = null;
+    for (let k = L.length - 2; k >= 0; k--) if (L[k].art === "hidden"){ h = L[k]; break; }
+    satz = h ? `hidden ${hm(h.t)}–${hm(e.t)}` : `visible ${hm(e.t)}`;
+  } else if (e.art === "hidden") satz = `hidden since ${hm(e.t)}`;
+  else satz = `${e.art} ${hm(e.t)}`;
+  return `<div class="note" style="margin-top:6px">Floating window · ${esc(satz)}</div>`;
 }
 function gefSchwebeZu(){
   const w = gefSchwebe; gefSchwebe = null; gefSchwebeSatz = null;
   if (w){ try { w.close(); } catch(e){} }
 }
-/* the box while it stands, nothing otherwise; written anew only when it
-   changed - this runs at every tick of the desk. The memo of what stands is
-   taken only after the write went through: a failed write is tried again
-   at the next tick, not remembered as done. */
+/* the box while it stands, the reading line otherwise (P3 (e)); written
+   anew only when it changed - this runs at every tick of the desk. The memo
+   of what stands is taken only after the write went through: a failed write
+   is tried again at the next tick, not remembered as done. */
 function gefSchwebeZeichnen(){
   if (!gefSchwebe) return;
   const K = gefEndeSatz();
-  const html = K ? `<div class="gf-satz" style="border-color:${K.rand};background:${K.grund};color:${K.farbe}">${K.text}</div>` : "";
+  let html;
+  if (K) html = `<div class="gf-satz" style="border-color:${K.rand};background:${K.grund};color:${K.farbe}">${K.text}</div>`;
+  else { const L = gefLesungZeile(); html = `<div class="gf-lesung${L.gehalten ? " gf-halt" : ""}">${esc(L.text)}</div>`; }
   if (html === gefSchwebeSatz) return;
   try { gefSchwebe.document.body.innerHTML = html; gefSchwebeSatz = html; } catch(e){}
 }
@@ -33109,7 +33261,8 @@ function gefPult(){
     <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="gf-kraft">${ICO_CAPTURE}${
       live ? "Capture running" : "Capture the game"}</button>
     ${live ? `<button class="rd-schalter" id="gf-teilen" style="font-size:10.5px;padding:6px 0">Share again</button>` : ""}
-    <button class="rd-schalter ${gefSchwebe ? "an" : ""}" id="gf-schweben" ${pipDa ? "" : "disabled"} title="${pipDa ? "A small window that stays over the game and shows the confirmation once the end screen was read" : "Needs Chrome or Edge 116 or newer"}">${gefSchwebe ? "Floating - close it" : "Float over the game"}</button>
+    <button class="rd-schalter ${gefSchwebe ? "an" : ""}" id="gf-schweben" ${pipDa ? "" : "disabled"} title="${pipDa ? "A small window that stays over the game: the score, and the confirmation once the end screen was read" : "Needs Chrome or Edge 116 or newer"}">${gefSchwebe ? "Floating - close it" : "Float over the game"}</button>
+    ${gefSchwebeLogZeile()}
     ${(() => {
       /* WAS STEHT GERADE AN - und nichts Dazuerfundenes. Gefragt wird die
          gegebene Bestaetigung durch ihr Frischefenster, NICHT der Befund
@@ -33138,8 +33291,7 @@ function gefPult(){
     <div class="kb-abstand"></div>
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="gf-klang">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
-    <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run
-      borderless or windowed. Only the town picked on the left is written to: the score, the
+    <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">Only the town picked on the left is written to: the score, the
       countdown, the objective row and the scoreboard.</div>`;
   document.getElementById("gf-kraft").addEventListener("click", () => {
     if (GEF && GEF.live) gefLiveStop(true); else gefLiveStart(); });
@@ -33171,18 +33323,34 @@ function gefPult(){
     if (gefSchwebe){ gefSchwebeZu(); gefPult(); } else gefSchwebeAuf();
   });
 }
+/* the score line the head strip and the floating window show: this look's
+   pair, or the last good one while it is younger than GEF_BALKEN_HALTEN -
+   dimmed then (gehalten), the state and no text (Blatt 16.09., P3 (c)) */
+function gefLesungZeile(){
+  const R = GEF && GEF.stand, bz = GEF && GEF.balkenZuletzt;
+  const frisch = R && R.balken;
+  const gehalten = !frisch && !!bz && jetzt() - bz.t <= GEF_BALKEN_HALTEN;
+  const b = frisch || (gehalten ? bz : null);
+  const rest = GEF && GEF.rest ? gefRestKurz(gefRestSek(GEF.rest.s, GEF.rest.t)) : null;
+  const text = (b ? `${b.li} : ${b.re}` : "-") + (rest ? ` · ${rest}` : "");
+  return {b, gehalten, rest, text};
+}
 function gefZeichnen(){
   if (!GEF) return;
+  gefKopfKnopf();
+  /* the desk hidden, the capture running (P3 (a)): only what lives outside
+     the desk is drawn - the frame's state and the floating window */
+  if (!gefOffen){ gefEndeRahmen(); gefSchwebeZeichnen(); return; }
   const kopf = document.getElementById("gf-kopf"), links = document.getElementById("gf-links"),
         blatt = document.getElementById("gf-blatt");
   if (!kopf || !links || !blatt) return;
-  const R = GEF.stand, b = R && R.balken;
+  const R = GEF.stand, L = gefLesungZeile(), b = L.b, gehalten = L.gehalten;
   const ortName = (GEF.ort !== null && GEF.ort !== undefined && MAP.n[GEF.ort]) ? MAP.n[GEF.ort][0] : null;
   kopf.innerHTML = `
     <div class="rd-kf weit ${ortName ? "ort" : ""}"><div class="t">Town</div>
       <div class="v">${ortName ? `<b class="kb-ortname">${esc(ortName)}</b>` : "<small>none picked, choose one on the left</small>"}</div></div>
     <div class="rd-kf"><div class="t">Score, left to right</div>
-      <div class="v">${b ? `${b.li}<small> : </small>${b.re}` : "-"}</div>
+      <div class="v${gehalten ? " gf-halt" : ""}">${b ? `${b.li}<small> : </small>${b.re}` : "-"}</div>
       <div class="bar"><i style="width:${b ? b.li : 0}%"></i></div></div>
     <div class="rd-kf"><div class="t">Time left</div>
       <div class="v">${GEF.rest ? esc(gefRestKurz(gefRestSek(GEF.rest.s, GEF.rest.t))) : "-"}</div>
@@ -33206,7 +33374,7 @@ function gefZeichnen(){
     ${orte.length ? "" : `<div class="note" style="margin-top:6px">No town carries the battle mark. Set it on the map first.</div>`}
     <h3 style="margin-top:14px">Reading</h3>
     Share the game window and play.
-    Hold Tab with a town picked on the left: the scoreboard is cut while it stands, its names are read afterwards one at a time. The last full look is the stand that goes to the clan; a name is sure once two readings agree or the register knows it. Kit: click a name's Kit, pick weapon and vehicle from the game's lists - what the player card in the game shows.
+    Hold Tab: the scoreboard is cut while it stands, its names are read afterwards one at a time. The last full look is the stand that goes to the clan; a name is sure once two readings agree or the register knows it. Kit: click a name's Kit, pick weapon and vehicle from the game's lists - what the player card in the game shows.
     <h3 style="margin-top:14px">What was measured</h3>
     <div class="note">Over twenty-one captures the head bars were found on all 43 boards and on none of 167 pictures without one; every row was counted right. Names read exactly in 282 of 397 rows at one look; after two looks 26 of 35 stood sure and right and 6 sure and wrong - the same misreading twice, so a sure name can still be wrong. A look at the board costs 9 to 10 ms the first time and 5 to 6 after; a name takes the reader about 30 ms.</div>
 `;
@@ -33218,6 +33386,9 @@ function gefZeichnen(){
       gefZeichnen();
     });
   }
+  /* the town the board named (P3 (f)) shows in the picker without a rebuild */
+  { const of = links.querySelector("#gf-ort"), v = (GEF.ort === null || GEF.ort === undefined) ? "" : String(GEF.ort);
+    if (of && of.value !== v && document.activeElement !== of) of.value = v; }
   /* while a name on the scoreboard block is being typed the sheet is not
      rebuilt under the hand (BAT-1, the rule of pgZeichnen): nothing below
      this line runs, the clock button's listener included */
@@ -33225,12 +33396,12 @@ function gefZeichnen(){
   blatt.innerHTML = `
     <div class="kb-titel">Battle state</div>
     ${b ? `
-      <div class="gf-balken"><span>left</span>
+      <div class="gf-balken${gehalten ? " gf-halt" : ""}"><span>left</span>
         <div class="kasten"><i style="width:${b.li}%;background:${esc(b.liTon || "#7a8a99")}"></i></div>
-        <span class="zahl">${b.li}%</span></div>
-      <div class="gf-balken"><span>right</span>
+        <span class="zahl${gehalten ? " gf-halt" : ""}">${b.li}%</span></div>
+      <div class="gf-balken${gehalten ? " gf-halt" : ""}"><span>right</span>
         <div class="kasten"><i style="width:${b.re}%;background:${esc(b.reTon || "#7a8a99")}"></i></div>
-        <span class="zahl">${b.re}%</span></div>
+        <span class="zahl${gehalten ? " gf-halt" : ""}">${b.re}%</span></div>
       <div class="note">${b.liTon ? `<span class="gf-ton" style="background:${esc(b.liTon)}"></span>left bar` : ""}${
         b.reTon ? `<span class="gf-ton" style="margin-left:12px;background:${esc(b.reTon)}"></span>right bar` : ""}
         ${b.liTon || b.reTon ? "" : `<div style="margin-top:4px">Neither bar carries a filled part yet.</div>`}</div>`
@@ -33345,15 +33516,38 @@ function gefZeichnen(){
   gefTafelVerdrahten(blatt);
   gefPult();
 }
+/* THE HEAD BUTTON CARRIES THE CAPTURE (Blatt 16.09., P3 (a)): "an" while
+   the tick runs with the desk hidden or shown, a pulse while another room
+   holds the picture (GEF.pause). State in the class and the title, no text. */
+function gefKopfKnopf(){
+  const k = document.getElementById("b-gefstand");
+  if (!k) return;
+  const live = !!(GEF && GEF.live), pause = live && !!GEF.pause;
+  k.classList.toggle("an", live);
+  k.classList.toggle("gf-pause", pause);
+  k.title = live ? (pause ? "Battlereader · paused" : "Battlereader · capture running") : "Reads the battle you are in";
+}
 async function gefstandAuf(){
   if (gefOffen) return;
   raeumeSchliessen("gefstand");
   gefOffen = true;
-  GEF = gefNeu();
-  /* the town chosen on the map when it is a battle, otherwise the only one */
+  /* THE CAPTURE OUTLIVES THE DESK (Blatt 16.09., P3 (a)). ENNO 17.09.2026:
+     "Der battlereader soll uebrigens als eine kleine Ausnahme auch
+     weiterlaufen, wenn man den Raum verlaesst". A running GEF is taken up
+     as it stands - town, stand, scoreboard, confirmation, floating window -
+     and the pause another room set is lifted. Only without one the desk
+     starts fresh, as before. */
+  const weiter = !!(GEF && GEF.live);
+  if (!GEF) GEF = gefNeu();
+  GEF.pause = 0;
   const orte = gefOrte();
-  if (sel !== null && sel !== undefined && fightAt(sel)) GEF.ort = sel;
-  else if (orte.length === 1) GEF.ort = orte[0];
+  if (!weiter){
+    /* the town chosen on the map when it is a battle, otherwise the only one */
+    if (sel !== null && sel !== undefined && fightAt(sel)) GEF.ort = sel;
+    else if (orte.length === 1) GEF.ort = orte[0];
+  } else if ((GEF.ort === null || GEF.ort === undefined) && sel !== null && sel !== undefined && fightAt(sel)){
+    gefOrtSetzen(sel);                        // taken up without a town: the map's pick, the picker's own way (E3)
+  }
   const li = document.getElementById("gf-links");
   if (li) li.dataset.gebaut = "";
   document.getElementById("gefstand").classList.add("an");
@@ -33363,13 +33557,23 @@ async function gefstandAuf(){
   gefLiveStart();
   gefZeichnen();
 }
+/* CLOSING THE DESK DOES NOT STOP THE CAPTURE (Blatt 16.09., P3 (a)): while
+   the tick runs the desk is only hidden - GEF, the tick, the floating window
+   and the confirmation stay, the map, the plates and the clan line go on
+   (they hang on GEF, not on the desk). The capture ends only through
+   "Capture running", the end of the share, or the page. Without a running
+   capture the desk closes as before: the reading is over, the window goes
+   with it, GEF is dropped (E1). */
 function gefstandZu(){
   if (!gefOffen) return;
   gefOffen = false;
+  document.getElementById("gefstand").classList.remove("an");
+  if (GEF && GEF.live){ gefKopfKnopf(); return; }
   gefLiveStop(true);
-  document.getElementById("gefstand").classList.remove("an", "gf-ende", "gf-puls");
+  document.getElementById("gefstand").classList.remove("gf-ende", "gf-puls");
   gefSchwebeZu();                             // the overlay goes with the desk (BAT-12), as the strip with the cabin
   GEF = null;
+  gefKopfKnopf();
 }
 document.getElementById("b-gefstand").addEventListener("click", gefstandAuf);
 document.getElementById("gf-zu").addEventListener("click", gefstandZu);
@@ -33386,7 +33590,14 @@ function raeumeSchliessen(ausser){
   if (ausser !== "radar"    && typeof radarOffen !== "undefined" && radarOffen) radarZu();
   if (ausser !== "kabine"   && typeof kbOffen    !== "undefined" && kbOffen)    kabineZu();
   if (ausser !== "spieler"  && typeof pgOffen    !== "undefined" && pgOffen)    spielerraumZu();
-  if (ausser !== "gefstand" && typeof gefOffen   !== "undefined" && gefOffen)   gefstandZu();
+  if (ausser !== "gefstand"){
+    if (typeof gefOffen !== "undefined" && gefOffen) gefstandZu();
+    /* THE BATTLEREADER PAUSES while another capture room is open (Blatt
+       16.09., P3 (a), KANN-7: on GEF && GEF.live, not on the desk). The
+       other room takes the one share and picks its window; the desk lifts
+       the pause when it is opened again (gefstandAuf). */
+    if (typeof GEF !== "undefined" && GEF && GEF.live){ GEF.pause = 1; gefKopfKnopf(); }
+  }
 }
 
 /* ==== TEST BENCH FOR THE READER ==========================================
@@ -45401,8 +45612,17 @@ const statusVon = who => {
 /* a recording running against the game counts as use of the page: whoever
    has the radar, the units cabin, the players room or the battlereader on
    the game is doing something with the tool, even without a click for 40
-   minutes (FABLE 15.09.2026, F2). Read only, nothing is set. */
-const aufnahmeLaeuft = () => wacheLaeuft() || !!(KB && KB.live) || !!(PG && PG.live) || !!(GEF && GEF.live);
+   minutes (FABLE 15.09.2026, F2). Read only, nothing is set.
+   AND THE SHARED WINDOW ITSELF (Blatt 16.09., P4, SOLL-6). ENNO 17.09.2026:
+   "Wenn jemand das Tool offen hat und das Spiel, sollte man grundsaetzlich
+   erstmal auf active stehen, es sei denn, man setzt sich selbst auf
+   inactive". The one share the rooms or the status line fetched is the sign
+   that the game runs: while it lives, no clock - a paused battlereader or a
+   closed radar with the share still standing included. Without a share the
+   clock runs as before; an Inactive set by hand stays (statusRuhePruefen
+   sets, it never lifts). */
+const aufnahmeLaeuft = () => wacheLaeuft() || !!(KB && KB.live) || !!(PG && PG.live) || !!(GEF && GEF.live)
+  || !!(bildStrom && bildStrom.active);
 /* WER NACH SEINEM STATUS EINEN BEFEHL ERFUELLEN KANN. AT-Befehle (Pfeil,
    Parablock, Flaeche): Active und RTS only - der schiebt seine Einheiten.
    FPS-Rollen: nur Active. Mobile sieht nur zu, Inactive ist weg, Offline
@@ -45595,6 +45815,31 @@ function statusSchliessen(){
     }).catch(()=>{});
   } catch(e){}
 }
+/* THE GAME WINDOW LINE (Blatt 16.09., P4, SOLL-6): "Game window · not
+   shared" with Share, "Game window · shared" while the page's share lives.
+   Drawn again only when the state changed - the button keeps its node and
+   its click. No button where the browser cannot share (phone, http). */
+function statusFensterZeichnen(){
+  const el = document.getElementById("st-fenster");
+  if (!el) return;
+  const geteilt = !!(bildStrom && bildStrom.active);
+  const kann = kannTeilen() && bildAufnahmeMoeglich();
+  const html = geteilt ? `<span class="st-gw an">Game window · shared</span>`
+    : `<span class="st-gw">Game window · not shared</span>${kann ? `<button class="mini" id="st-teilen">Share</button>` : ""}`;
+  if (el.dataset.stand === html) return;
+  el.dataset.stand = html;
+  el.innerHTML = html;
+  el.querySelector("#st-teilen")?.addEventListener("click", statusTeilen);
+}
+/* the one share, fetched the way the rooms fetch it (bildStromHolen: the
+   window picker, a whole screen refused, one open question for everybody).
+   Nothing reads it here; the rooms find it standing when they open. */
+async function statusTeilen(){
+  if (!kannTeilen() || !bildAufnahmeMoeglich()) return;
+  try { await bildStromHolen(); }
+  catch(e){ if (!(e && e.nurFenster)) toast("Nothing picked — nothing is shared."); }   // a whole screen: bildStromFragen said it already
+  statusFensterZeichnen();
+}
 function statusAufbau(){
   const kasten = document.getElementById("me-status");
   if (!kasten) return;
@@ -45602,6 +45847,8 @@ function statusAufbau(){
   if (!wahl) return;
   wahl.innerHTML = STATUS.filter(x => !x.werkzeug).map(x => `<option value="${x.k}">${esc(x.n)}</option>`).join("");   // Offline is not a choice: the tool is open
   wahl.addEventListener("change", ()=> statusSetzen(wahl.value, true));
+  statusFensterZeichnen();
+  setInterval(statusFensterZeichnen, 1500);    // the share comes and goes through the rooms as well (P4)
   statusAn();
   /* use of the page: capture phase, passive - the page reads its own
      events only (bedient). The clock once a minute, its own interval. */
@@ -53261,7 +53508,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 891a82174b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 1f9ee870ce</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -53489,7 +53736,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "891a82174b";
+const BAU = "1f9ee870ce";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
