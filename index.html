@@ -766,7 +766,7 @@ body.zieht #mapwrap canvas{pointer-events:none}
   padding-bottom:1px;border-bottom:1px solid rgba(128,140,160,.14)}
 .grp-h span{font-variant-numeric:tabular-nums}
 .grp-h .stale{opacity:.55;font-style:italic}
-.tw tbody tr[data-go]:hover,.tw tbody tr[data-pk]:hover{background:rgba(217,164,65,.1)}
+.tw tbody tr[data-go]:hover,.tw tbody tr[data-pk]:hover,.tw tbody tr[data-mg]:hover{background:rgba(217,164,65,.1)}
 .row{display:flex;gap:5px}
 .row select,.row input{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
   padding:5px 6px;outline:0;min-width:0}
@@ -1774,9 +1774,18 @@ body.kb-zieht{user-select:none}
 tr.fac-row td{background:color-mix(in srgb,var(--f) 7%,transparent)}
 tr.fac-row td:first-child{border-left:3px solid var(--f)}
 tr.fac-row:hover td{background:color-mix(in srgb,var(--f) 14%,transparent)}
-/* Stacked share bar — who contributed how much of one unit type */
-.share{display:flex;height:9px;border-radius:2px;overflow:hidden;background:var(--panel2);min-width:110px}
-.share i{display:block;height:100%}
+/* T2 (5): the account's symbol on the scoreboard - a hollow ring in the
+   account's colour, a placeholder until his pictures come */
+.pk-sym{display:inline-block;width:10px;height:10px;border-radius:50%;border:1.5px solid var(--dim);
+  box-sizing:border-box;vertical-align:-1px;margin-right:4px}
+/* T2 (2): a member's teams under his row (Members tab), grouped */
+.tw .mg-t{width:100%;border-collapse:collapse;font-size:11px}
+.tw .mg-t th{position:static;background:transparent;text-align:left;padding:6px 6px 2px;letter-spacing:.06em}
+.tw .mg-t th span{color:var(--dim);letter-spacing:0;text-transform:none;font-weight:400;margin-left:6px}
+.tw .mg-t td{text-align:left;padding:2px 10px 2px 6px;border-top:1px solid var(--line);white-space:nowrap}
+.tw .mg-t td:last-child{width:100%}
+.tw .mg-t td.sy{padding:1px 4px;width:28px}
+.tw .mg-t td.typ{color:var(--dim)}
 .lead{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:7px}
 .lead .card{background:var(--panel2);border-radius:var(--r);padding:8px 10px;border-left:3px solid var(--accent-dk)}
 .lead .card h4{font-family:var(--schmal);text-transform:uppercase;letter-spacing:.09em;
@@ -2402,14 +2411,14 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <!-- the clan window's tabs as menu entries (menueBauen moves them) -->
       <button class="btn" id="b-cl-card"   data-clantab="clan"   title="Name, side, standing orders">Card</button>
       <!-- the tab names are the window's own: over IS the depot, who IS the
-           list of owners. "depot" was never a tab, and tabsAktiv falls back
-           to the first one - so this entry used to open the clan card. -->
+           member list (T2, 19.09.2026). "depot" was never a tab, and tabsAktiv
+           falls back to the first one - so this entry used to open the clan card. -->
       <button class="btn" id="b-cl-depot"  data-clantab="over"   title="All depots of the clan">Depot</button>
       <button class="btn" id="b-cl-growth" data-clantab="growth" title="How the clan has grown">Growth</button>
-      <button class="btn" id="b-cl-over"   data-clantab="who"    title="Who owns which teams">Team owners</button>
-      <button class="btn" id="b-cl-deploy" data-clantab="deploy" title="Where the clan's teams stand">In the field</button>
-      <button class="btn" id="b-cl-people" data-clantab="people" title="Members and their roles">Roles</button>
-      <button class="btn" id="b-cl-punkte" data-clantab="punkte" title="Who has earned which points">Points</button>
+      <button class="btn" id="b-cl-over"   data-clantab="who"    title="Members, ranks and their teams">Members</button>
+      <button class="btn" id="b-cl-deploy" data-clantab="deploy" title="Which teams stand where">Deployed ATs</button>
+      <button class="btn" id="b-cl-people" data-clantab="people" title="Ranks, and what you want next war">Roles</button>
+      <button class="btn" id="b-cl-punkte" data-clantab="punkte" title="Who has earned which points">Scoreboard</button>
       <button class="btn" id="b-cl-tpl"    data-clantab="tpl"    title="Group templates shared with the clan">Templates</button>
       <button class="btn" id="b-cl-arsenal" title="What the whole clan can field, and where the gaps are">Clan arsenal</button>
       <button class="btn" id="b-arms">Arsenal</button>
@@ -3078,6 +3087,8 @@ const ZWEIGE = [
 ];
 const zweigVon = k => (AT[k] && AT[k].branch) || "other";
 const zweigName = z => (ZWEIGE.find(x=>x.k===z) || {name:z}).name;
+/* T2 (1): the column heads of the Growth table, one per branch */
+const ZWEIG_KURZ = {infantry:"Inf", recon:"Rec", armor:"Arm", airborne:"Para", airforce:"Air", other:"Other"};
 /* DEP-3 part 1 - which teams get the queue question when set out of the
    depot. ENNO 07.09.2026: "Daher sollte jeder Nutzer beim Einsetzen/
    Platzieren der eigenen Kampfeinheiten auf der Karte einmal gefragt werden,
@@ -9597,15 +9608,21 @@ function overtimePruefen(){
    summiert (warmap_punkte_stand liefert sum(betrag)). Wer den Zuschlag
    wieder aufnimmt, findet die dreizehn Ortskennungen und die Begruendung in
    warmap/sql/2026-09-08_punkte_wichtige_orte.sql. */
+/* T2 (5), ENNO 18.09.2026: "Die Abkuerzungen der Punkte bitte immer
+   ausschreiben und mit einem Symbol versehen, Platzhalter reichen erstmal"
+   and ""Order" nicht "Orders"". The key `order` is the server's and stays;
+   farbe is the account's colour for the placeholder ring (punkteSymbol). */
 const PUNKTE_KONTEN = [
-  {k:"recon",    n:"Recon",    kurz:"R"},
-  {k:"logistic", n:"Logistic", kurz:"L"},
-  {k:"order",    n:"Orders",   kurz:"O"},
-  {k:"leader",   n:"Leader",   kurz:"Ld"},
+  {k:"recon",    n:"Recon",    farbe:"#5fa8c8"},
+  {k:"logistic", n:"Logistic", farbe:"#c98a3c"},
+  {k:"order",    n:"Order",    farbe:"#8fae5f"},
+  {k:"leader",   n:"Leader",   farbe:"#d9a441"},
 ];
+/* the account's symbol - a hollow ring until his pictures come (his ToDo) */
+const punkteSymbol = k => `<i class="pk-sym" style="border-color:${k.farbe}"></i>`;
 /* the first-find kinds keep their names from the register (AUFK_NAME) */
 const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
-  fight: "Battles marked", map: "Map kept", unit: "Units kept", done: "Orders done",
+  fight: "Battles marked", map: "Map kept", unit: "Units kept", done: "Order done",
   attr: "Notes confirmed",
   /* P1, 17.09.2026: order/stift, recon/aufkl_done (2026-09-17_punkte_e.sql) */
   stift: "Teams given", aufkl_done: "Recon requests done",
@@ -9621,7 +9638,7 @@ const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
    Aktion, zwei Bedeutungen - also entscheidet das Konto ueber den Namen.
    Beide Aufrufer geben es mit: die Aufschluesselung in punkteZeichnen und die
    Tabelle im Buch. Wer einen vergisst, bekommt "undefined" in die Zelle. */
-const PUNKTE_AKTION_KONTO = {leader: {done: "Orders given"}};
+const PUNKTE_AKTION_KONTO = {leader: {done: "Order given"}};
 const punkteAktionName = (a, k) => (PUNKTE_AKTION_KONTO[k] || {})[a]
   || PUNKTE_AKTION[a] || String(a || "");
 /* WOFUER DER PUNKT WAR, in Worten. Die Sache ist der Schluessel, mit dem der
@@ -9782,7 +9799,7 @@ function punkteZeichnen(zeilen){
       .sort((a, b) => b.summe[konto.k] - a.summe[konto.k] || b.letzte - a.letzte
                       || String(a.name).localeCompare(String(b.name)));
     return `<div class="tw"><table>
-      <thead><tr><th>${esc(konto.n)}</th><th>Points</th></tr></thead>
+      <thead><tr><th>${punkteSymbol(konto)}${esc(konto.n)}</th><th>Points</th></tr></thead>
       <tbody>${liste.length ? liste.map((p, i) => `
         <tr data-pk="${esc(p.spieler)}"${p.spieler === S.me ? ' class="me"' : ''} style="cursor:pointer">
           <td>${i + 1}. ${esc(p.name)}${p.spieler === S.me ? " <em>you</em>" : ""}</td>
@@ -9802,7 +9819,7 @@ function punkteZeichnen(zeilen){
   feld.innerHTML = `
     <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
       <b style="font-family:var(--schmal);text-transform:uppercase;letter-spacing:.08em;color:var(--accent)"
-        >You: ${PUNKTE_KONTEN.map(k => `${esc(k.kurz)} ${nz(mein(k.k))}`).join(" / ")} \u00b7 EXP ${nzExp(meinExp)}</b>
+        >You: ${PUNKTE_KONTEN.map(k => `${punkteSymbol(k)}${esc(k.n)} ${nz(mein(k.k))}`).join(" \u00b7 ")} \u00b7 EXP ${nzExp(meinExp)}</b>
       <span style="flex:1"></span>
       <span style="font-size:11px;color:var(--dim2)">${leute.size} ${
         leute.size === 1 ? "player has" : "players have"} points on record</span>
@@ -9811,7 +9828,7 @@ function punkteZeichnen(zeilen){
       ${PUNKTE_KONTEN.map(spalte).join("")}
     </div>
     <div class="note"><b>Recon</b> - first finds, battles marked, map kept. <b>Logistic</b> - depot.
-      <b>Orders</b> - orders done. <b>Leader</b> - your orders, once done.
+      <b>Order</b> - orders done. <b>Leader</b> - your orders, once done.
       <b>EXP</b> - the four accounts by the clan's factors, plus a rank set by hand.</div>`;
   feld.querySelectorAll("tr[data-pk]").forEach(tr => tr.addEventListener("click", () => {
     const d = tr.nextElementSibling;
@@ -34490,7 +34507,7 @@ function gefTafelBlatt(){
   /* no stand yet: one state line instead of nothing (P3 (f)) - ENNO
      17.09.2026: "Wo finde ich den Kit Knopf?" - the Kit buttons stand on
      the rows once a board stands */
-  if (!B) return `<div class="gf-tf"><div class="kb-titel">Scoreboard · not read yet</div></div>`;
+  if (!B) return `<div class="gf-tf"><div class="kb-titel">Tab board · not read yet</div></div>`;
   const gebunden = gefTafelHaelt(GEF, B);   // held on the stand, not the living mark (Paket 20)
   const kam = gefTafelKameraden();
   const i = GEF.ort, o = (i !== null && i !== undefined) ? ownerOf(i) : -1, cf = clanFaktion(), recht = darf("aufklaerung");
@@ -34577,7 +34594,7 @@ function gefTafelBlatt(){
     <div style="margin-top:8px"><button class="mini" id="gf-tf-keep"${namen && gebunden && recht ? "" : " disabled"}>Keep ${namen} name${namen === 1 ? "" : "s"}</button></div>`};
   }
   return `<div class="gf-tf">
-    <div class="kb-titel">Scoreboard${B.art ? " · " + esc(gefTafelArtWort(B.art) || B.art) : ""}${B.ort !== null && B.ort !== undefined && MAP.n[B.ort] ? " · " + esc(MAP.n[B.ort][0]) : ""} · seen ${esc(alterText(B.t))}</div>
+    <div class="kb-titel">Tab board${B.art ? " · " + esc(gefTafelArtWort(B.art) || B.art) : ""}${B.ort !== null && B.ort !== undefined && MAP.n[B.ort] ? " · " + esc(MAP.n[B.ort][0]) : ""} · seen ${esc(alterText(B.t))}</div>
     ${gefTafelMarkeZeile(B, recht)}
     ${T.blatt.html}</div>`;
 }
@@ -48387,35 +48404,25 @@ function statusPuls(){
   const e = S.stat[S.me];
   stamp("stat", S.me, k, Object.assign({hz: Math.floor(jetzt()/60000)}, e && e.auto ? {auto:1} : {}));
 }
-/* THE MEMBER LIST FOLLOWS THE STATUS (FABLE 15.09.2026, S3): "Who is here"
-   is redrawn only when the run of statusVon over the members (ageing
+/* THE MEMBER LIST FOLLOWS THE STATUS (FABLE 15.09.2026, S3): the member
+   table is redrawn only when the run of statusVon over the members (ageing
    included) differs from what the list last showed - and never over
-   somebody's hands: not while an element of the clan window has the
-   focus, not while the wish field or its ticks hold something unsaved.
-   leuteZeichnen rebuilds the whole tab; a redraw at the wrong moment
-   would drop typed text without a word. The signature is kept on
-   #cl-people itself, so a freshly opened window is drawn once more at the
+   somebody's hands: not while an element of the clan window has the focus
+   (the filter field, a select). Since T2 (19.09.2026) the table lives in
+   the Members tab (#cl-who, mitgliederZeichnen) - the Roles tab with the
+   wish field is not touched by this any more. The signature is kept on
+   #cl-who itself, so a freshly opened window is drawn once more at the
    first check (guarded like every other). */
 const statusSignatur = () => leuteListe.map(m => statusVon(m.player)).join(",");
-function wunschOffen(feld){
-  const w = feld.querySelector("#lp-wunsch");
-  if (!w) return false;
-  const n = feld.querySelector("#lp-neu");                 // a rank name being typed (leader) counts as unsaved too (round 1, Skeptiker S1)
-  if (n && n.value.trim()) return true;
-  const mein = wunschVon(S.me) || {text:"", zweige:[]};
-  if (w.value.trim() !== (mein.text || "")) return true;
-  const z = [...feld.querySelectorAll("[data-wz]")].filter(c => c.checked).map(c => c.dataset.wz);
-  const soll = mein.zweige || [];
-  return z.length !== soll.length || z.some(k => !soll.includes(k));
-}
 function leuteNachziehen(){
-  const feld = document.getElementById("cl-people");
-  if (!feld || !feld.querySelector("#lp-wunsch")) return;    // not open, or still "Loading"
+  const feld = document.getElementById("cl-who");
+  if (!feld || !feld.querySelector("table")) return;        // not open, or still "Loading"
   const sig = statusSignatur();
   if (feld.dataset.statsig === sig) return;
-  if (feld.contains(document.activeElement) || wunschOffen(feld)) return;
+  const dlg = document.getElementById("dlg");
+  if (dlg && dlg.contains(document.activeElement)) return;
   feld.dataset.statsig = sig;
-  leuteZeichnen();
+  mitgliederZeichnen();
 }
 /* ANMELDEN. Wer die Seite oeffnet, ist da. Aufgehoben wird aber nur ein
    Inactive oder ein Offline (SON-1) - eine bewusst gesetzte Wahl bleibt
@@ -53903,29 +53910,21 @@ function zuwachs(tageZurueck){
     let vorher = null;
     for (const x of h){ if (x.d <= grenze) vorher = x; else break; }
     const jetztN = summeVon(h[h.length-1].c);
+    /* T2 (1): the branches of the last snapshot - one column each in the Growth table */
+    const zweige = {};
+    for (const [k, n] of Object.entries(h[h.length-1].c || {})){ const z = zweigVon(k); zweige[z] = (zweige[z] || 0) + n; }
     raus.push({who, name:d.name, mine: who === S.me, frisch: !vorher,
-               delta: vorher ? jetztN - summeVon(vorher.c) : null, jetzt: jetztN});
+               delta: vorher ? jetztN - summeVon(vorher.c) : null, jetzt: jetztN, zweige});
   }
   return raus.sort((a,b)=> b.delta - a.delta);
 }
-const RANGLISTEN = [
-  {name:"Most teams",        sym:"",                   e:"teams",
-   wert: l => l.length},
-  {name:"Most men",          sym:"infantry",           e:"men",
-   wert: l => l.reduce((s,d)=>s+atMen(d.k), 0)},
-  {name:"Most tanks",        sym:"medium_armor",       e:"vehicles",
-   wert: l => l.filter(d=>isArmor(d.k)).reduce((s,d)=>s+atVeh(d.k), 0)},
-  {name:"Most paratroopers", sym:"paratroopers",       e:"men",
-   wert: l => l.filter(d=>zweigVon(d.k)==="airborne").reduce((s,d)=>s+atMen(d.k), 0)},
-  {name:"Most planes",       sym:"fighter_squadron",   e:"planes",
-   wert: l => l.filter(d=>isAir(d.k)).reduce((s,d)=>s+atVeh(d.k), 0)},
-  {name:"Most fighters",     sym:"heavy_fighter_squadron", e:"planes",
-   wert: l => l.filter(d=>zweigVon(d.k)==="airforce").reduce((s,d)=>s+atVeh(d.k), 0)},
-  {name:"Most recon",        sym:"mechanized_recon",   e:"teams",
-   wert: l => l.filter(d=>zweigVon(d.k)==="recon").length},
-  {name:"Deepest pockets",   sym:"",                   e:"warfunds",
-   wert: l => l.reduce((s,d)=>s+((AT[d.k] && AT[d.k].wf[0]) || 0), 0)},
-];
+/* HERE STOOD EIGHT LEADER BOARDS (RANGLISTEN: most teams, men, tanks,
+   paratroopers, planes, fighters, recon, deepest pockets) and the share
+   bars per type - the tab "Team owners". ENNO 18.09.2026: "Was ist das?
+   Mitglieder mit ATs? Unnoetig. Stattdessen einfach die Liste der Clan
+   member mit deren Rang im Clan und wieviele ATs diese haben, mit dropdown
+   der ganzen Zeile, wo die ATs im Detail aufgezeigt werden" - that list is
+   mitgliederZeichnen (tab Members, T2, 19.09.2026). */
 
 document.getElementById("b-clan").addEventListener("click", ()=>clanDialog());
 document.querySelectorAll("[data-clantab]").forEach(b => b.addEventListener("click", ()=>clanDialog(b.dataset.clantab)));
@@ -54622,24 +54621,9 @@ function leuteZeichnen(liste){
   const feld = document.getElementById("cl-people");
   if (!feld) return;
   const R = rollenListe(), darfRollen = istLeader(), verwalter = istAdmin();
-  /* Raenge vergeben darf neben dem Leiter, wer das Recht befoerdern traegt
-     (ENNO 07.09.2026: "Befoerderung durch Leader/autorisierte Offiziere").
-     Der Server laesst meta:rang fuer dieselben durch. 13.09.2026 */
-  const darfBefoerdern = darfRollen || darf("befoerdern");
-  /* 5.59 (Nachzuegler-2), ENNO 16.09.2026: "Man soll sich natuerlich nicht
-     selbst befoerdern koennen denk doch einfach mal nach. Und auch nicht
-     hoeher als man selbst ist." For a promoter who is not the leader: no
-     select on the own row, no rank above the own height offered (a smaller
-     list place is higher), no select on anyone standing higher today. The
-     leader keeps everything. Height = the smallest list place over the
-     effective ranks (K5); no rank = below the list. The server's side of
-     this rule (warmap_rang_grenzen) is Teil B. */
-  const rangHoehe = p => { const h = rollenVon(p).map(r => R.findIndex(x => x.id === r.id)).filter(q => q >= 0); return h.length ? Math.min(...h) : R.length; };
-  const meineHoehe = darfRollen ? 0 : rangHoehe(S.me);
-  const darfHier = p => darfBefoerdern && (darfRollen || (p !== S.me && rangHoehe(p) >= meineHoehe));
-  const stdErlaubt = darfRollen || !standardRang() || R.findIndex(x => x.id === standardRang().id) >= meineHoehe;
+  /* the member table with the rank select (5.59, P2) sits in the Members
+     tab since T2 (mitgliederZeichnen) - drawn below from the same list */
   const mein = wunschVon(S.me) || {text:"", zweige:[]};
-  const teamsVon = p => { const d = depotIdx.get(p); return d ? d.list.length : 0; };
   /* the rank editor on the clan's own list (rangEditorHtml, 13.09.2026):
      writes go to meta:rollen; removing a rank clears it from meta:rang
      (the hand) only - a rangauto id nobody knows any more is read over.
@@ -54718,48 +54702,6 @@ function leuteZeichnen(liste){
     </div>
 
     <div class="sec">
-      <h3>Who is here</h3>
-      <div class="tw"><table>
-        <thead><tr><th>Name</th><th>Rank</th><th>Teams</th><th>Wants next war</th></tr></thead>
-        <tbody>${leuteListe.map(m => {
-          const w = wunschVon(m.player);
-          /* the EFFECTIVE rank: the hand's, else the one the points gave
-             (with a hint); the default stays the empty line (13.09.2026) */
-          const quelle = rangQuelle(m.player);
-          const ist = quelle ? rollenVon(m.player)[0].id : "";
-          /* P2 (Runde 2, E-G): a rank with ab below the player's effective
-             place resets his EXP to that ab (warmap_rang_sockel) - the
-             option says so; ENNO 17.09.2026: "Degradieren sollte aber
-             etwas wirklich seltenes sein." Runde 3 (F-1): the rank the
-             hand already holds says "set by hand" instead - choosing it
-             again changes nothing on the server. */
-          const wirk = expWirkPlatz(m.player), handR = expHandRang(m.player);
-          const fuehrt = m.player === leaderId();
-          return `<tr${m.player===S.me?' class="me"':''}>
-            <td>${statusPunkt(m.player)}${esc(m.name||m.player)}${m.player===S.me?" <em>you</em>":""}
-              ${m.approved===false?` <span style="color:var(--su);font-size:10px">locked</span>`:""}</td>
-            <td style="text-align:left">${spielerAbz(m.player, 18)}${fuehrt
-              ? `<b style="color:var(--accent)">Leader</b>`
-              : (darfHier(m.player)
-                 ? `<select data-rangfuer="${esc(m.player)}" style="font-size:11px">
-                      <option value="" ${stdErlaubt ? "" : "disabled"}>— ${esc(standardRang() ? rangTitel(standardRang()) : "none")} —</option>
-                      ${R.map((r, q) => (darfRollen || q >= meineHoehe) ? `<option value="${esc(r.id)}" ${r.id===ist?"selected":""}
-                        >${esc(rangTitel(r))}${q > wirk && Number.isFinite(+r.ab) && +r.ab >= 1 ? (r.id === handR ? " \u00b7 set by hand" : ` \u00b7 resets to ${nzExp(+r.ab)} EXP`) : ""}</option>` : "").join("")}</select>${quelle === "auto"
-                    ? ` <span title="promoted by rule (points or teams)" style="font-size:10px;color:var(--dim)">· auto</span>` : ""}${darfRollen
-                    ? ` <select data-fokusfuer="${esc(m.player)}" title="Focus" style="font-size:11px">
-                        <option value="">— focus —</option>
-                        ${ZWEIGWAHL.map(([k,n])=>`<option value="${k}" ${k===fokusVon(m.player)?"selected":""}>${esc(n)}</option>`).join("")}</select>`
-                    : (fokusName(fokusVon(m.player)) ? ` · ${esc(fokusName(fokusVon(m.player)))}` : "")}`
-                 : esc(rangZeile(m.player).join(" · ") || "—"))}</td>
-            <td>${teamsVon(m.player) || "—"}</td>
-            <td style="text-align:left;font-size:11.5px;color:var(--dim)">${
-              w ? `${(w.zweige||[]).map(z=>`<span class="chip">${esc((ZWEIGWAHL.find(q=>q[0]===z)||[,z])[1])}</span>`).join(" ")}
-                   ${esc(w.text||"")}` : "—"}</td>
-          </tr>`;
-        }).join("")}</tbody></table></div>
-    </div>
-
-    <div class="sec">
       <h3>What I want next war</h3>
       <div class="row" style="flex-wrap:wrap;gap:8px">
         ${ZWEIGWAHL.map(([k,n])=>`<label class="toggle"><input type="checkbox" data-wz="${k}"
@@ -54774,6 +54716,158 @@ function leuteZeichnen(liste){
 
   /* ---- Verdrahtung ---- */
   rangEditorVerdrahten(feld, rangO);
+  document.getElementById("lp-wunsch-go")?.addEventListener("click", ()=>{
+    const z = [...feld.querySelectorAll("[data-wz]")].filter(c=>c.checked).map(c=>c.dataset.wz);
+    setWunsch(document.getElementById("lp-wunsch").value, z);
+    leuteZeichnen();
+    toast("Noted — the leader sees it in the clan window");
+  });
+  mitgliederZeichnen();                       // T2 (2): the member table (tab Members) from the same list
+}
+/* ---- Clan -> Members (ToDo 16.9. T2 (2), 19.09.2026) ----
+   ENNO 18.09.2026: "Stattdessen einfach die Liste der Clan member mit deren
+   Rang im Clan und wieviele ATs diese haben, mit dropdown der ganzen Zeile,
+   wo die ATs im Detail aufgezeigt werden". The table that stood under
+   "Who is here" in Roles (name with the status dot, rank with the select
+   and its P2 texts, teams, wish) - drawn from leuteListe (warmap_members,
+   leuteFuellen) into #cl-who. Every row opens to the member's teams of the
+   side on screen, grouped by his groups (gruppenVon, read only - DEP-1,
+   ENNO 05.09.2026: "Die Zusammensetzung und Existenz dieser Gruppen ist
+   clanintern zugaenglich"), teams in no group last: symbol, tag, name,
+   type, where (the town as a jump, or "in depot"). The filter hides rows,
+   it never rebuilds the table (the field would lose its caret); open rows
+   and the filter text hold for the session. */
+let mitglOffen = new Set(), mitglSuche = "";
+function mitgliederZeichnen(){
+  const feld = document.getElementById("cl-who");
+  if (!feld) return;
+  const c = light() ? "#1a2029" : "#e9e2d5";
+  const R = rollenListe(), darfRollen = istLeader();
+  /* Raenge vergeben darf neben dem Leiter, wer das Recht befoerdern traegt
+     (ENNO 07.09.2026: "Befoerderung durch Leader/autorisierte Offiziere").
+     Der Server laesst meta:rang fuer dieselben durch. 13.09.2026 */
+  const darfBefoerdern = darfRollen || darf("befoerdern");
+  /* 5.59 (Nachzuegler-2), ENNO 16.09.2026: "Man soll sich natuerlich nicht
+     selbst befoerdern koennen denk doch einfach mal nach. Und auch nicht
+     hoeher als man selbst ist." For a promoter who is not the leader: no
+     select on the own row, no rank above the own height offered (a smaller
+     list place is higher), no select on anyone standing higher today. The
+     leader keeps everything. Height = the smallest list place over the
+     effective ranks (K5); no rank = below the list. The server's side of
+     this rule (warmap_rang_grenzen) is Teil B. */
+  const rangHoehe = p => { const h = rollenVon(p).map(r => R.findIndex(x => x.id === r.id)).filter(q => q >= 0); return h.length ? Math.min(...h) : R.length; };
+  const meineHoehe = darfRollen ? 0 : rangHoehe(S.me);
+  const darfHier = p => darfBefoerdern && (darfRollen || (p !== S.me && rangHoehe(p) >= meineHoehe));
+  const stdErlaubt = darfRollen || !standardRang() || R.findIndex(x => x.id === standardRang().id) >= meineHoehe;
+  const teamsVon = p => { const d = depotIdx.get(p); return d ? d.list.length : 0; };
+  /* where a team stands: town by team id, from the member's unit rows */
+  const orteVon = who => {
+    const m = new Map();
+    for (const [town, gruppen] of unitIdx)
+      for (const g of gruppen) if (g.who === who) for (const u of g.list) if (u.id && MAP.n[town]) m.set(u.id, town);
+    return m;
+  };
+  const teamZeile = (t, orte) => {
+    const tw = orte.get(t.id);
+    return `<tr>
+      <td class="sy">${symbolSVG(t.k, c, 24, 17)}</td>
+      <td>${esc(t.tag || "")}</td>
+      <td dir="auto">${esc(t.name || "")}</td>
+      <td class="typ">${esc(atName(t.k))}</td>
+      <td>${tw !== undefined ? `<a href="#" data-go="${tw}" style="color:var(--accent)">${esc(MAP.n[tw][0])}</a>` : `<span style="color:var(--dim2)">in depot</span>`}</td></tr>`;
+  };
+  const unterTafel = who => {
+    const d = depotIdx.get(who);
+    const liste = d ? d.list : [];
+    if (!liste.length) return `<div class="empty">No teams on this side.</div>`;
+    const orte = orteVon(who);
+    const gr = gruppenVon(who).filter(g => g.ats.length);
+    const drin = new Set(gr.flatMap(g => g.ats.map(t => t.id)));
+    const rest = liste.filter(t => !drin.has(t.id));
+    const block = (name, ats) => `<tr><th colspan="5">${esc(name)} <span>${ats.length} team${ats.length === 1 ? "" : "s"}</span></th></tr>${ats.map(t => teamZeile(t, orte)).join("")}`;
+    return `<table class="mg-t">${gr.map(g => block(gruppeName(g), g.ats)).join("")}${rest.length ? block(gr.length ? "No group" : "Teams", rest) : ""}</table>`;
+  };
+  feld.innerHTML = `
+    <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+      <input id="mg-such" value="${esc(mitglSuche)}" placeholder="Filter by name, rank, team, tag or type" spellcheck="false"
+        style="flex:1;min-width:160px;background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:2px 5px;outline:0;font-size:11.5px">
+      <span style="font-size:11px;color:var(--dim2)">${leuteListe.length} member${leuteListe.length === 1 ? "" : "s"}</span>
+    </div>
+    <div class="tw"><table>
+      <thead><tr><th>Name</th><th>Rank</th><th>Teams</th><th>Wants next war</th></tr></thead>
+      <tbody>${leuteListe.map(m => {
+        const w = wunschVon(m.player);
+        /* the EFFECTIVE rank: the hand's, else the one the points gave
+           (with a hint); the default stays the empty line (13.09.2026) */
+        const quelle = rangQuelle(m.player);
+        const ist = quelle ? rollenVon(m.player)[0].id : "";
+        /* P2 (Runde 2, E-G): a rank with ab below the player's effective
+           place resets his EXP to that ab (warmap_rang_sockel) - the
+           option says so; ENNO 17.09.2026: "Degradieren sollte aber
+           etwas wirklich seltenes sein." Runde 3 (F-1): the rank the
+           hand already holds says "set by hand" instead - choosing it
+           again changes nothing on the server. */
+        const wirk = expWirkPlatz(m.player), handR = expHandRang(m.player);
+        const fuehrt = m.player === leaderId();
+        const d = depotIdx.get(m.player), teams = d ? d.list : [];
+        /* the one text filter reaches name, rank, team names, tags and types */
+        const heu = `${m.name || m.player} ${fuehrt ? "leader" : rangZeile(m.player).join(" ")} ${teams.map(t => `${t.name || ""} ${t.tag || ""} ${atName(t.k)}`).join(" ")}`.toLowerCase();
+        const auf = mitglOffen.has(m.player);
+        return `<tr data-mg="${esc(m.player)}" data-such="${esc(heu)}"${m.player===S.me?' class="me"':''} style="cursor:pointer">
+          <td><span class="mg-pf" style="display:inline-block;width:12px;color:var(--dim2)">${auf ? "▾" : "▸"}</span>${statusPunkt(m.player)}${esc(m.name||m.player)}${m.player===S.me?" <em>you</em>":""}
+            ${m.approved===false?` <span style="color:var(--su);font-size:10px">locked</span>`:""}</td>
+          <td style="text-align:left">${spielerAbz(m.player, 18)}${fuehrt
+            ? `<b style="color:var(--accent)">Leader</b>`
+            : (darfHier(m.player)
+               ? `<select data-rangfuer="${esc(m.player)}" style="font-size:11px">
+                    <option value="" ${stdErlaubt ? "" : "disabled"}>— ${esc(standardRang() ? rangTitel(standardRang()) : "none")} —</option>
+                    ${R.map((r, q) => (darfRollen || q >= meineHoehe) ? `<option value="${esc(r.id)}" ${r.id===ist?"selected":""}
+                      >${esc(rangTitel(r))}${q > wirk && Number.isFinite(+r.ab) && +r.ab >= 1 ? (r.id === handR ? " \u00b7 set by hand" : ` \u00b7 resets to ${nzExp(+r.ab)} EXP`) : ""}</option>` : "").join("")}</select>${quelle === "auto"
+                  ? ` <span title="promoted by rule (points or teams)" style="font-size:10px;color:var(--dim)">· auto</span>` : ""}${darfRollen
+                  ? ` <select data-fokusfuer="${esc(m.player)}" title="Focus" style="font-size:11px">
+                      <option value="">— focus —</option>
+                      ${ZWEIGWAHL.map(([k,n])=>`<option value="${k}" ${k===fokusVon(m.player)?"selected":""}>${esc(n)}</option>`).join("")}</select>`
+                  : (fokusName(fokusVon(m.player)) ? ` · ${esc(fokusName(fokusVon(m.player)))}` : "")}`
+               : esc(rangZeile(m.player).join(" · ") || "—"))}</td>
+          <td>${teamsVon(m.player) || "—"}</td>
+          <td style="text-align:left;font-size:11.5px;color:var(--dim)">${
+            w ? `${(w.zweige||[]).map(z=>`<span class="chip">${esc((ZWEIGWAHL.find(q=>q[0]===z)||[,z])[1])}</span>`).join(" ")}
+                 ${esc(w.text||"")}` : "—"}</td>
+        </tr>
+        <tr data-mgu="${esc(m.player)}" style="display:${auf ? "" : "none"}">
+          <td colspan="4" style="text-align:left;white-space:normal;background:var(--panel2);padding:4px 8px 8px">${auf ? unterTafel(m.player) : ""}</td></tr>`;
+      }).join("")}</tbody></table></div>`;
+  tabellenkoepfeAusrichten(feld);
+
+  /* ---- Verdrahtung ---- */
+  const unter = p => feld.querySelector(`tr[data-mgu="${CSS.escape(p)}"]`);
+  const springe = a => { sel = +a.dataset.go; closeDlg(); flyTo(sel); schlachtSprung(sel); side(); draw(); };
+  const anwenden = () => {
+    const q = mitglSuche.trim().toLowerCase();
+    feld.querySelectorAll("tr[data-mg]").forEach(tr => {
+      const passt = !q || tr.dataset.such.includes(q);
+      tr.hidden = !passt;
+      const u = unter(tr.dataset.mg);
+      if (u) u.style.display = passt && mitglOffen.has(tr.dataset.mg) ? "" : "none";
+    });
+  };
+  const such = document.getElementById("mg-such");
+  if (such) such.addEventListener("input", ()=>{ mitglSuche = such.value; anwenden(); });
+  anwenden();
+  feld.querySelectorAll("tr[data-mg]").forEach(tr => tr.addEventListener("click", ev => {
+    if (ev.target.closest("select, button, a, input, option")) return;
+    const p = tr.dataset.mg, u = unter(p);
+    if (!u) return;
+    if (mitglOffen.has(p)){ mitglOffen.delete(p); u.style.display = "none"; }
+    else {
+      mitglOffen.add(p);
+      u.firstElementChild.innerHTML = unterTafel(p);      // drawn when opened, not for every row
+      u.style.display = "";
+      u.querySelectorAll("[data-go]").forEach(a => a.addEventListener("click", ev2 => { ev2.preventDefault(); springe(a); }));
+    }
+    const pf = tr.querySelector(".mg-pf"); if (pf) pf.textContent = mitglOffen.has(p) ? "▾" : "▸";
+  }));
+  feld.querySelectorAll("tr[data-mgu] [data-go]").forEach(a => a.addEventListener("click", ev => { ev.preventDefault(); springe(a); }));
   feld.querySelectorAll("[data-rangfuer]").forEach(s => s.addEventListener("change", ()=>{
     setRang(s.dataset.rangfuer, s.value ? [s.value] : null);
     leuteZeichnen(); kraftLeiste();
@@ -54782,12 +54876,6 @@ function leuteZeichnen(liste){
     setFokus(s.dataset.fokusfuer, s.value);
     leuteZeichnen(); kraftLeiste();
   }));
-  document.getElementById("lp-wunsch-go")?.addEventListener("click", ()=>{
-    const z = [...feld.querySelectorAll("[data-wz]")].filter(c=>c.checked).map(c=>c.dataset.wz);
-    setWunsch(document.getElementById("lp-wunsch").value, z);
-    leuteZeichnen();
-    toast("Noted — the leader sees it in the clan window");
-  });
 }
 
 function clanDialog(tab){
@@ -54820,7 +54908,6 @@ function clanDialog(tab){
     leute.push(p);
   }
   leute.sort((a,b)=> b.gesamt - a.gesamt || b.men - a.men);
-  const namen = new Map(leute.map(p=>[p.who, p.name]));
 
   /* What is actually standing on the map, by type — the deployment view. */
   const imFeld = new Map();
@@ -54835,15 +54922,11 @@ function clanDialog(tab){
       }
 
   const {reihen} = clanVerlauf();
-  const zeigeZweige = ZWEIGE.map(z=>z.k).filter(z => reihen.some(r => r.per[z]));
-
-  const shareBar = (k) => {
-    const m = proTypSpieler.get(k) || new Map();
-    const ges = [...m.values()].reduce((s,n)=>s+n, 0) || 1;
-    return `<div class="share">${[...m.entries()].sort((a,b)=>b[1]-a[1]).map(([who,n])=>
-      `<i style="width:${(100*n/ges).toFixed(1)}%;background:${spielerFarbe(who)}"
-         title="${esc(namen.get(who)||who)} — ${n} of ${ges} (${Math.round(100*n/ges)} %)"></i>`).join("")}</div>`;
-  };
+  /* T2 (1), ENNO 18.09.2026: "Hier bitte noch Luftwaffe und Paras reinpacken
+     in die Statistik." - the five branches always, Other only where it holds
+     anything; a branch nobody owns says 0 */
+  const zeigeZweige = ZWEIGE.map(z=>z.k).filter(z => z !== "other" || reihen.some(r => r.per[z]));
+  const heuteZweig = z => (reihen.length ? reihen[reihen.length-1].per[z] : 0) || 0;
 
   openDlg(`
     <div class="dlg-h"><h2>${esc(clanName())}</h2>
@@ -54855,10 +54938,10 @@ function clanDialog(tab){
       <button data-tab="clan"   aria-pressed="true">Card</button>
       <button data-tab="over"   aria-pressed="false">Depot</button>
       <button data-tab="growth" aria-pressed="false">Growth</button>
-      <button data-tab="who"    aria-pressed="false">Team owners</button>
-      <button data-tab="deploy" aria-pressed="false">In the field</button>
+      <button data-tab="who"    aria-pressed="false">Members</button>
+      <button data-tab="deploy" aria-pressed="false">Deployed ATs</button>
       <button data-tab="people" aria-pressed="false">Roles</button>
-      <button data-tab="punkte" aria-pressed="false">Points</button>
+      <button data-tab="punkte" aria-pressed="false">Scoreboard</button>
       <button data-tab="tpl"    aria-pressed="false">Templates</button>
     </div>
     <div class="dlg-b">
@@ -54943,19 +55026,9 @@ function clanDialog(tab){
       </div>
 
       <div class="tabp" data-tab="over">
-        ${(()=>{
-          const wf = clanFaktion(), bl = aktiveSeite();
-          return `<div class="row" style="align-items:center;gap:8px;margin-bottom:6px">
-            <span style="font-size:12px;color:var(--dim);width:86px">Looking at</span>
-            <div class="own4" style="flex:1">
-              ${FACTIONS.map(q=>`<button data-blick="${q.id}" style="--f:${q.color}"
-                aria-pressed="${bl===q.id}">${q.tag}</button>`).join("")}
-            </div>
-            ${bl !== wf ? `<span style="font-size:11px;color:var(--accent)">not the side you
-              fight this war — viewing only</span>`
-              : `<span style="font-size:11px;color:var(--dim2)">the side you fight this war</span>`}
-          </div>`;
-        })()}
+        ${/* T2 (4): the side switch "Looking at" is gone - the tab shows the clan's side.
+             ENNO 18.09.2026: ""Looking at: Fraktion": Auch unnoetig. Der Clan wird ja fest
+             durch den Clanleader gesetzt." depotBlick stays for the welcome question. */ ""}
         ${teams ? `
         <div class="sums">
           <div><span>Teams owned</span><b>${nz(teams)}</b></div>
@@ -55017,12 +55090,13 @@ function clanDialog(tab){
         ${reihen.length > 1 ? `
         <div class="chart">${wachstumSVG(reihen, 760, 210)}</div>
         <div class="leg">${zeigeZweige.map(z=>
-          `<span><i style="background:${ZWEIG_FARBE[z]}"></i>${esc(zweigName(z))}</span>`).join("")}
+          `<span><i style="background:${ZWEIG_FARBE[z]}"></i>${esc(zweigName(z))} <b>${nz(heuteZweig(z))}</b></span>`).join("")}
           <span style="margin-left:auto;color:var(--dim2)">${reihen[reihen.length-1].gesamt} teams ·
             ${nz(reihen[reihen.length-1].men)} men today</span></div>` : ""}
         ${reihen.length ? `
         <div class="tw"><table>
-          <thead><tr><th>Player</th><th>Last 7 days</th><th>Last 30 days</th><th>Owns now</th></tr></thead>
+          <thead><tr><th>Player</th><th>Last 7 days</th><th>Last 30 days</th><th>Owns now</th>${zeigeZweige.map(z =>
+            `<th title="${esc(zweigName(z))}">${esc(ZWEIG_KURZ[z] || zweigName(z))}</th>`).join("")}</tr></thead>
           <tbody>${(()=>{
             const w = new Map(zuwachs(7).map(x=>[x.who, x]));
             return zuwachs(30).map(x=>{
@@ -55034,42 +55108,16 @@ function clanDialog(tab){
                 : `<span style="color:var(--dim2)">—</span>`;
               return `<tr${x.mine?' class="me"':''}><td>${esc(x.name)}${x.mine?" <em>you</em>":""}${
                 x.frisch?' <small style="color:var(--dim2)" title="No snapshot older than the cut-off — counted from their first record">first record</small>':""}</td>
-                <td>${zeig(s.delta)}</td><td>${zeig(x.delta)}</td><td>${x.jetzt}</td></tr>`;
+                <td>${zeig(s.delta)}</td><td>${zeig(x.delta)}</td><td>${x.jetzt}</td>${zeigeZweige.map(z =>
+                  `<td>${(x.zweige || {})[z] ? nz(x.zweige[z]) : `<span style="color:var(--dim2)">0</span>`}</td>`).join("")}</tr>`;
             }).join("");
           })()}</tbody></table></div>` : ""}
         <div class="note">${reihen.length > 1 ? `A team appears on the line the day it was bought.`
           : `The first snapshot is the state as it is now — come back in a few days.`}</div>
       </div>
 
-      <div class="tabp" data-tab="who">
-        ${teams ? `
-        <div class="lead">${RANGLISTEN.map(r=>{
-          const rang = leute.map(p=>({name:p.name, mine:p.mine, v:r.wert(p.liste)}))
-                            .filter(x=>x.v > 0).sort((a,b)=>b.v-a.v).slice(0,3);
-          if (!rang.length) return "";
-          return `<div class="card"${rang[0].mine?' style="border-left-color:var(--accent)"':''}>
-            <h4>${r.sym?symbolSVG(r.sym, c, 20, 14):""}${esc(r.name)}</h4>
-            <ol>${rang.map(x=>`<li><span>${esc(x.name)}</span><b>${nz(x.v)}${r.e === "warfunds" ? kriegsendeZuschlagHtml(x.v) : ""}</b></li>`).join("")}</ol>
-            <div style="font-size:10px;color:var(--dim2);text-align:right">${esc(r.e)}</div>
-          </div>`;
-        }).join("")}</div>
-        <div class="tw"><table>
-          <thead><tr><th colspan="2">Type</th><th>Teams</th><th>Share per player</th><th>Top owner</th></tr></thead>
-          <tbody>${typen.map(d=>{
-            const m = [...(proTypSpieler.get(d.k)||new Map()).entries()].sort((a,b)=>b[1]-a[1]);
-            const ges = m.reduce((s,x)=>s+x[1],0) || 1;
-            return `<tr>
-              <td class="sy">${symbolSVG(d.k, c, 24, 17)}</td><td>${esc(atName(d.k))}</td>
-              <td>${d.teams}</td>
-              <td style="width:44%">${shareBar(d.k)}</td>
-              <td style="text-align:left">${m.length
-                ? `<span style="color:${spielerFarbe(m[0][0])}">●</span> ${esc(namen.get(m[0][0])||m[0][0])}
-                   <small style="color:var(--dim2)">${Math.round(100*m[0][1]/ges)} %</small>`
-                : "—"}</td></tr>`;
-          }).join("")}</tbody></table></div>
-        <div class="note">Hover a band for the exact count.</div>
-        ` : `<div class="empty">Nothing owned yet.</div>`}
-      </div>
+      <div class="tabp" data-tab="who"><div id="cl-who">
+        <div class="empty">Loading …</div></div></div>
 
       <div class="tabp" data-tab="deploy">
         ${leute.length ? `
@@ -55115,11 +55163,12 @@ function clanDialog(tab){
 
       <div class="tabp" data-tab="tpl">${gvorlTafelHtml()}</div>
 
-    </div>
-    <div class="dlg-f">
-      ${leute.length ? `<button class="btn" id="cl-copy">Copy as table</button>` : ""}
-      <button class="btn primary" id="d-close">Close</button>
     </div>`, "xwide");
+  /* T2 (4): no foot on this window - the cross (openDlg) closes it, and
+     "Copy as table" (the totals to the clipboard) is gone. ENNO 18.09.2026:
+     "Wenn es hier um ein Rauskopieren von Sachen geht, muss das auf jeden
+     Fall entfernt werden. Der Close button ist auch redundant, wenn oben
+     rechts das Kreuz ist btw." */
   tabsAktiv(document.getElementById("dlg"), tab);
   /* the faction pool tab is gone - it was a screenshot reading by hand,
      and nobody kept it up */
@@ -55139,14 +55188,14 @@ function clanDialog(tab){
   const clFuellen = w => {
     if (w === "punkte"){ punkteFuellen(); return; }
     if (clSchon.has(w)) return;
-    if (w === "people"){ clSchon.add(w); leuteFuellen(); }
+    /* T2 (2): Members and Roles draw from the same list - one question for both */
+    if (w === "people" || w === "who"){ clSchon.add("people"); clSchon.add("who"); leuteFuellen(); }
     else if (w === "clan"){ clSchon.add(w); clansFuellen(); }
   };
   const clOffen = document.querySelector("#dlg .tabp.on");
   clFuellen(clOffen ? clOffen.dataset.tab : "clan");
   document.querySelectorAll("#dlg .tabs button[data-tab]").forEach(b =>
     b.addEventListener("click", () => clFuellen(b.dataset.tab)));
-  document.getElementById("d-close").addEventListener("click", closeDlg);
   gvorlTafelVerdrahten();                                   // T4 (3): Clan -> Templates
   /* Clan-Reiter: Name, Seite, Krieg, Befehle. */
   document.getElementById("cl-save")?.addEventListener("click", ()=>{
@@ -55194,23 +55243,9 @@ The depot of that side becomes the active one.`)) return;
   document.getElementById("cl-withhold")?.addEventListener("click", ()=>{
     if (setWithhold(!withholdSteht())) clanDialog("clan");     // T11
   });
-  /* Blick aufs Depot einer anderen Seite - reine Ansichtssache. */
-  document.querySelectorAll("#dlg [data-blick]").forEach(b => b.addEventListener("click", ()=>{
-    const f = +b.dataset.blick;
-    depotBlick = (f === clanFaktion()) ? null : f;
-    rebuildUnits(); depotZeichnen(); kraftLeiste(); side();
-    clanDialog("over");
-  }));
   document.querySelectorAll("#dlg [data-go]").forEach(a => a.addEventListener("click", ev=>{
     ev.preventDefault(); sel = +a.dataset.go; closeDlg(); flyTo(sel); schlachtSprung(sel); side(); draw();
   }));
-  document.getElementById("cl-copy")?.addEventListener("click", async ()=>{
-    const zeilen = [["Player","Owned","Committed","Available","Men","Vehicles","CP","Warfunds"].join("\t")]
-      .concat(leute.map(p=>[p.name, p.gesamt, p.drin, p.frei, p.men, p.veh, p.cp, p.wf].join("\t")))
-      .concat([["TOTAL", teams, drin, teams-drin, men, veh, cp, wf].join("\t")]);
-    try { await navigator.clipboard.writeText(zeilen.join("\n")); toast("Copied"); }
-    catch(e){ toast("Clipboard blocked here."); }
-  });
 }
 
 /* ---------------- faction pool: what the side can actually pay for -------
@@ -56475,7 +56510,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build ba4c1363a6</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 70489530f2</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -56527,8 +56562,8 @@ function hilfeDialog(){
           sets every town it can see; <b>Units</b> reads a town's assault teams from the detail bar.</div>
         <div class="note"><b>Intel</b> (<kbd>I</kbd>): clans, players, their teams, sightings.
           Names match loosely.</div>
-        <div class="note"><b>Clan</b> (<kbd>C</kbd>) is what we own: the depot, how it grew, who
-          carries which share, what is in the field, the ranks, and who has earned which points.</div>
+        <div class="note"><b>Clan</b> (<kbd>C</kbd>) is what we own: the depot, how it grew, the
+          members and their teams, the deployed ATs, the ranks, the scoreboard.</div>
         <div class="note"><b>Your depot</b> survives a new war. You set it up once and afterwards
           only drag teams onto the map.</div>
         <div class="note"><b>Every entry carries its author.</b> You can see who set a town, drew a
@@ -56703,7 +56738,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "ba4c1363a6";
+const BAU = "70489530f2";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
