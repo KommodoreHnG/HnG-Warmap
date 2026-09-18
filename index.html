@@ -1356,7 +1356,7 @@ body.kb-zieht{user-select:none}
 .kb-z .f.bes.sehrlang{font-size:11.5px;letter-spacing:-.01em}
 /* and a long unit name goes on two lines inside its ruling instead of
    being cut - the Kommodore: "die Namen muessen immer ganz sichtbar sein" */
-.kb-z .f.nam.lang{white-space:normal;font-size:11.5px;line-height:15px;max-height:34px;text-overflow:clip;overflow:hidden;word-break:break-word}
+.kb-z .f.nam.lang{white-space:normal;font-size:11.5px;line-height:15px;max-height:34px;text-overflow:clip;overflow:hidden;word-break:break-word;display:flex;align-items:safe center}
 /* the name line as the game shows it, where no reader can hold on to its characters */
 .kb-z .f.nam .kb-nbild{height:20px;max-width:60%;object-fit:contain;object-position:left center;vertical-align:middle;margin-right:5px;border:1px solid #b9ab8a;border-radius:2px;background:#fff}
 .kb-z .f input,.kb-z .f select{width:100%;font:inherit;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 4px}
@@ -23446,6 +23446,43 @@ function atPunkteErgaenzen(nameText, besitzer, weitere){
   }
   return bestes ? rumpf.slice(0, rumpf.length - bestes.k) + bestes.b : null;
 }
+/* THE NAME AND THE OWNER ARE TWO READINGS OF THE SAME WORD - the rule that
+   stood inside unitsLesen up to 18.09.2026, moved out unchanged so that it
+   can be called on its own, and fenced by the game's limit (ToDo 16.9.2026,
+   ENNO 18.09.2026: "Namen teils länger geschätzt als durch Regeln erlaubt,
+   bsp. Zeile 7, Name „AT001 – THEPOOSYSLAY“ wurde als “AT001 –
+   THEPOOSYSLAYER6?” interpretiert, obwohl das nicht sein kann gemäß der
+   Regeln."). The Kommodore's naming convention: the owner's name hangs at
+   the END of the unit's name (three of four on his sheet), and where the
+   two RESEMBLE each other without being equal, the surer reading wins -
+   only when they differ by at most a third of their length, and only when
+   the winner was at least ten points surer.
+   TWO FENCES (T1 (e)):
+     (2) A name of twenty characters without dots is the full name - the
+         game cut it there when it was made, so its tail is the BEGINNING
+         of the owner, not the owner. Nothing is completed, nothing
+         replaced, in either direction: "AT001 - THEPOOSYSLAY" stays, and
+         so does "THEPOOSYSLAYER69" below it.
+     (1) A replaced tail must keep the name within TEAM_NAME_MAX. A longer
+         result describes a unit that cannot exist - the rule is dropped
+         and the reading stands.
+   Returns {name, besitzer}. */
+function atNameBesitzerAbgleich(nameText, bzName, nameZuv, besZuv){
+  if (!nameText || !bzName || nameText === bzName) return {name: nameText, besitzer: bzName};
+  if (nameText.length >= TEAM_NAME_MAX && !/(?:\u2026|\.{2,})\s*$/.test(nameText)) return {name: nameText, besitzer: bzName};
+  const tn = nameText.split(AT_TRENNER);
+  const schwanz = tn[tn.length-1].trim();
+  const d = levenshtein(schwanz.toUpperCase(), bzName.toUpperCase());
+  const lang = Math.max(schwanz.length, bzName.length);
+  if (schwanz && lang >= 4 && d > 0 && d <= lang/3){
+    if (besZuv >= nameZuv + 10){
+      tn[tn.length-1] = bzName;
+      const neu = tn.join(" - ");
+      if (neu.length <= TEAM_NAME_MAX) nameText = neu;
+    } else if (nameZuv >= besZuv + 10) bzName = schwanz;
+  }
+  return {name: nameText, besitzer: bzName};
+}
 async function unitsLesen(quelle, melde, letzteReihe, art, hand){
   const sag = melde || (()=>{});
   const {c, d, quer, gross, hell, gain} = (quelle && quelle.rahmen) ? quelle : await unitsRahmen(quelle);
@@ -23884,7 +23921,10 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
        every owner already on the sheet) */
     {
       const ergaenzt = atPunkteErgaenzen(nameText, bzName, unitsBekannteBesitzer);
-      if (ergaenzt) nameText = ergaenzt;
+      /* within the game's limit only (T1 (e), fence 1): a completion longer
+         than TEAM_NAME_MAX names a unit that cannot exist - the cut name
+         stays, with its dots */
+      if (ergaenzt && ergaenzt.length <= TEAM_NAME_MAX) nameText = ergaenzt;
     }
     /* THE NAME AND THE OWNER ARE TWO READINGS OF THE SAME WORD. The
        Kommodore noticed the naming convention: the owner's name usually
@@ -23900,17 +23940,11 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
        Kept strict: only when they differ by at most a third of their
        length (BATALLON against VLATKOOL is seven of eight apart, far over
        it), and only when the winner was at least ten points surer. */
-    if (nameText && bzName && nameText !== bzName){
-      const tn = nameText.split(AT_TRENNER);
-      const schwanz = tn[tn.length-1].trim();
-      const d = levenshtein(schwanz.toUpperCase(), bzName.toUpperCase());
-      const lang = Math.max(schwanz.length, bzName.length);
-      if (schwanz && lang >= 4 && d > 0 && d <= lang/3){
-        if (bes.zuv >= name.zuv + 10){
-          tn[tn.length-1] = bzName;
-          nameText = tn.join(" - ");
-        } else if (name.zuv >= bes.zuv + 10) bzName = schwanz;
-      }
+    /* (the rule lives in atNameBesitzerAbgleich, above unitsLesen - with
+       the game's limit as its fence, T1 (e)) */
+    {
+      const ab = atNameBesitzerAbgleich(nameText, bzName, name.zuv, bes.zuv);
+      nameText = ab.name; bzName = ab.besitzer;
     }
     /* the print of the name line, and whether its letters can be trusted */
     bildKennFeld = name.feld || null;
@@ -23995,7 +24029,24 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
           tagRoh = atStrichZuI(neu.tag);
       }
     }
+    /* THE GAME'S OWN LIMIT ON WHAT IS READ (T1 (e), fence 3). A name holds
+       at most TEAM_NAME_MAX characters, a tag TEAM_TAG_MAX - "obwohl das
+       nicht sein kann gemäß der Regeln" (ENNO 18.09.2026). What the machine
+       read beyond that is a misreading: the text is cut to the limit (the
+       dots of a cut name kept), the confidence drops by twenty, and the
+       line carries the note "longer than the game allows - check" (zuLang -
+       the sheet sets the red dot from it). */
+    let zuLang = false;
+    {
+      const PUNKTE = /\s*(?:\u2026|\.{2,})\s*$/;
+      const dots = (nameText.match(PUNKTE) || [""])[0];
+      const kern = dots ? nameText.replace(PUNKTE, "") : nameText;
+      if (kern.length > TEAM_NAME_MAX){ nameText = kern.slice(0, TEAM_NAME_MAX).trim() + dots; zuLang = true; }
+      if (tagRoh.length > TEAM_TAG_MAX){ tagRoh = tagRoh.slice(0, TEAM_TAG_MAX).trim(); zuLang = true; }
+      if (zuLang) name.zuv = Math.max(0, (+name.zuv || 0) - 20);
+    }
     R.einheit = {
+      zuLang: zuLang || undefined,
       unlesbar: unlesbar || undefined,
       /* THE PRINT IS TAKEN OFF THE LATIN FIELD, WHICHEVER MODEL WON. A
          foreign winner has a field of its own now (UNI-7), but the print
@@ -24389,6 +24440,7 @@ function unitsZeileAus(R){
   return {tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp,
           seite: rs !== null ? rs : R.seite, linie: R.linie || null, stadt: R.stadt ? R.stadt.i : null,
           nameZuv: e.nameZuv, besitzerZuv: e.besitzerZuv,
+          zuLang: !!e.zuLang,          /* read longer than the game allows, cut (T1 (e)) */
           /* WHAT THE READER SAYS ABOUT THE LETTERS goes with the reading. The
              sheet takes unlesbar, bild and schrift off this object, and they
              were never handed over here - so a row never learned that its
@@ -24598,6 +24650,33 @@ function kbTypNeuErledigt(z){
   if (!z || !z.typNeu) return;
   if (z.typNeu.vorher !== undefined) z.festTyp = z.typNeu.vorher;
   z.typNeu = null;
+}
+/* CLEAR AND READ AFRESH - Alt+Down through the extension, and the strip's
+   "read again" (ToDo 16.9.2026, ENNO 18.09.2026: "Erneuerung einer Lesung:
+   Bitte an Alt+Pfeiltaste unten koppeln. Hierdurch soll der aktuelle
+   Eintrag direkt gelöscht werden"). ONE line, the one under the frame -
+   never the ticked set, "der aktuelle Eintrag". The line loses name, tag,
+   owner, strength, type, picture and notes; its tick, its section mark and
+   its script hint stay. A hand lock opens and stays open: the entry is
+   gone, and the fresh reading is a new entry, not a confirmed one (a
+   default lock and an open one stay what they are). Then the same two
+   orders ↻N and ↻T set - the next look at this card writes it afresh. */
+function kbNeuLesenLeer(i){
+  const z = KB && KB.zeilen[i];
+  if (!z) return;
+  const schrift = z.schriftHand;
+  kbZeileLeeren(z);
+  Object.assign(z, {schriftHand: schrift, typ: null, eigen: false,
+                    unlesbar: false, beschrieben: false, bild: null, nameBild: null, schrift: null});
+  z.neuLesen = {vorher: z.festName === true ? null : z.festName};
+  if (kbFestName(z)) z.festName = false;
+  z.typNeu = {vorher: z.festTyp === true ? null : z.festTyp};
+  if (kbFestTyp(z)) z.festTyp = false;
+  unitsTypAlt = {}; KB.typenNeu = true;
+  const wahl = kbWahl();
+  if (wahl === i){ KB.kastenLetzte = null; KB.kastenAbgelehnt = null; KB.kastenRuhe = null; }
+  KB.status = `Line ${i + 1} cleared — click its unit in the game.`;
+  kbZeichnen();
 }
 function kbNeuLesenErledigt(z){
   if (!z || !z.neuLesen) return;
@@ -24902,6 +24981,8 @@ function kbGleicheLesung(z, e){
   return gleich(z.tag, e.tag) && gleich(z.name, e.name);
 }
 const KB_GUT = 62, KB_BRAUCHBAR = 45;
+/* the note on a line whose reading was longer than the game allows (T1 (e)) */
+const KB_ZU_LANG = "longer than the game allows - check";
 const kbLesungSchluessel = e =>
   (namKey(String((e && e.tag) || "")) + "|" + namKey(String((e && e.name) || ""))).trim();
 function kbGuteLesung(z, e){
@@ -25431,7 +25512,7 @@ function kbVerarbeiten(R, vorgabe){
       }
     }
     KB.wahlGeglaubt = wahl !== null && geglaubt;
-    if (wahl !== KB.auswahl){ if (!KB.handAn) kbVorrueckSchliessen(KB.auswahl, wahl); KB.auswahl = wahl; if (wahl !== null) kbKlack(); }
+    if (wahl !== KB.auswahl){ KB.auswahl = wahl; if (wahl !== null) kbKlack(); }
   } else if (!R.form){
     KB.status = "No detail bar in the picture.";
   }
@@ -25504,6 +25585,7 @@ function kbVerarbeiten(R, vorgabe){
       if (kbGleicheLesung(z, e)){
         z.nameZuv = Math.max(+z.nameZuv || 0, +e.nameZuv || 0);
         z.unsicher = false; z.kandidat = null; z.unsicherGrund = null;
+        if (e.zuLang){ z.unsicher = true; z.unsicherGrund = KB_ZU_LANG; }   /* still longer than the game allows (T1 (e)) */
         /* a note left by a refused reading is answered by this confirmation */
         if (!kbFestName(z)) z.abweichung = null;
         kbNeuLesenErledigt(z);
@@ -25527,6 +25609,9 @@ function kbVerarbeiten(R, vorgabe){
         return;
       }
       z.unsicher = false; z.kandidat = null; z.unsicherGrund = null;
+      /* the reading was cut to the game's limit - written, but with the red
+         dot and the note (T1 (e)); the next reading of the unit answers it */
+      if (e.zuLang){ z.unsicher = true; z.unsicherGrund = KB_ZU_LANG; }
       /* THE SAME UNIT MOVES, IT DOES NOT DOUBLE - but only a reading that
          is really written may take it from its old place. It used to be
          cleared before the doorman had seen the reading, and a reading he
@@ -26555,9 +26640,6 @@ function kbKarteBei(streifen, x, y){
 function kbHandSetzen(i, klack){
   if (i === null || i === undefined || i < 0 || i >= KB.N) return false;
   const anders = !KB.handAn || KB.handWahl !== i;
-  /* the line just left is confirmed when the pick moves on - not while the
-     frame is being dragged; the drag settles that at pointer-up */
-  if (anders && !KB.handZieht) kbVorrueckSchliessen(kbWahl(), i);
   KB.handAn = true; KB.handWahl = i;
   /* the box in the head may now be taken after all - offer it again */
   KB.kastenLetzte = null;
@@ -26574,7 +26656,6 @@ function kbSpangeVerdrahten(r, streifen){
     e.preventDefault();
     try { r.setPointerCapture(e.pointerId); } catch(err){}
     KB.handZieht = true;
-    r.dataset.vorher = (() => { const v = kbWahl(); return v === null || v === undefined ? "" : String(v); })();
     document.body.classList.add("kb-zieht");
     r.classList.add("hand");
     const t = stelle(e); if (t) kbHandSetzen(t.i, false);
@@ -26592,7 +26673,6 @@ function kbSpangeVerdrahten(r, streifen){
     if (!KB.handZieht) return;
     KB.handZieht = false;
     document.body.classList.remove("kb-zieht");
-    if (r.dataset.vorher !== undefined) kbVorrueckSchliessen(r.dataset.vorher === "" ? null : +r.dataset.vorher, kbWahl());
     kbZeichnen();
   };
   r.addEventListener("pointerup", los);
@@ -26954,9 +27034,12 @@ function kbZeichnen(){
          zooming the game puts something else behind the see-through bar,
          and the next capture is then a different picture - that second
          reading is what carries the name. */
-      const rot = KB.zeilen.filter(z => z.unsicher).map(z => z.i + 1);
-      if (!rot.length) return "";
-      return `<div class="kb-hinweis schwach">Line${rot.length === 1 ? "" : "s"} <b>${rot.join(", ")}</b> unreadable - pan or zoom the game and click ${rot.length === 1 ? "it" : "them"} again.</div>`;
+      const rot = KB.zeilen.filter(z => z.unsicher && z.unsicherGrund !== KB_ZU_LANG).map(z => z.i + 1);
+      /* and the lines whose reading was longer than the game allows (T1 (e)) */
+      const lang = KB.zeilen.filter(z => z.unsicher && z.unsicherGrund === KB_ZU_LANG).map(z => z.i + 1);
+      if (!rot.length && !lang.length) return "";
+      return (rot.length ? `<div class="kb-hinweis schwach">Line${rot.length === 1 ? "" : "s"} <b>${rot.join(", ")}</b> unreadable - pan or zoom the game and click ${rot.length === 1 ? "it" : "them"} again.</div>` : "")
+           + (lang.length ? `<div class="kb-hinweis schwach">Line${lang.length === 1 ? "" : "s"} <b>${lang.join(", ")}</b> ${KB_ZU_LANG}.</div>` : "");
     })()}
     ${(() => {
       /* A UNIT LEFT AND THE TOOL CANNOT SAY WHICH. It says so, and it says
@@ -27009,8 +27092,7 @@ function kbPult(){
     <div class="kb-abstand"></div>
     <button class="rd-schalter" id="kb-leer">New sheet</button>
     <div class="kb-abstand"></div>
-    <button class="rd-schalter ${kbSchwebe ? "an" : ""}" id="kb-schweben" ${pipDa ? "" : "disabled"} title="${pipDa ? "A small window that stays over the game: the strip at the card pitch of the game, the unit under the frame, and the confirm buttons" : "Needs Chrome or Edge 116 or newer"}">${kbSchwebe ? "Strip floating - close it" : "Float the strip"}</button>
-    <button class="rd-schalter ${kbVorrueckt ? "an" : ""}" id="kb-vorrueckt" title="When on, stepping the frame to the next card locks name and type of the line just left">Advancing confirms${kbVorrueckt ? "" : ": off"}</button>
+    <button class="rd-schalter ${kbSchwebe ? "an" : ""}" id="kb-schweben" ${pipDa ? "" : "disabled"} ${kbSchwebeGeste && !kbSchwebe ? "hidden" : ""} title="${pipDa ? "A small window that stays over the game: the strip at the card pitch of the game, the unit under the frame, and the confirm buttons" : "Needs Chrome or Edge 116 or newer"}">${kbSchwebe ? "Strip floating - close it" : "Float the strip"}</button>
     <div class="kb-abstand"></div>
     <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">Borderless or windowed.</div>`;
   /* the user's own switch: off means off, sharing included */
@@ -27042,8 +27124,7 @@ function kbPult(){
   });
   document.getElementById("kb-leer").addEventListener("click", kbNeuesBlatt);
   const schw = document.getElementById("kb-schweben");
-  if (schw && !schw.disabled) schw.addEventListener("click", ()=>{ if (kbSchwebe) kbSchwebeZu(); else kbSchwebeAuf(); });
-  document.getElementById("kb-vorrueckt").addEventListener("click", ()=>{ kbVorruecktSetzen(!kbVorrueckt); });
+  if (schw && !schw.disabled) schw.addEventListener("click", ()=>{ if (kbSchwebe){ kbSchwebeZu(); kbSchwebeZugemacht = true; kbZeichnen(); } else kbSchwebeAuf(); });
 }
 
 /* ---- the floating strip (Document Picture-in-Picture) ---------------------
@@ -27051,9 +27132,44 @@ function kbPult(){
    always-on-top window with an empty same-origin document. The page's one
    stylesheet is copied in, the strip is built there at the game's own card
    pitch, and every draw of the room refreshes it. Module-level, not on KB:
-   "New sheet" replaces KB (kbNeuesBlatt). */
+   "New sheet" replaces KB (kbNeuesBlatt).
+   ALWAYS ON (ToDo 16.9.2026, ENNO 18.09.2026: "Floating Strip immer an").
+   The browser opens such a window only from a gesture, and the click that
+   starts the capture spends its own on the share dialog. So the cabin
+   hangs ONE hook on the room when the capture starts (kbSchwebeSelbst):
+   the first pointer or key in the room while the share stands opens the
+   strip and takes the hook down. Whoever closes the window - its corner,
+   the browser, the button - is not handed it again this session
+   (kbSchwebeZugemacht); the button stays as the way back. No switch, no
+   localStorage. */
 let kbSchwebe = null;
-let kbVorrueckt = (() => { try { return localStorage.getItem("kb_vorrueckt") === "1"; } catch(e){ return false; } })();
+let kbSchwebeGeste = null;         /* the one-time hook, while it hangs */
+let kbSchwebeZugemacht = false;    /* closed by hand this session */
+try { localStorage.removeItem("kb_vorrueckt"); } catch(e){}   /* the advancing-confirms switch is gone (ENNO 18.09.2026: "Advancing confirms kann ganz raus, das ist jetzt unnötig") */
+function kbSchwebeGesteLoesen(){
+  const h = kbSchwebeGeste; kbSchwebeGeste = null;
+  const raum = document.getElementById("kabine");
+  if (h && raum){ raum.removeEventListener("pointerdown", h, true); raum.removeEventListener("keydown", h, true); }
+}
+function kbSchwebeSelbst(){
+  if (kbSchwebeGeste || kbSchwebe || kbSchwebeZugemacht || !("documentPictureInPicture" in window)) return;
+  const raum = document.getElementById("kabine");
+  if (!raum) return;
+  const h = ev => {
+    if (!KB || !KB.live || kbSchwebe || kbSchwebeZugemacht){ kbSchwebeGesteLoesen(); return; }
+    /* Escape closes the room, a bare modifier is no gesture the browser counts */
+    if (ev.type === "keydown" && (ev.key === "Escape" || /^(Alt|Shift|Control|Meta)$/.test(ev.key))) return;
+    /* no share yet (the picker is open, or declined): the next gesture */
+    if (!(bildStrom && bildStrom.active)) return;
+    kbSchwebeGesteLoesen();
+    /* requestWindow is the first await inside - the gesture is still fresh;
+       refused for want of activation, the hook hangs once more */
+    kbSchwebeAuf().then(e => { if (e && e.name === "NotAllowedError"){ kbSchwebeSelbst(); if (KB) kbZeichnen(); } });
+  };
+  kbSchwebeGeste = h;
+  raum.addEventListener("pointerdown", h, true);
+  raum.addEventListener("keydown", h, true);
+}
 /* the pitch as the game shows it: 105 capture points per card, the capture
    is KB.frame.w points wide (the window's own size), CSS points are device
    points over the ratio */
@@ -27068,7 +27184,10 @@ async function kbSchwebeAuf(){
   const breite = Math.max(380, Math.min(screen.availWidth - 60, Math.round(t * Math.max(6, Math.min(KB.N || 8, 16)) + 28)));
   let w;
   try { w = await window.documentPictureInPicture.requestWindow({width: breite, height: 240}); }   /* must be the first await after the click */
-  catch(e){ KB.status = "The floating window could not be opened - " + ((e && e.message) || e); kbZeichnen(); return; }
+  catch(e){ KB.status = "The floating window could not be opened - " + ((e && e.message) || e); kbZeichnen(); return e; }
+  /* the room may have closed while the window was being opened (the first
+     gesture was the X): no orphan strip, and no closed-by-hand mark */
+  if (!KB || !kbOffen){ try { w.close(); } catch(e){} return null; }
   kbSchwebe = w;
   const doc = w.document;
   for (const sh of document.styleSheets){
@@ -27082,8 +27201,8 @@ async function kbSchwebeAuf(){
     <div class="kb-knoepfe">
       <button class="rd-schalter" id="kb-schwebe-sichtbar" title="Tick every line that stands in the part of the bar you see right now">\u2610 visible part</button>
       <button class="rd-schalter" id="kb-schwebe-bestaetigen" title="Lock name, owner and type of the line under the frame">\u2713 confirm</button>
+      <button class="rd-schalter" id="kb-schwebe-neu" title="Clear the line under the frame and read it afresh (Alt+Down)">\u21bb read again</button>
       <button class="rd-schalter" id="kb-schwebe-platz" title="Placeholders for the numbers below this unit">\u2026 placeholders</button>
-      <button class="rd-schalter" id="kb-schwebe-vorrueckt" title="When on, stepping to the next card locks the line just left">advancing confirms</button>
       <button class="rd-schalter" id="kb-schwebe-abweg" hidden title="Nothing is read until cleared.">! unit left — understood</button>
     </div>`;
   doc.getElementById("kb-schwebe-sichtbar").addEventListener("click", ()=>{
@@ -27093,7 +27212,7 @@ async function kbSchwebeAuf(){
   });
   doc.getElementById("kb-schwebe-bestaetigen").addEventListener("click", ()=>{ const i = kbWahl(); if (i !== null && i !== undefined) kbBestaetigen(i); });
   doc.getElementById("kb-schwebe-platz").addEventListener("click", ()=>{ const i = kbWahl(); if (i !== null && i !== undefined) kbPlatzhalter(i); });
-  doc.getElementById("kb-schwebe-vorrueckt").addEventListener("click", ()=>{ kbVorruecktSetzen(!kbVorrueckt); });
+  doc.getElementById("kb-schwebe-neu").addEventListener("click", ()=>{ const i = kbWahl(); if (i !== null && i !== undefined) kbNeuLesenLeer(i); });
   doc.getElementById("kb-schwebe-abweg").addEventListener("click", ()=>{
     if (!KB) return;
     KB.abreiseUnklar = null;
@@ -27101,9 +27220,11 @@ async function kbSchwebeAuf(){
     kbZeichnen();
   });
   w.addEventListener("resize", ()=>{ kbSchwebeZeichnen(); });
-  /* closed from its own corner or by the browser: forget it, relabel the pult */
-  w.addEventListener("pagehide", ()=>{ if (kbSchwebe === w){ kbSchwebe = null; if (KB) kbZeichnen(); } });
+  /* closed from its own corner or by the browser: forget it, relabel the
+     pult - and do not hand it to him again this session (kbSchwebeSelbst) */
+  w.addEventListener("pagehide", ()=>{ if (kbSchwebe === w){ kbSchwebe = null; kbSchwebeZugemacht = true; if (KB) kbZeichnen(); } });
   kbZeichnen();
+  return null;
 }
 function kbSchwebeZu(){
   const w = kbSchwebe; kbSchwebe = null;
@@ -27167,7 +27288,7 @@ function kbSchwebeZeichnen(){
     ? `<b>${kbEsc(z.tag)}</b> ${kbEsc(z.name)}<br>${kbEsc(z.besitzer)}<br><small>${z.typ ? kbEsc(atName(z.typ)) : "type ?"} \u00b7 ${z.eigen ? "own" : kbSeiteName(z.seite)} \u00b7 line ${wahl + 1}${kbFestName(z) && kbFestTyp(z) ? " \u00b7 \u{1F512}" : ""}</small><div class="hp">${kbStaerkeHTML(z)}</div>`
     : kbEsc(KB.status);
   if (jf.innerHTML !== soll) jf.innerHTML = soll;
-  const vb = doc.getElementById("kb-schwebe-vorrueckt"); if (vb) vb.classList.toggle("an", kbVorrueckt);
+  const nb = doc.getElementById("kb-schwebe-neu"); if (nb) nb.disabled = !z;
   const bb = doc.getElementById("kb-schwebe-bestaetigen"); if (bb) bb.disabled = !z || z.status !== "erfasst" || z.eigen;
   const pb = doc.getElementById("kb-schwebe-platz"); if (pb) pb.disabled = !z || z.status !== "erfasst" || z.eigen;
 }
@@ -27242,11 +27363,15 @@ function kbPlatzhalter(i){
     ? `${teile[0].n} placeholder${teile[0].n === 1 ? "" : "s"} added for ${teile[0].stamm}`
     : teile.map(t => `${t.n} for ${t.stamm}`).join(", "));
 }
-/* REGISTERED SHORTCUTS from the small browser extension (erweiterung/):
+/* REGISTERED SHORTCUTS from the small browser extension (erweiterung/, 1.3):
    Alt+Up confirms the shown unit, Alt+Left steps one unit back, Alt+Right
-   one forward, Alt+Down adds placeholders for the numbers below it. The
-   browser registers the keys and the extension forwards them as a window
-   message; nothing here reads keys, nothing reaches the game. */
+   one forward, Alt+Down clears the shown line and reads it afresh (ToDo
+   16.9.2026, ENNO 18.09.2026: "Erneuerung einer Lesung: Bitte an
+   Alt+Pfeiltaste unten koppeln"); the placeholders keep their command
+   without a suggested key (Chrome allows four - Alt+Shift+Down is the
+   recommendation, set under chrome://extensions/shortcuts). The browser
+   registers the keys and the extension forwards them as a window message;
+   nothing here reads keys, nothing reaches the game. */
 window.addEventListener("message", ev => {
   const m = ev.data;
   if (!m || m.hng !== "taste" || ev.source !== window) return;
@@ -27263,25 +27388,15 @@ window.addEventListener("message", ev => {
   } else if (m.was === "platzhalter"){
     if (i === null) toast("No unit picked yet.");
     else kbPlatzhalter(i);
+  } else if (m.was === "neulesen"){
+    if (i === null) toast("No unit picked yet.");
+    else kbNeuLesenLeer(i);
   }
 });
-function kbVorruecktSetzen(an){
-  kbVorrueckt = !!an;
-  try { localStorage.setItem("kb_vorrueckt", kbVorrueckt ? "1" : "0"); } catch(e){}
-  if (KB){ KB.status = kbVorrueckt ? "Advancing confirms: stepping to the next card locks the line just left." : "Advancing confirms: off."; kbZeichnen(); }
-}
-/* the line just left is locked when the pick moves on - only a written
-   line, never one's own, never one that is being read afresh on order */
-function kbVorrueckSchliessen(vorher, neu){
-  if (!kbVorrueckt || !KB) return;
-  if (vorher === null || vorher === undefined || vorher === neu) return;
-  const z = KB.zeilen[vorher];
-  /* a line whose unit has left the bar is not "stepped away from" - it was
-     carried off, and locking it would only make it harder to correct */
-  if (!z || z.fort || z.status !== "erfasst" || z.eigen || z.neuLesen || z.typNeu) return;
-  if (!z.tag && !z.name) return;
-  z.festTyp = true; z.festName = true;
-}
+/* "Advancing confirms" (stepping to the next card locked the line just
+   left) is gone - ENNO 18.09.2026: "Advancing confirms kann ganz raus, das
+   ist jetzt unnötig". Leaving a line locks nothing; confirm is the button,
+   the key, or the lock on the line. */
 
 /* ---- editing the sheet ---------------------------------------------------- */
 function kbBearbeiten(ev){
@@ -27811,6 +27926,7 @@ function kbLiveStart(){
   KB.live = setInterval(kbTick, KB_TAKT);
   KB.status = "Live - click the units in the game's detail bar, left to right.";
   kbRauschenAn(); kbZeichnen(); kbTick();
+  kbSchwebeSelbst();                       /* the strip opens with the next gesture in the room */
 }
 /* STOPPING THE TICK IS NOT STOPPING THE SHARE, and it used to be only the
    first. clearInterval, noise off, done - while the sharing carried on
@@ -27828,6 +27944,7 @@ function kbLiveStop(auchFreigabe){
   if (!KB || !KB.live) return;
   clearInterval(KB.live); KB.live = null;
   kbRauschenAus();
+  kbSchwebeGesteLoesen();
   kbOrtFlaeche.c = null; kbOrtFlaeche.g = null;
   /* the share is the page's: it ends only when no room is watching */
   if (auchFreigabe && !(typeof PG !== "undefined" && PG && PG.live)
@@ -53615,7 +53732,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build aa5c5c7c80</span></p></div>
+         installation. <span style="color:var(--dim2)">· build f8c78c111b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -53843,7 +53960,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "aa5c5c7c80";
+const BAU = "f8c78c111b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
