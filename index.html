@@ -1327,19 +1327,79 @@ body.kb-zieht{user-select:none}
 /* THE FLOATING STRIP - a Document Picture-in-Picture window over the game:
    the same cards in one row at the game's own pitch (--kb-karte/--kb-luecke
    set from the capture width), the frame, the current line, three buttons */
-.kb-schwebe{margin:0;padding:8px 10px;background:#0b0c10;color:#a9b0b8;font-family:var(--schmal);font-size:13px;line-height:1.4;overflow:hidden;user-select:none}
+.kb-schwebe{margin:0;padding:8px 10px;background:#0b0c10;color:#a9b0b8;font-family:var(--schmal);font-size:15px;line-height:1.4;overflow:hidden;user-select:none}
 .kb-schwebe .kb-streifen{position:relative;top:auto;z-index:auto;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:var(--kb-luecke,6px);padding:6px 2px 16px;margin:0 0 8px;min-height:0}
 .kb-schwebe .kb-k{flex:none;width:var(--kb-karte,46px);height:var(--kb-hoehe,34px)}
 .kb-schwebe .kb-k canvas{width:calc(var(--kb-karte,46px)*.7);height:auto}
 .kb-schwebe .kb-k svg{width:calc(var(--kb-karte,46px)*.7);height:auto}
 .kb-schwebe .kb-jetzt{background:#15181d;border:1px solid #2a2e36;border-radius:3px;padding:8px 10px;margin:0 0 8px;min-height:3.4em}
-.kb-schwebe .kb-jetzt b{color:#e8d9a8;font-size:15px}
+.kb-schwebe .kb-jetzt b{color:#e8d9a8;font-size:17px}
 .kb-schwebe .kb-jetzt small{color:#8b929b}
 .kb-schwebe .kb-jetzt .hp{display:flex;flex-wrap:wrap;gap:2px 10px;margin-top:3px;color:#cbb98a}
 .kb-schwebe .kb-jetzt .hpg{display:inline-flex;align-items:center;gap:3px}
 .kb-schwebe .kb-knoepfe{display:flex;gap:8px;flex-wrap:wrap}
 .kb-schwebe .kb-knoepfe .rd-schalter{width:auto;padding:7px 12px}
 .kb-schwebe .kb-knoepfe .rd-schalter:disabled{opacity:.4;cursor:not-allowed}
+/* Q12: the correction field in the cabin's floating strip - tag, name and
+   owner of the shown line open on a click (ENNO 19.09.2026: "Ich brauche
+   auch immernoch in dem Overlay Fenster die Möglichkeit der Textkorrektur,
+   das geht aktuell noch nicht.") */
+.kb-schwebe .kb-jetzt [data-f]{cursor:text}
+.kb-schwebe .kb-jetzt input.kb-korr{font:inherit;font-size:15px;background:#0b0c10;color:#e9e2d5;border:1px solid #6c7480;border-radius:2px;padding:1px 5px;max-width:60%}
+/* Q12: the strip's type grew (13 -> 15 px, the tag 17 px - ENNO 19.09.2026:
+   "der Text darin kann generell etwas größer"); the window stays 240 high,
+   so the box and the strip give up two points of spacing each, and the
+   buttons drop the phone-size floor of 45 px that the narrow window pulled
+   in through the 900-px rule (the strip is a desktop window with a mouse).
+   Measured 19.09.2026 at 658 wide, three cards, a strength line: 256 ->
+   236 points (before the change 248 - eight points of the buttons cut).
+   Under 500 wide the four buttons wrap into two rows: the window then
+   opens 280 high (kbSchwebeAuf), measured at 380 wide (a Full HD game
+   window, the strip 49 high at that pitch) 251 points. */
+.kb-schwebe .kb-streifen{margin-bottom:6px}
+.kb-schwebe .kb-jetzt{padding:6px 10px;margin-bottom:6px}
+.kb-schwebe .kb-knoepfe .rd-schalter{min-height:0}
+/* Q12: THE DEPOT LIST as the game arranges it - one row per unit: the sign
+   box on the left (gold with the dark sign, as the game prints it), the
+   name above, tag, type and town below; the marked
+   row lit, a taken row ticked and dimmed, a skipped row struck out, a row
+   the game does not show right now slightly dimmed. Type larger than the
+   cabin's strip (ENNO 19.09.2026: "der Text darin kann generell etwas
+   größer und von der Anordnung an die Weise wie im Spiel angepasst
+   werden"). The same rows in the reader tab and in the floating window. */
+.dl-liste{display:flex;flex-direction:column;gap:4px;max-height:52vh;overflow-y:auto;font-family:var(--schmal)}
+.dl-z{display:flex;align-items:center;gap:10px;padding:6px 8px;border:1px solid #2a2e36;border-radius:3px;background:#15181d;color:#a9b0b8;cursor:pointer}
+.dl-z .sym{flex:none;width:44px;height:32px;border:2px solid #f3d27a;border-radius:2px;background:#e3a53a;display:flex;align-items:center;justify-content:center;color:#1d1a14;font-size:16px}
+.dl-z .sym svg{width:34px;height:24px;display:block}
+.dl-z .txt{flex:1;min-width:0;line-height:1.25}
+.dl-z .name{display:block;font-size:17px;font-weight:700;color:#e8d9a8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text}
+.dl-z .zeile2{display:flex;gap:10px;font-size:13px;color:#8b929b;white-space:nowrap;overflow:hidden}
+.dl-z .tag{color:#cbb98a;letter-spacing:.06em;text-transform:uppercase;cursor:text}
+.dl-z .typ{cursor:pointer}
+.dl-z .ort{margin-left:auto;overflow:hidden;text-overflow:ellipsis}
+.dl-z .stand{flex:none;width:22px;text-align:center;font-size:16px;color:#8b929b}
+.dl-z.jetzt{border-color:#f0b13a;box-shadow:0 0 10px 2px rgba(240,177,58,.35);background:#1d1a12}
+.dl-z.fertig{opacity:.55}
+.dl-z.fertig .stand{color:#2fa458}
+.dl-z.weg{opacity:.35}
+.dl-z.weg .name,.dl-z.weg .tag{text-decoration:line-through}
+.dl-z.dl-bekannt{opacity:.5}
+.dl-z.dl-bekannt .ort{color:#8b929b;font-style:italic;padding-right:3px}
+.dl-z.fern{opacity:.6}
+.dl-z.fern.jetzt{opacity:.85}
+.dl-z input,.dl-z select{font:inherit;font-size:14px;background:#0b0c10;color:#e9e2d5;border:1px solid #6c7480;border-radius:2px;padding:1px 4px;min-width:0;max-width:100%}
+.dl-knoepfe{display:flex;gap:8px;flex-wrap:wrap}
+.dl-schwebe{margin:0;padding:8px 10px;background:#0b0c10;color:#a9b0b8;font-family:var(--schmal);font-size:16px;line-height:1.4;overflow:hidden;user-select:none;display:flex;flex-direction:column;box-sizing:border-box;height:100vh}
+.dl-schwebe .dl-liste{flex:1;max-height:none;gap:5px;min-height:0}
+.dl-schwebe .dl-z{padding:7px 9px}
+.dl-schwebe .dl-z .name{font-size:19px}
+.dl-schwebe .dl-z .zeile2{font-size:14px}
+.dl-schwebe .dl-z .sym{width:48px;height:34px}
+.dl-schwebe .dl-z .sym svg{width:36px;height:26px}
+.dl-schwebe .dl-jetzt{flex:none;margin:8px 0;font-size:13px;color:#8b929b;min-height:1.4em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl-schwebe .dl-knoepfe{flex:none}
+.dl-schwebe .dl-knoepfe .rd-schalter{width:auto;padding:7px 12px}
+.dl-schwebe .dl-knoepfe .rd-schalter:disabled{opacity:.4;cursor:not-allowed}
 /* BAT-12: THE OVERLAY over the game - a Document Picture-in-Picture window
    like the strip above (.kb-schwebe: same ground, same type), holding nothing
    but the confirmation box of the battle desk while it stands (gefEndeSatz;
@@ -21420,7 +21480,8 @@ async function bildFreigabeNeu(){
     return false;
   }
   const liest = !!wache || !!(typeof KB !== "undefined" && KB && KB.live)
-      || !!(typeof PG !== "undefined" && PG && PG.live) || !!(typeof GEF !== "undefined" && GEF && GEF.live);
+      || !!(typeof PG !== "undefined" && PG && PG.live) || !!(typeof GEF !== "undefined" && GEF && GEF.live)
+      || !!(typeof DL !== "undefined" && DL && DL.live);   /* Q12: the depot reader watches too */
   if (!liest){ bildFreigabeBeenden(); toast("Sharing stopped - no room was watching."); return false; }
   if (wache){
     wache.stream = neu;
@@ -29417,6 +29478,7 @@ function kbPult(){
 let kbSchwebe = null;
 let kbSchwebeGeste = null;         /* the one-time hook, while it hangs */
 let kbSchwebeZugemacht = false;    /* closed by hand this session */
+let kbSchwebeEdit = null;          /* Q12: {i, feld} while a correction field is open in the strip */
 try { localStorage.removeItem("kb_vorrueckt"); } catch(e){}   /* the advancing-confirms switch is gone (ENNO 18.09.2026: "Advancing confirms kann ganz raus, das ist jetzt unnötig") */
 function kbSchwebeGesteLoesen(){
   const h = kbSchwebeGeste; kbSchwebeGeste = null;
@@ -29455,7 +29517,8 @@ async function kbSchwebeAuf(){
   const t = kbSchwebeTeilung();
   const breite = Math.max(380, Math.min(screen.availWidth - 60, Math.round(t * Math.max(6, Math.min(KB.N || 8, 16)) + 28)));
   let w;
-  try { w = await window.documentPictureInPicture.requestWindow({width: breite, height: 240}); }   /* must be the first await after the click */
+  /* Q12: under 500 wide the buttons stand in two rows (measured 19.09.2026 at 380: 251 points) - 40 more */
+  try { w = await window.documentPictureInPicture.requestWindow({width: breite, height: breite < 520 ? 280 : 240}); }   /* must be the first await after the click */
   catch(e){ KB.status = "The floating window could not be opened - " + ((e && e.message) || e); kbZeichnen(); return e; }
   /* the room may have closed while the window was being opened (the first
      gesture was the X): no orphan strip, and no closed-by-hand mark */
@@ -29491,9 +29554,12 @@ async function kbSchwebeAuf(){
     kbZeichnen();
   });
   w.addEventListener("resize", ()=>{ kbSchwebeZeichnen(); });
+  /* Q12: a click on tag, name or owner of the shown line opens the
+     correction field there (kbSchwebeKorrektur) */
+  doc.getElementById("kb-schwebe-jetzt").addEventListener("click", kbSchwebeKorrektur);
   /* closed from its own corner or by the browser: forget it, relabel the
      pult - and do not hand it to him again this session (kbSchwebeSelbst) */
-  w.addEventListener("pagehide", ()=>{ if (kbSchwebe === w){ kbSchwebe = null; kbSchwebeZugemacht = true; if (KB) kbZeichnen(); } });
+  w.addEventListener("pagehide", ()=>{ kbSchwebeEdit = null; if (kbSchwebe === w){ kbSchwebe = null; kbSchwebeZugemacht = true; if (KB) kbZeichnen(); } });   /* Q12: an open correction field went with the window - also when kbSchwebeZu closed it */
   kbZeichnen();
   return null;
 }
@@ -29556,12 +29622,58 @@ function kbSchwebeZeichnen(){
   const soll = KB.abreiseUnklar
     ? `<b>A unit left the bar.</b>`
     : z
-    ? `<b>${kbEsc(z.tag)}</b> ${kbEsc(z.name)}<br>${kbEsc(z.besitzer)}<br><small>${z.typ ? kbEsc(atName(z.typ)) : "type ?"} \u00b7 ${z.eigen ? "own" : kbSeiteName(z.seite)} \u00b7 line ${wahl + 1}${kbFestName(z) && kbFestTyp(z) ? " \u00b7 \u{1F512}" : ""}</small><div class="hp">${kbStaerkeHTML(z)}</div>`
+    ? `<b data-f="tag">${kbEsc(z.tag) || "?"}</b> <span data-f="name">${kbEsc(z.name) || "?"}</span><br><span data-f="besitzer">${kbEsc(z.besitzer) || "?"}</span><br><small>${z.typ ? kbEsc(atName(z.typ)) : "type ?"} \u00b7 ${z.eigen ? "own" : kbSeiteName(z.seite)} \u00b7 line ${wahl + 1}${kbFestName(z) && kbFestTyp(z) ? " \u00b7 \u{1F512}" : ""}</small><div class="hp">${kbStaerkeHTML(z)}</div>`
     : kbEsc(KB.status);
-  if (jf.innerHTML !== soll) jf.innerHTML = soll;
+  /* Q12: while a correction field is open the box is his, not the tick's */
+  if (kbSchwebeEdit){ /* the field stays */ }
+  else if (jf.innerHTML !== soll) jf.innerHTML = soll;
   const nb = doc.getElementById("kb-schwebe-neu"); if (nb) nb.disabled = !z;
   const bb = doc.getElementById("kb-schwebe-bestaetigen"); if (bb) bb.disabled = !z || z.status !== "erfasst" || z.eigen;
   const pb = doc.getElementById("kb-schwebe-platz"); if (pb) pb.disabled = !z || z.status !== "erfasst" || z.eigen;
+}
+/* Q12: THE CORRECTION FIELD IN THE FLOATING STRIP. ENNO 19.09.2026: "Ich
+   brauche auch immernoch in dem Overlay Fenster die Möglichkeit der
+   Textkorrektur, das geht aktuell noch nicht." A click on the tag, the
+   name or the owner of the shown line puts a field in its place; Enter
+   writes it to the line, Escape drops it, leaving the field writes (as
+   kbBearbeiten does in the room). Written as kbBearbeiten writes: a name
+   over an unreadable line is a description, a line with something on it
+   is read, the book's doorman is asked again. The room's sheet stays the
+   other way to correct. A locked line is his as in the room: the status
+   says "Line N is locked." and the field opens anyway. */
+function kbSchwebeKorrektur(ev){
+  const f = ev.target.closest("[data-f]");
+  if (!f || !KB || !kbSchwebe || kbSchwebeEdit) return;
+  const i = kbWahl();
+  const z = i !== null && i !== undefined ? KB.zeilen[i] : null;
+  if (!z || KB.abreiseUnklar) return;
+  const feld = f.dataset.f;
+  const el = kbSchwebe.document.createElement("input");
+  el.type = "text"; el.className = "kb-korr"; el.spellcheck = false; el.value = z[feld] || "";
+  if (feld === "name" && z.unlesbar && !z.beschrieben){ el.value = ""; el.placeholder = "e.g. 7 clowns"; }
+  kbSchwebeEdit = {i, feld};
+  /* a locked line: said as the room says it, the field opens anyway */
+  const gesperrt = kbFest(z);
+  if (gesperrt && KB.status.indexOf("locked") < 0){ KB.status = `Line ${i + 1} is locked.`; kbZeichnen(); }
+  const zu = schreiben => {
+    if (!kbSchwebeEdit) return;
+    kbSchwebeEdit = null;
+    if (schreiben && KB && KB.zeilen[i] === z){
+      z[feld] = el.value.trim();
+      if (feld === "name" && z.unlesbar) z.beschrieben = !!z[feld];
+      if (z.status !== "erfasst" && (z.tag || z.name || z.besitzer)) z.status = "erfasst";
+      kbBekanntSetzen(z);
+      if (!gesperrt) KB.status = `Line ${i + 1}: ${feld === "besitzer" ? "owner" : feld} corrected.`;
+    }
+    if (KB) kbZeichnen(); else kbSchwebeZeichnen();
+  };
+  el.addEventListener("keydown", e => {
+    if (e.key === "Enter"){ e.preventDefault(); zu(true); }
+    else if (e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); zu(false); }
+  });
+  el.addEventListener("blur", () => zu(true));
+  ev.preventDefault();
+  f.innerHTML = ""; f.appendChild(el); el.focus(); el.select();
 }
 /* CONFIRM: name, owner and type of one line locked by hand - one line only,
    unlike kbFrieren, which spreads to every ticked line */
@@ -29647,6 +29759,11 @@ window.addEventListener("message", ev => {
   const m = ev.data;
   if (!m || m.hng !== "taste" || ev.source !== window) return;
   bedient();                                        // a shortcut is use of the page (SON-1)
+  /* Q12: while the depot reader reads, or its floating list stands, the
+     four words are its (dlTaste: up, down, take, skip); the cabin has them
+     back the moment it stops. No fifth key: Chrome allows four suggested
+     ones and all four are taken (Anschlussliste 18.09., Offen 4). */
+  if (dlHatTasten()){ dlTaste(m.was); return; }
   if (!KB){ toast("Open Units first, then the shortcuts work."); return; }
   const i = kbWahl();
   if (m.was === "bestaetigen"){
@@ -30219,7 +30336,8 @@ function kbLiveStop(auchFreigabe){
   kbOrtFlaeche.c = null; kbOrtFlaeche.g = null;
   /* the share is the page's: it ends only when no room is watching */
   if (auchFreigabe && !(typeof PG !== "undefined" && PG && PG.live)
-      && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()) bildFreigabeBeenden();
+      && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()
+      && !(typeof DL !== "undefined" && DL && DL.live)) bildFreigabeBeenden();   /* Q12: the depot reader watches too */
   kbZeichnen();
 }
 /* one picture, for checks without the game */
@@ -32313,7 +32431,8 @@ function pgLiveStop(auchFreigabe){
   PG.staerkeR = null; PG.kopfR = null;
   /* the share is the page's: it ends only when no room is watching */
   if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)
-      && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()) bildFreigabeBeenden();
+      && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()
+      && !(typeof DL !== "undefined" && DL && DL.live)) bildFreigabeBeenden();   /* Q12: the depot reader watches too */
   pgZeichnen();
 }
 async function pgBild(datei){
@@ -38970,7 +39089,8 @@ function gefLiveStop(auchFreigabe){
   gefFlaechenWeg();
   if (GEF.status === "Live") GEF.status = "Capture stopped.";
   if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)
-      && !(typeof PG !== "undefined" && PG && PG.live) && !wacheLaeuft()) bildFreigabeBeenden();
+      && !(typeof PG !== "undefined" && PG && PG.live) && !wacheLaeuft()
+      && !(typeof DL !== "undefined" && DL && DL.live)) bildFreigabeBeenden();   /* Q12: the depot reader watches too */
   gefZeichnen();
 }
 /* a capture that ended while the desk was hidden: nothing to show, nothing
@@ -46102,7 +46222,7 @@ function wacheStop(vonAussen){
   /* the share is the page's, not the radar's: it ends only when no other
      room is watching through it */
   const andere = (typeof KB !== "undefined" && KB && KB.live) || (typeof PG !== "undefined" && PG && PG.live)
-      || (typeof GEF !== "undefined" && GEF && GEF.live);
+      || (typeof GEF !== "undefined" && GEF && GEF.live) || (typeof DL !== "undefined" && DL && DL.live);   /* Q12: the depot reader watches too */
   if (!andere) bildFreigabeBeenden();
   document.querySelector(".rd-schirm")?.classList.remove("live");
   const gesehen = wache.gesehen ? wache.gesehen.size : 0, geaendert = wache.gesamt;
@@ -48642,166 +48762,623 @@ document.getElementById("dep-shot").addEventListener("click", ()=>depotDialog("r
    werden können." What used to be the window "Read your assault teams"
    (capture, frame, sheet, take-over) is now depotLeserHtml - the tab's
    content - and depotLeserVerdrahten - its wiring, run by depotDialog right
-   after openDlg. The ids ds-* stay, depotLesen writes into them as before.
+   after openDlg. Since Q12 (19.09.2026) the tab reads the shared game window
+   live - see THE DEPOT READ FROM THE SHARED GAME WINDOW below.
    One window less. One line of state instead of the two old instruction
    lines (ENNO 18.09.2026: "Ich brauche aber in der Oberfläche keine
    Kommentare."). */
 function depotLeserHtml(){
+  const pip = ("documentPictureInPicture" in window);
   return `
-      ${/* capture only - no file picker any more */
-        bildAufnahmeMoeglich()
-        ? `<div class="hint">Capture the war map with the team list open.</div>
-           <div class="row"><button class="btn primary mit-ico" data-bild="grab">${ICO_CAPTURE}Capture the game …</button></div>`
-        : `<div class="hint">Capturing a window needs the page to run over https; on a local file the browser does not allow it.</div>`}
-      <div id="ds-status" style="font-size:12px;color:var(--dim)">Waiting for a capture …</div>
-      <div id="ds-crop" style="display:none;flex-direction:column;gap:6px">
-        <div class="hint">The box moves itself to the list. Drag your own only if a shot has
-          several lists in it.</div>
-        <div style="text-align:center">
-          <div id="ds-bild" style="display:inline-block;position:relative;line-height:0;
-            border:1px solid var(--line);border-radius:2px;background:#000;
-            touch-action:none;cursor:crosshair;overflow:hidden;max-width:100%">
-            <img id="ds-img" draggable="false" alt=""
-              style="display:block;max-width:100%;max-height:40vh;width:auto;height:auto;
-                     user-select:none;-webkit-user-drag:none">
-            <div id="ds-box" style="position:absolute;border:2px solid var(--accent);
-              box-shadow:0 0 0 9999px rgba(0,0,0,.62);pointer-events:none"></div>
-          </div>
-        </div>
-        <div class="row">
-          <button class="btn primary" id="ds-read">Read the box</button>
-          <button class="btn" id="ds-all">Whole picture</button>
-        </div>
-      </div>
-      <div id="ds-list" style="display:none;flex-direction:column;gap:4px;max-height:40vh;overflow-y:auto"></div>
-      <details id="ds-roh" style="display:none;font-size:11px;color:var(--dim2)">
-        <summary style="cursor:pointer">What the recogniser actually saw</summary>
-        <div id="ds-rohbild" style="margin-top:6px"></div>
-        <pre id="ds-rohtext" style="white-space:pre-wrap;word-break:break-word;margin:6px 0 0;
-          font-size:11px;max-height:24vh;overflow:auto"></pre>
-      </details>
-      <div class="row" style="align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap">
+      <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
+        ${bildAufnahmeMoeglich()
+          ? `<button class="btn primary mit-ico" id="dl-start">${ICO_CAPTURE}Read from game</button>
+             <button class="btn" id="dl-schweben"${pip ? "" : ' disabled title="Needs Chrome or Edge 116 or newer"'}>Float over the game</button>`
+          : `<div class="hint">Capturing a window needs the page to run over https; on a local file the browser does not allow it.</div>`}
+        <span style="flex:1"></span>
         <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);cursor:pointer">
-          <input type="checkbox" id="ds-stellen"> Publish depot for clan
+          <input type="checkbox" id="dl-stellen"> Publish depot for clan
         </label>
-        <button class="btn primary" id="ds-go" disabled>Add ticked</button>
+      </div>
+      <div id="dl-status" style="font-size:12px;color:var(--dim)"></div>
+      <div id="dl-liste" class="dl-liste"></div>
+      <div class="dl-knoepfe">
+        <button class="btn" id="dl-nehmen" title="Alt+Right">\u2713 take</button>
+        <button class="btn" id="dl-weg" title="Alt+Left">\u2717 skip</button>
+        <button class="btn" id="dl-neu">\u21bb read again</button>
       </div>`;
 }
 function depotLeserVerdrahten(){
-  if (!document.getElementById("ds-bild")) return;         // no reader tab in this window
+  if (!document.getElementById("dl-liste")) return;        // no reader tab in this window
+  const start = document.getElementById("dl-start");
+  if (start) start.addEventListener("click", ()=>{ if (DL && DL.live) dlLiveStop(true); else dlLiveStart(); });
+  const fl = document.getElementById("dl-schweben");
+  if (fl) fl.addEventListener("click", ()=>{ if (!dlSchwebe) dlSchwebeAuf(); });   /* requestWindow is the first await inside */
+  const st = document.getElementById("dl-stellen");
+  if (st){ st.checked = !!(DL && DL.stellen); st.addEventListener("change", ()=>{ dlNeu().stellen = st.checked; }); }
+  document.getElementById("dl-nehmen").addEventListener("click", ()=>{ if (DL && DL.wahl !== null) dlUebernehmen(DL.wahl); });
+  document.getElementById("dl-weg").addEventListener("click", ()=>{ if (DL && DL.wahl !== null) dlVerwerfen(DL.wahl); });
+  document.getElementById("dl-neu").addEventListener("click", dlNochmal);
+  document.getElementById("dl-liste").addEventListener("click", ev => dlBearbeiten(ev, document));
+  dlZeichnen();
+}
 
-  /* Der Rahmen wird in Bruchteilen des Bildes gefuehrt, nicht in Pixeln - dann
-     stimmt er unabhaengig davon, wie stark die Vorschau verkleinert ist. */
-  const VORGABE = {x:.70, y:.05, w:.29, h:.90};
-  const feld = document.getElementById("ds-bild");
-  const kast = document.getElementById("ds-box");
-  let datei = null, box = VORGABE, zieh = null;
-
-  const malen = () => {
-    kast.style.left  = (box.x*100)+"%"; kast.style.top    = (box.y*100)+"%";
-    kast.style.width = (box.w*100)+"%"; kast.style.height = (box.h*100)+"%";
-  };
-  const anteil = ev => {
-    const r = feld.getBoundingClientRect();
-    return [Math.min(1, Math.max(0, (ev.clientX-r.left)/r.width)),
-            Math.min(1, Math.max(0, (ev.clientY-r.top )/r.height))];
-  };
-  feld.addEventListener("pointerdown", ev => {
-    zieh = anteil(ev); box = {x:zieh[0], y:zieh[1], w:0, h:0}; malen();
-    feld.setPointerCapture(ev.pointerId); ev.preventDefault();
-  });
-  feld.addEventListener("pointermove", ev => {
-    if (!zieh) return;
-    const [x,y] = anteil(ev);
-    box = {x:Math.min(zieh[0],x), y:Math.min(zieh[1],y),
-           w:Math.abs(x-zieh[0]), h:Math.abs(y-zieh[1])};
-    malen();
-  });
-  const loslassen = () => {
-    if (!zieh) return;
-    zieh = null;
-    if (box.w < .04 || box.h < .04){ box = VORGABE; malen(); }   // Fehlklick
-  };
-  feld.addEventListener("pointerup", loslassen);
-  feld.addEventListener("pointercancel", loslassen);
-
-  bildQuelle("ds-file", async f => {
-    datei = f;
-    document.getElementById("ds-img").src = URL.createObjectURL(f);
-    document.getElementById("ds-crop").style.display = "flex";
-    document.getElementById("ds-list").style.display = "none";
-    document.getElementById("ds-roh").style.display  = "none";
-    document.getElementById("ds-go").disabled = true;
-    box = VORGABE; malen();
-    const st = document.getElementById("ds-status");
-    st.innerHTML = "Looking at the picture …";
-    /* Erst schauen, wo wir sind. Ein ganzes Fenster verraet es an der golden
-       hinterlegten Registerkarte; bei einem blossen Ausschnitt gibt es kein
-       Urteil, und es geht weiter wie bisher. */
-    let voll = null, wo = null;
-    try {
-      voll = await farbAusschnitt(f, null);
-      wo = await ansichtErkennen(voll);
-    } catch(e){ voll = null; }
-    if (wo && wo.wo === "andere"){
-      st.innerHTML = `<b>That is the ${esc(wo.text.slice(0,14).toLowerCase())} screen.</b>
-        Switch the game to <b>War</b> or to <b>Soldiers</b> with a soldier's assault teams
-        open, then take the shot again. You can also read this one anyway —
-        press <b>Whole picture</b>.`;
-      return;
+/* ---- Q12: THE DEPOT READ FROM THE SHARED GAME WINDOW ------------------
+   ENNO 19.09.2026 (Antwortblatt 18.09., "Was dir sonst auffällt" (2)):
+   "Hier hätte ich gerne genau wie bei der Erfassung in Städten ein
+   Overlay, was aber vertikal funktioniert. ... Ich möchte auch keine
+   einzelscreenshots mehr sondern hier auch mit den Pfeiltasten
+   durchklicken und mittels overlay und alt+pfeiltasten bestätigen. Ich
+   brauche auch immernoch in dem Overlay Fenster die Möglichkeit der
+   Textkorrektur, das geht aktuell noch nicht. Und der Text darin kann
+   generell etwas größer und von der Anordnung an die Weise wie im Spiel
+   angepasst werden bitte." ENNO 12.09.2026 (DEP-11): "mit dem Overlay über
+   dem Spiel arbeiten wollen, welches wir über ALT + Pfeiltasten steuern".
+   The reader tab takes the cabin's stream (bildLive): a look four times a
+   second, a doorman on the list's area (dlWache), and when the list stood
+   still for two looks after a change, the cards in view are read -
+   listenRahmen and depotAusRaster, as the single shot did. A card whose
+   two text lines print as one read before (its kennung) is not put
+   through the recogniser again: its row comes back from the sheet. The
+   sheet (DL.zeilen) keeps every unit seen this session in the game's
+   order; the tab and the floating window (dlSchwebe, a Document
+   Picture-in-Picture window like the cabin's strip) show it as a vertical
+   list, one row per unit in the game's own arrangement, the marked row
+   lit. While the reader runs it holds the four registered keys: Alt+Up
+   and Alt+Down move the mark, Alt+Right takes the row into the depot (the
+   same write as "Add ticked" used: setMyDepot), Alt+Left skips it. A
+   click on the name, the tag or the type opens the correction field. */
+let DL = null;                       /* the depot reader's state: sheet, mark, doorman - null until the tab was used */
+let dlSchwebe = null, dlSchwebeGeste = null, dlSchwebeZugemacht = false, dlSchwebeOeffnet = false;
+const DL_TAKT = 250;                 /* four looks a second: a list is scrolled, not clicked through at speed */
+const DL_WACHE_STUFE = 8, DL_WACHE_MIN = 3, DL_RUHE = 2;
+const DL_KENN_STUFE = 32, DL_KENN_ZELLEN = 6, DL_KENN_MITTEL = 6;
+const DL_FELD = {x: 0.6, y: 0.08, w: 0.4, h: 0.86};   /* the doorman's area before a list was found: the war map's right part (SUCHFELD.krieg) */
+let dlWacheC = null, dlWacheG = null, dlKennC = null, dlKennG = null;
+function dlNeu(){
+  if (!DL) DL = {live: null, laeuft: false, zeilen: [], wahl: null, status: "", box: null, wache: {alt: null}, ruhe: 0, neu: true,
+                 bildNr: -1, gestellt: [], fehler: 0, pause: 0, edit: null, stellen: false, inSicht: 0, nochmal: false};
+  return DL;
+}
+const dlHatTasten = () => !!(DL && (DL.live || dlSchwebe));
+/* the key of a reading: tag AND name core (S1 - two cards whose tag read
+   the same, O for 0, must stay two rows); empty when neither was read */
+const dlSchluessel = g => {
+  const t = atTagSauber(g.tag || ""), n = eigenNameKern(g.name || "").toLowerCase();
+  return t || n ? `t:${t}|n:${n}` : "";
+};
+const dlKeyTag = key => key ? key.slice(2, key.indexOf("|n:")) : "";
+const dlKeyName = key => key ? key.slice(key.indexOf("|n:") + 3) : "";
+/* two name cores near enough to be one unit read twice: three edits, or
+   one holds the other (a cut name; an empty reading is held by any name -
+   then the tag decides) */
+const dlEndNr = k => { const m = /(\d+)\s*$/.exec(String(k || "").replace(/[Il|]/g, "1").replace(/O/g, "0")); return m ? m[1] : null; };
+const dlNameNah = (a, b) => {
+  if (a === b) return true;
+  const na = dlEndNr(a), nb = dlEndNr(b);
+  if (na !== null && nb !== null && na !== nb) return false;   /* "Name 2" and "Name 3" are two units */
+  return a.includes(b) || b.includes(a) || levenshtein(a, b) <= 3;
+};
+/* a row whose tag the depot holds already (myDepot) - taken before, or
+   twice on the sheet after one was taken; nothing is written for it (S2) */
+const dlImDepot = z => { const t = atTagSauber(z.tag || ""); return !!t && myDepot().some(d => atTagSauber(d.tag || "") === t); };
+const dlOffen = z => z.status === "gelesen" && !dlImDepot(z);
+async function dlLiveStart(){
+  dlNeu();
+  if (DL.live) return;
+  DL.status = "Asking for the game window \u2026"; dlZeichnen();
+  try { await bildStromHolen(); }                      /* the browser's picker - the first await after the click */
+  catch(e){
+    const m = String((e && e.message) || e);
+    DL.status = e && e.nurFenster ? m : (/denied|Permission|NotAllowed/i.test(m) ? "Screen sharing was declined." : m);
+    dlZeichnen(); return;
+  }
+  if (!DL || DL.live) return;
+  DL.fehler = 0; DL.pause = 0; DL.neu = true; DL.ruhe = 0; DL.wache.alt = null; DL.bildNr = -1;
+  DL.live = setInterval(dlTick, DL_TAKT);
+  DL.status = "Live";
+  dlZeichnen(); dlTick();
+  dlSchwebeSelbst();                                    /* the floating list opens with the next gesture in the window */
+}
+function dlLiveStop(auchFreigabe){
+  if (!DL || !DL.live) return;
+  clearInterval(DL.live); DL.live = null;
+  dlSchwebeGesteLoesen();
+  /* the share is the page's: it ends only when no room is watching */
+  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live) && !(typeof PG !== "undefined" && PG && PG.live)
+      && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()) bildFreigabeBeenden();
+  DL.status = `Stopped \u00b7 ${DL.zeilen.length} on the sheet`;
+  dlZeichnen();
+  /* the queue no. of the teams set out meanwhile - asked once, at the end
+     (DEP-3 A3): a window over the page while he is in the game is seen by
+     nobody */
+  const g = DL.gestellt.splice(0);
+  if (g.length) schlangeFragen(g);
+}
+/* the doorman: the list's area (the last frame found, before that the
+   right part of the picture) averaged to 24 by 96 cells; the count of cells
+   that moved by more than eight steps, as bildWache counts */
+function dlWache(bild){
+  if (!dlWacheC){
+    dlWacheC = document.createElement("canvas"); dlWacheC.width = 24; dlWacheC.height = 96;
+    dlWacheG = dlWacheC.getContext("2d", {willReadFrequently: true});
+    dlWacheG.imageSmoothingEnabled = true; dlWacheG.imageSmoothingQuality = "high";
+  }
+  const W = bild.width, H = bild.height, b = DL.box || DL_FELD;
+  dlWacheG.drawImage(bild, Math.round(b.x*W), Math.round(b.y*H), Math.max(1, Math.round(b.w*W)), Math.max(1, Math.round(b.h*H)), 0, 0, 24, 96);
+  const d = dlWacheG.getImageData(0, 0, 24, 96).data, n = 24*96;
+  const jetztB = new Uint8Array(n);
+  for (let i = 0, j = 0; j < n; i += 4, j++) jetztB[j] = (d[i] + d[i+1] + d[i+2])/3;
+  let anders = n;
+  if (DL.wache.alt){ anders = 0; for (let j = 0; j < n; j++) if (Math.abs(jetztB[j] - DL.wache.alt[j]) > DL_WACHE_STUFE) anders++; }
+  DL.wache.alt = jetztB;
+  return anders;
+}
+async function dlTick(){
+  if (!DL || !DL.live || DL.laeuft) return;
+  if (DL.pause && jetzt() < DL.pause) return;
+  DL.pause = 0;
+  if (!bildNeu(DL)) return;
+  DL.laeuft = true;
+  let bild = null;
+  try {
+    bild = await bildLive();
+    if (!DL || !DL.live) return;
+    const anders = dlWache(bild);
+    if (anders >= DL_WACHE_MIN){ DL.ruhe = 0; DL.neu = true; return; }   /* something moved - wait for it to settle */
+    if (!DL.neu) return;
+    if (++DL.ruhe < DL_RUHE) return;                                   /* still for two looks after a change: read */
+    DL.neu = false; DL.ruhe = 0;
+    await dlLesen(bild);
+    DL.fehler = 0;
+  } catch(e){
+    if (!DL || !DL.live) return;
+    const txt = String((e && e.message) || e);
+    DL.fehler++;
+    /* the share itself says whether it is over (as the cabin judges it) */
+    if (!bildStrom || !bildStrom.active){
+      dlLiveStop(false);
+      DL.status = e && e.nurFenster ? txt : "The screen sharing has ended.";
+      dlZeichnen();
+    } else {
+      if (DL.fehler >= KB_FEHLER_MAX) DL.pause = jetzt() + 800;
+      DL.neu = true;
+      DL.status = `A look failed and was skipped (${DL.fehler}) \u2014 ${txt}`;
+      dlZeichnen();
     }
-    const gefunden = voll ? listenRahmen(voll, wo && wo.wo) : null;
-    if (gefunden){
-      box = gefunden.box; malen();
-      st.innerHTML = `${wo ? `<b>${wo.wo === "krieg" ? "War map" : "Soldiers"}</b> — ` : ""}${
-        gefunden.n} assault team${gefunden.n===1?"":"s"} in view. Reading …`;
-      return depotLesen(datei, box);
+  } finally {
+    if (bild && bild.close) bild.close();
+    if (DL) DL.laeuft = false;
+  }
+}
+/* nothing readable in this picture: the rows leave the view, the doorman
+   goes back to the wide area, a "read again" asked for is over (K5) */
+function dlSichtLeer(bild, text){
+  for (const z of DL.zeilen) z.sicht = false;
+  DL.inSicht = 0; DL.nochmal = false;
+  if (DL.box){ DL.box = null; DL.wache.alt = null; dlWache(bild); }
+  DL.status = text; dlZeichnen();
+}
+async function dlLesen(bild){
+  DL.status = "Looking at the picture \u2026"; dlZeichnen();
+  const voll = await farbAusschnitt(bild, null);
+  let wo = null;
+  try { wo = await ansichtErkennen(voll); } catch(e){ wo = null; }
+  if (!DL || !DL.live) return;
+  if (wo && wo.wo === "andere"){ dlSichtLeer(bild, `That is the ${wo.text.slice(0, 14).toLowerCase()} screen - open the war map.`); return; }
+  const gefunden = listenRahmen(voll, wo && wo.wo);
+  if (!gefunden){ dlSichtLeer(bild, "No team list in view."); return; }
+  const b = gefunden.box, alt = DL.box;
+  const neuerRahmen = !alt || Math.abs(alt.x - b.x) > 0.01 || Math.abs(alt.y - b.y) > 0.01 || Math.abs(alt.w - b.w) > 0.01 || Math.abs(alt.h - b.h) > 0.01;
+  DL.box = b;
+  /* a new frame is a new area for the doorman: its stand is taken on this
+     same picture, so the change of frame is no change of list */
+  if (neuerRahmen){ DL.wache.alt = null; dlWache(bild); }
+  /* THE STRIP, NOT THE TIGHT FRAME. The single shot cut the picture to the
+     list and scaled the cut up to 600 points; on that the raster lost its
+     period (measured 19.09.2026 at Full HD: 3 cards of 7, names of the
+     wrong cards). The strip listenRahmen itself judged - the war map's
+     right part, full height, unscaled - gives all seven. */
+  const feld = (wo && SUCHFELD[wo.wo]) || [0, 1];
+  const streifen = await farbAusschnitt(bild, {x: feld[0], y: 0, w: feld[1] - feld[0], h: 1});
+  const rows = await depotAusRaster(streifen, t => { if (DL){ DL.status = t; dlZeichnen(); } }, dlBekannt);
+  if (!DL || !DL.live) return;
+  dlEinsortieren(rows || []);
+  DL.nochmal = false;
+  DL.status = `${DL.inSicht} in view \u00b7 ${DL.zeilen.length} on the sheet`;
+  dlZeichnen();
+}
+/* THE PRINT of a card's two text lines (name; tag and town): 64 by 16 grey
+   cells, averaged (imageSmoothingQuality high, as bildWache). Anchored on
+   the ink, not on the raster: the raster's card top is rounded anew at
+   every look and its text edge came out five points off on a scrolled
+   list (measured 19.09.2026), and a print taken one point off compared as
+   a different card (184 of 1024 cells for one point sideways). So the
+   ink - what differs from the field's median by more than DL_KENN_TINTE,
+   dark on the light card as light on a dark one; a row or column counts
+   from DL_KENN_TINTE_N points on, the card's paper texture stays under
+   20 steps - names the first row and the first column; a run of ink that
+   touches the field's edge is the card's border or the sign box and is
+   stepped over. From the anchor the print takes DL_KENN_BREITE card
+   pitches of width and the text's own height, both as fractions of the
+   pitch (P), so that a raster reading the pitch a quarter point differently
+   moves the print by a third of a point, not by a whole cell. Measured on
+   the seven cards of the Full HD war map: the same card up to three points
+   off in any direction 0 cells, the list scrolled 37 points 0 to 4 cells
+   (mean under 3,1 - the redrawn picture's rounding); two cards a digit
+   apart ("XXL-Schnitzel 2" / "3") 12 cells, mean 4,6. The thresholds sit
+   at DL_KENN_ZELLEN cells and DL_KENN_MITTEL mean: a false "same" would
+   show the wrong unit, a false "other" only costs a reading. */
+const DL_KENN_TINTE = 30, DL_KENN_TINTE_N = 4, DL_KENN_RAND_X = 6, DL_KENN_RAND_Y = 4, DL_KENN_BREITE = 1.37;
+function depotKartenKennung(quelle, x, y, w, h, P){
+  if (!dlKennC){
+    dlKennC = document.createElement("canvas"); dlKennC.width = 64; dlKennC.height = 16;
+    dlKennG = dlKennC.getContext("2d", {willReadFrequently: true});
+    dlKennG.imageSmoothingEnabled = true; dlKennG.imageSmoothingQuality = "high";
+  }
+  const breite = DL_KENN_BREITE * P, hoehe = h;
+  x = Math.max(0, Math.round(x - DL_KENN_RAND_X)); y = Math.max(0, Math.round(y - DL_KENN_RAND_Y));
+  w = Math.max(8, Math.min(quelle.width - x, Math.ceil(breite) + DL_KENN_RAND_X + 2)); h = Math.max(8, Math.min(quelle.height - y, Math.ceil(hoehe) + 2*DL_KENN_RAND_Y));
+  const d = quelle.getContext("2d", {willReadFrequently: true}).getImageData(x, y, w, h).data;
+  const hist = new Uint32Array(256), n = w*h;
+  for (let i = 0; i < d.length; i += 4) hist[((d[i] + d[i+1] + d[i+2])/3)|0]++;
+  let med = 0, acc = 0;
+  for (let v = 0; v < 256; v++){ acc += hist[v]; if (acc >= n/2){ med = v; break; } }
+  const tinte = i => Math.abs((d[i] + d[i+1] + d[i+2])/3 - med) > DL_KENN_TINTE;
+  /* the first line or column with ink - past a run that starts at the edge */
+  const anker = (z, N) => {
+    let i = 0;
+    if (z[0] >= N){ while (i < z.length && z[i] >= N) i++; }
+    for (; i < z.length; i++) if (z[i] >= N) return i;
+    return -1;
+  };
+  const ze = new Uint16Array(h);
+  for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) if (tinte((yy*w + xx)*4)) ze[yy]++;
+  const y0 = anker(ze, DL_KENN_TINTE_N);
+  if (y0 < 0) return null;                                    /* no ink: no print */
+  const y1 = Math.min(h, Math.ceil(y0 + hoehe));
+  const sp = new Uint16Array(w);
+  for (let yy = y0; yy < y1; yy++) for (let xx = 0; xx < w; xx++) if (tinte((yy*w + xx)*4)) sp[xx]++;
+  const x0 = anker(sp, DL_KENN_TINTE_N);
+  if (x0 < 0 || y1 - y0 < 4) return null;
+  dlKennG.drawImage(quelle, x + x0, y + y0, Math.min(breite, quelle.width - x - x0), Math.min(hoehe, quelle.height - y - y0), 0, 0, 64, 16);
+  const e = dlKennG.getImageData(0, 0, 64, 16).data, out = new Uint8Array(64*16);
+  for (let i = 0, j = 0; j < out.length; i += 4, j++) out[j] = (e[i] + e[i+1] + e[i+2])/3;
+  return out;
+}
+function dlKennungGleich(a, b){
+  if (!a || !b || a.length !== b.length) return false;
+  let anders = 0, summe = 0;
+  for (let j = 0; j < a.length; j++){ const dv = Math.abs(a[j] - b[j]); summe += dv; if (dv > DL_KENN_STUFE) anders++; }
+  return anders <= DL_KENN_ZELLEN && summe/a.length <= DL_KENN_MITTEL;
+}
+/* the sheet's row for a print - or null, and the card is read */
+function dlBekannt(kennung){
+  if (!DL) return null;
+  for (const z of DL.zeilen) if (z.kennung && dlKennungGleich(z.kennung, kennung)) return z;
+  return null;
+}
+/* the cards of one look into the sheet: a row that came back (wieder) or
+   whose key is on the sheet is the same unit - the fresh print, the fresh
+   reading where nothing was written by hand; a new row goes in behind the
+   previous row of this look, so the sheet keeps the game's order.
+   THE KEY (S1, E7): tag and name core together, and never a row this same
+   look hit already (!u.sicht) - two cards whose tag read the same ("BUMB0-1"
+   twice, O for 0) are two rows. Where the full key finds nothing, the tag
+   alone counts, but only while exactly one row of the sheet carries it AND
+   that row's name core is near the one read (dlNameNah): a card cut by
+   the list's edge reads its name worse than whole (measured 19.09.2026:
+   "Bodenmanner - 1" -> "poaenmanner - I", the tag the same, three edits)
+   and must not become a second row at every scroll - but a card whose
+   name reads as another unit's ("XXL-Schnitzel 1" / "Numbers Mason 1",
+   the tag read alike) is its own row, also when the first left the view;
+   with two rows of one tag the name decides. A reading with neither tag
+   nor name nor print (only the sign was read) is no row (S4). */
+function dlEinsortieren(rows){
+  const markiert = DL.wahl !== null && DL.zeilen[DL.wahl] ? DL.zeilen[DL.wahl] : null;   /* the mark stays on its row while rows go in before it */
+  for (const z of DL.zeilen) z.sicht = false;
+  let nach = -1, n = 0;
+  for (const g of rows){
+    let z = g.wieder && !g.wieder.sicht ? g.wieder : null;    /* a print this look hit already is another card's row */
+    const key = dlSchluessel(g);
+    if (!z && !key && !g.kennung) continue;
+    if (!z && key){
+      /* a row answers to the key it was read with and to the key of what
+         stands on it now (his hand's tag or name) */
+      const keys = u => [u.key, dlSchluessel(u)];
+      z = DL.zeilen.find(u => !u.sicht && keys(u).includes(key)) || null;
+      if (!z){
+        /* half the key - the tag, without one the name core - while the
+           sheet holds exactly one row with it; on the tag only with a name
+           near the one read */
+        const t = dlKeyTag(key), nm = dlKeyName(key);
+        const gleich = DL.zeilen.filter(u => keys(u).some(k => k && (t ? dlKeyTag(k) === t : dlKeyName(k) === nm)));
+        if (gleich.length === 1 && !gleich[0].sicht && (!t || keys(gleich[0]).some(k => k && dlKeyTag(k) === t && dlNameNah(dlKeyName(k), nm)))) z = gleich[0];
+      }
+      if (z){
+        z.kennung = g.kennung;
+        /* "read again" lets the fresh reading win; an ordinary look keeps
+           what stood - a card cut by the list's edge reads worse than it
+           did whole (measured: "Bodenmanner - 1" -> "poaenmanner - I") */
+        const frisch = !!DL.nochmal;
+        if (frisch) z.key = key;
+        if (!z.hand.name && (frisch || !z.name)){ z.name = g.name || ""; z.cut = !!g.cut; }
+        if (!z.hand.tag && (frisch || !z.tag)) z.tag = g.tag || "";
+        z.ort = g.ort || ""; z.stadt = g.stadt === undefined ? null : g.stadt; z.staerke = g.staerke || "";
+        if (!z.hand.typ && (frisch || !z.typ)){ z.typ = g.gewaehlt || z.typ || ""; z.kand = g.kand || []; }
+      }
+    } else if (z && g.kennung) z.kennung = g.kennung;
+    if (!z){
+      z = {id: Math.random().toString(36).slice(2, 9), key, kennung: g.kennung || null, name: g.name || "", tag: g.tag || "",
+           ort: g.ort || "", stadt: g.stadt === undefined ? null : g.stadt, kand: g.kand || [], typ: g.gewaehlt || "", cut: !!g.cut,
+           staerke: g.staerke || "", status: "gelesen", hand: {}, t: jetzt()};
+      DL.zeilen.splice(nach + 1, 0, z);
     }
-    st.innerHTML = wo
-      ? `<b>${wo.wo === "krieg" ? "War map" : "Soldiers"}</b>, but no assault team list in the
-         picture. Open the list, then take the shot again — or drag a box around it yourself.`
-      : "Drag a box around the assault team list, or just press <b>Whole picture</b>.";
+    z.sicht = true; n++;
+    const i = DL.zeilen.indexOf(z);
+    if (i > nach) nach = i;
+  }
+  DL.inSicht = n;
+  DL.wahl = markiert ? DL.zeilen.indexOf(markiert) : null;
+  if (DL.wahl === null || DL.wahl < 0){
+    const j = DL.zeilen.findIndex(u => u.sicht && dlOffen(u));
+    DL.wahl = j >= 0 ? j : (DL.zeilen.length ? 0 : null);
+  }
+}
+/* TAKE: the row goes into the depot the way "Add ticked" wrote it -
+   myDepot().slice(), eigenCutSetzen, atTagSauber, setMyDepot; placed at the
+   town read when the tick says so (deployTeam, the queue question at the
+   stop). Without a type nothing is written. */
+function dlUebernehmen(i){
+  const z = DL && DL.zeilen[i];
+  if (!z){ if (DL){ DL.status = "No row marked."; dlZeichnen(); } return false; }
+  if (z.status === "uebernommen"){ DL.status = `Row ${i + 1} is in the depot already.`; dlZeichnen(); return false; }
+  /* S2: a tag the depot holds is not written twice - the row stays dimmed
+     with "already in depot"; correct the tag first if it was read wrong */
+  if (dlImDepot(z)){ DL.status = `Row ${i + 1} is in the depot already.`; DL.wahl = i; dlZeichnen(); toast("Already in the depot."); return false; }
+  /* K-b: nothing to write - the card printed, but neither name nor tag
+     was read; the row stays open for the correction, then take goes */
+  if (!eigenNameKern(z.name) && !atTagSauber(z.tag)){ DL.status = `Row ${i + 1} has no name and no tag.`; DL.wahl = i; dlZeichnen(); return false; }
+  if (!z.typ || !AT[z.typ]){ DL.status = `Row ${i + 1}: type ? - click the type first.`; DL.wahl = i; dlZeichnen(); return false; }
+  const liste = myDepot().slice();
+  const id = Math.random().toString(36).slice(2, 9);
+  const nameRoh = z.name, name = eigenNameKern(nameRoh);
+  /* OWN NAMES CUT OFF: the mark stays unless the name was completed by hand */
+  const cut = !!name && (eigenNameAbgeschnitten(nameRoh) || (!!z.cut && !z.hand.name));
+  liste.push(eigenCutSetzen({id, k: z.typ, name, tag: atTagSauber(z.tag)}, cut));
+  setMyDepot(liste);
+  if (!myDepotAlle().some(d => d.id === id)){ DL.status = "Not added."; dlZeichnen(); return false; }   /* the write was declined */
+  z.status = "uebernommen"; z.depotId = id;
+  let gestellt = false;
+  if (DL.stellen && z.stadt !== null && z.stadt !== undefined && deployTeam(z.stadt, id)){ gestellt = true; DL.gestellt.push({id, town: z.stadt}); }
+  depotZeichnen(); side(); draw(); tally();
+  /* the depot window, when it stands, shows the new team on its Teams tab
+     - rebuilt with the reader tab carried over (as wieder does) */
+  const reiter = document.querySelector('#dlg .tabp[data-tab="read"]');
+  if (reiter && document.getElementById("veil").classList.contains("on") && document.querySelector('#dlg .tabs button[data-tab="read"]')){
+    depotLeserBehalten = reiter; depotDialog("read");
+  }
+  DL.status = `Row ${i + 1} added${gestellt ? " and placed" : ""} \u00b7 ${name || atName(z.typ)}`;
+  dlWeiter(i);
+  return true;
+}
+/* SKIP: the row stays on the sheet struck out - gone, it would come back
+   with the next look; a second skip takes it back */
+function dlVerwerfen(i){
+  const z = DL && DL.zeilen[i];
+  if (!z){ if (DL){ DL.status = "No row marked."; dlZeichnen(); } return; }
+  if (z.status === "uebernommen"){ DL.status = `Row ${i + 1} is in the depot already.`; dlZeichnen(); return; }
+  if (z.status === "verworfen"){ z.status = "gelesen"; DL.status = `Row ${i + 1} back.`; DL.wahl = i; dlZeichnen(); return; }
+  z.status = "verworfen";
+  DL.status = `Row ${i + 1} skipped.`;
+  dlWeiter(i);
+}
+/* the next row after i that passes f, else the previous one, else -1 */
+function dlNaechste(i, f){
+  for (let k = i + 1; k < DL.zeilen.length; k++) if (f(DL.zeilen[k])) return k;
+  for (let k = i - 1; k >= 0; k--) if (f(DL.zeilen[k])) return k;
+  return -1;
+}
+/* the mark moves to the next open row the game shows, else to the previous
+   one; with no row in view (the list left the picture) over all rows -
+   never on to a row the game does not show while others are shown (K7) */
+function dlWeiter(i){
+  const inSicht = DL.zeilen.some(z => z.sicht);
+  const j = dlNaechste(i, z => dlOffen(z) && (!inSicht || z.sicht));
+  DL.wahl = j >= 0 ? j : i;
+  dlZeichnen();
+}
+/* Alt+Up / Alt+Down: one row up or down among the rows in view (K7) */
+function dlSchritt(d){
+  if (!DL || !DL.zeilen.length) return;
+  const inSicht = DL.zeilen.some(z => z.sicht);
+  const von = DL.wahl === null ? (d > 0 ? -1 : DL.zeilen.length) : DL.wahl;
+  for (let k = von + d; k >= 0 && k < DL.zeilen.length; k += d) if (!inSicht || DL.zeilen[k].sicht){ DL.wahl = k; break; }
+  dlZeichnen();
+}
+/* the four registered words while the reader holds them */
+function dlTaste(was){
+  if (!DL) return;
+  if (was === "bestaetigen") dlSchritt(-1);                                 /* Alt+Up: one row up */
+  else if (was === "neulesen") dlSchritt(1);                                /* Alt+Down: one row down */
+  else if (was === "vor"){ if (DL.wahl === null){ DL.status = "No row marked."; dlZeichnen(); } else dlUebernehmen(DL.wahl); }   /* Alt+Right: take */
+  else if (was === "zurueck"){ if (DL.wahl === null){ DL.status = "No row marked."; dlZeichnen(); } else dlVerwerfen(DL.wahl); }  /* Alt+Left: skip */
+  /* platzhalter: nothing here - placeholders are an enemy's matter */
+}
+/* READ AGAIN: the rows in view lose their print and are read at the next
+   still look - for a reading that came out wrong */
+function dlNochmal(){
+  if (!DL || !DL.live) return;
+  for (const z of DL.zeilen) if (z.sicht && z.status !== "uebernommen") z.kennung = null;
+  DL.nochmal = true; DL.neu = true; DL.ruhe = DL_RUHE;
+  DL.status = "Reading again \u2026"; dlZeichnen();
+}
+/* ---- drawing: the tab and the floating window show the same rows ---- */
+function dlListeHtml(){
+  if (!DL || !DL.zeilen.length) return "";
+  /* the tags the depot holds - a row with one of them is dimmed and says so
+     in place of the town (S2; the old sheet said "tag already known") */
+  const imDepot = new Set(myDepot().map(d => atTagSauber(d.tag || "")).filter(Boolean));
+  return DL.zeilen.map((z, i) => {
+    const bekannt = z.status !== "uebernommen" && !!atTagSauber(z.tag || "") && imDepot.has(atTagSauber(z.tag || ""));
+    const kl = ["dl-z", i === DL.wahl ? "jetzt" : "", z.status === "uebernommen" ? "fertig" : "", z.status === "verworfen" ? "weg" : "", bekannt ? "dl-bekannt" : "", z.sicht ? "" : "fern"].filter(Boolean).join(" ");
+    const ort = bekannt ? "already in depot" : (z.stadt !== null && z.stadt !== undefined && MAP.n[z.stadt] ? MAP.n[z.stadt][0] : (z.ort || ""));
+    return `<div class="${kl}" data-i="${i}">
+      <span class="sym">${z.typ && AT[z.typ] ? symbolSVG(z.typ, KB_TINTE_DUNKEL, 34, 24) : "?"}</span>
+      <div class="txt"><span class="name" data-f="name">${esc(z.name || "") || "?"}${z.cut && z.name ? "\u2026" : ""}</span>
+        <div class="zeile2"><span class="tag" data-f="tag">${esc(z.tag || "") || "?"}</span><span class="typ" data-f="typ">${z.typ && AT[z.typ] ? esc(atName(z.typ)) : "type ?"}</span>${ort ? `<span class="ort">${esc(ort)}</span>` : ""}</div>
+      </div>
+      <span class="stand">${z.status === "uebernommen" ? "\u2713" : (z.status === "verworfen" ? "\u2717" : "")}</span>
+    </div>`;
+  }).join("");
+}
+function dlListeFuellen(host){
+  const html = dlListeHtml();
+  if (host.dataset.html !== html){ host.dataset.html = html; host.innerHTML = html; }
+  const ziel = DL && DL.wahl !== null ? host.querySelector(`.dl-z[data-i="${DL.wahl}"]`) : null;
+  if (ziel && String(DL.wahl) !== host.dataset.gerollt && ziel.scrollIntoView){ host.dataset.gerollt = String(DL.wahl); ziel.scrollIntoView({block: "nearest"}); }
+}
+function dlZeichnen(){
+  const st = document.getElementById("dl-status");
+  if (st){
+    st.textContent = DL ? DL.status : "Share the game window with the team list open.";
+    const start = document.getElementById("dl-start");
+    if (start) start.innerHTML = `${ICO_CAPTURE}${DL && DL.live ? "Stop" : "Read from game"}`;
+    const fl = document.getElementById("dl-schweben");
+    if (fl && ("documentPictureInPicture" in window)) fl.disabled = !!dlSchwebe;
+    const liste = document.getElementById("dl-liste");
+    if (liste && !(DL && DL.edit && DL.edit.doc === document)) dlListeFuellen(liste);
+    const z = DL && DL.wahl !== null ? DL.zeilen[DL.wahl] : null;
+    const nb = document.getElementById("dl-nehmen"); if (nb) nb.disabled = !z || z.status === "uebernommen" || dlImDepot(z);
+    const wb = document.getElementById("dl-weg"); if (wb) wb.disabled = !z || z.status === "uebernommen";
+    const rb = document.getElementById("dl-neu"); if (rb) rb.disabled = !(DL && DL.live);
+  }
+  dlSchwebeZeichnen();
+}
+/* THE CORRECTION FIELD, in the tab as in the floating window: a click on
+   the name, the tag or the type of a row puts the field in its place;
+   Enter writes, Escape drops, leaving the field writes. A click elsewhere
+   on the row marks it. What the hand wrote survives the next reading of
+   the same unit (z.hand). */
+function dlBearbeiten(ev, doc){
+  if (!DL) return;
+  const zel = ev.target.closest(".dl-z[data-i]"); if (!zel) return;
+  const host = zel.parentNode;
+  const i = +zel.dataset.i, z = DL.zeilen[i]; if (!z) return;
+  const f0 = ev.target.closest("[data-f]");
+  if (DL.wahl !== i){ DL.wahl = i; dlZeichnen(); }
+  if (!f0 || DL.edit) return;
+  const feld = f0.dataset.f;
+  const f = host.querySelector(`.dl-z[data-i="${i}"] [data-f="${feld}"]`);
+  if (!f || f.querySelector("input,select")) return;
+  let el;
+  if (feld === "typ"){
+    el = doc.createElement("select");
+    const kand = z.kand && z.kand.length > 1 ? z.kand.filter(k => AT[k]) : [];
+    const rest = MAP.at.filter(a => !kand.includes(a.k));
+    el.innerHTML = `<option value="">?</option>` + kand.map(k => `<option value="${k}">${esc(atName(k))}</option>`).join("")
+      + (kand.length ? `<option value="" disabled>\u2014</option>` : "") + rest.map(a => `<option value="${a.k}">${esc(atName(a.k))}</option>`).join("");
+    el.value = z.typ || "";
+  } else {
+    el = doc.createElement("input"); el.type = "text"; el.spellcheck = false; el.value = z[feld] || "";
+    el.maxLength = feld === "tag" ? TEAM_TAG_MAX : TEAM_NAME_MAX;
+  }
+  DL.edit = {i, feld, doc};
+  const zu = schreiben => {
+    if (!DL || !DL.edit || DL.edit.i !== i || DL.edit.feld !== feld) return;
+    DL.edit = null;
+    delete host.dataset.html;                        /* the field must go even when nothing changed */
+    if (schreiben){
+      const v = el.value.trim();
+      if (feld === "typ"){ z.typ = v && AT[v] ? v : ""; z.hand.typ = true; }
+      else if (feld === "tag"){ z.tag = atTagSauber(v); z.hand.tag = true; }
+      else { z.name = atNameSauber(v); z.cut = false; z.hand.name = true; }
+    }
+    dlZeichnen();
+  };
+  el.addEventListener("keydown", e => {
+    if (e.key === "Enter"){ e.preventDefault(); zu(true); }
+    else if (e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); zu(false); }
   });
-  document.getElementById("ds-read").addEventListener("click", ()=> depotLesen(datei, box));
-  document.getElementById("ds-all").addEventListener("click", ()=>{
-    box = {x:0, y:0, w:1, h:1}; malen(); depotLesen(datei, box);
-  });
-
-  document.getElementById("ds-go").addEventListener("click", ()=>{
-    const liste = myDepot().slice();
-    let n = 0, gestellt = [];
-    document.querySelectorAll("#ds-list .zeile").forEach(z => {
-      if (!z.querySelector("input[type=checkbox]").checked) return;
-      const k = z.querySelector("select.typ").value;
-      const felder = z.querySelectorAll("input[type=text]");
-      const id = Math.random().toString(36).slice(2,9);
-      /* OWN NAMES CUT OFF: the mark stays unless the name was completed here */
-      const nameRoh = felder[0].value, name = eigenNameKern(nameRoh);
-      const cut = !!name && (eigenNameAbgeschnitten(nameRoh) ||
-                             (z.dataset.cut === "1" && name === eigenNameKern(z.dataset.gelesen)));
-      liste.push(eigenCutSetzen({id, k, name, tag: atTagSauber(felder[1].value)}, cut));
-      const tw = z.dataset.stadt;
-      if (tw !== "") gestellt.push([id, +tw]);
-      n++;
-    });
-    setMyDepot(liste);
-    /* Der Standort einer Einheit sieht der ganze Clan. Er wird deshalb nur auf
-       ausdruecklichen Wunsch mit uebernommen - das Depot selbst bleibt davon
-       unberuehrt. */
-    const stellen = document.getElementById("ds-stellen");
-    if (!(stellen && stellen.checked)) gestellt = [];
-    /* T11 (FABLE 19.09.2026): only the teams that were really set out -
-       under withhold a "No" refuses the whole batch, the toast must not
-       count them */
-    gestellt = gestellt.filter(([id, tw]) => deployTeam(tw, id));
-    closeDlg(); depotZeichnen(); side(); draw(); tally();
-    toast(`${n} team${n===1?"":"s"} added${gestellt.length?`, ${gestellt.length} placed`:""}`);
-    /* DEP-3 A3: one window for all just placed teams that queue - AFTER
-       closeDlg (it clears #dlg next tick only while the veil is off, and
-       openDlg puts the veil back on). Every id here is new, so all were
-       set out of the depot. */
-    schlangeFragen(gestellt.map(([id, tw]) => ({id, town: tw})));
-  });
+  el.addEventListener("blur", () => zu(true));
+  if (feld === "typ") el.addEventListener("change", () => zu(true));
+  ev.preventDefault();
+  f.innerHTML = ""; f.appendChild(el); el.focus(); if (el.select) el.select();
+}
+/* ---- the floating window: the list over the game ---------------------- */
+function dlSchwebeGesteLoesen(){
+  const h = dlSchwebeGeste; dlSchwebeGeste = null;
+  const d = document.getElementById("dlg");
+  if (h && d){ d.removeEventListener("pointerdown", h, true); d.removeEventListener("keydown", h, true); }
+}
+/* opens with the next gesture in the depot window (as the cabin's strip
+   does in its room) - requestWindow wants a fresh user activation */
+function dlSchwebeSelbst(){
+  if (dlSchwebeGeste || dlSchwebe || dlSchwebeZugemacht || !("documentPictureInPicture" in window)) return;
+  const d = document.getElementById("dlg");
+  if (!d) return;
+  const h = ev => {
+    if (!DL || !DL.live || dlSchwebe || dlSchwebeZugemacht || !document.getElementById("dl-liste")){ dlSchwebeGesteLoesen(); return; }
+    if (ev.type === "keydown" && (ev.key === "Escape" || /^(Alt|Shift|Control|Meta)$/.test(ev.key))) return;
+    if (ev.type === "keydown" && ev.target && /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName)) return;   /* typing into a field is no wish for a window */
+    if (ev.target && ev.target.closest && ev.target.closest("#dl-start,#dl-schweben,.dlg-x")) return;   /* Stop, the X and the button itself are no wish of this hook */
+    if (!(bildStrom && bildStrom.active)) return;
+    dlSchwebeGesteLoesen();
+    dlSchwebeAuf().then(e => { if (e && e.name === "NotAllowedError") dlSchwebeSelbst(); });
+  };
+  dlSchwebeGeste = h;
+  d.addEventListener("pointerdown", h, true);
+  d.addEventListener("keydown", h, true);
+}
+async function dlSchwebeAuf(){
+  if (dlSchwebe || dlSchwebeOeffnet || !("documentPictureInPicture" in window)) return;
+  dlNeu();
+  const hoehe = Math.max(320, Math.min(screen.availHeight - 80, 66 * Math.max(5, Math.min(DL.zeilen.length || 7, 10)) + 120));
+  let w;
+  dlSchwebeOeffnet = true;                              /* one window, however many gestures land here */
+  try { w = await window.documentPictureInPicture.requestWindow({width: 420, height: hoehe}); }   /* must be the first await after the click */
+  catch(e){ dlSchwebeOeffnet = false; DL.status = "The floating window could not be opened - " + ((e && e.message) || e); dlZeichnen(); return e; }
+  dlSchwebeOeffnet = false;
+  if (!DL){ try { w.close(); } catch(e){} return null; }
+  dlSchwebe = w;
+  const doc = w.document;
+  for (const sh of document.styleSheets){
+    try { const st = doc.createElement("style"); st.textContent = [...sh.cssRules].map(r => r.cssText).join("\n"); doc.head.appendChild(st); }
+    catch(e){ if (sh.href){ const l = doc.createElement("link"); l.rel = "stylesheet"; l.href = sh.href; doc.head.appendChild(l); } }
+  }
+  doc.body.className = "dl-schwebe";
+  doc.body.innerHTML = `<div class="dl-liste" id="dl-schwebe-liste"></div>
+    <div class="dl-jetzt" id="dl-schwebe-jetzt"></div>
+    <div class="dl-knoepfe">
+      <button class="rd-schalter" id="dl-schwebe-nehmen" title="Alt+Right">\u2713 take</button>
+      <button class="rd-schalter" id="dl-schwebe-weg" title="Alt+Left">\u2717 skip</button>
+      <button class="rd-schalter" id="dl-schwebe-neu">\u21bb read again</button>
+    </div>`;
+  doc.getElementById("dl-schwebe-liste").addEventListener("click", ev => dlBearbeiten(ev, doc));
+  doc.getElementById("dl-schwebe-nehmen").addEventListener("click", ()=>{ if (DL && DL.wahl !== null) dlUebernehmen(DL.wahl); });
+  doc.getElementById("dl-schwebe-weg").addEventListener("click", ()=>{ if (DL && DL.wahl !== null) dlVerwerfen(DL.wahl); });
+  doc.getElementById("dl-schwebe-neu").addEventListener("click", dlNochmal);
+  /* closed from its own corner or by the browser: forget it, and do not
+     hand it to him again this session (dlSchwebeSelbst) */
+  w.addEventListener("pagehide", ()=>{ if (dlSchwebe === w){ dlSchwebe = null; dlSchwebeZugemacht = true; if (DL && DL.edit && DL.edit.doc === doc) DL.edit = null; dlZeichnen(); } });
+  dlZeichnen();
+  return null;
+}
+function dlSchwebeZu(){
+  const w = dlSchwebe; dlSchwebe = null;
+  if (w){ try { w.close(); } catch(e){} }
+}
+function dlSchwebeZeichnen(){
+  if (!dlSchwebe || !DL) return;
+  const doc = dlSchwebe.document;
+  const liste = doc.getElementById("dl-schwebe-liste"), jf = doc.getElementById("dl-schwebe-jetzt");
+  if (!liste || !jf) return;
+  if (!(DL.edit && DL.edit.doc === doc)) dlListeFuellen(liste);
+  if (jf.textContent !== DL.status) jf.textContent = DL.status;
+  const z = DL.wahl !== null ? DL.zeilen[DL.wahl] : null;
+  const nb = doc.getElementById("dl-schwebe-nehmen"); if (nb) nb.disabled = !z || z.status === "uebernommen" || dlImDepot(z);
+  const wb = doc.getElementById("dl-schwebe-weg"); if (wb) wb.disabled = !z || z.status === "uebernommen";
+  const rb = doc.getElementById("dl-schwebe-neu"); if (rb) rb.disabled = !DL.live;
 }
 
 
@@ -50260,7 +50837,7 @@ function kuerzelReihe(liste){
    drei Typen, 16/14 auf zwei. Die Zahlen geben die Truppenstaerke und dienen
    als Gegenprobe - passt die Besetzung nicht zum erkannten Zeichen, wird die
    Zeile zur Pruefung markiert statt stillschweigend geraten. */
-async function depotAusRaster(quelle, melde){
+async function depotAusRaster(quelle, melde, merk){
   let r;
   try { r = kartenRaster(quelle); }
   catch(e){ return null; }
@@ -50278,6 +50855,11 @@ async function depotAusRaster(quelle, melde){
   const rKue = (r.textRechts && r.textRechts[1]) || rueck;
   for (let i = 0; i < r.karten.length; i++){
     const k = r.karten[i];
+    /* Q12: the print of the card's two text lines; a card the sheet knows
+       by its print is not read again - its row comes back (merk) */
+    const kennung = depotKartenKennung(quelle, r.textX, k.name[0] - 2, rNam - r.textX, k.kuerzel[1] - k.name[0] + 4, r.P);
+    const alt = merk ? merk(kennung) : null;
+    if (alt){ raus.push(Object.assign({}, alt, {kennung, wieder: alt, gewaehlt: alt.typ || ""})); continue; }   /* a row's typ is a reading's gewaehlt (K-c) */
     melde(`Reading unit ${i+1} of ${r.karten.length} …`);
 
     /* 1. Das Zeichen - die eigentliche Typangabe. */
@@ -50375,131 +50957,18 @@ async function depotAusRaster(quelle, melde){
       }
     }
     if (!name && !tag && !gewaehlt) continue;
-    raus.push({name, tag, ort, stadt, kand, gewaehlt, cut: !!name && cut,
+    raus.push({name, tag, ort, stadt, kand, gewaehlt, cut: !!name && cut, kennung,
                staerke: gute.map(p => p.join("/")).join("  ")});
   }
   if (!raus.length) return null;
   return kuerzelReihe(raus);
 }
 
-async function depotLesen(datei, box){
-  const st = document.getElementById("ds-status");
-  const setz = s => st.innerHTML = s;
-  if (!datei){ setz("Pick a picture first."); return; }
-  document.getElementById("ds-list").style.display = "none";
-  document.getElementById("ds-go").disabled = true;
-
-  /* Erst das Raster. Nur wenn sich keins findet - anderer Ausschnitt,
-     anderes Fenster, kein Gruen -, wird der ganze Ausschnitt als Fliesstext
-     gelesen wie bisher. */
-  let beste = null, rohBest = "", bild = null;
-  /* Erst mit dem Rahmen, dann ohne ihn. Der Finder kommt mit dem ganzen
-     Bildschirmfoto zurecht, also darf ein Rahmen nie zum Abbruch fuehren -
-     zwischen den Einheiten ist Abstand, enger als "alles" geht gar nicht. */
-  for (const mitRahmen of (box ? [true, false] : [false])){
-    try {
-      const farbe = await farbAusschnitt(datei, mitRahmen ? box : null);
-      beste = await depotAusRaster(farbe, setz);
-    } catch(e){ beste = null; }
-    if (beste && beste.length) break;
-  }
-  try {
-    if (beste) rohBest = beste.map(g =>
-      `${g.name} | ${g.tag} ${g.ort} | ${g.kand.join(", ")}`).join("\n");
-  } catch(e){ beste = null; }
-
-  try { bild = await bildAufbereiten(datei, box); }
-  catch(e){ setz("<b>That picture could not be opened.</b>"); return; }
-  if (beste && beste.length) return depotAnzeigen(beste, rohBest, bild, setz);
-
-  /* Drei Lesarten - ein Block, eine Spalte, verstreute Zeilen. Je nach Bild
-     teilt Tesseract die Liste anders auf; welche am meisten findet, gewinnt.
-     Sobald ein Durchgang mehrere Einheiten liefert, reicht das - ueber ein
-     ganzes Bildschirmfoto dauert jeder Durchgang sonst eine halbe Minute. */
-  const modi = bild.width*bild.height > 1.6e6 ? [6, 4] : [6, 4, 11];
-  beste = [];
-  for (let m=0; m<modi.length; m++){
-    let text = "";
-    const vor = modi.length > 1 ? `(${m+1} of ${modi.length}) ` : "";
-    try { text = await ocrText(bild, modi[m], s => setz(`${vor}${s}`)); }
-    catch(e){
-      setz(`<b>The recogniser could not be loaded.</b> It needs internet access and does not work
-            offline. Add the teams by hand instead.`);
-      return;
-    }
-    if (!rohBest) rohBest = text;
-    const g = depotAusText(text);
-    if (g.length > beste.length){ beste = g; rohBest = text; }
-    if (beste.length >= 3) break;
-  }
-
-  return depotAnzeigen(beste, rohBest, bild, setz);
-}
-
-/* Die Anzeige des Ergebnisses - beide Lesewege enden hier. */
-function depotAnzeigen(beste, rohBest, bild, setz){
-  const roh = document.getElementById("ds-roh");
-  document.getElementById("ds-rohtext").textContent = rohBest.trim() || "(nothing)";
-  const rb = document.getElementById("ds-rohbild");
-  rb.innerHTML = "";
-  bild.style.maxWidth = "100%"; bild.style.height = "auto";
-  rb.appendChild(bild);
-  roh.style.display = "block";
-
-  if (!beste.length){
-    setz(`<b>No teams recognised.</b> Take the shot with the game at its own resolution rather than
-          a scaled-down window, and make sure the assault team list is open. Open the line below to
-          see what came through.`);
-    return;
-  }
-  const c = light() ? "#1a2029" : "#e9e2d5";
-  const bekannt = new Set(myDepot().map(d => (d.tag||"").toUpperCase()).filter(Boolean));
-  setz(`<b>${beste.length} team${beste.length===1?"":"s"} recognised.</b>
-        Check the type where it was ambiguous, then add.`);
-  const kiste = document.getElementById("ds-list");
-  kiste.innerHTML = beste.map(g => {
-    const doppelt = g.tag && bekannt.has(g.tag.toUpperCase());
-    return `<label class="zeile" style="display:flex;align-items:center;gap:6px;background:var(--panel2);
-        border-radius:2px;padding:5px 7px">
-      <input type="checkbox" ${doppelt?"":"checked"}>
-      <span style="width:30px">${symbolSVG(g.gewaehlt, c, 26, 18)}</span>
-      <input type="text" value="${esc(g.name)}" placeholder="name" style="flex:1;min-width:0;
-        background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:3px 6px;
-        outline:0;font-size:12px">
-      <input type="text" value="${esc(g.tag)}" placeholder="TAG" style="width:76px;
-        background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:3px 6px;
-        outline:0;font-size:11px">
-      <select class="typ" style="width:168px;background:var(--panel);border:1px solid var(--line);
-        border-radius:2px;padding:3px 5px;outline:0;font-size:11px">
-        ${(g.kand.length>1 ? g.kand : MAP.at.map(a=>a.k)).map(k=>
-          `<option value="${k}"${k===g.gewaehlt?" selected":""}>${esc(atName(k))}</option>`).join("")}
-      </select>
-      <span style="font-size:10px;color:${g.stadt!==null?"var(--accent)":"var(--dim2)"};width:96px;
-        overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
-        g.stadt!==null ? esc(MAP.n[g.stadt][0]) : (doppelt ? "tag already known" : esc(g.ort||""))}</span>
-    </label>`;
-  }).join("");
-  kiste.querySelectorAll(".zeile").forEach((z,i) => {
-    z.dataset.stadt = beste[i].stadt === null ? "" : beste[i].stadt;
-    /* OWN NAMES CUT OFF: what was read cut stays marked unless completed here */
-    z.dataset.cut = beste[i].cut ? "1" : "";
-    z.dataset.gelesen = beste[i].name || "";
-    if (beste[i].cut){
-      const nf = z.querySelector("input[type=text]");
-      if (nf) nf.title = "Name cut off in the game. Hover the unit in the game or type the rest.";
-    }
-    /* Ein hergeleitetes Kuerzel darf nicht aussehen wie ein gelesenes. */
-    if (beste[i].tagAbgeleitet){
-      const tf = z.querySelectorAll("input[type=text]")[1];
-      if (tf){ tf.style.borderStyle = "dashed";
-               tf.title = "derived from the numbering of the unit next to it"; }
-    }
-    const sel2 = z.querySelector("select.typ"), sym = z.querySelector("span");
-    sel2.addEventListener("change", ()=>{ sym.innerHTML = symbolSVG(sel2.value, c, 26, 18); });
-  });
-  kiste.style.display = "flex";
-  document.getElementById("ds-go").disabled = false;
-}
+/* The single-shot way - a picture, a frame, "Read the box", "Whole
+   picture", the sheet with ticks and "Add ticked" (depotLesen,
+   depotAnzeigen) - is gone since Q12 (ENNO 19.09.2026: "Ich möchte auch
+   keine einzelscreenshots mehr"). The reader tab reads the shared game
+   window live, see THE DEPOT READ FROM THE SHARED GAME WINDOW. */
 
 /* ---- from the text back to the teams ---------------------------------
    No symbol recognition needed: the strength figures give the type away.
@@ -60202,7 +60671,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 4d0c4e3070</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 174839f842</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -60430,7 +60899,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "4d0c4e3070";
+const BAU = "174839f842";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
