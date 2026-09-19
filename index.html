@@ -20387,7 +20387,8 @@ function tally(){
       <span class="u">contested</span></div>` : "")
     + withholdKachel()                                     // T11: while the leader's withhold stands
     + kriegsendeKachel()                                   // T5: the winner's deployment cost, read off the war end screen
-    + lageKachel();                                        // T10: the war update's hour and its countdown
+    + lageKachel()                                         // T10: the war update's hour and its countdown
+    + chatKachel();                                        // T13: the army chat's hints of this session
 }
 
 /* ---------------- side panel ---------------- */
@@ -36589,6 +36590,514 @@ function lageStart(){
   if (t) t.addEventListener("click", ev => { if (ev.target.closest && ev.target.closest("#lage-kachel")) lageDialog(); });
   lageWecker(LAGE_TAKT_ZU);
   LAGE.uhr = setInterval(lageKachelAuffrischen, 30000);
+}
+/* ======================================================================
+   T13 / Q6 (ToDo 16.9.2026 Z53, Antwortblatt 18.09. Bitte 1; 19.09.2026): THE ARMY CHAT
+   ENNO 18.09.2026: "Screenshot abgreifen und auslesen des Armeechats
+   ingame, uebertragen in Hinweise auf Kriegskarte (siehe Screenshot), mit
+   Angabe des schreibenden Spielers". ENNO 19.09.2026: "Ist hinterlegt."
+   MEASURED FIRST (Listen/MESSUNG-Q6.md, Messungen/messung_q6_1.py, with
+   the page's own reader: his 1.png and 2.png at 3840x2160, Chat
+   Einblick.mkv as 208 pictures every 0,5 s, 612 pictures without a chat):
+   the window sits at the same place in all 180 open pictures (left edge
+   0,0370 W, top edge 0,2852 H). The gate is the geometry (body median
+   < 34, head bar p10 36-50 and median 38-52, input box median < 30, a
+   dark left and top edge) AND the head word ("Channels" and its
+   translations, one error per six letters): 180/180 open, 0/30 shut,
+   0/612 elsewhere - the geometry alone lets one dark battle picture
+   through without the edges, the word alone none. The channel is the
+   members head "Soviet Army (158)": 144/144, other channels 36/36. Rows
+   are ink runs in the message field (brightness > 90 or blue), no fixed
+   height: the font size is a game setting ("Fontgroesse", 10 px at 1440p
+   to 56 px at 2160p in his material). A wrapped row carries no blue in
+   the first 4 % of the width (time rows 628-791 blue points, wraps 0).
+   Each row read alone (psm 7) with the tolerant pattern: rows of 0,012 H
+   and more - time 56, writer 55, text 55, all three 54 of 59; rows of
+   0,007 H only 51/55 on a two-letter word, so rows under 0,009 H are not
+   written. Town names with the STRICT rule (up to 4 key letters only
+   exact and capitalised, 5-7 only exact, from 8 one error): 23/23 hits, 0
+   false on 28 messages - the page's town rule (one error per eight) hit
+   too->Hoo, ats->Ath, que->Rue, get->Gent ... nine times. A row costs
+   224 ms median, the head word 76 ms, the worker 6 s once; the message
+   field is read only when it changed (share of points > 40 apart
+   >= 0,0005: all 8 real changes, 166 quiet pairs <= 0,0001). A hint line
+   is 15-102 bytes (mean 44): 2 KB a town hold about 45, a tenth of what
+   a row may carry. NOT MEASURED: other window places or sizes, scroll
+   positions, font sizes 8-21, the US/GE channel names, the head words the
+   page's models cannot read (ru, ja, ko, zh - the gate stays shut there),
+   foreign scripts in writer names, the live share.
+   THE READER runs beside the war end and the start page reader on the
+   one share (bildLive only while it stands, never a question of its own),
+   with a gate of its own. Every message of the army channel that names a
+   town becomes a line of that town's note (bucket notes - no new bucket,
+   no migration): "<text> · from chat, <writer> hh:mm". Writer and time
+   live in the line because the server seals by and t with the account
+   that writes (warmap_stempeln). The same message (time, writer, text)
+   never twice at a town: a set of this session, kept in this browser, and
+   the note's own lines within one error per eight letters (the reader's
+   own jitter). A note keeps 2 KB: the oldest chat lines go first, a line
+   written by hand never. The tile "chat · N new hints" counts this
+   session's lines; nothing else is said (ENNO 18.09.2026: "Ich brauche
+   aber in der Oberflaeche keine Kommentare.").
+   ROUND 2 (FABLE 19.09.2026, 20:19, after the reviewers of round 1): two
+   towns fold to one key (Munster 812 / Muenster 822) - a second map by the
+   raw lower-case name with its umlaut decides between them; a town whose
+   note he is typing in is skipped in this look, not marked as seen, and
+   caught up by the next look (CHAT.nachtrag); the pattern knows a clan tag
+   before the name ("[[KGB]Altair123]" - the tag stays part of the writer);
+   a time outside 00-23/00-59, a writer under two letters or a text that
+   starts with "]" drops the row (E4); the tick's timer is re-armed BEFORE
+   the await (watchdog CHAT_BLICK_TOT), so a look that never returns cannot
+   stop the reader for the session.
+   ROUND 3 (FABLE 19.09.2026, 21:27, after the reviewers of round 2): a hit
+   whose word span lies inside a longer hit's span falls, so a part of a
+   multi-word name never marks a second town ("Bad Essen" is not Essen);
+   one look at a time - none beside a look given up on until that one has
+   returned, and its bitmap and cut-out are closed the moment it is given
+   up on (no memory growth while a worker stands still); "typing" needs the
+   window in front as well (document.hasFocus); a held message counts its
+   towns once.
+   ====================================================================== */
+const CHAT_TAKT_ZU = 3000, CHAT_TAKT_AUF = 2000;      // a look every 3 s; every 2 s while the gate stands open
+const CHAT_BLICK_TOT = 30000;                          // the watchdog: a look that has not returned after 30 s is given up on, the next tick comes anyway (30 rows ~ 7 s, the worker 6 s once)
+const CHAT_NACHTRAG_MAX = 100;                         // messages kept for the next look while he types in a town's note (SOLL-2, round 2; FABLE's number, 19.09.2026)
+const CHAT_FELD = {                                    // shares of W and H (measurement, section 2)
+  koerper:     {x0:0.0450, y0:0.3000, x1:0.2500, y1:0.5600},
+  kopfleiste:  {x0:0.2292, y0:0.2407, x1:0.3320, y1:0.2833},
+  kopfwort:    {x0:0.2555, y0:0.2440, x1:0.3280, y1:0.2800},
+  mitglieder:  {x0:0.2700, y0:0.5820, x1:0.3500, y1:0.6060},
+  nachrichten: {x0:0.0391, y0:0.2963, x1:0.2617, y1:0.9306},
+  eingabe:     {x0:0.0420, y0:0.9350, x1:0.2600, y1:0.9650}};
+const CHAT_AUSSCHNITT = {x0:0.02, y0:0.23, x1:0.37, y1:0.98};   // the part of the picture the gate and the rows need
+const CHAT_KOPFWORTE = ["Channels", "Kan\u00e1ly", "Canales", "Canaux", "Kana\u0142y", "Canais", "Kanallar"];   // StrategyGUI/Chat/channels_button_label: de+en, cs, es, fr, pl, pt, tr
+const CHAT_ARMEEN = ["Soviet Army", "US Army", "German Army"];   // server strings, English (SOLL-8); only "Soviet Army" seen
+const CHAT_MUSTER = /^\W*(\d\d)[:.,](\d\d)[\]\)\}]?\s*[\[\(\{]?((?:\[[^\s\[\]\(\)\{\}]+\])?[^\s\[\]\(\)\{\}]+)[\]\)\}]?\s*(.*)$/;   // the tolerant pattern of the measurement; the writer any run without brackets or blanks, an optional clan tag "[KGB]" before it stays part of the writer (SOLL-3, round 2), one closing bracket after the minutes (E3)
+const CHAT_ZEILE_MIN = 0.009;                          // ink height (share of H) under which a row is not written
+const CHAT_AENDERUNG = 0.0005;                         // share of the message field's points > 40 apart: the field changed
+const CHAT_NOTIZ_MAX = 2048;                           // bytes a town's note holds; the oldest chat lines go first
+const CHAT_GESEHEN_MAX = 600;                          // keys of written messages kept in this browser
+const CHAT_GESEHEN_STORE = "hng-warmap-chat-gesehen";
+const CHAT_HINWEIS = /^(.*) \u00b7 from chat, (\S+) (\d\d:\d\d)$/;   // a chat line of a note, read back for the double check
+const CHAT = {gestartet: false, laeuft: false, laeuftSeit: 0, laufNr: 0, wecker: null, torZuletzt: 0, torOffen: false,
+  kopf: null, kanal: null, kanalT: 0, armee: false, feldAlt: null, feldAltW: 0, feldAltH: 0, cache: new Map(), cacheWH: "",
+  gesehen: new Set(), gesehenGeladen: false, neu: 0, kleinNur: false, letzter: null, gelesenT: 0, fehler: 0, ms: [],
+  nachtrag: [],                                        // messages a look left for later because he was typing in that town's note
+  blick: null, offen: 0, aufgegeben: 0};               // the look out right now {nr, seit, bmp, A, aufgegeben}, how many are out (0 or 1), how many were given up on (KANN-w, round 3)
+const chatBox = F => ({x: F.x0, y: F.y0, w: F.x1 - F.x0, h: F.y1 - F.y0});
+/* the cut-out: the window's part of the picture as pixels, once a look */
+function chatAusschnitt(bm, W, H){
+  const A = CHAT_AUSSCHNITT;
+  const rx = Math.round(A.x0*W), ry = Math.round(A.y0*H);
+  const rw = Math.max(1, Math.min(W - rx, Math.round((A.x1 - A.x0)*W))), rh = Math.max(1, Math.min(H - ry, Math.round((A.y1 - A.y0)*H)));
+  const c = document.createElement("canvas");
+  c.width = rw; c.height = rh;
+  const g = c.getContext("2d", {willReadFrequently: true});
+  g.drawImage(bm, rx, ry, rw, rh, 0, 0, rw, rh);
+  return {d: g.getImageData(0, 0, rw, rh).data, rx, ry, rw, rh, W, H};
+}
+/* the geometry of the gate (measurement, section 3): medians of the body,
+   the head bar and the input box, the dark edges left and top */
+function chatGeometrie(A){
+  const {d, rx, ry, rw, rh, W, H} = A;
+  const hell = (x, y) => { const i = ((y - ry)*rw + (x - rx))*4; return (d[i] + d[i+1] + d[i+2])/3; };
+  const innen = (x0, y0, x1, y1) => [Math.max(rx, x0), Math.max(ry, y0), Math.min(rx + rw, x1), Math.min(ry + rh, y1)];
+  const stat = F => {
+    const [x0, y0, x1, y1] = innen(Math.round(F.x0*W), Math.round(F.y0*H), Math.round(F.x1*W), Math.round(F.y1*H));
+    const hist = new Uint32Array(256); let n = 0;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++){ hist[Math.round(hell(x, y))]++; n++; }
+    const q = p => { let s = 0; for (let v = 0; v < 256; v++){ s += hist[v]; if (s >= n*p) return v; } return 255; };
+    return n ? {med: q(0.5), p10: q(0.1)} : {med: 255, p10: 255};
+  };
+  const ko = stat(CHAT_FELD.koerper), kl = stat(CHAT_FELD.kopfleiste), ei = stat(CHAT_FELD.eingabe);
+  let kanteX = null, kanteY = null;
+  { const [x0, y0, x1, y1] = innen(Math.round(0.02*W), Math.round(0.33*H), Math.round(0.08*W), Math.round(0.60*H));
+    for (let x = x0; x < x1 && kanteX === null; x++){ let s = 0; for (let y = y0; y < y1; y++) s += hell(x, y); if (y1 > y0 && s/(y1 - y0) < 32) kanteX = x/W; } }
+  { const [x0, y0, x1, y1] = innen(Math.round(0.05*W), Math.round(0.25*H), Math.round(0.23*W), Math.round(0.33*H));
+    for (let y = y0; y < y1 && kanteY === null; y++){ let s = 0; for (let x = x0; x < x1; x++) s += hell(x, y); if (x1 > x0 && s/(x1 - x0) < 32) kanteY = y/H; } }
+  const geo = {koerperMed: ko.med, leisteP10: kl.p10, leisteMed: kl.med, eingabeMed: ei.med, kanteX, kanteY};
+  geo.tor = ko.med < 34 && kl.p10 >= 36 && kl.p10 <= 50 && kl.med >= 38 && kl.med <= 52 && ei.med < 30 && kanteX !== null && kanteY !== null;
+  return geo;
+}
+/* did the message field change since the last reading? every second point
+   of the field, the share of points more than 40 apart (section 5) */
+function chatAenderung(A){
+  const {d, rx, ry, rw, rh, W, H} = A, F = CHAT_FELD.nachrichten;
+  const x0 = Math.max(rx, Math.round(F.x0*W)), x1 = Math.min(rx + rw, Math.round(F.x1*W));
+  const y0 = Math.max(ry, Math.round(F.y0*H)), y1 = Math.min(ry + rh, Math.round(F.y1*H));
+  const sw = Math.max(1, Math.floor((x1 - x0)/2)), sh = Math.max(1, Math.floor((y1 - y0)/2));
+  const probe = new Uint8Array(sw*sh);
+  for (let j = 0; j < sh; j++) for (let k = 0; k < sw; k++){
+    const i = ((y0 + j*2 - ry)*rw + (x0 + k*2 - rx))*4;
+    probe[j*sw + k] = (d[i] + d[i+1] + d[i+2])/3;
+  }
+  let anteil = 1;
+  if (CHAT.feldAlt && CHAT.feldAltW === sw && CHAT.feldAltH === sh){
+    let n = 0; const alt = CHAT.feldAlt;
+    for (let i = 0; i < probe.length; i++) if (Math.abs(probe[i] - alt[i]) > 40) n++;
+    anteil = n/probe.length;
+  }
+  return {anteil, probe, sw, sh};
+}
+/* the rows of the message field: runs of ink (brightness > 90 or blue),
+   gaps up to 2 closed, nothing under 0,25 % H or 30 points (the mouse's
+   I-beam); blue in the first 4 % of the width marks a time (section 4) */
+function chatZeilen(A){
+  const {d, rx, ry, rw, rh, W, H} = A, F = CHAT_FELD.nachrichten;
+  const x0 = Math.max(rx, Math.round(F.x0*W)), x1 = Math.min(rx + rw, Math.round(F.x1*W));
+  const y0 = Math.max(ry, Math.round(F.y0*H)), y1 = Math.min(ry + rh, Math.round(F.y1*H));
+  const bx = x0 + Math.round(0.04*W);
+  const bw = x1 - x0, bh = y1 - y0;
+  if (bw < 1 || bh < 1) return [];
+  const tinte = new Uint8Array(bw*bh), prof = new Uint32Array(bh), blau = new Uint32Array(bh);
+  for (let y = y0; y < y1; y++){
+    const r = y - y0; let n = 0, b = 0;
+    for (let x = x0; x < x1; x++){
+      const i = ((y - ry)*rw + (x - rx))*4, R = d[i], G = d[i+1], B = d[i+2];
+      const blauPunkt = B - R > 50 && B > 100;
+      if ((R + G + B)/3 > 90 || blauPunkt){ tinte[r*bw + (x - x0)] = 1; n++; if (x < bx && blauPunkt) b++; }
+    }
+    prof[r] = n; blau[r] = b;
+  }
+  const runs = []; let an = false, s = 0;
+  for (let r = 0; r < bh; r++){
+    if (prof[r] >= 3 && !an){ an = true; s = r; }
+    else if (prof[r] < 3 && an){ an = false; runs.push([s, r - 1]); }
+  }
+  if (an) runs.push([s, bh - 1]);
+  const zus = [];
+  for (const r of runs){ if (zus.length && r[0] - zus[zus.length - 1][1] <= 2) zus[zus.length - 1][1] = r[1]; else zus.push(r); }
+  const out = [], hMin = Math.max(4, Math.round(0.0025*H));
+  for (const [a, e] of zus){
+    const h = e - a + 1;
+    let n = 0, b = 0, xe = -1, xl = -1;
+    for (let r = a; r <= e; r++){ n += prof[r]; b += blau[r]; }
+    if (h < hMin || n < 30) continue;
+    for (let x = 0; x < bw && xe < 0; x++) for (let r = a; r <= e; r++) if (tinte[r*bw + x]){ xe = x; break; }
+    for (let x = bw - 1; x >= 0 && xl < 0; x--) for (let r = a; r <= e; r++) if (tinte[r*bw + x]){ xl = x; break; }
+    out.push({y0: a + y0, y1: e + y0, h, tinte: n, blau: b, xe: xe + x0, xl: xl + x0});
+  }
+  return out;
+}
+/* the head word against the Latin words of channels_button_label */
+async function chatKopfwort(bm){
+  const c = await bildAufbereiten(bm, chatBox(CHAT_FELD.kopfwort), false);
+  const r = await ocrMitZuv(c, 7, null, "");
+  const text = String(r.text || "").trim().replace(/\s+/g, " "), t = unitsKey(text);
+  let best = null;
+  if (t.length >= 3) for (const w of CHAT_KOPFWORTE){
+    const k = unitsKey(w), dd = levenshtein(t, k);
+    if (dd <= Math.max(1, Math.floor(k.length/6)) && (best === null || dd < best.d)) best = {d: dd, wort: w};
+  }
+  return {text, zuv: r.zuv, wort: best ? best.wort : null};
+}
+/* the members head "Soviet Army (158)": the channel, and whether it is an army's */
+async function chatKanal(bm){
+  const c = await bildAufbereiten(bm, chatBox(CHAT_FELD.mitglieder), false);
+  const r = await ocrMitZuv(c, 7, null, "");
+  const text = String(r.text || "").trim().replace(/\s+/g, " ");
+  const m = /^(.+?)\s*\((\d+)\)/.exec(text);
+  const name = (m ? m[1] : text.replace(/\(.*$/, "")).trim(), k = unitsKey(name);
+  let armee = null;
+  if (k.length >= 3) for (const a of CHAT_ARMEEN){ const ak = unitsKey(a); if (levenshtein(k, ak) <= Math.max(1, Math.floor(ak.length/5))){ armee = a; break; } }
+  return {text, name, n: m ? +m[2] : null, armee, zuv: r.zuv};
+}
+/* one row read alone, a quarter of its height as air above and below */
+async function chatZeileLesen(bm, H, z){
+  const F = CHAT_FELD.nachrichten, luft = Math.max(3, Math.round(z.h*0.25));
+  const y0 = Math.max(0, z.y0 - luft), y1 = Math.min(H, z.y1 + luft + 1);
+  const c = await bildAufbereiten(bm, {x: F.x0, y: y0/H, w: F.x1 - F.x0, h: (y1 - y0)/H}, false);
+  const r = await ocrMitZuv(c, 7, null, "");
+  return {text: String(r.text || "").trim().replace(/\s+/g, " "), zuv: r.zuv};
+}
+/* rows to messages: a time row opens a message, a row without blue hangs
+   on the message before it; a time row the pattern cannot read is dropped
+   and closes the message before it (E4) - so is one with a time outside
+   00-23/00-59, a writer under two letters or a text that starts with "]"
+   (the mouse's marking band; round 2 KANN-a/b) */
+function chatNachrichten(zeilen, H){
+  const out = []; let vorige = null;
+  for (const z of zeilen){
+    const text = z.text || "", m = CHAT_MUSTER.exec(text);
+    if (!z.blau){
+      if (vorige){ vorige.text = (vorige.text + " " + text).trim(); vorige.zeilen.push(z); }
+      continue;
+    }
+    if (!m || +m[1] > 23 || +m[2] > 59 || m[3].length < 2 || m[4].trim().charAt(0) === "]"){ vorige = null; continue; }
+    vorige = {zeit: m[1] + ":" + m[2], schreiber: m[3], text: m[4].trim(), h: z.h, klein: z.h < CHAT_ZEILE_MIN*H, zeilen: [z]};
+    out.push(vorige);
+  }
+  return out;
+}
+/* the raw key: lower case, the German umlauts as ae/oe/ue/ss, everything
+   else as it is - the spelling of someone without an umlaut key (SOLL-1, round 2) */
+const chatRohKey = s => String(s).toLowerCase().normalize("NFC").replace(/\u00e4/g, "ae").replace(/\u00f6/g, "oe").replace(/\u00fc/g, "ue").replace(/\u00df/g, "ss").replace(/[^\p{L}\p{N}]/gu, "");
+/* the town list by key, built once: exact folded keys, the raw keys, the
+   folded keys two different names share (Munster 812 / Muenster 822: the
+   raw key decides), and the long ones for the one-error search */
+let chatStadtIdx = null;
+function chatStadtIndex(){
+  if (chatStadtIdx) return chatStadtIdx;
+  const genau = new Map(), roh = new Map(), doppel = new Set(), lang = [];
+  for (let i = 0; i < MAP.n.length; i++){
+    const k = unitsKey(MAP.n[i][0]), r = chatRohKey(MAP.n[i][0]);
+    if (!k) continue;
+    if (!genau.has(k)) genau.set(k, i);
+    else if (r !== chatRohKey(MAP.n[genau.get(k)][0])) doppel.add(k);
+    if (!roh.has(r)) roh.set(r, i);
+    if (k.length >= 8) lang.push([k, i]);
+  }
+  return (chatStadtIdx = {genau, roh, doppel, lang});
+}
+/* the towns a message names - the strict rule (section 6): words, pairs
+   and triples, each hit with its word span (a = first word, e = past the
+   last); up to 4 key letters only exact and with a capital, 5-7 only
+   exact, from 8 one error. A hit whose span lies inside a longer hit's
+   span falls: "Bad Essen" is not Essen, "Cerny Most" not Most, "Freiburg
+   Flugplatz" not Freiburg (SOLL-A, round 3). Where two names share the
+   folded key, the raw key (umlaut as ue) picks the town; a raw key that
+   hits when the folded one does not ("Muenster") counts by the same
+   length rule (SOLL-1, round 2) */
+function chatOrte(text){
+  const w = String(text || "").replace(/[^\p{L}\p{N}\s'\-]/gu, " ").split(/\s+/).filter(Boolean);
+  const idx = chatStadtIndex(), treffer = [];
+  for (let n = 1; n <= 3; n++) for (let i = 0; i + n <= w.length; i++){
+    const wort = w.slice(i, i + n).join(" "), t = unitsKey(wort);
+    if (t.length < 3) continue;
+    let best = null;
+    const g = idx.genau.get(t), rk = chatRohKey(wort), r = idx.roh.get(rk);
+    if (g !== undefined){ if (t.length > 4 || /^\p{Lu}/u.test(wort)) best = {d: 0, ort: (idx.doppel.has(t) && r !== undefined) ? r : g, wort}; }
+    else if (r !== undefined){ if (rk.length > 4 || /^\p{Lu}/u.test(wort)) best = {d: 0, ort: r, wort}; }
+    else if (t.length >= 7) for (const [k, j] of idx.lang){
+      if (Math.abs(k.length - t.length) > 1) continue;
+      if (levenshtein(t, k) <= 1){ best = {d: 1, ort: j, wort}; break; }
+    }
+    if (best){ best.a = i; best.e = i + n; treffer.push(best); }
+  }
+  const ganz = treffer.filter(t => !treffer.some(u => u.e - u.a > t.e - t.a && u.a <= t.a && t.e <= u.e && u.d <= t.d));   // a part of a longer hit falls (SOLL-A, round 3) - unless the longer hit is the fuzzier one (FABLE 19.09.2026: "Plauen, Hagen" keeps both)
+  const je = new Map();
+  for (const t of ganz){ const alt = je.get(t.ort); if (!alt || t.wort.length > alt.wort.length || (t.wort.length === alt.wort.length && t.d < alt.d)) je.set(t.ort, t); }
+  return [...je.values()];
+}
+const chatHinweisZeile = n => `${n.text} \u00b7 from chat, ${n.schreiber} ${n.zeit}`;
+/* the note's own chat lines against this message: same time, the writer
+   within one error, the text within one per eight letters */
+function chatNotizDoppelt(zeilen, n){
+  const ws = unitsKey(n.schreiber), ts = unitsKey(n.text);
+  for (const l of zeilen){
+    const m = CHAT_HINWEIS.exec(l);
+    if (!m || m[3] !== n.zeit || levenshtein(unitsKey(m[2]), ws) > 1) continue;
+    const tk = unitsKey(m[1]);
+    if (levenshtein(tk, ts) <= Math.max(1, Math.floor(Math.max(tk.length, ts.length)/8))) return true;
+  }
+  return false;
+}
+/* one line into the town's note - "neu", "doppelt" (the note had it),
+   "voll" (2 KB of hand-written text, nothing can go), "recht" (no right) */
+function chatHinweisSchreiben(i, n){
+  const alt = noteOf(i), zeilen = alt ? String(alt).split("\n") : [];
+  if (chatNotizDoppelt(zeilen, n)) return "doppelt";
+  zeilen.push(chatHinweisZeile(n));
+  let text = zeilen.join("\n");
+  while (byteLaenge(text) > CHAT_NOTIZ_MAX){
+    const k = zeilen.findIndex((l, j) => j < zeilen.length - 1 && CHAT_HINWEIS.test(l));
+    if (k < 0) return "voll";
+    zeilen.splice(k, 1); text = zeilen.join("\n");
+  }
+  return stamp("notes", i, text) ? "neu" : "recht";
+}
+function chatGesehenSchluessel(){ return CHAT_GESEHEN_STORE + ":" + ((typeof CFG !== "undefined" && CFG && CFG.room) || ""); }
+function chatGesehenLaden(){
+  if (CHAT.gesehenGeladen) return;
+  CHAT.gesehenGeladen = true;
+  try { const l = JSON.parse(localStorage.getItem(chatGesehenSchluessel()) || "[]"); if (Array.isArray(l)) for (const k of l) if (typeof k === "string") CHAT.gesehen.add(k); } catch(e){}
+}
+function chatGesehenSichern(){
+  try {
+    let l = [...CHAT.gesehen];
+    if (l.length > CHAT_GESEHEN_MAX){ l = l.slice(-CHAT_GESEHEN_MAX); CHAT.gesehen = new Set(l); }
+    localStorage.setItem(chatGesehenSchluessel(), JSON.stringify(l));
+  } catch(e){}
+}
+/* the messages of one reading into the notes: a line a town a message.
+   The town whose note he is typing in right now is left alone and not
+   marked as seen - the next keystroke would overwrite the line; the
+   caller keeps E.uebersprungen for the next look (SOLL-2, round 2) */
+function chatAufnehmen(nachrichten){
+  chatGesehenLaden();
+  const E = {neu: 0, doppelt: 0, klein: 0, ohneOrt: 0, voll: 0, recht: 0, tippt: 0, staedte: [], uebersprungen: []};
+  const tippt = sel !== null && !!document.activeElement && document.activeElement.id === "note" && document.hasFocus();   // the caret in the note AND the window in front: after Alt-Tab into the game nobody types here (KANN-h, round 3)
+  let gemerkt = false;
+  for (const n of (nachrichten || [])){
+    if (!n || !n.zeit || !n.schreiber) continue;
+    if (n.klein){ E.klein++; continue; }
+    n.orte = n.orte || chatOrte(n.text);               // a held message counts its towns once (KANN-l, round 3)
+    const orte = n.orte;
+    if (!orte.length){ E.ohneOrt++; continue; }
+    for (const o of orte){
+      if (tippt && o.ort === sel){
+        E.tippt++;
+        if (!E.uebersprungen.some(u => u.zeit === n.zeit && u.schreiber === n.schreiber && u.text === n.text)) E.uebersprungen.push(n);
+        continue;
+      }
+      const key = `${n.zeit}|${unitsKey(n.schreiber)}|${unitsKey(n.text)}|${o.ort}`;
+      if (CHAT.gesehen.has(key)){ E.doppelt++; continue; }
+      const was = chatHinweisSchreiben(o.ort, n);
+      if (was === "recht"){ E.recht++; continue; }
+      if (was === "voll"){ E.voll++; continue; }
+      CHAT.gesehen.add(key); gemerkt = true;
+      if (was === "doppelt"){ E.doppelt++; continue; }
+      E.neu++; CHAT.neu++;
+      if (!E.staedte.includes(o.ort)) E.staedte.push(o.ort);
+    }
+  }
+  if (gemerkt) chatGesehenSichern();
+  if (E.neu){
+    save();
+    try { tally(); } catch(e){}
+    if (sel !== null && !tippt && E.staedte.includes(sel)) try { side(); } catch(e){}
+  }
+  return E;
+}
+/* ONE READING of a picture: gate, head word, channel, rows, messages.
+   frisch: read whatever the field did (the probe); otherwise only when the
+   field changed or the gate was shut before. blick: the look this reading
+   belongs to - given up on while a row waits for the worker, the reading
+   stops after that await (its bitmap is closed by then; KANN-w, round 3) */
+async function chatLesen(bm, W, H, frisch, blick){
+  const t0 = performance.now();
+  const A = chatAusschnitt(bm, W, H), geo = chatGeometrie(A);
+  if (blick) blick.A = A;                                // so the cut-out can go when the look is given up on
+  const R = {tor: false, geo, kopf: null, kanal: null, zeilen: [], nachrichten: [], geaendert: null, gelesen: false, ms: 0};
+  const fertig = () => { R.ms = Math.round(performance.now() - t0); return R; };
+  const weg = () => !!(blick && blick.aufgegeben);
+  if (!geo.tor) return fertig();
+  const ae = chatAenderung(A);
+  R.geaendert = ae.anteil;
+  const neu = !!frisch || !CHAT.torOffen || ae.anteil >= CHAT_AENDERUNG;
+  if (!neu && CHAT.kopf && CHAT.kopf.wort && jetzt() - CHAT.kanalT < 10000){ R.tor = true; R.kopf = CHAT.kopf; R.kanal = CHAT.kanal; return fertig(); }
+  R.kopf = await chatKopfwort(bm);
+  if (weg() || !R.kopf.wort) return fertig();
+  R.tor = true;
+  R.kanal = await chatKanal(bm);
+  if (weg()) return fertig();
+  const wh = W + "x" + H;
+  if (CHAT.cacheWH !== wh || !CHAT.kanal || CHAT.kanal.name !== R.kanal.name){ CHAT.cache.clear(); CHAT.cacheWH = wh; }
+  CHAT.kopf = R.kopf; CHAT.kanal = R.kanal; CHAT.kanalT = jetzt();
+  if (!neu) return fertig();
+  CHAT.feldAlt = ae.probe; CHAT.feldAltW = ae.sw; CHAT.feldAltH = ae.sh;
+  if (!R.kanal.armee) return fertig();
+  const zeilen = chatZeilen(A);
+  for (const z of zeilen){
+    const k = z.y0 + "|" + z.h, c = CHAT.cache.get(k);
+    if (c && Math.abs(c.tinte - z.tinte) <= Math.max(6, 0.03*z.tinte) && Math.abs(c.xl - z.xl) <= 3){ z.text = c.text; z.zuv = c.zuv; z.ausCache = true; continue; }
+    const r = await chatZeileLesen(bm, H, z);
+    if (weg()) return fertig();
+    z.text = r.text; z.zuv = r.zuv;
+    CHAT.cache.set(k, {tinte: z.tinte, xl: z.xl, text: r.text, zuv: r.zuv});
+  }
+  R.zeilen = zeilen;
+  R.nachrichten = chatNachrichten(zeilen, H);
+  R.gelesen = true;
+  return fertig();
+}
+/* ONE LOOK on the one share. It never asks for a share: bildLive only when
+   the stream stands, and only with the right to file intel (notes). One
+   look at a time: none beside a running one, and none beside a look given
+   up on (CHAT_BLICK_TOT, the watchdog) until that one has returned - its
+   bitmap and cut-out are closed the moment it is given up on, so a worker
+   that stands still costs no memory (KANN-w, round 3); the return, late or
+   not, frees the reader, and the next tick looks again */
+async function chatBlick(frisch){
+  const alt = CHAT.blick;
+  if (alt){
+    if (!alt.aufgegeben && jetzt() - alt.seit >= CHAT_BLICK_TOT) chatBlickAufgeben(alt);
+    return null;
+  }
+  if (!(bildStrom && bildStrom.active) || !darf("aufklaerung")){ chatTorZu(); return null; }
+  const blick = {nr: ++CHAT.laufNr, seit: jetzt(), bmp: null, A: null, aufgegeben: false};
+  CHAT.blick = blick; CHAT.offen++; CHAT.laeuft = true; CHAT.laeuftSeit = blick.seit;
+  try {
+    blick.bmp = await bildLive();
+    if (blick.aufgegeben) return null;
+    const W = blick.bmp.width, H = blick.bmp.height;
+    const R = await chatLesen(blick.bmp, W, H, frisch, blick);
+    if (blick.aufgegeben) return null;
+    CHAT.letzter = R;
+    if (R.tor){
+      CHAT.torZuletzt = jetzt(); CHAT.torOffen = true; CHAT.armee = !!(R.kanal && R.kanal.armee);
+      if (R.gelesen){
+        CHAT.gelesenT = jetzt();
+        CHAT.kleinNur = R.nachrichten.length > 0 && R.nachrichten.every(n => n.klein);
+      }
+    } else chatTorZu();
+    if (R.gelesen || CHAT.nachtrag.length){              // this reading, and what an earlier look left for later (he was typing in that town's note)
+      const liste = CHAT.nachtrag.concat(R.gelesen ? R.nachrichten : []);
+      CHAT.nachtrag = [];
+      R.aufnahme = chatAufnehmen(liste);
+      CHAT.nachtrag = R.aufnahme.uebersprungen.slice(-CHAT_NACHTRAG_MAX);
+    }
+    CHAT.ms.push(R.ms); if (CHAT.ms.length > 20) CHAT.ms.shift();
+    chatKachelAuffrischen();
+    return R;
+  } catch(e){
+    if (blick.aufgegeben) return null;                 // a look given up on may throw on its closed bitmap: expected, not an error
+    CHAT.fehler++;
+    if (CHAT.fehler === 1) console.error("chat: the look threw", e);   // once per session; the count is for the next measurement
+    return null;
+  } finally {
+    if (blick.bmp){ try { blick.bmp.close(); } catch(e){} }
+    blick.A = null;
+    CHAT.offen--;
+    if (CHAT.blick === blick){ CHAT.blick = null; CHAT.laeuft = false; }
+  }
+}
+/* a look that has not returned after CHAT_BLICK_TOT: its bitmap (~33 MB at
+   4K) and its cut-out (~9 MB) go now; the look itself returns in its own
+   time and frees the reader then */
+function chatBlickAufgeben(b){
+  b.aufgegeben = true; CHAT.aufgegeben++;
+  CHAT.feldAlt = null;                                  // the next look reads the field afresh (FABLE 19.09.2026)
+  if (b.bmp){ try { b.bmp.close(); } catch(e){} }
+  if (b.A){ b.A.d = null; b.A = null; }
+}
+function chatTorZu(){
+  if (!CHAT.torOffen) return;
+  CHAT.torOffen = false; CHAT.armee = false; CHAT.kleinNur = false;
+  CHAT.feldAlt = null; CHAT.cache.clear(); CHAT.kopf = null; CHAT.kanal = null; CHAT.kanalT = 0;
+}
+function chatWecker(ms){
+  if (CHAT.wecker) clearTimeout(CHAT.wecker);
+  CHAT.wecker = setTimeout(chatTick, ms);
+}
+async function chatTick(){
+  CHAT.wecker = null;
+  chatWecker(CHAT_BLICK_TOT);                          // the watchdog, set BEFORE the await: the ticks keep coming; no new look until the one given up on has returned (round 3)
+  await chatBlick(false);
+  chatWecker(chatLiest() ? CHAT_TAKT_AUF : CHAT_TAKT_ZU);
+}
+/* ---- the tile ---------------------------------------------------------- */
+const chatLiest = () => !!(CHAT.torOffen && jetzt() - CHAT.torZuletzt < 10000);
+function chatKachel(){
+  const liest = chatLiest();
+  if (!CHAT.neu && !liest) return "";
+  let u = "new hints";
+  if (liest) u += !CHAT.armee ? " \u00b7 other channel" : CHAT.kleinNur ? " \u00b7 font too small" : " \u00b7 reading";
+  return `<div class="tile" id="chat-kachel" style="--f:var(--accent)">
+      <span class="k">chat</span><span class="v">${CHAT.neu}</span>
+      <span class="u">${u}</span></div>`;
+}
+function chatKachelAuffrischen(){
+  const el = document.getElementById("chat-kachel"), html = chatKachel();
+  if (!el){ if (html) try { tally(); } catch(e){} return; }
+  const box = document.createElement("div"); box.innerHTML = html;
+  const neu = box.firstElementChild;
+  if (!neu){ el.remove(); return; }
+  if (neu.outerHTML !== el.outerHTML) el.replaceWith(neu);
+}
+function chatStart(){
+  if (CHAT.gestartet) return;
+  CHAT.gestartet = true;
+  chatWecker(CHAT_TAKT_ZU);
 }
 /* ---- THE OBJECTIVE ROW: BOXES AND CAPTURE CIRCLES  (BAT-3 / BAT-10) ------
    ENNO 05.09.2026: "Bei aktivem Einnehmen eines Kontrollpunktes durch einen
@@ -60671,7 +61180,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 174839f842</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 6c036af918</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -60899,7 +61408,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "174839f842";
+const BAU = "6c036af918";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -62184,6 +62693,7 @@ async function mitgliederDialog(meldung){
   leisteBauen(); menueBauen(); fingerSteuerung(); handySchalter(); statusAufbau();
   try { kriegsendeStart(); } catch(e){}   // T5: the war end reader on the one share, the start line, the question after a cut - never in the way of the startup
   try { lageStart(); } catch(e){}         // T10: the start page reader beside it, its own gate, the tile's clock
+  try { chatStart(); } catch(e){}         // T13: the army chat reader beside them, its own gate, hints into the notes
   layAnwenden();
   if (torNoetig()){
     /* Liegt ein verschlossener Code vor, wird nach dem Passwort gefragt -
