@@ -33810,11 +33810,23 @@ const KRIEGSENDE_NAME_TINTE = 0.05;
    too small. FABLE 18.09.2026, seen on the copy (shrunk 4K screens, no real
    2560 war end screen), not in the measurement. */
 const KRIEGSENDE_ZAHLEN_BREIT = 2560, KRIEGSENDE_ZAHLEN_MASS = 3840;
-/* no war ends twice within a day of the last cut - the same screen still
-   stands after the reload, and for anybody who was away it stands for hours
-   or days (E8); a war lasts days (9, 18, 26 measured). The same day on the
-   server (warmap_kriegsende). */
-const KRIEG_SCHNITT_SPERRE = 86400000;
+/* NO DAY BETWEEN TWO CUTS (Antwortblatt 18.09., Q1 - ENNO 19.09.2026: "Soll
+   so bleiben, aber ein Krieg kann auch innerhalb von 24h enden."): the day
+   bolt of 18.09.2026 fell with his word. What stays is an hour - no war
+   lasts under one (9, 18, 26 days measured) - and the screen that still
+   stands after a cut, after the reload and for anybody who was away for
+   hours or days, is told apart by what it shows (the stored war ends,
+   kriegsendeSchonGesehen, and "the same screen as war N" on the server)
+   and by the gate marker below. The same hour on the server
+   (warmap_kriegsende, 2026-09-19_kriegsende_ohne_tag.sql). */
+const KRIEG_SCHNITT_SPERRE = 3600000;
+/* a stored war end is the same screen when the winner is the same and at
+   least this many of its sixteen numbers - the fifteen of the table and
+   the days - are equal: one misread digit, or the days read as 19 for 9,
+   does not make the standing screen a new end (FABLE 19.09.2026, Q1 round
+   2; the digits read 45 of 45 at 3840, MESSUNG-T5 4). Page and server
+   alike. */
+const KRIEGSENDE_GLEICH_MIN = 12;
 /* the gate must have been seen SHUT since the last cut (the war map, not
    an end screen) before a new end counts - the browser keeps the cut it saw
    it under, so the reload after a cut does not forget it (E8) */
@@ -34549,25 +34561,27 @@ function kriegsendeZuschlagHtml(wf){
   return ` <span class="krieg-zu">+${Math.floor(wf*z.v.kosten/100).toLocaleString("en")}</span>`;
 }
 /* the same screen again? After the cut the page reloads and the screen may
-   still stand - and whoever was away sees it for hours or days: the winner,
-   the days and all fifteen table numbers of a stored row are that screen,
-   whatever number it carries. Every row from number 1 on counts, except the
-   running number's own row - that one is this war's proof, and a proof
-   whose cut did not run is tried again (E10). */
+   still stand - and whoever was away sees it for hours or days: a stored
+   row with the same winner and at least KRIEGSENDE_GLEICH_MIN of its
+   sixteen numbers (the fifteen of the table, the days) is that screen,
+   whatever number it carries - a misread digit does not make it a new end
+   (Q1 round 2). Every row from number 1 on counts, except the running
+   number's own row - that one is this war's proof, and a proof whose cut
+   did not run is tried again (E10). */
 function kriegsendeSchonGesehen(B){
   const s = KRIEGSENDE_FRAKTION[B.sieger], nr = kriegsendeNr();
   if (!B.zahlen || !B.tage || !B.tafel) return true;    // no numbers: nothing to tell it apart by, and nothing to cut with (voll says so first)
   for (const k in (S.kriegsende || {})){
     const e = S.kriegsende[k], kn = +k;
     if (!(kn >= 1) || kn === nr) continue;
-    if (!e || !e.v || e.v.sieger !== s || e.v.tage !== B.tage.wert || !e.v.tafel) continue;
-    let gleich = true;
-    for (let i = 0; i < 3 && gleich; i++){
+    if (!e || !e.v || e.v.sieger !== s || !e.v.tafel) continue;
+    let gleich = e.v.tage === B.tage.wert ? 1 : 0;
+    for (let i = 0; i < 3; i++){
       const f = KRIEGSENDE_FRAKTION[B.tafelKlasse[i]], t = e.v.tafel[f];
-      if (!t){ gleich = false; break; }
-      for (let j = 0; j < 5; j++) if (t[KRIEGSENDE_TAFEL_SPALTEN[j]] !== B.tafel[i][j].wert){ gleich = false; break; }
+      if (!t) continue;
+      for (let j = 0; j < 5; j++) if (t[KRIEGSENDE_TAFEL_SPALTEN[j]] === B.tafel[i][j].wert) gleich++;
     }
-    if (gleich) return true;
+    if (gleich >= KRIEGSENDE_GLEICH_MIN) return true;
   }
   return false;
 }
@@ -34691,7 +34705,7 @@ function kriegsendeBefundAufnehmen(B){
   }
   if (kriegsendeSchonGesehen(B)) return;       // a stored war end: the screen that stands after a cut, for everybody - silent
   if (!kriegsendeTorWarZu()                    // E8: the gate was never shut since the last cut - the screen that stands after a cut is not a new end
-      || (epoche() && jetzt() - epoche() < KRIEG_SCHNITT_SPERRE)){   // or the last cut is younger than a day: that is its screen
+      || (epoche() && jetzt() - epoche() < KRIEG_SCHNITT_SPERRE)){   // or the last cut is younger than an hour: that is its screen (no day any more - Q1, ENNO 19.09.2026)
     kriegsendeEinmal("zuGesagt", "War end seen \u2014 not cut.");
     return;
   }
@@ -59532,7 +59546,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build b74333bd1a</span></p></div>
+         installation. <span style="color:var(--dim2)">· build fc1385d355</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -59760,7 +59774,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "b74333bd1a";
+const BAU = "fc1385d355";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
