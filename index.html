@@ -289,6 +289,7 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
    dass die Option gar nicht erst da ist. */
 .tool:disabled{opacity:.3;cursor:not-allowed;color:var(--dim2)}
 .tool:disabled:hover{background:transparent}
+.tool.withhold:not([aria-pressed="true"]){opacity:.45;color:var(--dim2)}
 .tool[aria-pressed="true"]{background:linear-gradient(180deg,#3a2f1c,#2a2114);
   border-color:var(--accent);color:var(--accent);box-shadow:inset 0 0 12px rgba(226,172,72,.14)}
 /* ONE STROKE FOR EVERY SIGN. stroke-width stood eight times over, each
@@ -5850,12 +5851,14 @@ function setClanBefehl(txt){
    (imKrieg): a new war lifts it by itself, meta rows survive the cut.
    Effect while it stands: the tile in the top bar (tally), the drawing
    tools for attack, defence line, planned para-block and area are dimmed
-   for the clan's own side (withholdSperrt - another side's arrow is a
-   sighting and stays drawable, that is recon), a fresh para-block of our
-   side is not saved, and setting a team out of the depot asks ONCE per
-   session (withholdPlatzierenOk) - a hint, not a bar: his "bzw. wird nicht
-   empfohlen" (FABLE, Offen 5). Recon requests and role requests stay.
-   Running orders stay as they are - the leader ends them himself. */
+   for the clan's own side, gather on every side (withholdSperrt - another
+   side's arrow is a sighting and stays drawable, that is recon) but stay clickable: the
+   first click asks ONCE per session (withholdZeichnenOk), as setting a
+   team out of the depot does (withholdPlatzierenOk) - a hint, never a bar
+   (Antwortblatt 18.09., 2. - ENNO 19.09.2026: "Es geht ja nur darum, dass
+   der Clan hier eine Vorgehensweise empfiehlt."). Recon requests and role
+   requests never ask. Running orders stay as they are - the leader ends
+   them himself. */
 const withholdSteht = () => { const e = S.meta.withhold; return !!(e && e.v && e.v.an && imKrieg(e)); };
 /* "Withhold since 18.09. · <name>" - the one line every window shows */
 const withholdSeit = () => {
@@ -5875,9 +5878,11 @@ function setWithhold(an){
 }
 /* the tools that CREATE an order of our side; "gather" since T15 (19.09.2026) */
 const WITHHOLD_WERKZEUGE = ["arrow", "line", "para", "area", "gather"];
-/* does withhold bar this tool right now? Only for the clan's own side:
-   drawn for another side the same tools record sightings. A gather is
-   always our own side (T15), so it is barred whatever side is chosen. */
+/* does withhold dim this tool and make its first use ask? Only for the
+   clan's own side: drawn for another side the same tools record sightings.
+   A gather is always our own side (T15), so it is dimmed whatever side is
+   chosen. Since 19.09.2026 (Antwortblatt 18.09., Antwort 2) withhold is a
+   recommendation: nothing is barred, the first use asks once per session. */
 const withholdSperrt = t => withholdSteht() && WITHHOLD_WERKZEUGE.includes(t) && (faction === clanFaktion() || t === "gather");
 const WITHHOLD_TIPP = `<b>Withhold</b> \u00b7 `;
 /* the top-bar tile, while it stands */
@@ -5887,20 +5892,29 @@ function withholdKachel(){
       <span class="k">withhold</span><span class="v">\u2298</span>
       <span class="u">no combat teams this war</span></div>`;
 }
-/* SETTING A TEAM OUT OF THE DEPOT ASKS ONCE PER SESSION. Yes is remembered
-   for this withhold row (a lifted and re-set withhold asks anew, E6); No
-   refuses and asks again at the next grip - a whole batch of the depot
-   reader after one No is refused without asking each team. */
-let withholdJa = 0, withholdNein = 0, withholdGezeigt = false;
-function withholdPlatzierenOk(){
+/* SETTING A TEAM OUT OF THE DEPOT, OR DRAWING A COMBAT ORDER, ASKS ONCE PER
+   SESSION - one memory each ("place", "draw"; Antwortblatt 18.09., Q2).
+   Yes is remembered for this withhold row (a lifted and re-set withhold
+   asks anew, E6); No refuses and asks again at the next grip. Placing
+   alone rests 1.5 s after a No: a whole batch of the depot reader is
+   refused without asking each team. Drawing rests not at all - every
+   click after a No asks again. */
+let withholdJa = {}, withholdNein = {}, withholdGezeigt = false;
+const withholdZeit = () => (S.meta.withhold.v && S.meta.withhold.v.t) || S.meta.withhold.t || 0;   // v.t: the server restamps only the row's t
+function withholdFrage(was, ruhe){
   if (!withholdSteht()) return true;
-  const t = (S.meta.withhold.v && S.meta.withhold.v.t) || S.meta.withhold.t || 0;   // v.t: the server restamps only the row's t
-  if (withholdJa === t) return true;
-  if (jetzt() - withholdNein < 1500) return false;
-  if (confirm("Withhold stands \u2013 place anyway?")){ withholdJa = t; return true; }
-  withholdNein = jetzt();
+  const t = withholdZeit();
+  if (withholdJa[was] === t) return true;
+  if (ruhe && jetzt() - (withholdNein[was] || 0) < ruhe) return false;
+  if (confirm(`Withhold stands \u2013 ${was} anyway?`)){ withholdJa[was] = t; return true; }
+  withholdNein[was] = jetzt();
   return false;
 }
+const withholdPlatzierenOk = () => withholdFrage("place", 1500);
+const withholdZeichnenOk = () => withholdFrage("draw", 0);
+/* drawing already allowed this session (no question)? - the tool bar must
+   not throw a chosen tool back to inspect after a Yes */
+const withholdZeichnenJa = () => withholdSteht() && withholdJa.draw === withholdZeit();
 /* Wer die Karte allein benutzt, darf alles - sonst koennte niemand anfangen.
    Mit Anschluss entscheidet der Zugangscode. */
 /* ---- Zwei Aemter ------------------------------------------------------
@@ -13521,7 +13535,7 @@ function paraBlockZiele(cap){
 /* the button in the capital's window: the flow with the fixed list; the marks wait for the first drop (F.marken) */
 function paraBlockStarten(cap){
   if (!darf("befehl")) return darfNicht("befehl");
-  if (withholdSperrt("para")){ toast("Withhold stands."); return; }   // T11: the same bar setTool holds
+  if (withholdSperrt("para") && !withholdZeichnenOk()) return;   // Q2: the same question setTool asks, once per session
   const Z = paraBlockZiele(cap);
   if (!Z.ziele.length){ toast("No enemy airfield within fighter range."); return; }
   if (tool !== "para") setTool("para");
@@ -13962,7 +13976,7 @@ function gatherFlussAbbruch(){
 /* one click on a town while the gather tool is up */
 function gatherKlick(i){
   if (!MAP.n[i] || gatherSchliesst) return;
-  if (withholdSperrt("gather")){ toast("Withhold stands."); return; }   // T11: the same bar setTool holds
+  if (withholdSperrt("gather") && !withholdZeichnenOk()) return;   // Q2: the same question setTool asks, once per session
   const meine = clanFaktion();
   if (ownerOf(i) !== meine){ toast(`${MAP.n[i][0]} is not ours.`); return; }
   const F = gatherFluss || (gatherFluss = {ziel: null, starts: [], kette: []});
@@ -16449,10 +16463,10 @@ function paraDialog(i){
     const prioEl = document.getElementById("pd-prio");
     const prio = prioEl ? befehlPrio({prio: prioEl.value}) : (pb ? pb.prio : undefined);
     if (seite === null){ if (pb) setPara(i, null, false); closeDlg(); if (sel === i) side(); draw(); tally(); return; }
-    /* T11: no NEW PLANNED block of our side while withhold stands; an active
-       block reports what stands (like the tool), one that already stands is
-       edited as before, another side's is a sighting */
-    if (!pb && plan && withholdSteht() && seite === clanFaktion()){ toast("Withhold stands."); return; }
+    /* Q2: a NEW PLANNED block of our side while withhold stands asks once
+       per session; an active block reports what stands (like the tool), one
+       that already stands is edited as before, another side's is a sighting */
+    if (!pb && plan && withholdSteht() && seite === clanFaktion() && !withholdZeichnenOk()) return;
     if (!setPara(i, seite, plan, {label, soll: soll || undefined, farbe: farbe || undefined, prio})) return;
     closeDlg(); if (sel === i) side(); draw(); tally(); toast("Saved");
   });
@@ -18133,8 +18147,9 @@ function werkzeugeAuffrischen(){
   document.querySelectorAll(".tool[data-t]").forEach(b => {
     const r = WERKZEUG_RECHT[b.dataset.t];
     const zu = !!r && !darf(r);
-    const wh = !zu && withholdSperrt(b.dataset.t);         // T11: no new orders of our side
-    b.disabled = zu || wh;
+    const wh = !zu && withholdSperrt(b.dataset.t);         // Q2: a hint - dimmed, still clickable, the click asks (setTool)
+    b.disabled = zu;
+    b.classList.toggle("withhold", wh);
     b.title = zu ? rechtSatz(r) : wh ? "Withhold" : (b.dataset.tip || "");
   });
   /* UND NICHT AM TOTEN WERKZEUG KLEBEN BLEIBEN. Faellt das Recht fuer das
@@ -18144,7 +18159,7 @@ function werkzeugeAuffrischen(){
      am unteren Rand, und der Klick auf die Karte liefe in den stillen
      Riegel. Inspect zeigt nur an und braucht nie ein Recht. */
   const jetztRecht = WERKZEUG_RECHT[tool];
-  if ((jetztRecht && !darf(jetztRecht)) || withholdSperrt(tool)) setTool("inspect");
+  if ((jetztRecht && !darf(jetztRecht)) || (withholdSperrt(tool) && !withholdZeichnenJa())) setTool("inspect");   // Q2: after a Yes the tool stays
   /* the state line follows a withhold that came or went with a pull */
   const whJetzt = withholdSteht();
   if (whJetzt !== withholdGezeigt){ withholdGezeigt = whJetzt; tips(); }
@@ -18159,7 +18174,7 @@ function setTool(t){
   if (t === "op"){ opDialog(null); return; }
   const noetig = WERKZEUG_RECHT[t];
   if (noetig && !darf(noetig)) return darfNicht(noetig);
-  if (withholdSperrt(t)){ toast("Withhold stands."); return false; }   // T11: the number keys run through here too
+  if (withholdSperrt(t) && !withholdZeichnenOk()) return false;   // Q2: asks once per session, No leaves the tool as it was; the number keys run through here too
   /* UND die Menge, schon hier. Sonst erfaehrt man es erst NACH der Arbeit:
      man zieht eine Linie ueber zwanzig Staedte, laesst los, und sie ist
      weg. Dieselbe Vorgabe wie bei den Rechten, nur auf Mengen angewandt -
@@ -18293,18 +18308,18 @@ function pbMenue(i, x, y, standVorher, opOffen){
     <button type="button" class="btn" id="pb-menu-def" style="width:100%;font-size:11px">${verteidigt ? "Defence window \u2026" : "Defend this city"}</button>`);
   m.querySelectorAll("[data-pb]").forEach(k => k.addEventListener("click", () => {
     const v = k.dataset.pb, plan = m.querySelector("#pb-menu-plan").checked;
-    if (v !== "" && plan && +v === clanFaktion() && withholdSteht() && !paraAt(i)){ toast("Withhold stands."); return; }   // T11: no new planned block of ours
+    if (v !== "" && plan && +v === clanFaktion() && withholdSteht() && !paraAt(i) && !withholdZeichnenOk()) return;   // Q2: a new planned block of ours asks once
     setPara(i, v === "" ? null : +v, plan);
     pbMenueZu(); if (sel === i) side(); draw(); tally();
   }));
   m.querySelector("#pb-menu-fenster").addEventListener("click", () => { pbMenueZu(); paraDialog(i); });
   m.querySelector("#pb-menu-def").addEventListener("click", () => {
-    if (!verteidigt && withholdSperrt("line")){ toast("Withhold stands."); return; }   // T11: no new line of ours; the window of a standing one opens
+    if (!verteidigt && withholdSperrt("line") && !withholdZeichnenOk()) return;   // Q2: a new line of ours asks once; the window of a standing one opens
     pbMenueZu(); lineEinzelAnlegen(i);
   });
   /* KAR-5 (ENNO 12.09.2026): "Start Attack from here" - the arrow tool with this town as origin, the next click is the target */
   m.querySelector("#pb-menu-angriff").addEventListener("click", () => {
-    if (withholdSperrt("arrow")){ toast("Withhold stands."); return; }   // T11: the same bar setTool holds
+    if (withholdSperrt("arrow") && !withholdZeichnenOk()) return;   // Q2: the same question setTool asks, once per session
     pbMenueZu();
     if (tool !== "arrow") setTool("arrow");
     if (tool !== "arrow") return;              // refused: the arrow cap
@@ -18321,7 +18336,7 @@ function pbMenue(i, x, y, standVorher, opOffen){
        die Rueckgaengig-Geste den eben selbst angelegten Plan in Kraft setzen,
        und das ist die staerkste Aussage, die es hier gibt. Ein Block, der
        beim Oeffnen schon stand, wird wie bisher in Kraft gesetzt. */
-    if (ev.target.checked && !steht && vorwahl === clanFaktion() && withholdSteht()){ toast("Withhold stands."); ev.target.checked = false; return; }   // T11
+    if (ev.target.checked && !steht && vorwahl === clanFaktion() && withholdSteht() && !withholdZeichnenOk()){ ev.target.checked = false; return; }   // Q2: asks once
     if (ev.target.checked) setPara(i, steht ? steht.f : vorwahl, true);
     else if (steht && standVorher) setPara(i, steht.f, false);
     else if (steht) setPara(i, null, false);
@@ -59289,7 +59304,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 619c60f9b5</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 07c9b77c5c</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -59517,7 +59532,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "619c60f9b5";
+const BAU = "07c9b77c5c";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
