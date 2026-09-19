@@ -13946,12 +13946,17 @@ function paraTipp(){
    arrows, as the drops have it (BEF-12): the fourth start, Escape, Enter,
    the right button, a click on empty ground, the X on the target ring or
    a tool change. A gather has no attack route (angriffsWeg is for
-   attacks). Points: the page books nothing new; the server today treats
-   a gather set done like an attack (warmap_punkte_abschluss books
-   order_done/leader_done when a battle at the start or the target was
-   reported inside the order's window, or gefecht_pflicht is 0) - until
-   its own migration reads v.gather and swaps the battle duty for "teams
-   at the target" (Kopfblock SOLL-7, open). The page shows the state:
+   attacks). Points: the page books nothing new; the server reads
+   v.gather (2026-09-19_gather_punkte.sql, Antwortblatt 18.09. Q4 - ENNO
+   19.09.2026: "Gather soll nicht mit Gefechten assoziiert sein. Es geht
+   hier primaer um das Sammeln an einem verbuendeten Ausgangspunkt."):
+   TEAMS AT THE TARGET instead of the battle duty. A gather set done pays
+   order_done to every assigned player with at least one of his assigned
+   teams in units:<target>:<who> at that moment, leader_done to the
+   issuer as soon as one such player exists, and nothing without one -
+   never through a battle (warmap_gefecht_auf_befehl says false for a
+   gather; the chain factor stays with attacks and lines; gefecht_pflicht
+   0 checks nothing, as for an attack). The page shows the same state:
    gatherStand counts the assigned teams that stand at the target
    (units:<target>:<who>). Air: the target must be an airfield for the
    branches airborne and airforce (fliegt); otherwise those rows of the
@@ -59439,7 +59444,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 6f49681c96</span></p></div>
+         installation. <span style="color:var(--dim2)">· build f8c41065a3</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -59667,7 +59672,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "6f49681c96";
+const BAU = "f8c41065a3";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
