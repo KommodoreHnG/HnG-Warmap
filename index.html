@@ -433,6 +433,7 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
 #schlacht .sf-zeit{text-align:right;flex:none;font-variant-numeric:tabular-nums}
 #schlacht .sf-zeit b{display:block;font-family:var(--schmal);font-size:1.3em;font-weight:700;line-height:1.1;color:var(--accent)}
 #schlacht .sf-zeit span{font-size:.85em;color:var(--dim);white-space:nowrap}
+#schlacht .sf-zeit .sf-aktiv{display:block}
 #schlacht .sf-lage{display:flex;flex-wrap:wrap;align-items:center;gap:.45em;font-size:.9em;color:var(--dim)}
 #schlacht .sf-lage:empty{display:none}
 #schlacht .sf-tafeln{display:flex;flex-wrap:wrap;gap:.6em;align-items:flex-start}
@@ -30210,6 +30211,473 @@ function gfKennung(d){
     for (let x = 62; x <= 1780; x += 23) h = (h*31 + (gfHell(d, x, y) > 110 ? 1 : 0)) >>> 0;
   return h;
 }
+/* ================= THE HEAD STRIP OF THE BATTLE WINDOW (Blatt 16.09., P8) =====
+   ENNO 17.09.2026 (Antwortblatt 16.09., Nr. 11): "Alles in diesem
+   Detailfenster soll ausgelesen werden, weil das alles relevante Infos
+   sind. Auch ob da bspw. „Aufklärung“ steht, weil dann der Matchmaker noch
+   nicht entschieden hat, welche Karte gespielt wird" - "Wichtig ist bei der
+   Gefechtslaufzeit, dass diese immer nachrangig gegenüber der aus dem
+   battlereader ist" - "Ein Gefecht dauert niemals 4 Stunden, diese
+   Zeitangabe ist aber über die Kriegskarte teils sichtbar, da hier die Zeit
+   des Autoresolves miteinbezogen wird".
+   Measured (Listen/MESSUNG-P8.md, FABLE 19.09.2026): 22 windows at
+   3840x2160 (Player Grabber/Beispiel 1-19, Bilder/Triple Fight with/no
+   players, AT grabber/Saalfeld Line layout) x 3 sets (raw, linear light /
+   6, gamma / 4,4) = 66 runs, and 131 runs without a window. The strip is a
+   band x 59-2592, y 299-450, 32 points above the table's head band
+   (GF_TABELLE.kopf 482), pixel-equal on all 22. EVERYTHING HERE IS READ OFF
+   THE SOURCE, not off R.d: unitsRahmen lifts these captures by 6,6 (median
+   26) and the ink saturates - the star loses its blue, the hour's 0 reads
+   "?", the text reader falls to 62/66 (role) and 55/66 (town). Off the
+   source: type 66/66, role 66/66, town 66/66, running time 66/66 to the
+   second, status 66/66, star 66/66, day/night 66/66, weather 42/42 on the
+   two classes with material, objective lines 66/66, counter 66/66; the
+   gate 66/66 and 0 of 131 strangers.
+   THE GATE has three witnesses, all relative: gfRahmenDa and gfTabelleDa
+   (BAT-2) and the strip's own (gfKopfZeuge) - the window's top line y 271,
+   the share of columns whose point is over 20 and three times as bright as
+   y 265 and y 280: 1,00 on 66/66, 0,00-0,02 on the strangers; the ground
+   under the band (y 455-478), p90-p10 span 0 (strangers up to 138); the
+   band's columns off that ground 0,75-0,98 (strangers 0-1, alone no
+   witness). Rule: line >= 0,9, span <= 6, band >= 0,6.
+   THE DIGITS (running time, counter) go through the table's own templates
+   (GF_ZIFFERN, gfKopfZiffern): ground = the box's median, ink from ground +
+   10 (empty boxes show 0 on every set, the gamma twin's clock 18-39),
+   threshold at half the contrast, one glyph per run, cut at its ink rows,
+   14 by 30, min-max, L1; the width witness scaled by the glyph height
+   against the table's 27 rows (36 here: "1" 10-11, the rest 14-19). 132
+   clock glyphs and 77 counter glyphs per set: farthest 0,116 (GF_ZIFFER_MAX
+   0,225), tightest gap 0,035 (GF_ZIFFER_MIN 0,02), no "?". The letters H /
+   MIN / S stand in no language file and are not read.
+   THE WORDS (type, role, "Aufklärung", status) take the page's own road,
+   bildAufbereiten + ocrMitZuv, off the source; the type as a PREFIX of the
+   line against GEF_TAFEL_ARTEN (gefTafelArt compares the whole key and
+   fails at distance 11), the rest of the line against the twelve
+   languages' role words (D:/Programme/HnG/texts, gamemode_assault_attack /
+   _defend), one error per eight characters; the status against
+   battle_is_starting / _running / _ending, one per four. The role has two
+   more witnesses, the star's colour (red <=> attack, 66/66) and the number
+   of objective lines (3 <=> defence, 2 <=> attack, 66/66) - it is written
+   only when every witness present agrees.
+   THE TOWN stands at the START of its line and the photo behind it adds
+   tails ("BENESQV F", "TRNAVA Sz."): gefTafelStadt takes the last words
+   (the FPS board's order) and read 59/66 with two wrong towns on stranger
+   texts; gfKopfStadt takes every window of one to three words, keys of at
+   least four characters, an error only on town keys of six and more, the
+   longer key at a tie ("Augsburg Munitions Factory" over "Augsburg") -
+   66/66, 0 wrong, 0 of 130 stranger texts.
+   THE PICTOGRAMS: the star's filled square (2201-2231 x 352-382), mean
+   colour, red <=> R > 1,3 B and R > 1,3 G, blue <=> B > 1,3 R and B > 1,05
+   G (raw blue 95/117/155, red 179/66/53; the gamma twin 21/26/35 and
+   41/15/12). Day/night and weather as template comparison - the box's
+   brightest channel in 2 by 2 blocks, min-max, L1 against the class mean of
+   the captures (GF_KOPF_VORLAGEN): day/night three classes, own class <=
+   0,061, foreign >= 0,125, threshold 0,09; weather three classes after the
+   game's words (StrategyGUI/BattleInformation weatherCondition0/1/2 =
+   Slightly cloudy / Overcast / Foggy): cloudy 19, overcast 2, own <= 0,013,
+   foreign >= 0,302, and foggy from the one picture B16 (a cloud over three
+   strokes - the fog sign; n = 1, 0,31 to the other two). The time of day
+   (timeOfDay0..3 = Night / Dawn / Day / Dusk) has one pictogram for dawn
+   and dusk, the sun at the horizon. The counter is ONE figure per side, the
+   side's players in the battle (B9 4/6 = the names of the lists), before
+   the start 0 - no "18/19", no capacity anywhere in the window (MESSUNG-P8
+   section 0): kopf per side, no kap.
+   NOT read: the assault pictogram (the type stands in the text), the ping
+   (not written; read 65/66, no use yet), the map card (BAT-17), the
+   requirements box. A
+   picture with "Aufklärung" in the strip does not exist yet - the word list
+   (CampaignScreen/Gamemap/0) is checked on both text lines, nothing more is
+   claimed for it. */
+const GF_KOPF = {
+  /* the three strips drawn off the source: the head band with the top line
+     and the ground under it, the counter row (both bands), the objective box */
+  streifen: [{k: "kopf", x: 0, y: 262, w: 2620, h: 220}, {k: "zaehler", x: 160, y: 960, w: 1160, h: 160}, {k: "ziele", x: 1930, y: 1285, w: 640, h: 270}],
+  linie: {y: 271, oben: 265, unten: 280, x0: 43, x1: 2608, punkt: 20, mal: 3, anteil: 0.9},
+  grund: {y0: 455, y1: 478, x0: 100, x1: 2550, spanne: 6},
+  band: {y0: 305, y1: 444, x0: 100, x1: 2550, anteil: 0.6},
+  art: [240, 310, 1100, 357], ort: [240, 358, 1100, 416], status: [1560, 372, 1830, 428],
+  uhr: [[1845, 380, 1895, 428], [1930, 380, 1980, 428], [2055, 380, 2105, 428]],
+  stern: [2201, 352, 2231, 382], tag: [2285, 342, 2372, 420], wetter: [2405, 350, 2485, 410],
+  ziele: [[1940, 1292, 2560, 1352], [1940, 1388, 2560, 1448], [1940, 1485, 2560, 1545]],
+  zaehler: [110, 21, 230, 58],       /* the counter box beside the place's emblem, like gfZifferTinte: x from GF_SPALTE[p], y from the band */
+  tinte: 10,                         /* a box with less contrast than this holds no digit */
+  hoehe: 27,                         /* the table's glyph height the width witness was measured at */
+  farbe: 1.3, blauGruen: 1.05,       /* the star's channel ratios */
+  vorlage: 0.09,                     /* a pictogram farther than this from every class is unknown (own <= 0,061, foreign >= 0,125) */
+  rotMin: 20,                        /* the status field's redness R - max(G, B) counts from here at the least (its threshold: half the field's maximum) */
+  kennungTol: 60,                    /* bits of the fingerprint that may differ between two readings of one strip.
+                                        Measured over all 22 windows (Chrome, r3/kenn_r3.js): the same battle in two
+                                        captures 0, consecutive video frames of the war map 0-12, linear light / 4
+                                        <= 11, gamma / 3 <= 46, JPEG q60 <= 76 (3 of 22 over 60: TFmit 76, B10 74,
+                                        TFohne 62 - a re-encoding the live path never sees), the whole picture x 0,97 1 /
+                                        x 1,06 55, a cursor in the field 28; another battle >= 171, the status
+                                        swapped 245. Over the limit costs one reading of the words (~200 ms). */
+  zielTinte: 600                     /* ink points of an objective line (present lines 4701-6380, the missing third 0) */
+};
+/* the game's words for the strip, twelve languages (D:/Programme/HnG/texts/HnG_Strategy_<lang>.xml):
+   StrategyGUI/Squad/matchmaking/gamemode_assault_attack / _defend, CampaignScreen/Gamemap/0 (the map
+   name while the matchmaker has none), CampaignScreen/Warmap/battle_is_starting / _running / _ending */
+const GF_KOPF_WORTE = {
+  attack: ["Zaútočit", "Angreifen", "Attack", "Ataca", "Attaquer", "攻撃", "공격", "Atak", "Atacar", "Атаковать", "Saldır", "进攻"],
+  defence: ["Obrana:", "Verteidigen", "Defend", "Defiende", "Défendre", "防衛", "방어", "Obrona", "Defender", "Оборона:", "Savun", "防御"],
+  aufkl: ["Průzkum oblasti", "Aufklärung", "Area reconnaissance", "Reconocimiento de área", "Reconnaissance de la zone", "エリア偵察", "지역 수색", "Rozpoznanie terenu", "Reconhecimento da área", "Разведка района", "Alan keşfi", "区域侦察"],
+  starting: ["Bitva začíná", "Kampf startet", "Battle is starting", "La batalla está comenzando.", "La bataille commence", "戦闘が開始しています", "전투가 시작되었습니다", "Bitwa rozpoczyna się", "A batalha está começando", "Бой начинается.", "Muharebe başlıyor", "战斗开始中"],
+  running: ["Bitva již probíhá", "Kampf läuft", "Battle is running", "La batalla está en curso.", "La bataille est en cours", "戦闘が行われています", "전투가 진행 중입니다", "Bitwa jest w toku", "A batalha está ocorrendo", "Бой ведется.", "Muharebe devam ediyor", "战斗正在进行"],
+  ending: ["Bitva končí", "Kampf geht zu Ende", "Battle is ending", "La batalla está terminando.", "La bataille se termine", "戦闘が終了しています", "전투 종료 중입니다", "Bitwa kończy się", "A batalha está acabando", "Бой заканчивается.", "Muharebe sonlanıyor", "战斗即将结束"]
+};
+/* the class means of the pictogram boxes over the 22 captures (the box's
+   brightest channel in 2 by 2 blocks, min-max, 8 bit, base64;
+   Messungen/ergebnis_p8_1.json -> vorlagen): day/night 44 by 39 - sun 13
+   pictures, sun at the horizon 4, moon 5; weather 40 by 30 - two small
+   clouds ("cloudy" - the game's "Slightly cloudy") 19, one large cloud
+   ("overcast") 2, a cloud over three strokes ("foggy") 1 - B16 alone, its
+   own picture as the template (n = 1) */
+const GF_KOPF_VORLAGEN = {
+  tag: {w: 44, h: 39, klassen: {
+    sun: "Dg4ODQ0MDAwLCwoKCQkKVdpfCAcHBwcHCAcHBwYGBgYFBQUFBQUEAwMDAgMODg0NDQsLCwsKCgoJCRKP+aoNBwcHBwcHBwcHBgYGBgYGBgUFBQMDAwMCAg0NDQ0MEBwTDAoJCQkJJJvLqCcIBwcGBgcOGA4GBgYGBgYGBQUFBAMDAwICDQ0MDAwYeoQ7FQoLH0FtmqedcUQhCQYQM3mKDwYGBwYGBgYFBQUEBAQDAwINDQwMDAtT5NyIKl6v7P7/////8LZjIX7W7loHBwYHBgYGBgUFBQQEBAMDAw0NDAwMCxex8KOl6P///////////uynke+8HAcGBgYGBgYGBQUFBAQDAwMDDQ0MDAwKClSgtff///////////////i/lVELBwYGBgUFBQYFBQQDAwMDAgINDQwMDAsKFpD5//////////////////iaGgcHBgYGBQUFBQQEBAMDAwICAg0NDAwMCwpK5f///////////////////+5TCgcGBgYFBAUFBAQDAwMDAwICDQ0MDA0MEKf7/////////////////////68WBwYGBgUEBQUEBAMCAgMDAgINDQwMDQsz1v//////////////////////6TIHBgYGBQUFBQQEAwICAgMCAg0MCw8ZKGbp///////////////////////zaycVCgYFBQUFBAQDAgIDAwICDBM0Y63CmvT///////////////////////eivbJmMA4FBQUEBAMCAgIDAgIMG3LS+tmj9///////////////////////96nQ/dV3GAUFBQQDAwMDAwMCAwwNGDRhiYzx///////////////////////2lIhkMhQGBAUEBAQDAgMDAwMDDAwMDA8VT+P///////////////////////FVEAoFBQUEBAQDBAMCAwMDAwMMDAsLCwsjzP//////////////////////2iMGBgUFBQUFBAMDAwIDAwMCAgsLCwsKCgyF9/////////////////////2NDwoQFBUTDggEAwMDAgICAwICCwsLCwoKCizP////////////////////10I2Zpu4wLSRWywKAwMCAgIDAgILCwsKCgoKIHjn/////////////////+2OktnpvqGYpsbszncdAwICAwMDAwsLCgoKCgt1t5fk/v////////////7tudDfjT8kJDkgJkmi468vBAMDAwICCgoJCgoJJsn4o2zF9P/////////2zZzeyk0SBwts50YFBhRk2LcqAwMDAgIJCQgJCQxu26NTFSdzsd34//jft3lPwsw7CAYFDYH/WAcEBAdS26ISAwMCAgcHBwgIFVZFGggICAsfPnOCdkEgEoPiUgcFBQYNgf9dOjEHAwl24FwEAwICBwcGBgYIDAgHBwgICAcdpu+7GwUt0J0SBQUFBg2B/5TaqhsDAxvBrRoDAgIHBwYGBgYGBgcGBwcGBgp58Y8FBlPvSgYFBQUFDYH/8fOCDwMDCG3nNgMCAgcIBwcHBwcHBwcGBgYGBj3KQQQLgc4qBAUEBQUNgf/9tyAEAwMEPexWBQICCQkJCQkJCQkJCAgIBwcHDnQWBRCdth4FBgUFBg2B/91ABAMCAgMt1m4IAgIKCgoKCgkJCQkJCQkICAcHEggGEqewHAYHBgYGC2fjawoDAwICAirQdwkCAgoKCQoKCQkJCQkJCQgICAcGBgYPlMAkBgYGBgYGFzYSBQQEAwICMuBkBgICCgoJCgoJCQkJCQkJCAgIBwYGBgpu4TYGBwYGBgYGBgUEBAMCAgRN8kUDAgIKCgkKCgkJCQkICAgICAcHBgYGBj/qagsHBgYGBgYGBAQDAwEBC5LOKQICAgoKCQkJCQkJCQgICAgICAYGBgYFHK7JJAcGBgYFBQUEBAMCAQE524kLAgEBCgoJCQkJCQkJCAgICAcHBgYGBgUHVt6QFAYGBgUFBQQDAwIBHK7NNQIBAQEKCgkJCQgJCQgHCAgHBwcGBgYGBQUOiOR+FQUFBQUFBAQDBB6Z4mYCAQEBAQoJCQgICAgICAcICAcHBwYGBQYFBQUck+WgMxAHBAQECBBEtOFwDgEBAQEBCQkJCQgICAkJCAgIBwcHBgYGBQUFBQUbfNTalVY8Nz5gpeDJYQ0BAQEBAAEKCgkJCQgICAgICAgHBwcGBgYFBAUFBQUKQI7K8O/n8uq/fy4CAQEBAQEAAQoKCgoJCAgHBwcHCAcHBwYGBQUEBAQEBQYFDig8UFdLOCIJAQEBAQEBAQAA",
+    sun_low: "FhUVFRUUExMTEhIREBAQDw4ODg0NDQ0NDAsKCQkJCQkICAgICAgHBwcGBQYVFBQUExISEhIREREPDw8ODg4ODQ0NDAwLCgkJCQkJCQkJCAgJCAcHBgYFBhQUExQTEhISEhEREQ8PDg4ODg4NDQwMCwsLCgoJCQoJCQkJCQkIBwcHBwYGExMSExMSEhISERERDw8PDg4ODQ0NDQwMDAsLCwoKCwoKCgoJCQkHBwcHBgYSEhISEhIREhIREBAQDw8ODg4ODQ0NDAwMDAsLCwsLCgoKCwoKCQgICAcGBhISERERERERERAQDw8PDg4NDg8NDQ0MDAsLCwsKCgoKCgoKCgkJBwcHBgYGEREREBEQDxAPDw4ODg4NDAwXLhIMDAwLCwsKCwoKCgkJCQkJCAcGBgYFBQUREREQEA8PDw4ODg4NDQ0MDCZlIAsLCwsLCgoKCQkJCAcICAcHBgUFBQQEBBEREBAQEA8ODg4ODQ0MDQ0QRow7DQoKCgoKCQkICQgHBwcHBgYFBAUFBAMEERAQEBEQDw4ODg4NDAwNDBd2wW0RCgoKCgkJCAgJCAcGBwcGBQUEBAQEAwQREBAQERAQGioSDQ0MDAwMFmS7ZBAKCgoKCQgQKBAIBgYGBgYFBQQEBAQEBBAQDw8QDw8aXlwuEwwQHT1bp+OtWTgZDAkRMl1REAcGBgYHBgUFBAQEBAMDEBAODg4ODhNGgHlHHkdxforX7NuJfG9CHEx4ezYMBgYGBgYFBQUEAwMEAwMQEA8PDg4OF1qTbkJkgIOElbK5sJCCgX9gQHCEUxMGBgYGBgUFBAQEBAQDBA8QDw8ODQ0RTp+XlYiPs9fn7e/s5NCniYONkZpOCwYGBgYGBQQEAwMEBAMEDg4ODw4NDAwliNrHruL5/v///////fbVn7zThyQGBgYGBgYEBAQDAwMEAwQNDQ0NDQwMDBWHx8f0//////////////7rr7uEEQYGBgUFBQQEAwMDAwQDAwwMDAwMCwsMH3rD9v/////////////////srHUiFBUTDwgFAwMDAgIDAwMDDQwMCwsLCwwzpO////////////////////7mtaq4wLSRWywKAwMCAgMDAwMMDAwMCwwcJFfT/v////////////////////7qvqGYpsfszncdAgIDAwMDAwwMDBEvU21PefX///////////////////3mjT8kJDggJ0qi468uBAMDAwMDCwsNKlpxgFmV/v/////////////////8y00RBgts50YFBhNj2LcqAwMCAgMKCgoKEShFQ6f//////////////////s47BwYFDYH/VwcDAwdR26ISAwMCAgoNMEhIR0pUsP/////////////////qUgcFBQUNgf9XBwMDAgh24FwEAwICChBMampqam2i8+nn5+fn5+fn5+ft/p0UBgYGBg2B/1cHBAMDAhrBrRoDAgIKCxAZGRkZHGHLpZKSkpKRkZCQkbXzSwgGBgYFDIH/VwcDAwICCG3nNgICAgoKCgoMDg8QJpvWqIuGg4KBgYGEwM8sBQYLDQwThP9XBgMCAQIDPOxWBQICCgoKCiNNUVFSbMPm3LukmpWSkJfUth8FCkhjX2W3/1cGAgIBAQIt1m4HAQIKCgoKK1ldXV1dYHydtsfJwry5wOiwHAUOV3SMxO/qRQQCAgEBAinQdwkCAgoKCQkMExQUFBQVFBgiKzM9RUZKqMAkBQYZSYKXh00RBQQDAgICMuBkBgICCgoJCQkJCQkJCQkJCAgIBwgJCA1v4TYFBR1yd1McCAUEAwMCAgRN8kYDAgIKCgkJCQkJCQkICAgICAcGBgYGBj/qagoFEUAxCwUFBAQDAwEBDJLOKQICAgoJCQkJCQkJCQgICQgIBwYFBQUFHK7IJAUEBgUFBQUFBAMCAgE524kMAgECCQkICAkICQkICAgJCAcHBgUFBQUHVt6PEgQEBQUFBQUEAwMCHK7NNQICAQEJCQgICQgICAgHBwgHBwcGBQUFBQUOieR9FAQFBQUFBQQDBB6a4mYCAgIBAQkIBwcIBwgICAcHBwcHBwYFBQUFBQUckuWfMg8HBQUECBBFtOFwDgECAgEBCQgHBwgHCAgICAgIBwYGBQUFBQQEBAUae9TalVY8Nz5gpeDJYQ0BAgICAQEJCQkICAcHCAgICAgHBwYFBQUFBAQEBQUJQI7K8O/n8urAgC4CAQEBAgEBAQoKCgkJBwcHBwcHCAgHBwYFBQQDBAQEBQUFDik+UVdMOCIJAgEBAQEBAQEA",
+    moon: "CgoJCQgIBwgICShYNwUFBQQEBAMEAwMDBQcICAcHBwYGBgYFBQUEBAQDAgMKCgkICAcHBxFXv+ZbBQUFBQQEAwQEAwMEBwgIBwcHBwYGBgUFBQQEAwMCAgoJCAgIBwcUeOX+7mAFBQUEBAQEBAMCAwUHBwcHBwcHBwYGBgUFBAQDAwICCAgICAgHDXHt///1bwUFBQQEBAMDAwIEBgcHBwcHBwcHBwYFBQUDAwMDAgIICAcIBwdJ4P////6MDAUFBAQEBAMEAwUHBwcHBwcHBgYGBwYGBQMDAwMCAggIBwcHHKr9/////7khBQQEBAQDAwQFBwgIBwcGBwcGBgYHBgUFBAMDAwICCAgHBwlG7f//////7kgGBAQFBAMDBAYHCQgHBwcHBwYGBgcGBQUDAwMDAgIICAgID4H/////////oxIEBQUEAwMFBwgJCAcHBwcHBgYHBwYFBQMDAwMCAggICAgWtP/////////rWwcFBQUEBAUHCAgIBwcHBgcGBgcHBgUEAwMDAwICCAgICBnS//////////7OOAcFBAQEBQcHCAgHBwcHBwYGBwcFBQQDAwMDAgIJCAgIGtX///////////y+NQYEAwQFBwcICAcHBwcHBgYGBgUFBAMDAwMCAggJCAgZz/////////////zIUQ0FBQUFBwgHBwcHBwcGBwcGBQUEAwMDAwICCQkICBWw//////////////3liTcUBQUGCAgHBwcHBwYHBwYFBQQDAwMDAgIJCQgIDnv////////////////+3Z9uTDo1MQwHBwcHBwcHBwYFBAMDAwMDAwkJCAgJQun//////////////////vXl29iHEQcHBwcGBgcGBQUEAwMDAwMDCAgICAgbpPz/////////////////////7U0JBwcHBwYGBgYFBQQDAwMEAwMICAgICAhB2v////////////////////mZFgUGBgYGBwcGBgUEBAMDAwQDAwgICAgIBwxm6P/////////////////7uykEBAoRFRYUEAkGBAQDAwMDBAMDCAgICAcHBxJp4P3/////////////9rcwBA81Z5y5wLSSXC0LBAMDAwMDAwMICAgIBwcHBw1Ls/X//////////t6FIQUpi9npvqGZpsftznceAwMDAwQDAwcHBwcHBwcGBgcgVJ/Z7O/u58J9Nw0GRMPfjkAkJTogJ0qj468uBQMDAwMDBwcHBwcGBgYGBQUIEBkuQDgjEwoCAkDRyk0SBgts50YGBhRk2LYqAgMCAgMGBwYGBgYGBQUFBQUEBAUFBAQDAgIlwMw6BwYFDIH/WAcEAwdR26IRAgICAgUFBQYFBQYGBQUFBQQEBAQDAwMCCoHiUQcFBQUMgf9YBwQDAgl24FwEAwICBQUFBQUFBQYGBQUEBAMEBAMDAwIqz5wSBQUFBQyB/1cHBAMDAhrBrBkDAgIFBgUGBgUFBQYFBQUDAwMEAwMCBFLvSQYGBQUFDIH/VwcDAwICCG3nNQMCAgUGBQYGBgYGBgUFBQQDAwQDAwMJgM4pBAYFBQUMgf9lKEtpNQIDPOtWBQICBQYGBgYGBgYGBQUFAwMEBAQDAg2dthwEBgUFBQyB/+bq8PCYAgIt1m4IAgIGBgYGBgUFBQUFBQUEBAQDAwICDqavGQQGBQUFCmfq276ggT0CAirQdwkCAgYGBQYFBQQFBQUGBgUEBAMDAgILkr8hBAYFBQUGFzoxIhMGAgICMuBkBwIDBgYFBQUFBQUFBQUFBQQEAwMCAgds4DQEBgUFBQUGBgQEAwMCAgRN8kYDAgIGBgUFBQUFBQUFBAUEBAQDAwICAjzqaAkGBQUFBQYGBAQDAwIBDJLOKQIBAgYFBQUFBQUFBQQEBQQEBAMCAgEBGa3IIwYFBQUFBQUFBAMDAgI524kMAgECBgUEBAUEBQUFBAQEBAQEAwICAgEDU92PFAYFBgUFBQUEAwMCHK7NNgICAQEGBQQEBQQFBQQDAwQEBAMDAgIBAQEKhuR+FQUFBQUFBQQDBB6Z4mcDAgICAgYFBQQEBAQEBAMDBAMDAwMCAQEBAQEZkuWgNBAHBQUFCBFFtOFxDwICAgIBBQUFBQQEBAQEBAQEAwMDAgICAQEBAQIZfNTalVY8OD9gpeDJYQ4CAgICAQEGBQUFBAQEBAQDBAQDAwMCAgIBAAEBAgQKQI/K8O/n8uq/gC8DAgICAgIBAQYHBgYFBAMDAwMDBAQEAwICAQEAAAEBBAYFDyk9UVhMOCMJAgICAQICAgAB"}},
+  wetter: {w: 40, h: 30, klassen: {
+    cloudy: "CgoKCwsKCgoJCQkICAkJCAgIBwcHBwYGBgYGBgUFBQQEBAMDAwMCAgoKCgoLCgoKCQkJCAgICAgIBwcHBwYGCBQ5UTISBgUEBAQDAwMDAgIKCgoKCwoKCQkJCQgICAgIBwcGBgYGCDms6vHppC8FBAQEAwMDAwICCgoKCwoKCgoJCQkICAgICAgIBgYHBiTB//////yyHwQEBAMDAwMCAgoKCwsKCQkJCQkJCAgICAgICAkaRk41pv7/////8YsqDAQDAwMDAgIKCgoKCgkKCQgJCQgICAgHCAs/uu7w05/x///////33XcTAwMDAwICCgoKCgoJCgoICAkICAgIBwctyP/////+/P/////////vbAkDAwMCAgoKCgoKCQoKCAgICAgICAcOdvz//////////////////8YlAwMDAgIKCgoJCQkJCQgICAgICAgHFa3////////////////////1PAMDAwICCgkJCQkICQkICAgICAgIBxa4////////////////////+j8DAwMCAgoJCQkJCAgICAgICAgICAcQiv7//////////////////9kvAwMDAgIKCQkJCQgICAcICAgICAkICUHg//////////////////iNEAMDAwICCgoJCQkICAgICAgICAgJCAgQZuD+//////////////elJAICAgICAgoJCQkJCAgJCAgICAgICAgHBw89fZeWlpaWlpaWlo1YHQMCAgICAQEKCQkJCQgICAgIEB0VCQgHBwcGBw0REBAQDw8PDg4NBwMDAgICAgEBCgkJCQkICAgILYaum0kMBwcHBgYGBgYGBQUFBAQEBAMDAwICAgIBAQkJCQkJCAsSKKf5//7WRQsHBwYGBgYFBQUFBQQEBAQDAwMCAgIDAgIKCQkJCRFMkrDw/////MNjGwcGBgYGBQUFBQUFBAQEAwMDAgICAwICCgkICQ1X5P//////////9osQBgYGBgUFBgUFBQQEBAMDAwMCAgICAgoJCQkXuv/////////////kMQYGBgYFBQUFBQUEBAQDAwMDAwICAgIJCQkJHOH/////////////8VIFBgYGBQUFBQUFBAQEAwMDAwMDAgICCQkJCRjA/////////////+k2BQUGBgUFBQUFBQQEBAMDAwMDAgIBAQkICAgMX+r9/////////vaSEgUFBQYFBQUEBQQEBAQDAwMCAgICAQEICAgICBNdscHBwcHBwbl6HgYFBQUFBQUFBAUFBAQEAwMDAgICAQEBCAgICAgICAgICAcGBgYGBQUFBQUFBQQEBQQEBAQEBAMDAgICAQEAAAgICAgICAgIBwcHBgYGBgUFBQUFBQUEBAQEBAQDAwMCAgIBAQEBAAAICAgICAgICAcHBwYGBgYGBQUFBQUFBAQEBAQEAwMDAgICAQEBAQAACAgICAkICAgHBwcGBgYGBgYFBQUFBQQEBAQEBAMDAgICAgEBAQEAAAgICAgJCAgICAcHBgYGBgYGBgUFBQUEBAQDAwQDAgICAgIBAQEBAAAICAgJCQgICAgIBwcGBgYGBgYFBQUFBAQEAwMDAgICAgIBAQEBAQAA",
+    foggy: "CgsODw8ODQ0MDQwLCwwegef///////eoMgoKCgkJCQgHBwYGBgYFBQoLDg8PDQ0NDA0NCwsUdvL/////////+qokCQkJCQgHBwcGBgUGBQUKCw4PEQ4ODQwODQwMKdP////////////5ag0ICAgHBwcHBgYFBQUFCwwPEREPDg0RM19tXDyD8f///////////8xiLQsICAcHBwYGBgUFBQwOERIRDg4khtTr8+rNkr7////////////869OFIAgIBwcGBgYFBQUMDQ4PDg4pqfT///////Tw////////////////9KYjCAcHBgYGBgUFDAwMDAwclvj////////////////////////////4khYHBwYGBgYGBgwLCwsLSer//////////////////////////////+lFCAcGBgYGBgYMCwsKE43/////////////////////////////////ig8HBgYGBgUFCwoKChnE/////////////////////////////////8MXBgYGBgYFBQsKCgob1P/////////////////////////////////UGQYGBgYGBQUMCgkJGcz/////////////////////////////////zBgGBQYGBgUFDAsJCRSj/////////////////////////////////6ITBgUGBgYFBQwLCgkLXvj///////////////////////////////hdCgYFBQUGBQULCgkJCCS1/P////////////////////////////y0IwYGBQUFBgYFCgkJCQkJQ9H+//////////////////////////7RQggGBgUFBQYGBgoJCQkJCQxCuPP6/f39/f39/f39/f39/f39+vO4QQsICAcGBgcIBwcKCAkJCgkJDB9ena2ura2tra2tra2tra2trJ1eHwsJCAgIBwcHCAcHCwoICQoKCgoKDA0ODQwMCwoKCQkKCgsLDAsLCwkJCQgJCQgHBwcHBwoJCQkJCgoKFFFzc3JxcXFvb29vb29vcXFxcXFtRAkICQkICAcHBgYKCQkJCQoLCyKczs7Ozs7Ozc3Nzs7Ozs7Ozs7Oy4oKCAgJCAgIBwYGCgkKCQkJCQkKIzg4ODg4NzY2Njc3Nzg4OTk5OTceCwkICAgIBwYEAwoJCgoJCAguV1tcW1tcW1pZWVpaWltbXFxcXFxZMwsKCAgIBwYEAgIJCQoLCwoJkNLU1NTU1NTT09PT09PT1NTU1NTU0pALCggIBwYEAwIBCAgKCwwMCyxHSEdGRkZFRENEREREREVFRkZHR0UrCggHBgUEAwIBAQcICQsMDA0gNDQzMzMyMS8vLy8vLy8vMTExMiIMCQgGBQQDAwIBAAAHBwkLDQ0Oldve3t7e3t7e3d3d3d3d3d7e3t6lIQYFBAMCAgIBAQABBwgLDA4PD0NkZmVlZWVlZWRkZGRkZGRlZWRkRw8FBAICAgEBAQEAAQYHCg0PDw8ODAsKCgkJCQgICAgICAgHCAgGBgYFBAQDAgIBAQEBAAAFBwoNDw8ODg0MCwoKCQkICAgHCAgIBwcGBQQDBAQEAwMCAQEBAQAA",
+    overcast: "BwcHBwgolef+///spDQHBQUFBAQEBAMDAwMCAgICAgEBAQAAAAAAAAcHBwcdrPn///////zBLAUFBQQEBAQDAwMDAwICAgIBAQEAAAAAAAAHEiUrfvL/////////+Z4ZBwUEBAQEAwMDAwMDAgICAQEBAQEBAAAAQZC9y+n+///////////vqWEVBAQEBAMDAwMDAwICAgEBAQEBAQEAANn7///////////////////rmhkEBAYJCgYDAwMCAgIBAQEBAQEBAAD//////////////////////tdJCyxUdnlXMREDAgICAQEBAQEBAQAA/////////////////////+BdIHnQ/P///diQLAQCAgEBAQEBAQEAAP////////////////////VsKZ30////////+cA3BAIBAQEAAAEBAAD///////////////////6vKYn5///////////9th0CAQEBAAABAQAA//////////////HGpqGhUD7m//////////////ZzAgEBAQAAAQEAAP//////////8K1QMignJhR79//////////////+wyUQBgEBAQEBAAD/////////43clSJPK1L94YuD///////////////rdsWcgBAEBAQAA////////7Gshhuj//////tfa///////////////////5u0EEAQEAAPX+////+ZElkvT//////////v////////////////////7QPAIBAAB3y+Xu78kyau7//////////////////////////////////LUYAQAACShPYWNKJMf+///////////////////////////////////vYwIAAAgHBwcHBlvr/////////////////////////////////////qQUAAAHBwcHBwiC/P/////////////////////////////////////OKAAABwcHBwgPkv//////////////////////////////////////4DEAAAgHBwcHDYz//////////////////////////////////////9kuAAAIBwcHBwdx9v////////////////////////////////////+8HwAACAcHBwcGPd3////////////////////////////////////7iAkAAAgHBwcHBg6d+v//////////////////////////////////2DsBAAAIBwcHBwcHMcv/////////////////////////////////73kFAQAACAcHBwcHBwpHzf3/////////////////////////////74gRAQEAAAgHBwcHBwcHCjWb5vL19fX19fX19fX19fX19fX19fTux10SAgEBAAAIBwcHBwcHBwYHEi9ebm5tbW1sbGxsbGxsa2xsa2tnRRcFAQEBAQAACAcHBwcHBwcGBgYFBQUGBQUFBAQEBAMDAwIDAwICAgEBAQEBAQEAAAgHBwcHBwcHBgYGBQUFBQUFBQQEBAQDAwMCAwMCAgIBAQEBAQEBAAAICAgICAcHBwYGBgYFBQUFBQUEBAQEAwMDAgMDAgICAQEBAQEBAQAA"}}
+};
+let gfKopfVorlagenFertig = null;
+function gfKopfVorlagenListe(feld){
+  if (!gfKopfVorlagenFertig) gfKopfVorlagenFertig = {};
+  if (gfKopfVorlagenFertig[feld]) return gfKopfVorlagenFertig[feld];
+  const aus = [];
+  for (const [k, b64] of Object.entries(GF_KOPF_VORLAGEN[feld].klassen)){
+    const roh = atob(b64), v = new Float32Array(roh.length);
+    for (let i = 0; i < roh.length; i++) v[i] = roh.charCodeAt(i)/255;
+    aus.push([k, v]);
+  }
+  return (gfKopfVorlagenFertig[feld] = aus);
+}
+/* the word lists keyed like the page keys names (unitsKey); the types out of GEF_TAFEL_ARTEN */
+let gfKopfWorteFertig = null;
+function gfKopfWorteListe(){
+  if (gfKopfWorteFertig) return gfKopfWorteFertig;
+  const mach = (kl, worte) => worte.map(w => [kl, unitsKey(w)]).filter(p => p[1].length >= 2);
+  const arten = [];
+  for (const [art, worte] of Object.entries(GEF_TAFEL_ARTEN)) for (const w of worte){ const k = unitsKey(w); if (k.length >= 3) arten.push([art, k]); }
+  gfKopfWorteFertig = {arten,
+    rolle: [...mach("attack", GF_KOPF_WORTE.attack), ...mach("defence", GF_KOPF_WORTE.defence)],
+    aufkl: mach("aufkl", GF_KOPF_WORTE.aufkl),
+    status: [...mach("starting", GF_KOPF_WORTE.starting), ...mach("running", GF_KOPF_WORTE.running), ...mach("ending", GF_KOPF_WORTE.ending)]};
+  return gfKopfWorteFertig;
+}
+/* the strips, drawn from the source bitmap onto standing surfaces (like gfAusschnitt) */
+let gfKopfFlaechen = null;
+function gfKopfStreifen(bm){
+  const A = GF_KOPF.streifen;
+  if (!gfKopfFlaechen) gfKopfFlaechen = A.map(st => {
+    const c = document.createElement("canvas"); c.width = st.w; c.height = st.h;
+    const g = c.getContext("2d", {willReadFrequently: true});
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "low";
+    return {c, g};
+  });
+  const sx = bm.width/UNITS_W, sy = bm.height/UNITS_H, aus = {};
+  A.forEach((st, j) => {
+    const f = gfKopfFlaechen[j];
+    f.g.drawImage(bm, st.x*sx, st.y*sy, st.w*sx, st.h*sy, 0, 0, st.w, st.h);
+    aus[st.k] = {d: f.g.getImageData(0, 0, st.w, st.h).data, x: st.x, y: st.y, w: st.w, h: st.h};
+  });
+  return aus;
+}
+/* a point of a strip in picture coordinates: its offset, its brightness, its brightest channel */
+const gfKopfP = (S, x, y) => ((y - S.y)*S.w + (x - S.x))*4;
+const gfKopfHell = (S, x, y) => { const p = gfKopfP(S, x, y), d = S.d; return (d[p] + d[p+1] + d[p+2])/3; };
+const gfKopfMax = (S, x, y) => { const p = gfKopfP(S, x, y), d = S.d; return Math.max(d[p], d[p+1], d[p+2]); };
+const gfKopfRot = (S, x, y) => { const p = gfKopfP(S, x, y), d = S.d; return Math.max(0, d[p] - Math.max(d[p+1], d[p+2])); };
+/* the strip's own witness (section 2 of the sheet): the top line, the ground under the band, the band */
+function gfKopfZeuge(S){
+  const K = GF_KOPF, L = K.linie, G = K.grund, B = K.band;
+  let n = 0, m = 0;
+  for (let x = L.x0; x <= L.x1; x += 10){
+    m++;
+    const v = gfKopfHell(S, x, L.y), o = gfKopfHell(S, x, L.oben), u = gfKopfHell(S, x, L.unten);
+    if (v > L.punkt && v >= L.mal*o && v >= L.mal*u) n++;
+  }
+  const linie = m ? n/m : 0;
+  const vals = [];
+  for (let y = G.y0; y <= G.y1; y += 2) for (let x = G.x0; x <= G.x1; x += 25) vals.push(gfKopfHell(S, x, y));
+  vals.sort((a, b) => a - b);
+  const grund = vals[vals.length >> 1], spanne = vals[Math.floor(vals.length*0.9)] - vals[Math.floor(vals.length*0.1)];
+  let sn = 0, sm = 0;
+  for (let x = B.x0; x <= B.x1; x += 10){
+    sm++;
+    let su = 0, k = 0;
+    for (let y = B.y0 + 6; y <= B.y1 - 6; y += 4){ su += gfKopfHell(S, x, y); k++; }
+    if (Math.abs(su/k - grund) > Math.max(4, 0.15*grund)) sn++;
+  }
+  const band = sm ? sn/sm : 0;
+  return {linie: Math.round(linie*100)/100, grund, spanne, band: Math.round(band*100)/100,
+          da: linie >= L.anteil && spanne <= G.spanne && band >= B.anteil};
+}
+/* a fingerprint of the strip's three text fields off the SOURCE strip
+   (S.kopf, not the lifted R.d: the lift's gain follows the whole picture,
+   and a bright patch beside the window changed the hash) - relative, so
+   that a dark share hashes as well as a capture; only a CHANGE is read off
+   it. The type and the town by brightness (threshold: median plus half the
+   contrast of the brightness samples of the three fields). The status field
+   is RED script on a dark ground - its brightest point 91-128 against a
+   threshold of 152-184 - and gave no bit at all by brightness (round 2:
+   "starting" swapped for "running" on B1 = 1 bit, and the change was seen
+   only through the photo behind the text); since round 3 it goes in by its
+   redness R - max(G, B), threshold half the field's maximum and at least
+   GF_KOPF.rotMin: red ones per window 164-167 (239-240 before the start),
+   the status swapped 245 bits, TFohne -> TFmit 1393. One bit per sample
+   (6.058), as a string; two strips are the same strip when at most
+   GF_KOPF.kennungTol bits differ (the numbers there). */
+function gfKopfKennung(S){
+  const hell = [], grund = [], rot = [];
+  for (const [x0, y0, x1, y1] of [GF_KOPF.art, GF_KOPF.ort])
+    for (let y = y0; y <= y1; y += 3) for (let x = x0; x <= x1; x += 6) hell.push(gfKopfHell(S, x, y));
+  { const [x0, y0, x1, y1] = GF_KOPF.status;
+    for (let y = y0; y <= y1; y += 3) for (let x = x0; x <= x1; x += 6){ grund.push(gfKopfHell(S, x, y)); rot.push(gfKopfRot(S, x, y)); } }
+  const sortiert = hell.concat(grund).sort((a, b) => a - b);   /* the brightness threshold over the three fields, as before */
+  const med = sortiert[sortiert.length >> 1], mx = sortiert[sortiert.length - 1], schwelle = med + 0.5*(mx - med);
+  let h = "";
+  for (const v of hell) h += v > schwelle ? "1" : "0";
+  let rmx = 0;
+  for (const v of rot) if (v > rmx) rmx = v;
+  const rotSchwelle = Math.max(GF_KOPF.rotMin, rmx/2);
+  for (const v of rot) h += v > rotSchwelle ? "1" : "0";
+  return h;
+}
+const gfKopfTeilGleich = (a, b, von, bis) => {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length || !a.length) return false;
+  let d = 0;
+  for (let i = von; i < bis; i++) if (a[i] !== b[i] && ++d > GF_KOPF.kennungTol) return false;
+  return true;
+};
+const gfKopfKennungGleich = (a, b) => gfKopfTeilGleich(a, b, 0, typeof a === "string" ? a.length : 0);
+/* how many bits of the fingerprint come from the brightness of the type and town fields (5.184 at the measured fields) - the rest is the status field's redness */
+const gfKopfHellBits = () => [GF_KOPF.art, GF_KOPF.ort].reduce((n, [x0, y0, x1, y1]) => n + (Math.floor((y1 - y0)/3) + 1)*(Math.floor((x1 - x0)/6) + 1), 0);
+let gfKopfZiffernFertig = null;
+const gfKopfZiffernVorlagen = () => gfKopfZiffernFertig || (gfKopfZiffernFertig = gfZiffernVorlagenTabelle().filter(p => p[0] !== "." && p[0] !== "k"));
+/* one box of digits off a strip, with the table's templates (section 5): ground = median, ink from
+   ground + GF_KOPF.tinte, threshold at half the contrast, runs, glyphs cut at their ink rows, 14 by 30,
+   min-max, L1; the width witness scaled by the glyph height. text "" for an empty box, "?" per glyph
+   that no template claims; n the number when every glyph is sure and the text is one or two digits */
+function gfKopfZiffern(S, x0, y0, x1, y1, vorl){
+  const B = x1 - x0 + 1, H = y1 - y0 + 1, g = new Float32Array(B*H), h = new Uint32Array(256);
+  let hell = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < B; x++){ const v = gfKopfHell(S, x0 + x, y0 + y); g[y*B + x] = v; h[v|0]++; if (v > hell) hell = v; }
+  let s = 0, grund = 255;
+  for (let v = 0; v < 256; v++){ s += h[v]; if (s*2 >= B*H){ grund = v; break; } }
+  const aus = {text: "", n: null, leer: true, grund, hell, abstand: 1, fern: 0};
+  if (hell - grund < GF_KOPF.tinte) return aus;
+  aus.leer = false;
+  const schwelle = grund + GF_ZEUGE.anteil*(hell - grund);
+  const spalte = new Uint8Array(B);
+  for (let x = 0; x < B; x++) for (let y = 0; y < H; y++) if (g[y*B + x] > schwelle){ spalte[x] = 1; break; }
+  const laeufe = []; let st = -1;
+  for (let x = 0; x <= B; x++){
+    const an = x < B && spalte[x];
+    if (an && st < 0) st = x;
+    if (!an && st >= 0){ laeufe.push([st, x - 1]); st = -1; }
+  }
+  if (!laeufe.length || laeufe.length > 3) return aus;
+  let sicher = true;
+  for (const [a0, b0] of laeufe){
+    const w = b0 - a0 + 1;
+    let ra = -1, re = -1;
+    for (let y = 0; y < H; y++){
+      let an = false;
+      for (let x = a0; x <= b0; x++) if (g[y*B + x] > schwelle){ an = true; break; }
+      if (an){ if (ra < 0) ra = y; re = y; }
+    }
+    const hh = re - ra + 1, m = new Float32Array(w*hh);
+    for (let y = 0; y < hh; y++) for (let x = 0; x < w; x++) m[y*w + x] = g[(ra + y)*B + a0 + x];
+    const v = gefEndbildStauchen(m, w, hh, GF_ZIFFER_B, GF_ZIFFER_H);
+    let mn = Infinity, mx = -Infinity, nan = false;
+    for (let q = 0; q < v.length; q++){ if (v[q] !== v[q]) nan = true; if (v[q] < mn) mn = v[q]; if (v[q] > mx) mx = v[q]; }
+    const sp = Math.max(1, mx - mn), sk = hh/GF_KOPF.hoehe, R_ = GF_BREITEN, dist = [];
+    if (!nan) for (const [c, t] of vorl){
+      if (c === "1" ? (w > R_.eins*sk || w < R_.einsMin*sk) : w < R_.ziffer*sk) continue;
+      let su = 0;
+      for (let q = 0; q < v.length; q++) su += Math.abs((v[q] - mn)/sp - t[q]);
+      dist.push([su/v.length, c]);
+    }
+    dist.sort((p, q) => p[0] - q[0]);
+    const best = dist.length ? dist[0][1] : null, bestW = dist.length ? dist[0][0] : Infinity;
+    const zweit = dist.length > 1 ? dist[1][0] : Infinity, luft = Math.min(1, zweit - bestW);
+    if (best === null || bestW > GF_ZIFFER_MAX || luft < GF_ZIFFER_MIN){ aus.text += "?"; sicher = false; }
+    else { aus.text += best; if (bestW > aus.fern) aus.fern = bestW; }
+    if (luft < aus.abstand) aus.abstand = luft;
+  }
+  aus.fern = Math.round(aus.fern*1000)/1000; aus.abstand = Math.round(aus.abstand*1000)/1000;
+  if (sicher && /^\d\d?$/.test(aus.text)) aus.n = +aus.text;
+  return aus;
+}
+/* the star's colour off its filled square */
+function gfKopfStern(S){
+  const [x0, y0, x1, y1] = GF_KOPF.stern;
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++){ const p = gfKopfP(S, x, y); r += S.d[p]; g += S.d[p+1]; b += S.d[p+2]; n++; }
+  r /= n; g /= n; b /= n;
+  const f = GF_KOPF.farbe;
+  return r > f*b && r > f*g ? "red" : b > f*r && b > GF_KOPF.blauGruen*g ? "blue" : null;
+}
+/* a pictogram box against its class means: the brightest channel in 2 by 2 blocks, min-max, L1 */
+function gfKopfVorlage(S, box, vorlagen){
+  const [x0, y0, x1, y1] = box, w = Math.floor((x1 - x0 + 1)/2), h = Math.floor((y1 - y0 + 1)/2), v = new Float32Array(w*h);
+  let mn = Infinity, mx = -Infinity;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+    const q = (gfKopfMax(S, x0 + x*2, y0 + y*2) + gfKopfMax(S, x0 + x*2 + 1, y0 + y*2) + gfKopfMax(S, x0 + x*2, y0 + y*2 + 1) + gfKopfMax(S, x0 + x*2 + 1, y0 + y*2 + 1))/4;
+    v[y*w + x] = q; if (q < mn) mn = q; if (q > mx) mx = q;
+  }
+  const sp = Math.max(1, mx - mn);
+  let best = null;
+  for (const [k, t] of vorlagen){
+    if (t.length !== v.length) continue;
+    let su = 0;
+    for (let q = 0; q < v.length; q++) su += Math.abs((v[q] - mn)/sp - t[q]);
+    const d = su/v.length;
+    if (best === null || d < best.d) best = {k, d: Math.round(d*1000)/1000};
+  }
+  return best;
+}
+/* the objective lines: ink per line window (points over the median plus half the contrast, only with
+   contrast >= max(8; 0,6 x median)); the third window lies outside the box when attacking */
+function gfKopfZiele(S){
+  const tinte = []; let zeilen = 0;
+  for (const [x0, y0, x1, y1] of GF_KOPF.ziele){
+    const h = new Uint32Array(256); let mx = 0, m = 0;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++){ const p = gfKopfP(S, x, y), v = Math.min(S.d[p], S.d[p+1], S.d[p+2]); h[v]++; m++; if (v > mx) mx = v; }
+    let s = 0, med = 0;
+    for (let v = 0; v < 256; v++){ s += h[v]; if (s*2 >= m){ med = v; break; } }
+    let k = 0;
+    if (mx - med >= Math.max(8, 0.6*med)){ const sch = med + 0.5*(mx - med); for (let v = Math.ceil(sch); v < 256; v++) k += h[v]; }
+    tinte.push(k); if (k >= GF_KOPF.zielTinte) zeilen++;
+  }
+  return {zeilen, tinte};
+}
+/* the nearest word of a list to a key, within one error per `je` characters of that word (at least one) */
+function gfKopfWort(key, liste, je){
+  if (!key || key.length < 3) return null;
+  let best = null;
+  for (const [kl, k] of liste){ const d = levenshtein(key, k); if (best === null || d < best.d) best = {kl, k, d}; }
+  return best !== null && best.d <= Math.max(1, Math.floor(best.k.length/je)) ? best.kl : null;
+}
+/* the nearest word of a list as a PREFIX of a key (the same error budget), the longer key at a tie -
+   so that a photo tail behind the word ("angreifenfy", "verteidigenoa") does not count as errors */
+function gfKopfWortPraefix(key, liste, je){
+  if (!key || key.length < 3) return null;
+  let best = null;
+  for (const [kl, k] of liste){ const d = levenshtein(key.slice(0, k.length), k); if (best === null || d < best.d || (d === best.d && k.length > best.k.length)) best = {kl, k, d}; }
+  return best !== null && best.d <= Math.max(1, Math.floor(best.k.length/je)) ? best.kl : null;
+}
+/* the first line, "Sturm Verteidigen": the type as a prefix (one error per eight characters, the
+   longer key at a tie), the rest of the line as the role - a prefix as well; "Aufklärung" against the whole line */
+function gfKopfArtRolle(text){
+  const W = gfKopfWorteListe(), key = unitsKey(String(text || ""));
+  let typ = null, rest = key, best = null;
+  for (const [art, k] of W.arten){
+    const d = levenshtein(key.slice(0, k.length), k);
+    if (d <= Math.max(1, Math.floor(k.length/8)) && (best === null || d < best[0] || (d === best[0] && k.length > best[1]))){ typ = art; best = [d, k.length]; rest = key.slice(k.length); }
+  }
+  return {typ, rolle: gfKopfWortPraefix(rest, W.rolle, 8), aufkl: gfKopfWort(key, W.aufkl, 8) === "aufkl"};
+}
+/* the town out of the second line (section 4): every window of one to three words from every
+   position, keys of at least four characters, an error only on town keys of six and more; the
+   town picked wins among the hits, else the closest, the longer key at a tie */
+function gfKopfStadt(text, gewaehlt){
+  const w = String(text || "").replace(/[^\p{L}\p{N}\s'\-]/gu, " ").split(/\s+/).filter(Boolean);
+  if (!w.length) return null;
+  const gName = (gewaehlt !== null && gewaehlt !== undefined && MAP.n[gewaehlt]) ? MAP.n[gewaehlt][0] : null;
+  let best = null;
+  for (let ab = 0; ab < w.length; ab++) for (let n = 1; n <= 3 && ab + n <= w.length; n++){
+    const t = unitsKey(w.slice(ab, ab + n).join(" "));
+    if (t.length < 4) continue;
+    for (const [sk, i] of STADT_KEYS){
+      if (Math.abs(sk.length - t.length) > 3) continue;
+      const d = levenshtein(t, sk);
+      if (d > (sk.length < 6 ? 0 : Math.max(1, Math.floor(sk.length/8)))) continue;
+      if (gName !== null && MAP.n[i][0] === gName) return gewaehlt;
+      if (best === null || d < best[0] || (d === best[0] && sk.length > best[2])) best = [d, i, sk.length];
+    }
+  }
+  return best === null ? null : best[1];
+}
+/* the words of the strip through the text reader (off the source bitmap): type + role, town, status */
+async function gfKopfWorte(bm, gewaehlt){
+  const t0 = performance.now();
+  const lies = async box => {
+    const [x0, y0, x1, y1] = box;
+    const feld = await bildAufbereiten(bm, unitsBox(x0, y0, x1 - x0 + 1, y1 - y0 + 1), false);
+    const r = await ocrMitZuv(feld, 7, null, "");
+    return {text: (r.text || "").trim().replace(/\s+/g, " "), zuv: r.zuv};
+  };
+  const art = await lies(GF_KOPF.art), ort = await lies(GF_KOPF.ort), status = await lies(GF_KOPF.status);
+  const W = gfKopfWorteListe(), a = gfKopfArtRolle(art.text);
+  const aufkl = a.aufkl || gfKopfWort(unitsKey(ort.text), W.aufkl, 8) === "aufkl";
+  return {typ: a.typ, rolle: a.rolle, aufkl, ort: aufkl ? null : gfKopfStadt(ort.text, gewaehlt),
+          status: gfKopfWort(unitsKey(status.text), W.status, 4),
+          text: {art: art.text, ort: ort.text, status: status.text}, zuv: {art: art.zuv, ort: ort.zuv, status: status.zuv},
+          ms: Math.round(performance.now() - t0)};
+}
+/* the role out of the witnesses present - the strip's word, the star, the objective lines: all of them or nothing */
+function gfKopfRolle(K){
+  if (!K) return null;
+  const z = [];
+  if (K.worte && K.worte.rolle) z.push(K.worte.rolle);
+  if (K.stern) z.push(K.stern === "red" ? "attack" : "defence");
+  if (K.ziele && (K.ziele.zeilen === 2 || K.ziele.zeilen === 3)) z.push(K.ziele.zeilen === 2 ? "attack" : "defence");
+  return z.length && z.every(r => r === z[0]) ? z[0] : null;
+}
+const gfKopfUhrText = sek => { const s = Math.max(0, Math.round(sek)); return String(Math.floor(s/3600)).padStart(2, "0") + ":" + String(Math.floor((s % 3600)/60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+/* the game's words (StrategyGUI/BattleInformation): timeOfDay Night / Dawn / Day / Dusk - the sun at the
+   horizon is one pictogram for dawn and dusk; weatherCondition Slightly cloudy / Overcast / Foggy */
+const gfKopfLichtWort = l => l === "moon" ? "night" : l === "sun_low" ? "dawn/dusk" : l === "sun" ? "day" : "";
+const gfKopfWetterWort = w => w === "cloudy" ? "slightly cloudy" : w === "overcast" ? "overcast" : w === "foggy" ? "foggy" : "";
+/* THE STRIP OUT OF ONE READING. Hangs on the R that gfLesen hands out (frame,
+   counter band) and reads off the source bitmap (quelle: the beat's
+   ImageBitmap, or a file or blob, decoded here and closed again). null when
+   the frame is not there; else da (the gate: table witness and strip
+   witness), and with da the clock (uhr.s in seconds, null when a box is
+   unsure), the counter per place (zaehler, null for a place without a
+   side or an unsure box), stern, licht / tag, wetter, ziele, the strip's
+   fingerprint (kennung) and the time of the reading (t); with mitWorten
+   (true, or a function of the reading so far - it sees the fingerprint)
+   the words (worte) through the text reader. */
+async function gfKopf(R, quelle, mitWorten, gewaehlt){
+  if (!R || !R.da || !R.d || !quelle) return null;
+  const eigen = !(typeof ImageBitmap !== "undefined" && quelle instanceof ImageBitmap);
+  const bm = eigen ? await createImageBitmap(quelle) : quelle;
+  try {
+    const K = gfKopfAus(R, bm);
+    if (K.da && (typeof mitWorten === "function" ? mitWorten(K) : mitWorten)) K.worte = await gfKopfWorte(bm, gewaehlt);
+    return K;
+  } finally { if (eigen && bm.close) bm.close(); }
+}
+function gfKopfAus(R, bm){
+  const t0 = performance.now();
+  const W = gfTabelleDa(gfAusschnitt(bm));
+  const S = gfKopfStreifen(bm), Z = gfKopfZeuge(S.kopf);
+  const K = {da: !!(W && W.da) && Z.da, tabelle: !!(W && W.da), zeuge: Z, kennung: gfKopfKennung(S.kopf), t: jetzt(), ms: 0};
+  if (!K.da){ K.ms = Math.round((performance.now() - t0)*100)/100; return K; }
+  const vorl = gfKopfZiffernVorlagen();
+  const uhr = GF_KOPF.uhr.map(b => gfKopfZiffern(S.kopf, b[0], b[1], b[2], b[3], vorl));
+  K.uhr = {text: uhr.map(u => u.text), s: uhr.every(u => /^\d\d$/.test(u.text)) ? (+uhr[0].text)*3600 + (+uhr[1].text)*60 + (+uhr[2].text) : null,
+           abstand: Math.min(...uhr.map(u => u.abstand)), fern: Math.max(...uhr.map(u => u.fern))};
+  K.zaehler = [null, null, null]; K.zaehlerText = ["", "", ""];
+  if (R.band) for (let p = 0; p < 3; p++){
+    const z = GF_KOPF.zaehler, ax = GF_SPALTE[p];
+    const c = gfKopfZiffern(S.zaehler, ax + z[0], R.band.y0 + z[1], ax + z[2], R.band.y0 + z[3], vorl);
+    K.zaehler[p] = c.n; K.zaehlerText[p] = c.text;
+  }
+  K.stern = gfKopfStern(S.kopf);
+  const tag = gfKopfVorlage(S.kopf, GF_KOPF.tag, gfKopfVorlagenListe("tag"));
+  K.licht = tag && tag.d <= GF_KOPF.vorlage ? tag.k : null; K.tag = K.licht === null ? null : (K.licht === "moon" ? 0 : 1); K.lichtD = tag ? tag.d : null;
+  const we = gfKopfVorlage(S.kopf, GF_KOPF.wetter, gfKopfVorlagenListe("wetter"));
+  K.wetter = we && we.d <= GF_KOPF.vorlage ? we.k : null; K.wetterD = we ? we.d : null;
+  K.ziele = gfKopfZiele(S.ziele);
+  K.ms = Math.round((performance.now() - t0)*100)/100;
+  return K;
+}
 /* One look at the picture: geometry only, no text. Reading the names costs
    a second each and happens one row at a time, in the room's own beat. */
 async function gfLesen(quelle, ziel){
@@ -30484,7 +30952,10 @@ function pgNeu(){
              from, its cost, its own status line, what was last written to
              the pot and when, and the cells typed by hand (key side:column) */
           staerke: null, staerkeR: null, staerkeMs: null, staerkeZeile: "",
-          staerkeGeschrieben: null, staerkeT: 0, staerkeHand: {}};
+          staerkeGeschrieben: null, staerkeT: 0, staerkeHand: {},
+          /* the head strip (P8): the last reading, the R it came from, the
+             words the text reader gave, the strip's last fingerprint */
+          kopf: null, kopfR: null, kopfWorte: null, kopfVorige: null};
 }
 /* NO BAR, NO POSITION - AND NOTHING TO CONFUSE. A town with one or two
    units shows no card strip at all, only the floating box with the unit's
@@ -30634,6 +31105,8 @@ async function pgTick(){
       }
     }
     PG.vorige = R.kennung;
+    await pgKopf(R, f);                        /* P8: the head strip first, so the first row carries it */
+    if (!PG || !PG.live) return;
     await pgStaerke(R, f);
     if (!PG || !PG.live) return;
     /* one unread visible line that actually carries a name */
@@ -30720,7 +31193,7 @@ function pgLiveStop(auchFreigabe){
   /* the last reading and the standing surface go with the room - 33
      megabytes each, nothing to keep while nobody looks */
   PG.R = null; pgFlaeche.c = null; pgFlaeche.g = null;
-  PG.staerkeR = null;
+  PG.staerkeR = null; PG.kopfR = null;
   /* the share is the page's: it ends only when no room is watching */
   if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)
       && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()) bildFreigabeBeenden();
@@ -30733,6 +31206,8 @@ async function pgBild(datei){
   pgVerarbeiten(R);
   if (R.da){
     if (PG.stadt === null){ const st = await gfStadt(R.c); if (st) PG.stadt = st.i; }
+    await pgKopf(R, datei);
+    if (!PG) return;
     await pgStaerke(R, datei);
     if (!PG) return;
     for (const s of R.seiten){
@@ -30771,6 +31246,61 @@ async function pgStaerke(R, quelle){
   }
   if (PG.staerke) pgStaerkeTeilen();
 }
+/* THE HEAD STRIP, ONCE PER PICTURE (P8). Hangs on the reading and the
+   bitmap like pgStaerke and runs before it, so that the first row of a
+   battle carries the strip as well as the table. The digits, the
+   pictograms and the objective lines are read every time (no text reader,
+   a few thousandths); the words (type, role, town, status) through the
+   text reader only when the strip's text changed and stood still for two
+   readings - once per battle, and again when "starting" turns to
+   "running" (a file is read at once). The words carry the fingerprint they
+   were read at and count only while it is the fingerprint of the last
+   reading (pgKopfWorteGueltig): a changed strip writes no old words, the
+   row goes without type / status until the new strip stood still and was
+   read. A town the room has not read (gfStadt) is taken from the strip; a
+   read town is never overwritten. */
+async function pgKopf(R, quelle){
+  if (!PG || !R || !R.da || !quelle) return;
+  if (PG.kopfR === R) return;
+  PG.kopfR = R;
+  const mit = K => {
+    const still = gfKopfKennungGleich(K.kennung, PG.kopfVorige) || !PG.live;
+    PG.kopfVorige = K.kennung;
+    return still && (!PG.kopfWorte || !gfKopfKennungGleich(PG.kopfWorte.kennung, K.kennung));
+  };
+  const K = await gfKopf(R, quelle, mit, PG.stadt);
+  if (!PG || PG.kopfR !== R) return;
+  if (!K || !K.da){ PG.kopf = null; return; }
+  PG.kopf = K;
+  if (K.worte){
+    PG.kopfWorte = Object.assign({kennung: K.kennung}, K.worte);
+    if ((PG.stadt === null || PG.stadt === undefined) && K.worte.ort !== null) PG.stadt = K.worte.ort;
+  }
+}
+/* the words, as long as they belong to the strip last read (same fingerprint); null otherwise */
+const pgKopfWorteGueltig = () => {
+  if (!(PG && PG.kopf && PG.kopf.da && PG.kopfWorte)) return null;
+  const a = PG.kopfWorte.kennung, b = PG.kopf.kennung, n = gfKopfHellBits();
+  if (!gfKopfTeilGleich(a, b, 0, n)) return null;                       // another strip (type/town field): nothing of it holds
+  if (gfKopfTeilGleich(a, b, n, a.length)) return PG.kopfWorte;
+  return Object.assign({}, PG.kopfWorte, {status: null});               // the same strip with another status word: type, role and town hold, the status waits for the next reading (Skeptiker Handwerk R3 KANN-2)
+};
+/* the strip's reading as one line for the room's head: type · role · clock as hh:mm like the windows (or "no map yet") · light · weather */
+function pgKopfZeile(){
+  const K = PG.kopf, W = pgKopfWorteGueltig();
+  if (!K || !K.da) return "\u2014";
+  const t = [];
+  if (W && W.typ) t.push(gefTafelArtWort(W.typ) || W.typ);
+  const r = gfKopfRolle(Object.assign({}, K, {worte: W}));
+  if (r) t.push(r === "attack" ? "Attacking" : "Defending");
+  if (W && W.aufkl) t.push("no map yet");
+  else if (K.uhr && K.uhr.s !== null) t.push((W && W.status === "starting" ? "starting " : W && W.status === "ending" ? "ending " : "active ") + gfKopfUhrText(K.uhr.s).slice(0, 5));
+  if (K.licht) t.push(gfKopfLichtWort(K.licht));
+  if (K.wetter) t.push(gfKopfWetterWort(K.wetter) || K.wetter);
+  return t.join(" \u00b7 ") || "\u2014";
+}
+/* the counter's figure for a place, null when none was read */
+const pgKopfZahl = platz => (PG.kopf && PG.kopf.da && PG.kopf.zaehler && PG.kopf.zaehler[platz] !== null && PG.kopf.zaehler[platz] !== undefined) ? PG.kopf.zaehler[platz] : null;
 /* one cell set from a text - the reader's or a typed one */
 function pgStaerkeZelle(z, i, text){
   const k = GF_GRUPPEN[i].k, w = gfZahl(text);
@@ -30812,9 +31342,18 @@ function pgStaerkeHand(){
    order, as read, without the register's label; spieler what the head
    shows (the rows seen with ink, PG.ende); liste how long the side's list
    is as far as it is known (T9 (e): the roll's count, or the side's end
-   once the row after it was seen empty). typ and seit (kind of battle,
-   running time) are not read here - the head strip is not read at all -
-   and may be missing. */
+   once the row after it was seen empty).
+   THE HEAD STRIP (Blatt 16.09., P8 - ENNO 17.09.2026: "Alles in diesem
+   Detailfenster soll ausgelesen werden"): kopf per side is the counter
+   beside the emblem (one figure, the side's players in the battle - no
+   capacity anywhere in the window, MESSUNG-P8 section 0); typ / rolle /
+   status / aufkl the strip's words, seit the war map's clock in seconds
+   at the time seitT (the reading, not the write - the windows count on
+   from there), stern, tag (1 sun, 0 moon) with licht (sun / sun_low /
+   moon), wetter (cloudy / overcast / foggy). Everything absent that was
+   not read; the words only while their fingerprint is the strip's
+   (pgKopfWorteGueltig); the write mark leaves the clock out, so the
+   seconds alone never cost a write. */
 const PG_TEILEN_TAKT = 15000;
 function pgStaerkeTeilen(){
   const St = PG.staerke;
@@ -30834,17 +31373,29 @@ function pgStaerkeTeilen(){
        the list ends there, and a shorter side does not say "check again"
        for good. Without roll and without ink: 0. */
     const zuEnde = !!s && PG.leer.has(pgKey(s.platz, ende));
-    return {spieler: ende, liste: s ? (zuEnde ? ende : n) : 0, namen};
+    return {spieler: ende, liste: s ? (zuEnde ? ende : n) : 0, namen, kopf: s ? pgKopfZahl(s.platz) : null};
   };
   const seiten = St.zeilen.map(z => {
     const b = blatt(z.f);
     const e = {f: z.f, n: z.n, ca: z.ca, text: z.text, spieler: b.spieler, liste: b.liste, namen: b.namen};
+    if (b.kopf !== null) e.kopf = b.kopf;
     if (z.hand && z.hand.length) e.hand = z.hand.map(i => GF_GRUPPEN[i].k);
     return e;
   });
-  const marke = JSON.stringify(seiten);
+  const v = {seiten, q: St.q, src: "battle-window"};
+  const K = PG.kopf && PG.kopf.da ? PG.kopf : null, KW = pgKopfWorteGueltig();
+  if (K){
+    if (KW){ if (KW.typ) v.typ = KW.typ; if (KW.status) v.status = KW.status; if (KW.aufkl) v.aufkl = 1; }
+    const rolle = gfKopfRolle(Object.assign({}, K, {worte: KW}));
+    if (rolle) v.rolle = rolle;
+    if (K.uhr && K.uhr.s !== null){ v.seit = K.uhr.s; v.seitT = K.t; }
+    if (K.stern) v.stern = K.stern;
+    if (K.licht){ v.tag = K.tag; v.licht = K.licht; }
+    if (K.wetter) v.wetter = K.wetter;
+  }
+  const marke = JSON.stringify([seiten, v.typ, v.rolle, v.status, v.aufkl, v.stern, v.licht, v.wetter, v.seit !== undefined]);
   if (marke !== PG.staerkeGeschrieben && (PG.staerkeGeschrieben === null || jetzt() - PG.staerkeT >= PG_TEILEN_TAKT)){
-    if (setBattle(PG.stadt, {seiten, q: St.q, src: "battle-window"})){ PG.staerkeGeschrieben = marke; PG.staerkeT = jetzt(); }
+    if (setBattle(PG.stadt, v)){ PG.staerkeGeschrieben = marke; PG.staerkeT = jetzt(); }
   }
   const e = (S.btl || {})[PG.stadt];
   PG.staerkeZeile = e && e.v && e.v.src === "battle-window"
@@ -30973,36 +31524,41 @@ function pgZeichnen(){
   /* while a name is being typed the sheet must not be rebuilt under the
      hand - the input would be thrown away on the next look */
   if (PG.tippt) return;
-  const kopf = document.getElementById("sp-kopf"), links = document.getElementById("sp-links"),
+  const kopfEl = document.getElementById("sp-kopf"), links = document.getElementById("sp-links"),
         blatt = document.getElementById("sp-blatt");
   const ortName = PG.stadt !== null && PG.stadt !== undefined ? MAP.n[PG.stadt][0] : null;
   const gelesen = PG.namen.size;
-  const soll = Object.values(PG.ende).reduce((a, b) => a + (b || 0), 0);
-  kopf.innerHTML = `
+  /* P8: the counter's figure is the side's count where it was read; the rows seen with ink otherwise */
+  const soll = PG.seiten.length ? PG.seiten.reduce((a, s) => a + (pgKopfZahl(s.platz) !== null ? pgKopfZahl(s.platz) : (PG.ende[s.platz] || 0)), 0)
+                                : Object.values(PG.ende).reduce((a, b) => a + (b || 0), 0);
+  kopfEl.innerHTML = `
     <div class="rd-kf weit ${ortName ? "ort" : ""}"><div class="t">Battle at</div>
       <div class="v">${ortName ? `<b class="kb-ortname">${kbEsc(ortName)}</b>`
         : "<small>not read yet</small>"}</div></div>
     ${PG.seiten.map(s => `<div class="rd-kf"><div class="t">${kbEsc(kbSeiteName(s.f))}</div>
-      <div class="v">${PG.ende[s.platz] || "—"}<small> players</small></div></div>`).join("")}
+      <div class="v">${pgKopfZahl(s.platz) !== null ? pgKopfZahl(s.platz) : (PG.ende[s.platz] || "—")}<small> players</small></div></div>`).join("")}
     <div class="rd-kf ${soll && gelesen >= soll ? "gut" : ""}"><div class="t">Names read</div>
       <div class="v">${gelesen}<small> of ${soll || "?"}</small></div>
       <div class="bar"><i style="width:${soll ? Math.round(100*Math.min(1, gelesen/soll)) : 0}%"></i></div></div>
     <div class="rd-kf"${PG.staerkeMs !== null ? ` title="strength table read in ${PG.staerkeMs} ms"` : ""}><div class="t">Capture</div>
       <div class="v"><small>${PG.frame ? `${PG.frame.w}×${PG.frame.h}, brightness ${PG.hell}${
-        PG.gain > 1 ? `, ×${PG.gain.toFixed(1)}` : ""}` : "—"}</small></div></div>`;
+        PG.gain > 1 ? `, ×${PG.gain.toFixed(1)}` : ""}` : "—"}</small></div></div>
+    <div class="rd-kf weit"${PG.kopf && PG.kopf.da ? ` title="war map line read in ${PG.kopf.ms} ms${PG.kopfWorte ? ", words in " + PG.kopfWorte.ms + " ms" : ""}"` : ""}><div class="t">War map</div>
+      <div class="v" style="white-space:normal;line-height:1.3"><small>${kbEsc(pgKopfZeile())}</small></div></div>`;
   links.innerHTML = `
     <h3>Now</h3>
     <div class="kb-jetzt">${kbEsc(PG.status)}</div>
     <h3>Set</h3>
-    <div class="kb-geraet ${PG.liest ? "scannt" : ""}">${kbFunkgeraetSVG()}</div>
-    <h3 style="margin-top:14px">How it works</h3>
-    <div>Open a battle on the war map and scroll its lists. <b>Keep the sheet</b> writes the names to the register.
-    The strength table is read as well and shared with the clan
-    while the window stands.</div>`;
+    <div class="kb-geraet ${PG.liest ? "scannt" : ""}">${kbFunkgeraetSVG()}</div>`;
+  /* ENNO 18.09.2026: "Ich brauche aber in der Oberfläche keine Kommentare." - the
+     "How it works" text of this room is gone (P8, 19.09.2026) */
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Battle"} · ${
     new Date().toLocaleDateString()}</div>
     ${PG.seiten.length ? `${pgStaerkeHtml()}<div class="sp-listen">${PG.seiten.map(s => {
-      const n = Math.max(PG.ende[s.platz] || 0, PG.N || 0);
+      /* P8: the counter's figure is the side's count where it was read (the rows drawn never
+         fewer than the rows seen with ink); the roll's count otherwise */
+      const kopfZahl = pgKopfZahl(s.platz);
+      const n = kopfZahl !== null ? Math.max(kopfZahl, PG.ende[s.platz] || 0) : Math.max(PG.ende[s.platz] || 0, PG.N || 0);
       const zeilen = [];
       for (let i = 0; i < n; i++){
         const k = pgKey(s.platz, i), v = PG.namen.get(k);
@@ -31031,11 +31587,16 @@ function pgZeichnen(){
             }</div></div>`);
       }
       return `<div class="sp-liste"><h4>${kbEsc(kbSeiteName(s.f))}
-        <span class="sp-n">${[...PG.namen.values()].filter(v => v.f === s.f).length} of ${n || "?"}</span></h4>
+        <span class="sp-n">${[...PG.namen.values()].filter(v => v.f === s.f).length} of ${kopfZahl !== null ? kopfZahl : (n || "?")}</span></h4>
         ${zeilen.join("")}</div>`;
     }).join("")}</div>` : `<div class="kb-hinweis">No battle window seen yet.</div>`}`;
   pgPult();
 }
+/* ENNO 18.09.2026: "Ich brauche aber in der Oberfläche keine Kommentare." - the
+   foot of this desk ("The game must run borderless or windowed. Names go into
+   the register with their side; nothing else is kept.") is gone, and so is
+   the foot of the battle reader's desk (gefPult, "Only the town picked on the
+   left is written to: ...") - P8, 19.09.2026 */
 function pgPult(){
   const pult = document.getElementById("sp-pult");
   const live = !!PG.live;
@@ -31048,10 +31609,7 @@ function pgPult(){
     <div class="kb-abstand"></div>
     <button class="rd-schalter" id="sp-keep" ${[...PG.namen.values()].some(v => !v.gespeichert) ? "" : "disabled"}>Keep the sheet</button>
     <div class="kb-abstand"></div>
-    <button class="rd-schalter" id="sp-leer">New sheet</button>
-    <div class="kb-abstand"></div>
-    <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">The game must run
-      borderless or windowed. Names go into the register with their side; nothing else is kept.</div>`;
+    <button class="rd-schalter" id="sp-leer">New sheet</button>`;
   /* the user's own switch: off means off, sharing included */
   document.getElementById("sp-kraft").addEventListener("click", () => { PG.live ? pgLiveStop(true) : pgLiveStart(); });
   /* share again: end the share and ask once; declined, the tick stops the room itself */
@@ -36106,9 +36664,7 @@ function gefPult(){
     <div class="kb-abstand"></div>
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="gf-klang">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
-    ${gefSchreiberZeile()}
-    <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">Only the town picked on the left is written to: the score, the
-      countdown, the objective row and the scoreboard.</div>`;
+    ${gefSchreiberZeile()}`;
   document.getElementById("gf-kraft").addEventListener("click", () => {
     if (GEF && GEF.live) gefLiveStop(true); else gefLiveStart(); });
   /* share again: end the share and ask once; declined, the tick stops the desk itself */
@@ -36188,11 +36744,6 @@ function gefZeichnen(){
       ${orte.map(i => `<option value="${i}"${i === GEF.ort ? " selected" : ""}>${esc(MAP.n[i][0])}</option>`).join("")}
     </select>
     ${orte.length ? "" : `<div class="note" style="margin-top:6px">No town carries the battle mark. Set it on the map first.</div>`}
-    <h3 style="margin-top:14px">Reading</h3>
-    Share the game window and play.
-    Hold Tab: the scoreboard is cut while it stands, its names are read afterwards one at a time. The last full look is the stand that goes to the clan; a name is sure once two readings agree or the register knows it. Kit: click a name's Kit, pick weapon and vehicle from the game's lists - what the player card in the game shows.
-    <h3 style="margin-top:14px">What was measured</h3>
-    <div class="note">Over twenty-one captures the head bars were found on all 43 boards and on none of 167 pictures without one; every row was counted right. Names read exactly in 282 of 397 rows at one look; after two looks 26 of 35 stood sure and right and 6 sure and wrong - the same misreading twice, so a sure name can still be wrong. A look at the board costs 9 to 10 ms the first time and 5 to 6 after; a name takes the reader about 30 ms.</div>
 `;
     links.dataset.gebaut = "1";
     const of = links.querySelector("#gf-ort");
@@ -53221,15 +53772,25 @@ function beitrittDialog(){
    reichlich da ist. */
 /* THE POT btl IS WRITTEN SINCE 13.09.2026 by the players' room (BAT-2).
    THE CONTRACT WITH THE BATTLE WINDOW (BAT-11, FABLE 13.09.2026):
-     v = {seiten: [{f, n, ca, text, spieler, namen, hand?}], typ?, seit?, q, src}
+     v = {seiten: [{f, n, ca, text, spieler, liste, namen, kopf?, hand?}],
+          typ?, rolle?, status?, aufkl?, seit?, seitT?, stern?, tag?, licht?, wetter?, q, src}
    per side f (0 US, 1 GE, 2 USSR), n {<res.k>: count} above zero only,
    ca [keys the game shortened, "1.3k" filed as 1300], text [18 as shown],
    spieler (the head's count), namen [the sheet's names of that side, in
    sheet order, as read], hand [keys typed by hand] only when typed;
    q "live" | "file", src "battle-window"; t, by, n (the name) from stamp.
-   typ and seit (kind of battle, running time in seconds) are NOT written:
-   the head strip is not read here - they may be missing, and BAT-11 must
-   do without them. battleStand hands out the whole row (t and by are
+   liste how long the side's list is as far as known (T9 (e)).
+   THE HEAD STRIP (Blatt 16.09., P8, since 19.09.2026): kopf per side the
+   counter beside the emblem (one figure, the side's players - no capacity
+   in the window); typ the kind of battle (a key of GEF_TAFEL_ARTEN), rolle
+   "attack" | "defence" (word, star and objective lines agreeing), status
+   "starting" | "running" | "ending", aufkl 1 when the strip says
+   "Aufklärung" (no map chosen yet), seit the war map's clock in seconds at
+   the time seitT (ms of the reading; the windows count on from there),
+   stern "red" | "blue", tag 1 | 0 with licht "sun" | "sun_low" | "moon",
+   wetter "cloudy" | "overcast" | "foggy" (the game's Slightly cloudy /
+   Overcast / Foggy). Every one of them may be missing - nothing is
+   guessed - and BAT-11 shows what is there (schlachtKopfText). battleStand hands out the whole row (t and by are
    wanted), this war and within the replay moment, like gefechtStand.
    READ SINCE 14.09.2026 by the battle window (BAT-11, schlachtAnsichtZeichnen):
    seiten[].f for the chips, text[j] as the cell (ca -> "~"), spieler and
@@ -53252,8 +53813,12 @@ function setBattle(i, v){
    known (liste: the roll's count, or the side's end once seen) and what the
    sheet read (namen) - pgStaerkeTeilen. A side with fewer names than the
    greater of the two is not full: not every name of the list is read yet
-   (FABLE G-3, 18.09.2026, reading (1); reading (2), places free, needs the
-   head's counter 18/19 and comes with P8). The battle window, the town
+   (FABLE G-3, 18.09.2026, reading (1)). P8 (19.09.2026): the head's counter
+   is ONE figure per side - the side's players, no capacity (MESSUNG-P8
+   section 0) - so reading (2), places free, has no source; the counter
+   (kopf) is the side's count for this line where it was read - the roll's
+   count is one bar for both lists and said "check again" to the shorter
+   side. The battle window, the town
    window and the map ask here; read only. Nothing for a side with neither
    count nor list. */
 function pgCheckAgain(i){
@@ -53261,8 +53826,11 @@ function pgCheckAgain(i){
   if (!v || !Array.isArray(v.seiten)) return null;
   const offen = [];
   for (const sd of v.seiten){
-    const n = Array.isArray(sd.namen) ? sd.namen.length : 0, spieler = +sd.spieler || 0, liste = +sd.liste || 0, soll = Math.max(spieler, liste);
-    if (soll > n) offen.push({f: sd.f, namen: n, soll, spieler, liste});
+    const n = Array.isArray(sd.namen) ? sd.namen.length : 0, spieler = +sd.spieler || 0, liste = +sd.liste || 0;
+    /* P8: the counter's figure is the side's count where it was read; the roll's count is ONE for both lists */
+    const kopf = (sd.kopf !== undefined && sd.kopf !== null && !isNaN(+sd.kopf)) ? +sd.kopf : null;
+    const soll = kopf !== null ? kopf : Math.max(spieler, liste);
+    if (soll > n) offen.push({f: sd.f, namen: n, soll, spieler, liste, kopf});
   }
   return offen.length ? offen : null;
 }
@@ -53379,7 +53947,9 @@ function schlachtFenster(i){
     });
     return `<div class="hint">${esc(kbSeiteName(s.f))}: ${teile.join(" \u00b7 ")}</div>`;
   });
+  const kopf = schlachtKopfText(v);
   return `<div class="hint" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><b>Battle window</b></div>
+      ${kopf.art || kopf.zeit ? `<div class="hint">${esc([kopf.art, kopf.zeit].filter(Boolean).join(" \u00b7 "))}</div>` : ""}
       ${zeilen.join("")}
       ${(pgCheckAgain(i) || []).map(o => `<div class="hint" style="color:var(--accent)">${esc(kbSeiteName(o.f))}: Names ${o.namen} of ${o.soll} \u00b7 check again</div>`).join("")}
       <div class="hint" style="color:var(--dim)">read from the battle window by ${esc(werWar(e))} ${esc(alterText(e.t))}</div>`;
@@ -53396,9 +53966,11 @@ function schlachtFenster(i){
    age of the battle mark and who set it (the mark's time, not the battle's);
    the tables and the names out of the pot btl, which the players' room
    writes (BAT-2), in exactly the form setBattle describes; behind every name
-   what the register knows (pgEtikett, read only). Kind of battle and running
-   time ("aktiv seit") are NOT shown: BAT-2 does not read the head strip
-   (typ/seit absent), and nothing is guessed. No layout card of the FPS map
+   what the register knows (pgEtikett, read only). Kind of battle, role,
+   light and weather stand in the situation row and the war map's running
+   time under the countdown since P8 (19.09.2026) - out of the row btl, the
+   players' room reads the head strip (gfKopf); what was not read is not
+   shown, nothing is guessed. No layout card of the FPS map
    (its holder colours are BAT-17).
    Opened by a click on a contested town (the disc, or the stack of KAR-6);
    closed by the x, by Escape when no room and no dialog is open, and by
@@ -53449,6 +54021,34 @@ function schlachtZeit(i){
   return {gross: rt ? rt + " left" : ot ? overtimeKurz(ot) : "",
           klein: e ? `marked contested ${alterText(e.t)} by ${werWar(e)}` : ""};
 }
+/* P8: what the war map's own head strip said, out of the row btl (read
+   only): the kind and the role, the light and the weather as one line for
+   the situation row; the running time as one line under the battle
+   reader's countdown - "war map: active 00:41", counted on from the
+   reading (seit at seitT), from four hours on "(includes auto-resolve)"
+   (ENNO 17.09.2026: "Ein Gefecht dauert niemals 4 Stunden ... da hier die
+   Zeit des Autoresolves miteinbezogen wird"), "starting" / "ending" as the
+   strip says, and "no map yet" instead of a time while the strip says
+   "Aufklärung". The battle reader's time stands first and large; this
+   one is the war map's (ENNO 17.09.2026: "immer nachrangig gegenüber der
+   aus dem battlereader"). The clock counts on without a lid - the age
+   line under it says how old the reading is. */
+function schlachtKopfText(v){
+  if (!v) return {art: "", zeit: ""};
+  const teile = [];
+  if (v.typ) teile.push(gefTafelArtWort(v.typ) || String(v.typ));
+  if (v.rolle === "attack" || v.rolle === "defence") teile.push(v.rolle === "attack" ? "Attacking" : "Defending");
+  if (gfKopfLichtWort(v.licht)) teile.push(gfKopfLichtWort(v.licht));
+  if (gfKopfWetterWort(v.wetter)) teile.push(gfKopfWetterWort(v.wetter));
+  let zeit = "";
+  if (v.aufkl) zeit = "war map: no map yet";
+  else if (typeof v.seit === "number" && typeof v.seitT === "number"){
+    const sek = Math.max(0, v.seit + ((zeitReise || jetzt()) - v.seitT)/1000);
+    const wort = v.status === "starting" ? "starting" : v.status === "ending" ? "ending" : "active";
+    zeit = `war map: ${wort} ${gfKopfUhrText(sek).slice(0, 5)}${sek >= 4*3600 ? " (includes auto-resolve)" : ""}`;
+  }
+  return {art: teile.join(" \u00b7 "), zeit};
+}
 /* what the window was drawn from: the row times of the pot and of the
    reading. The players' room (setBattle) and the battle reader (gefSchreiben
    with another town selected) write without a side() for this town - the
@@ -53464,6 +54064,8 @@ function schlachtAnsichtTakt(){
   const g = el.querySelector("[data-sf-zeit]"), k = el.querySelector("[data-sf-seit]");
   if (g) g.textContent = z.gross;
   if (k) k.textContent = z.klein;
+  const a = el.querySelector("[data-sf-aktiv]");
+  if (a){ const eb = battleStand(schlachtOrt); a.textContent = schlachtKopfText(eb && eb.v).zeit; }
   const e = battleStand(schlachtOrt), n = el.querySelector("[data-sf-gelesen]");
   if (e && n) n.textContent = `read by ${werWar(e)} ${alterText(e.t)}`;
 }
@@ -53514,10 +54116,16 @@ function schlachtAnsichtZeichnen(){
      score sentence of the town column (gefSatz) */
   const lage = [];
   const o = ownerOf(i), f = clanFaktion();
-  if (b && b.li === undefined && o >= 0 && f !== undefined && f !== null) lage.push(`<span>${o === f ? "Defending" : "Attacking"}</span>`);
+  /* P8: ONE role word per row - the strip's (v.rolle, the direct source) stands in its own
+     part below; the owner's rule speaks only while the strip gave no role */
+  const kopf = schlachtKopfText(v);
+  const rolleDa = !!(v && (v.rolle === "attack" || v.rolle === "defence"));
+  if (!rolleDa && b && b.li === undefined && o >= 0 && f !== undefined && f !== null) lage.push(`<span>${o === f ? "Defending" : "Attacking"}</span>`);
   if (seiten) lage.push(`<span>${seiten.map(s => chipVon(s.f)).join(" ")}</span>`);
   if (b && b.kp && b.kp.length) lage.push(`${gefKpChip(b)}<span>${b.kp.filter(p => p.h === "b").length} of ${b.kp.length} objectives ours</span>`);
   if (b && b.li !== undefined) lage.push(`<span>${esc(gefSatz(b))}</span>`);
+  /* P8: the war map's strip - kind, role, light, weather - after the battle reader's own words */
+  if (kopf.art) lage.push(`<span>${esc(kopf.art)}</span>`);
   /* the three tables: GF_BLOECKE gives the blocks, GF_GRUPPEN the eighteen
      columns in the game's order; the cell is text[j] as the game showed it
      ("1.3k" stays "1.3k"), a shortened one with "~" as the column does */
@@ -53543,11 +54151,14 @@ function schlachtAnsichtZeichnen(){
      behind each name */
   const namen = seiten ? seiten.map(sd => {
     const liste = Array.isArray(sd.namen) ? sd.namen : [];
-    const zahl = +sd.spieler || liste.length;
+    /* P8: the counter's figure is the side's count and the count to check against, where it was
+       read - a read 0 stands as 0 (before the start), "not read" only without any count */
+    const kz = (sd.kopf !== undefined && sd.kopf !== null && !isNaN(+sd.kopf)) ? +sd.kopf : null;
+    const zahl = kz !== null ? kz : (+sd.spieler || liste.length), soll = kz !== null ? kz : Math.max(zahl, +sd.liste || 0);
     const cols = Math.max(1, Math.ceil(liste.length / SCHLACHT_SPALTE));
     return `<div class="sf-seite">
-      <div class="sf-sh">${chipVon(sd.f)}${zahl ? `<b>${zahl}</b>` : ""}${liste.length < Math.max(zahl, +sd.liste || 0) ? `<em class="sf-check">Names ${liste.length} of ${Math.max(zahl, +sd.liste || 0)} \u00b7 check again</em>`
-          : zahl && zahl !== liste.length && liste.length ? `<span>players \u00b7 ${liste.length} read</span>` : zahl ? "" : `<span class="empty">not read</span>`}</div>
+      <div class="sf-sh">${chipVon(sd.f)}${zahl || kz !== null ? `<b>${zahl}</b>` : ""}${liste.length < soll ? `<em class="sf-check">Names ${liste.length} of ${soll} \u00b7 check again</em>`
+          : zahl && zahl !== liste.length && liste.length ? `<span>players \u00b7 ${liste.length} read</span>` : (zahl || kz !== null) ? "" : `<span class="empty">not read</span>`}</div>
       <div class="sf-namen" style="column-count:${cols}">${liste.map(nm => {
         const et = pgEtikett(nm);
         return `<div dir="auto">${esc(nm)}${et ? `<small title="${esc(et.tip)}">${esc(et.text)}</small>` : ""}</div>`;
@@ -53557,7 +54168,7 @@ function schlachtAnsichtZeichnen(){
   el.innerHTML = `<button class="dlg-x" data-sf-zu title="Close">\u00d7</button>
     <div class="sf-kopf">
       <div class="sf-ort"><b>${esc(n[0])}</b><span>${esc(MAP.typen[n[3]] || "")}</span></div>
-      <div class="sf-zeit"><b data-sf-zeit>${esc(z.gross)}</b><span data-sf-seit>${esc(z.klein)}</span></div>
+      <div class="sf-zeit"><b data-sf-zeit>${esc(z.gross)}</b>${kopf.zeit ? `<span class="sf-aktiv" data-sf-aktiv>${esc(kopf.zeit)}</span>` : ""}<span data-sf-seit>${esc(z.klein)}</span></div>
     </div>
     <div class="sf-lage">${lage.join("")}</div>
     <div class="sf-tafeln">${tafeln}</div>
@@ -56801,7 +57412,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build ca63b7734e</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 742d48103f</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -57029,7 +57640,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "ca63b7734e";
+const BAU = "742d48103f";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
