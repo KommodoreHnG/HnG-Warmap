@@ -455,6 +455,25 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
 #schlacht .sf-namen{column-gap:1.2em;column-fill:balance}
 #schlacht .sf-namen div{break-inside:avoid;white-space:nowrap;line-height:1.3}
 #schlacht .sf-namen small{font-size:.8em;color:var(--dim2);margin-left:.45em}
+/* T8: the dot before a name - filled = on record (roster or scouted teams), hollow = not;
+   the region's flag after it; the count in the side's head; the enemy line under the situation row.
+   The dot hangs in a lane left of the names (the block's padding, paid back by its margin; the
+   second column's dots in the column gap): it costs the names no width, so the sheet's font steps
+   hold as without it (measured 19.09.2026: inline it broke three sides of 14 letters at 1920 x 1080) */
+#schlacht .sf-namen{padding-left:.75em;margin-left:-.75em}
+#schlacht .sf-namen div{position:relative}
+#schlacht .sf-dot{position:absolute;left:-.7em;top:50%;width:.45em;height:.45em;margin-top:-.225em;border-radius:50%;
+  border:1px solid var(--dim2);box-sizing:border-box}
+#schlacht .sf-dot.an{background:var(--accent);border-color:var(--accent)}
+/* the phone's window has .55em of padding, less than the lane: there the block pays the lane
+   itself and the names move .75em right (the window scrolls in itself there) */
+@media (max-width: 760px){#schlacht .sf-namen{margin-left:0}}
+#schlacht .sf-namen .flagge{margin:0 0 0 .4em;vertical-align:-1px}
+#schlacht .sf-known{font-size:.85em;white-space:nowrap}
+#schlacht .sf-feind{font-size:.9em;color:var(--dim)}
+#schlacht .sf-feind b{color:var(--text);font-weight:600}
+/* the step before tighter (schlachtAnsichtPassen): the flags go, the dot stays */
+#schlacht.sf-ohne-flaggen .sf-namen .flagge{display:none}
 /* the last step of schlachtAnsichtPassen: tighter gaps and lines */
 #schlacht.sf-eng{gap:.3em;line-height:1.2}
 #schlacht.sf-eng .sf-tafel th,#schlacht.sf-eng .sf-tafel td{padding:.06em .3em}
@@ -1025,6 +1044,9 @@ i.prio{margin-right:5px;vertical-align:-1px}
 .sp-z .cl{font-size:11px;color:#7a6a48;max-width:84px;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;cursor:default}
 .sp-z .cl:empty{display:none}
+/* T8: the same dot as in the battle window - filled = on record, hollow = not */
+.sp-z .sp-dot{display:inline-block;width:7px;height:7px;border-radius:50%;border:1px solid #7a6a48;box-sizing:border-box;margin-right:5px;vertical-align:middle}
+.sp-z .sp-dot.an{background:#7a6a48}
 .sp-fahne{width:16px;height:11px;border:1px solid rgba(0,0,0,.35);flex:none}
 /* a line that two models read differently - one click swaps the reading */
 .sp-tausch{cursor:pointer;color:#b98a2c;font-size:12px;padding:0 3px;border-radius:2px}
@@ -10056,9 +10078,11 @@ function rolleWunschPasst(s, w){
    No btl row, no enemy side, no branch: "" - the caller shows nothing
    rather than "not read" (FABLE: nothing is pre-chewed).
    The QUALITY of the enemy's pilots - his example - is not in the table;
-   it would come from the register (SPI-2, pgEtikett) and is a question on
-   the answer sheet, not built here. Nor is any recommendation: the line
-   says what stands over there, the judgement is his. */
+   since T8 (19.09.2026) the register's confirmed "good pilot" words stand
+   as a count over this line (schlachtFeindText, #rr-feind: the register's
+   part only, the table's numbers are this line's). Nor is any
+   recommendation: the line says what stands over there, the judgement is
+   his. */
 const ROLLE_ZWEIG = {pilot: "airforce", flak: "airforce", tanker: "armor", at: "armor", scout: "recon",
                      infantry: "infantry", medic: "infantry", sniper: "infantry"};
 /* the enemy line has its own lid (a triple with three groups a side runs
@@ -10618,6 +10642,7 @@ function rolleDialog(i){
         <button class="btn primary" id="rr-ok">Ask</button>
       </div>
       <div class="note" id="rr-kann">${paraTextSicher(() => rolleErfuellbarText(KAMPFROLLEN[0].k))}</div>
+      ${(() => { const t = schlachtFeindText(i, true); return t ? `<div class="note" id="rr-feind">${esc(t)}</div>` : ""; })()}
       ${battleStand(i) ? `<div class="note" id="rr-gegner" hidden></div>` : ""}
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`);
@@ -31876,7 +31901,8 @@ function pgZeichnen(){
               : PG.leer.has(k) ? ""
               : PG.liest === k ? "reading …"
               : imFenster ? "not read yet" : "—"}</div>
-          <div class="cl"${et ? ` title="${kbEsc(et.tip)}"` : ""}>${et ? kbEsc(et.text) : ""}</div>
+          <div class="cl"${et ? ` title="${kbEsc(et.tip)}"` : ""}>${v ? (() => { const k = schlachtKennung(v.name);
+            return `<i class="sp-dot${k.bekannt ? " an" : ""}" title="${k.bekannt ? "on record" : "not on record"}"></i>`; })() : ""}${et ? kbEsc(et.text) : ""}</div>
           <div class="ok">${
             v && v.zweit ? `<span class="sp-tausch" data-k="${k}" title="Also read as &quot;${kbEsc(v.zweit.name)}&quot;${
               v.zweit.schrift ? " (" + kbEsc(v.zweit.schrift) + ")" : " (Latin)"} — click to use that one">⇄</span>` : ""
@@ -54094,7 +54120,9 @@ function beitrittDialog(){
    READ SINCE 14.09.2026 by the battle window (BAT-11, schlachtAnsichtZeichnen):
    seiten[].f for the chips, text[j] as the cell (ca -> "~"), spieler and
    namen for the name blocks, t and by for "read by"; seiten: [] counts as
-   not read, and t is what its tick watches for a fresh row.
+   not read, and t is what its tick watches for a fresh row. T8 (19.09.2026)
+   holds every name of namen against the register (schlachtKennung) and sums
+   the enemy sides' n into the enemy line (schlachtFeindStand).
    NOTE FOR KLEIN-3 (BEF-13): panzerGemeldet may take a younger btl row's
    enemy armour columns (light/medium/heavy_armor, tank_destroyer,
    heavy_tank_destroyer) as the better witness; the row comes from here,
@@ -54382,22 +54410,121 @@ function schlachtAnsichtTakt(){
    the row, the largest step at which nothing is cut off wins and the
    tables wrap. What still does not fit then stays cut (overflow hidden),
    never scrolled. On the phone the window scrolls in itself: the steps
-   serve only the width there, and the tables may wrap. */
+   serve only the width there, and the tables may wrap.
+   WITHOUT FLAGS BEFORE TIGHTER (T8, 19.09.2026): the register's flags
+   behind the names need width - at every size they are tried first with,
+   then without them (class sf-ohne-flaggen hides them), plain before
+   tight; they stand where they fit, the dot before the name always
+   stands. A window without flags skips the step. Measured 19.09.2026 at
+   1920 x 1080, three sides of 18 names: with flags the third block
+   wrapped from 10 letters on and 9 px tight still cut the last row; without
+   them the sheet's steps hold up to 16 letters like the plain window. */
 function schlachtAnsichtPassen(el){
   const tel = matchMedia("(max-width: 760px)").matches;
   const breit = () => el.scrollWidth <= el.clientWidth + 1;
   const hoch = () => el.scrollHeight <= el.clientHeight + 1;
   const eineReihe = () => new Set([...el.querySelectorAll(".sf-tafel")].map(t => Math.round(t.getBoundingClientRect().top))).size <= 1;
+  const flaggen = !!el.querySelector(".sf-namen .flagge");
   const lauf = bed => {
-    for (const px of [13, 12, 11, 10, 9]) for (const eng of [false, true]){
+    for (const px of [13, 12, 11, 10, 9]) for (const eng of [false, true]) for (const ohne of (flaggen ? [false, true] : [false])){
       el.classList.toggle("sf-eng", eng);
+      el.classList.toggle("sf-ohne-flaggen", ohne);
       el.style.setProperty("--f-schlacht", px + "px");
       if (bed()) return px;
     }
     return 0;
   };
   if (tel) return lauf(breit);
-  return lauf(() => breit() && hoch() && eineReihe()) || lauf(() => breit() && hoch());
+  const st = lauf(() => breit() && hoch() && eineReihe()) || lauf(() => breit() && hoch());
+  if (!st) el.classList.remove("sf-ohne-flaggen");   // nothing fits at all: the height is the problem, not the flags' width - they stay
+  return st;
+}
+/* T8 (ToDo 16.9.2026, Z39; Paket 21 rest) - ENNO 12.09.2026 (BAT-16): "Die
+   Schlachtanalyse wollen wir eigentlich dynamisch in den Battlereader
+   integrieren, da ja letztlich nur geschaut wird, ob wir die erfassten
+   Spieler bereits kennen." What the register knows about a name off the
+   sheet: on record (a roster row, or scouted teams in the enemy depot -
+   atEcht, placeholders do not count) and the region of the roster row.
+   Read only, like pgEtikett - nothing is written. */
+function schlachtKennung(name){
+  try {
+    const key = spielerKey(name), e = S.roster[key], v = e && e.v;
+    const dep = atEcht(feindDepot(key));
+    return {key, bekannt: !!v || dep.length > 0, region: (v && v.region) || ""};
+  } catch(err){ return {key: "", bekannt: false, region: ""}; }
+}
+const schlachtPunkt = k => `<i class="sf-dot${k.bekannt ? " an" : ""}" title="${k.bekannt ? "on record" : "not on record"}"></i>`;
+/* the words noted about how this one plays (Roles tab, SPI-2), only those
+   somebody OTHER than the author confirmed - ENNO 05.09.2026: "Fuer die
+   freien Angaben der Attribute, wie das jemand ein guter Pilot ist, werden
+   die Punkte nicht direkt vergeben, sondern jedes mal, wenn ein anderer aus
+   dem Clan dies bestaetigt." Trimmed, one space, lower case - for the two
+   stock words below. */
+const schlachtRollen = key => {
+  const rob = feindRob(key), raus = [];
+  for (const r of feindRollen(key)){
+    const o = rob[r];
+    if (o && Array.isArray(o.ok) && o.ok.some(x => x && x !== o.by)) raus.push(String(r).trim().replace(/\s+/g, " ").toLowerCase());
+  }
+  return raus;
+};
+/* WHAT IS NEEDED HERE, in numbers - ENNO 05.09.2026: "Bspw. Kann einem die
+   Schlachtanalyse bereits sagen, welche Rollen hier benoetigt werden".
+   The enemy's table, summed over every side that is not the clan's (a
+   triple faces both): tanks are the five armour vehicle groups, planes the
+   three air force vehicle groups, paras and recon the two men groups (the
+   keys are GF_GRUPPEN's); "~" where a side's cell was a shortened thousand
+   (ca). From the register: how many of the enemy's names carry the
+   confirmed stock word "good pilot", how many "good tanker" (SF_KNOWN, the
+   first two of ROLLEN_START; the whole phrase, case does not matter,
+   nothing else counts - "tank killer" is no tanker; FABLE 19.09.2026) -
+   players, not words (schlachtRollen). No recommendation in words (ENNO
+   18.09.2026: "Ich brauche aber in der Oberflaeche keine Kommentare."):
+   the numbers say it. null without a btl row or without an enemy side. */
+const SF_FEIND_GRUPPEN = [
+  {wort: "tanks",  keys: ["light_armor", "medium_armor", "heavy_armor", "tank_destroyer", "heavy_tank_destroyer"]},
+  {wort: "planes", keys: ["fighter_plane", "heavy_fighter_plane", "recon_plane"]},
+  {wort: "paras",  keys: ["paratrooper"]},
+  {wort: "recon",  keys: ["recon"]}];
+const SF_KNOWN = {get piloten(){ return ROLLEN_START[0]; }, get panzer(){ return ROLLEN_START[1]; }};   // the first two stock words, read at run time - a change of the list follows here
+function schlachtFeindStand(i){
+  const e = battleStand(i), v = e && e.v;
+  const seiten = v && Array.isArray(v.seiten) ? v.seiten.filter(sd => sd && sd.f !== clanFaktion()) : [];
+  if (!seiten.length) return null;
+  const teile = SF_FEIND_GRUPPEN.map(g => {
+    let n = 0, ca = false;
+    for (const sd of seiten) for (const k of g.keys){
+      n += Math.max(0, +((sd.n || {})[k]) || 0);
+      if (Array.isArray(sd.ca) && sd.ca.includes(k)) ca = true;
+    }
+    return {wort: g.wort, n, ca};
+  });
+  const gesehen = new Set();
+  let piloten = 0, panzer = 0;
+  for (const sd of seiten) for (const nm of (Array.isArray(sd.namen) ? sd.namen : [])){
+    const k = schlachtKennung(nm);
+    if (!k.key || gesehen.has(k.key)) continue;
+    gesehen.add(k.key);
+    const w = schlachtRollen(k.key);
+    if (w.includes(SF_KNOWN.piloten)) piloten++;
+    if (w.includes(SF_KNOWN.panzer)) panzer++;
+  }
+  return {teile, piloten, panzer, namen: gesehen.size};
+}
+/* the one line, plain text: "enemy: 12 tanks · 4 planes · 1 recon · 2 known pilots · 1 known tanker";
+   a group of 0 stays away as in Teil E (rolleGegnerText), one of a kind loses the plural s
+   ("1 tank"), a word without it stays ("1 recon"); "" without any number. nurRegister: only
+   the register's part, without "enemy:" - the role window, where Teil E already carries the
+   table's numbers of the role's branch (FABLE 19.09.2026). */
+function schlachtFeindText(i, nurRegister){
+  const st = schlachtFeindStand(i);
+  if (!st) return "";
+  const ein = (n, w) => `${n} ${n === 1 && /s$/.test(w) ? w.slice(0, -1) : w}`;
+  const teile = nurRegister ? [] : st.teile.filter(t => t.n > 0).map(t => (t.ca ? "~" : "") + ein(t.n, t.wort));
+  if (st.piloten) teile.push(ein(st.piloten, "known pilots"));
+  if (st.panzer) teile.push(ein(st.panzer, "known tankers"));
+  if (!teile.length) return "";
+  return "enemy: " + teile.join(" \u00b7 ");   // the same word in the roles window - under "Could be met by N members" a bare "2 known pilots" read as our own (Skeptiker Wort R2)
 }
 function schlachtAnsichtZeichnen(){
   const i = schlachtOrt;
@@ -54425,6 +54552,8 @@ function schlachtAnsichtZeichnen(){
   if (b && b.li !== undefined) lage.push(`<span>${esc(gefSatz(b))}</span>`);
   /* P8: the war map's strip - kind, role, light, weather - after the battle reader's own words */
   if (kopf.art) lage.push(`<span>${esc(kopf.art)}</span>`);
+  /* T8: what is needed here, in numbers - the enemy's table and the register (schlachtFeindText) */
+  const feind = schlachtFeindText(i);
   /* the three tables: GF_BLOECKE gives the blocks, GF_GRUPPEN the eighteen
      columns in the game's order; the cell is text[j] as the game showed it
      ("1.3k" stays "1.3k"), a shortened one with "~" as the column does */
@@ -54450,6 +54579,8 @@ function schlachtAnsichtZeichnen(){
      behind each name */
   const namen = seiten ? seiten.map(sd => {
     const liste = Array.isArray(sd.namen) ? sd.namen : [];
+    /* T8: on record or not, per name (schlachtKennung); the side's count in the head */
+    const kenn = liste.map(nm => schlachtKennung(nm)), bekannt = kenn.filter(k => k.bekannt).length;
     /* P8: the counter's figure is the side's count and the count to check against, where it was
        read - a read 0 stands as 0 (before the start), "not read" only without any count */
     const kz = (sd.kopf !== undefined && sd.kopf !== null && !isNaN(+sd.kopf)) ? +sd.kopf : null;
@@ -54457,10 +54588,12 @@ function schlachtAnsichtZeichnen(){
     const cols = Math.max(1, Math.ceil(liste.length / SCHLACHT_SPALTE));
     return `<div class="sf-seite">
       <div class="sf-sh">${chipVon(sd.f)}${zahl || kz !== null ? `<b>${zahl}</b>` : ""}${liste.length < soll ? `<em class="sf-check">Names ${liste.length} of ${soll} \u00b7 check again</em>`
-          : zahl && zahl !== liste.length && liste.length ? `<span>players \u00b7 ${liste.length} read</span>` : (zahl || kz !== null) ? "" : `<span class="empty">not read</span>`}</div>
-      <div class="sf-namen" style="column-count:${cols}">${liste.map(nm => {
-        const et = pgEtikett(nm);
-        return `<div dir="auto">${esc(nm)}${et ? `<small title="${esc(et.tip)}">${esc(et.text)}</small>` : ""}</div>`;
+          : zahl && zahl !== liste.length && liste.length ? `<span>players \u00b7 ${liste.length} read</span>` : (zahl || kz !== null) ? "" : `<span class="empty">not read</span>`}${
+          liste.length ? `<span class="sf-known">known ${bekannt} of ${liste.length}</span>` : ""}</div>
+      <div class="sf-namen" style="column-count:${cols}">${liste.map((nm, ix) => {
+        const et = pgEtikett(nm), k = kenn[ix];
+        /* the dot, the name, the flag (regionSVG: title and aria-label carry the region's name), the label */
+        return `<div dir="auto">${schlachtPunkt(k)}${esc(nm)}${k.region ? regionSVG(k.region, 12) : ""}${et ? `<small title="${esc(et.tip)}">${esc(et.text)}</small>` : ""}</div>`;
       }).join("")}</div>
     </div>`;
   }).join("") : `<span class="empty">not read</span>`;
@@ -54469,7 +54602,7 @@ function schlachtAnsichtZeichnen(){
       <div class="sf-ort"><b>${esc(n[0])}</b><span>${esc(MAP.typen[n[3]] || "")}</span></div>
       <div class="sf-zeit"><b data-sf-zeit>${esc(z.gross)}</b>${kopf.zeit ? `<span class="sf-aktiv" data-sf-aktiv>${esc(kopf.zeit)}</span>` : ""}<span data-sf-seit>${esc(z.klein)}</span></div>
     </div>
-    <div class="sf-lage">${lage.join("")}</div>
+    <div class="sf-lage">${lage.join("")}</div>${feind ? `<div class="sf-feind">${esc(feind).replace(/(~?\d+)/g, "<b>$1</b>")}</div>` : ""}
     <div class="sf-tafeln">${tafeln}</div>
     <div class="sf-note">${seiten ? `<span data-sf-gelesen>read by ${esc(werWar(e))} ${esc(alterText(e.t))}</span>` : `<span class="empty">not read</span>`}</div>
     <div class="sf-seiten">${namen}</div>`;
@@ -57711,7 +57844,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 9b3f21c0c6</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0f4fc923e9</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -57939,7 +58072,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "9b3f21c0c6";
+const BAU = "0f4fc923e9";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
