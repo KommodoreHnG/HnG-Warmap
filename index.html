@@ -473,6 +473,16 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
 #schlacht .sf-known{font-size:.85em;white-space:nowrap}
 #schlacht .sf-feind{font-size:.9em;color:var(--dim)}
 #schlacht .sf-feind b{color:var(--text);font-weight:600}
+/* Q3 (19.09.2026): what to avoid, under the enemy line - up to three short lines, each only
+   when its case stands (schlachtWarnungen), one line per warning, the figure behind it in
+   small; the lines wrap like the situation row and never widen the window (a nowrap line
+   of 480 px cost two font steps at 1400 x 1000, where the window stands at its max-width) */
+#schlacht .sf-warn{font-size:.9em;color:var(--warn,#d08b3a)}
+#schlacht .sf-warn span{display:block}
+#schlacht .sf-warn small{font-size:.85em;color:var(--dim);margin-left:.5em;white-space:nowrap}
+#rr-warn{color:var(--warn,#d08b3a)}
+#rr-warn>div+div{margin-top:2px}
+#rr-warn small{color:var(--dim);margin-left:.4em}
 /* the step before tighter (schlachtAnsichtPassen): the flags go, the dot stays */
 #schlacht.sf-ohne-flaggen .sf-namen .flagge{display:none}
 /* the last step of schlachtAnsichtPassen: tighter gaps and lines */
@@ -10116,9 +10126,10 @@ function rolleWunschPasst(s, w){
    The QUALITY of the enemy's pilots - his example - is not in the table;
    since T8 (19.09.2026) the register's confirmed "good pilot" words stand
    as a count over this line (schlachtFeindText, #rr-feind: the register's
-   part only, the table's numbers are this line's). Nor is any
-   recommendation: the line says what stands over there, the judgement is
-   his. */
+   part only, the table's numbers are this line's). What to avoid stands
+   under it since Q3 (19.09.2026, #rr-warn, schlachtWarnungen: light tanks
+   only, they hold the air, known AT gunners) - on his word; this line
+   says what stands over there. */
 const ROLLE_ZWEIG = {pilot: "airforce", flak: "airforce", tanker: "armor", at: "armor", scout: "recon",
                      infantry: "infantry", medic: "infantry", sniper: "infantry"};
 /* the enemy line has its own lid (a triple with three groups a side runs
@@ -10679,6 +10690,7 @@ function rolleDialog(i){
       </div>
       <div class="note" id="rr-kann">${paraTextSicher(() => rolleErfuellbarText(KAMPFROLLEN[0].k))}</div>
       ${(() => { const t = schlachtFeindText(i, true); return t ? `<div class="note" id="rr-feind">${esc(t)}</div>` : ""; })()}
+      ${(() => { const w = schlachtWarnungen(i); return w.length ? `<div class="note" id="rr-warn">${w.map(x => `<div data-warn="${x.art}">${esc(x.text)}<small>${esc(x.zahl)}</small></div>`).join("")}</div>` : ""; })()}
       ${battleStand(i) ? `<div class="note" id="rr-gegner" hidden></div>` : ""}
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`);
@@ -56076,17 +56088,21 @@ const schlachtRollen = key => {
    keys are GF_GRUPPEN's); "~" where a side's cell was a shortened thousand
    (ca). From the register: how many of the enemy's names carry the
    confirmed stock word "good pilot", how many "good tanker" (SF_KNOWN, the
-   first two of ROLLEN_START; the whole phrase, case does not matter,
+   first three of ROLLEN_START; the whole phrase, case does not matter,
    nothing else counts - "tank killer" is no tanker; FABLE 19.09.2026) -
-   players, not words (schlachtRollen). No recommendation in words (ENNO
-   18.09.2026: "Ich brauche aber in der Oberflaeche keine Kommentare."):
-   the numbers say it. null without a btl row or without an enemy side. */
+   players, not words (schlachtRollen); since Q3 (19.09.2026) also how many
+   carry "good at gunner" (gunners, SF_KNOWN.pak). No explanation in words
+   (ENNO 18.09.2026: "Ich brauche aber in der Oberflaeche keine
+   Kommentare."): the numbers say it; what to avoid stands in the short
+   lines under it (schlachtWarnungen, his word of 19.09.2026). null
+   without a btl row or without an enemy side. */
 const SF_FEIND_GRUPPEN = [
   {wort: "tanks",  keys: ["light_armor", "medium_armor", "heavy_armor", "tank_destroyer", "heavy_tank_destroyer"]},
   {wort: "planes", keys: ["fighter_plane", "heavy_fighter_plane", "recon_plane"]},
   {wort: "paras",  keys: ["paratrooper"]},
   {wort: "recon",  keys: ["recon"]}];
-const SF_KNOWN = {get piloten(){ return ROLLEN_START[0]; }, get panzer(){ return ROLLEN_START[1]; }};   // the first two stock words, read at run time - a change of the list follows here
+const SF_KNOWN = {get piloten(){ return ROLLEN_START[0]; }, get panzer(){ return ROLLEN_START[1]; },
+                  get pak(){ return ROLLEN_START[2]; }};   // the first three stock words, read at run time - a change of the list follows here (pak = "good at gunner", Q3)
 function schlachtFeindStand(i){
   const e = battleStand(i), v = e && e.v;
   const seiten = v && Array.isArray(v.seiten) ? v.seiten.filter(sd => sd && sd.f !== clanFaktion()) : [];
@@ -56100,7 +56116,7 @@ function schlachtFeindStand(i){
     return {wort: g.wort, n, ca};
   });
   const gesehen = new Set();
-  let piloten = 0, panzer = 0;
+  let piloten = 0, panzer = 0, gunners = 0;
   for (const sd of seiten) for (const nm of (Array.isArray(sd.namen) ? sd.namen : [])){
     const k = schlachtKennung(nm);
     if (!k.key || gesehen.has(k.key)) continue;
@@ -56108,8 +56124,9 @@ function schlachtFeindStand(i){
     const w = schlachtRollen(k.key);
     if (w.includes(SF_KNOWN.piloten)) piloten++;
     if (w.includes(SF_KNOWN.panzer)) panzer++;
+    if (w.includes(SF_KNOWN.pak)) gunners++;   // Q3 (c): confirmed "good at gunner"
   }
-  return {teile, piloten, panzer, namen: gesehen.size};
+  return {teile, piloten, panzer, gunners, namen: gesehen.size};
 }
 /* the one line, plain text: "enemy: 12 tanks · 4 planes · 1 recon · 2 known pilots · 1 known tanker";
    a group of 0 stays away as in Teil E (rolleGegnerText), one of a kind loses the plural s
@@ -56125,6 +56142,74 @@ function schlachtFeindText(i, nurRegister){
   if (st.panzer) teile.push(ein(st.panzer, "known tankers"));
   if (!teile.length) return "";
   return "enemy: " + teile.join(" \u00b7 ");   // the same word in the roles window - under "Could be met by N members" a bare "2 known pilots" read as our own (Skeptiker Wort R2)
+}
+/* WHAT TO AVOID (Q3, Antwortblatt 18.09.) - ENNO 19.09.2026: "Ein leichter
+   Panzer kann fast nie gegen einen mittleren oder schweren etwas
+   ausrichten. Daher sollte entsprechend ein Spieler mit nur leichten
+   Panzern hier den Warnhinweis bekommen, bzw. der Battlereader von dem
+   Einsatz dieser Fahrzeuge abraten. [...] Hat der Gegner die Lufthoheit,
+   also keine eigenen Jaeger oder mehr Elitepiloten beim Gegnerteam, ist der
+   Einsatz von Panzer generell auch eher nicht zu empfehlen. Und wenn wir
+   wissen, dass der Gegner sehr gute Panzerabwehrspieler hat, dann sollte
+   man auch eher zurueckhaltend sein."
+   Up to three short lines, each only when its case stands, the figure
+   behind it:
+   (a) light tanks only - the viewer's own depot on the war side
+       (paraDepotVon) holds armour (zweigVon = armor, the page's types) and
+       every armour team is light_armor, AND the enemy's table (the sides
+       that are not the clan's, a triple summed) shows medium/heavy armour
+       or tank destroyers;
+   (b) they hold the air - the enemy's table shows fighters and OUR row
+       on the table shows none (a missing row is unknown, not none), OR the
+       enemy's confirmed "good pilot" names outnumber ours (T8's count,
+       schlachtFeindStand, the same rule over our side's names);
+   (c) known AT gunners - at least one enemy name carries the confirmed
+       stock word "good at gunner" (SF_KNOWN.pak, schlachtFeindStand).
+   Read only; nothing is written, no points. No explanation in the window
+   (ENNO 18.09.2026: "Ich brauche aber in der Oberflaeche keine
+   Kommentare."). [] without a btl row or without an enemy side. */
+const SF_WARN = {
+  leicht: "light_armor",                                   // the page's light armour team type
+  schwer: [{k: "medium_armor", wort: "medium"}, {k: "heavy_armor", wort: "heavy"},
+           {k: "tank_destroyer", wort: "TD"}, {k: "heavy_tank_destroyer", wort: "heavy TD"}],   // the table's heavier groups
+  jaeger: ["fighter_plane", "heavy_fighter_plane"]};
+function schlachtWarnungen(i){
+  const e = battleStand(i), v = e && e.v, f = clanFaktion();
+  const alle = v && Array.isArray(v.seiten) ? v.seiten.filter(sd => sd) : [];
+  const feind = alle.filter(sd => sd.f !== f), wir = alle.filter(sd => sd.f === f);
+  if (!feind.length) return [];
+  const summe = (seiten, keys) => { let n = 0; for (const sd of seiten) for (const k of keys) n += Math.max(0, +((sd.n || {})[k]) || 0); return n; };
+  const ca = (seiten, k) => seiten.some(sd => Array.isArray(sd.ca) && sd.ca.includes(k));
+  const st = schlachtFeindStand(i) || {piloten: 0, gunners: 0};
+  const raus = [];
+  /* (a) light tanks only */
+  let depot = null;
+  try { depot = paraDepotVon(S.me); } catch (err){ depot = null; }
+  const panzer = Array.isArray(depot) ? depot.filter(t => t && zweigVon(t.k) === "armor") : [];
+  if (panzer.length && panzer.every(t => t.k === SF_WARN.leicht)){
+    const teile = SF_WARN.schwer.map(g => ({n: summe(feind, [g.k]), ca: ca(feind, g.k), wort: g.wort})).filter(t => t.n > 0);
+    if (teile.length) raus.push({art: "a", text: "Light tanks only \u2013 they field medium/heavy", zahl: teile.map(t => `${t.ca ? "~" : ""}${t.n} ${t.wort}`).join(" \u00b7 ")});
+  }
+  /* (b) they hold the air */
+  /* a covered cell of our row ("?" in text, no n) is unknown, not none - like a missing row (Skeptiker 19.09.2026) */
+  const spalte = k => GF_GRUPPEN.findIndex(g => g.k === k);
+  const verdeckt = wir.some(sd => Array.isArray(sd.text) && SF_WARN.jaeger.some(k => String(sd.text[spalte(k)] || "").trim() === "?"));
+  const jf = summe(feind, SF_WARN.jaeger), jw = wir.length && !verdeckt ? summe(wir, SF_WARN.jaeger) : null;
+  let unsere = 0;
+  const gesehen = new Set();
+  for (const sd of wir) for (const nm of (Array.isArray(sd.namen) ? sd.namen : [])){
+    const k = schlachtKennung(nm);
+    if (!k.key || gesehen.has(k.key)) continue;
+    gesehen.add(k.key);
+    if (schlachtRollen(k.key).includes(SF_KNOWN.piloten)) unsere++;
+  }
+  const luft = [];
+  if (jf > 0 && jw === 0) luft.push(`${ca(feind, "fighter_plane") || ca(feind, "heavy_fighter_plane") ? "~" : ""}${jf} vs 0 fighters`);
+  if (st.piloten > unsere) luft.push(`${st.piloten} vs ${unsere} known pilots`);
+  if (luft.length) raus.push({art: "b", text: "They hold the air \u2013 tanks not advised", zahl: luft.join(" \u00b7 ")});
+  /* (c) known AT gunners */
+  if (st.gunners > 0) raus.push({art: "c", text: "Known AT gunners on their side \u2013 tanks with care", zahl: `${st.gunners} known`});
+  return raus;
 }
 function schlachtAnsichtZeichnen(){
   const i = schlachtOrt;
@@ -56154,6 +56239,8 @@ function schlachtAnsichtZeichnen(){
   if (kopf.art) lage.push(`<span>${esc(kopf.art)}</span>`);
   /* T8: what is needed here, in numbers - the enemy's table and the register (schlachtFeindText) */
   const feind = schlachtFeindText(i);
+  /* Q3: what to avoid, under it - only the lines whose case stands (schlachtWarnungen) */
+  const warn = schlachtWarnungen(i);
   /* the three tables: GF_BLOECKE gives the blocks, GF_GRUPPEN the eighteen
      columns in the game's order; the cell is text[j] as the game showed it
      ("1.3k" stays "1.3k"), a shortened one with "~" as the column does */
@@ -56202,7 +56289,8 @@ function schlachtAnsichtZeichnen(){
       <div class="sf-ort"><b>${esc(n[0])}</b><span>${esc(MAP.typen[n[3]] || "")}</span></div>
       <div class="sf-zeit"><b data-sf-zeit>${esc(z.gross)}</b>${kopf.zeit ? `<span class="sf-aktiv" data-sf-aktiv>${esc(kopf.zeit)}</span>` : ""}<span data-sf-seit>${esc(z.klein)}</span></div>
     </div>
-    <div class="sf-lage">${lage.join("")}</div>${feind ? `<div class="sf-feind">${esc(feind).replace(/(~?\d+)/g, "<b>$1</b>")}</div>` : ""}
+    <div class="sf-lage">${lage.join("")}</div>${feind ? `<div class="sf-feind">${esc(feind).replace(/(~?\d+)/g, "<b>$1</b>")}</div>` : ""}${
+      warn.length ? `<div class="sf-warn">${warn.map(w => `<span data-warn="${w.art}">${esc(w.text)}<small>${esc(w.zahl)}</small></span>`).join("")}</div>` : ""}
     <div class="sf-tafeln">${tafeln}</div>
     <div class="sf-note">${seiten ? `<span data-sf-gelesen>read by ${esc(werWar(e))} ${esc(alterText(e.t))}</span>` : `<span class="empty">not read</span>`}</div>
     <div class="sf-seiten">${namen}</div>`;
@@ -59444,7 +59532,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f8c41065a3</span></p></div>
+         installation. <span style="color:var(--dim2)">· build b74333bd1a</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -59672,7 +59760,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f8c41065a3";
+const BAU = "b74333bd1a";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
