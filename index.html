@@ -1994,6 +1994,35 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 @media (max-width:760px){.op-griff::before{content:"";position:absolute;inset:-6px;border-radius:50%}}
 .op-x{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:var(--su);
   color:#fff;font-size:15px;line-height:22px;text-align:center;cursor:pointer}
+/* Q11: the plan strip above the field - the operation being planned, its
+   towns as chips, its members as rows (abstract dashed, set solid), the
+   building blocks (Antwortblatt 18.09., Sonst 1; Bauer 19.09.2026). The
+   field gives way while a plan is open, so the window stays on the screen. */
+#op-plan{display:flex;flex-direction:column;gap:6px}
+#op-feld.q11-klein{height:min(calc(40vh / var(--dlg-zoom,1)),420px)}
+.q11-orte{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:12px}
+.q11-orte .q11-l{color:var(--dim2);font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;margin-left:8px}
+.q11-orte .q11-l:first-child{margin-left:0}
+.q11-etappen{display:inline-flex;flex-wrap:wrap;gap:4px}
+.q11-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 4px 2px 8px;border:1px solid var(--line);border-radius:999px;
+  font-size:11.5px;background:var(--panel2);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.q11-chip.q11-auto{color:var(--dim);border-style:dashed;cursor:default;padding-right:8px}
+.q11-x{border:0;background:none;color:var(--dim);font-size:14px;line-height:1;cursor:pointer;padding:0 3px}
+.q11-x:hover{color:var(--text)}
+.q11-liste{display:flex;flex-direction:column;gap:3px}
+.q11-g{display:flex;align-items:center;gap:8px;padding:4px 8px;border:1px solid var(--line);border-radius:3px;background:var(--panel2);
+  font-size:12px;line-height:1.3;min-height:28px;cursor:pointer}
+.q11-g.q11-abstrakt{border-style:dashed}
+.q11-g.q11-hervor{box-shadow:0 0 0 2px var(--accent)}
+.q11-g .q11-n{color:var(--dim2);min-width:16px;text-align:right}
+.q11-g .q11-art{display:flex;align-items:center;gap:5px;min-width:96px;white-space:nowrap}
+.q11-g .q11-art svg{width:14px;height:14px;flex:0 0 auto;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.q11-g .q11-was{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.q11-g .q11-anf{color:var(--dim);white-space:nowrap}
+.q11-griff{cursor:grab;color:var(--dim);touch-action:none;user-select:none;-webkit-user-select:none;padding:0 2px;font-size:14px}
+.q11-g.q11-zieht,.q11-chip.q11-zieht{opacity:.5}
+.q11-g.q11-ziel,.q11-chip.q11-ziel{outline:2px solid var(--accent);outline-offset:1px}
+@media (max-width:600px){.q11-g{flex-wrap:wrap;gap:4px 8px}.q11-g .q11-was{flex-basis:100%;white-space:normal}}
 /* die Filterreihen ueber der Befehlsliste (ENNO 07.09.2026: "Filterung fuer Auftraege") */
 .orders-filter{margin:5px 0 8px}
 .orders-filter .sp-filter{margin:0 0 3px;align-items:center}
@@ -7863,7 +7892,7 @@ function ordersDetail(b, st, hab, alle){
    aber nichts. Der Zustand liegt ausserhalb, weil das Fenster nach jeder
    Aenderung neu gebaut wird (wie ordersFilter); behalten = Neubau, die
    Lagen bleiben. */
-let opStand = {hervor: null, pan: {x: 0, y: 0}, lage: new Map(), kante: null, neu: null};
+let opStand = {hervor: null, pan: {x: 0, y: 0}, lage: new Map(), kante: null, neu: null, plan: null};   // plan: the operation open in the plan strip (Q11)
 /* ---- P5-B: AN OPERATION FROM ITS TARGET OR ORIGIN (KAR-5, BEF-15;
    ENNO 12.09.2026, PAR-2: "eine Operation auch vom Ziel heraus aufziehen
    kann, und den Ausgangspunkt erst am Ende definiere"). opStand.neu =
@@ -7877,7 +7906,10 @@ let opStand = {hervor: null, pan: {x: 0, y: 0}, lage: new Map(), kante: null, ne
 const OP_NEU_KEY = "op-neu";
 function opEntwurfNeu(art, i){
   if (!MAP.n[i]) return;
+  q11KastenWeg(opStand.neu);                   // Q11: the box this one replaces takes its plan along when that holds nothing but the town
   opStand.neu = {art: art === "start" ? "start" : "ziel", ort: i, op: "op" + pfeilId()};
+  /* Q11: the same operation gets its plan - the town as origin or end (q11PlanFuer reads the box) - and the strip opens on it */
+  q11PlanFuer(opStand.neu.op); q11Speichern(); opStand.plan = opStand.neu.op;
   opDialog(null);
 }
 const opEntwurfName = () => {
@@ -7926,6 +7958,604 @@ function opAbsprungZeile(id, b){
         <button class="btn" id="${id}" style="font-size:11px">Open in operation planner</button>
       </div>`;
 }
+/* ---- Q11: THE PLANNED OPERATION - BUILDING BLOCKS, STAGES (Antwortblatt
+   18.09., "Was dir sonst auffaellt" (1); gebaut Bauer 19.09.2026, Runde 3
+   nach den Befunden der Skeptiker Handwerk und Wort) ----
+   ENNO 19.09.2026: "Ich will aber eigentlich eine Oberflaeche haben, in
+   der ich auch Bausteinartig Befehle anlegen kann und dann aus dem Planer
+   heraus manuell oder automatisch Start und Endpunkte waehlen kann. Wenn
+   ich bspw. eine Operation mit Anfangs- und Endpunkt anlege, sollte ich
+   auch Etappenziele anlegen koennen. Faengt die befehlskette mit einem
+   Angriff auf eine bestimmte Stadt an, sollte ich bspw. einfach einen
+   weiteren Angriffsbefehl, der natuerlich erstmal noch abstrakt ist, hier
+   reinziehen koennen, der Anfangspunkt ist dann einfach das Ende des
+   vorigen Befehls."
+   One plan per operation, keyed by its op (the field the chain carries),
+   in this browser only (localStorage, like the P5 draft box and the
+   drawer of drafts): origin, stages, end - towns in order, one role per
+   town - and its abstract members: kind (attack, drop, gather, defence),
+   the requirement as in the arrow window (req), a line's planned strength
+   (soll), and by hand a start, a target, towns. What is not set by hand
+   is read when the strip is built (q11Aufloesen): a member starts where
+   the one before it ends - his sentence; the first at the origin, or at
+   the end of the operation's last order on the map - and aims at the
+   next stage the chain has not reached (FABLE, Offen 5); reached is the
+   greatest stage index over the end towns of all the operation's orders
+   on the map, so a chain that stands outside the stages never aims at a
+   town it has attacked. A gather assembles where the chain stands, its
+   start towns are picked; a line without towns holds the town the chain
+   stands at. "Set on the map" makes real orders of the members in order,
+   on the roads the tools take (pfeilAnlegen, the drop's luftPruefen,
+   lineSpeichern), our side (clanFaktion, as the gather), and links each
+   after the one before through opVerbinden - the chain a hand-drawn one
+   carries (v.op, v.vor, v.nach, folge); the first order without a
+   predecessor takes the plan's op and name. A drop from a field that is
+   not ours asks here, in the para tool's words, whatever side the tool
+   bar shows. Withhold asks once, as the tools do (Q2). A member that
+   cannot be set stays planned, and so does the rest. Nothing new on the
+   server: the towns and the abstract members are never sent. */
+const Q11_STORE = "warmap.plaene";
+const Q11_ARTEN = {attack: {name: "Attack", tool: "arrow"}, drop: {name: "Drop", tool: "para"},
+                   gather: {name: "Gather", tool: "gather"}, line: {name: "Defence", tool: "line"}};
+let Q11 = null;                              // {op: plan}, read on first use
+let q11Wahl = null;                          // {op, gid, feld} while the next click on the map is a town for the plan
+function q11Lesen(){
+  let o = {};
+  try { o = JSON.parse(lies(Q11_STORE, "{}") || "{}"); } catch (e){ o = {}; }
+  if (!o || typeof o !== "object" || Array.isArray(o)) o = {};
+  const raus = {};
+  const stadt = i => (i !== null && i !== undefined && i !== "" && Number.isInteger(+i) && +i >= 0 && MAP.n[+i]) ? +i : null;
+  const staedte = l => Array.isArray(l) ? l.map(stadt).filter(i => i !== null) : [];
+  for (const op of Object.keys(o)){
+    const p = o[op];
+    if (!p || typeof p !== "object") continue;
+    const plan = {op, name: String(p.name || "").slice(0, 40), anfang: stadt(p.anfang), etappen: staedte(p.etappen), ende: stadt(p.ende), glieder: []};
+    for (const g of (Array.isArray(p.glieder) ? p.glieder : [])){
+      if (!g || !Q11_ARTEN[g.art]) continue;
+      const r = g.req ? anfLesen({req: g.req}) : null;
+      plan.glieder.push({id: String(g.id || pfeilId()), art: g.art, von: stadt(g.von), zu: stadt(g.zu), orte: staedte(g.orte),
+                         req: r && (Object.keys(r.at).length || Object.keys(r.cls).length) ? r : null,
+                         soll: +g.soll > 0 ? Math.min(999, Math.round(+g.soll)) : null});
+    }
+    /* an empty plan is nothing to keep */
+    if (plan.glieder.length || plan.anfang !== null || plan.ende !== null || plan.etappen.length || plan.name) raus[op] = plan;
+  }
+  return raus;
+}
+const q11Alle = () => Q11 || (Q11 = q11Lesen());
+function q11Speichern(){ schreib(Q11_STORE, JSON.stringify(q11Alle())); }
+/* the plan of an operation, made on demand; felder are merged in. Made for
+   the P5 draft box, it takes the box's town as origin or end - never an
+   empty plan beside a box that names a town */
+function q11PlanFuer(op, felder){
+  const alle = q11Alle();
+  if (!alle[op]){
+    alle[op] = {op, name: "", anfang: null, etappen: [], ende: null, glieder: []};
+    const e = opStand.neu;
+    if (e && e.op === op && MAP.n[e.ort]) alle[op][e.art === "start" ? "anfang" : "ende"] = e.ort;
+  }
+  if (felder) Object.assign(alle[op], felder);
+  return alle[op];
+}
+function q11PlanWeg(op){ delete q11Alle()[op]; q11Speichern(); if (opStand.plan === op) opStand.plan = null; }
+/* a plan that holds nothing at all goes when the strip leaves it - the
+   select, Close, the x, Escape - and when the strip is built, every one
+   that is neither the choice nor the box's (measured: left by Close, it
+   stayed, and a second "+ New operation" listed two alike) */
+const q11Leer = p => !p.name && !p.glieder.length && !p.etappen.length && p.anfang === null && p.ende === null;
+function q11LeerWeg(op){
+  const p = op ? q11Alle()[op] : null;
+  if (p && q11Leer(p) && !(opStand.neu && opStand.neu.op === op)){ delete q11Alle()[op]; q11Speichern(); }
+}
+/* Escape closes the planner in the page-wide keydown, which runs after
+   this one: a tick later the window is shut, and the strip's empty plan
+   goes as it does at Close */
+document.addEventListener("keydown", ev => {
+  if (ev.key !== "Escape" || !document.getElementById("op-plan")) return;
+  setTimeout(() => { if (!document.getElementById("veil").classList.contains("on")) q11LeerWeg(opStand.plan); }, 0);
+});
+/* the P5 draft box goes (the x, or a new box replaces it): its plan goes
+   with it when it holds nothing but the town (measured: three "Set as
+   target" left three plans "New operation · planned" behind). Origin AND
+   end set by hand is more than the town: that plan stays */
+function q11KastenWeg(e){
+  const p = e ? q11Alle()[e.op] : null;
+  if (p && !p.name && !p.glieder.length && !p.etappen.length && (p.anfang === null || p.ende === null)) q11PlanWeg(e.op);
+}
+const q11Ort = i => (i !== null && i !== undefined && MAP.n[i]) ? MAP.n[i][0] : "";
+/* an abstract member's name: the line after its resolved form - one town "Defence", two and more "Line", as befehlArtName names it once set */
+const q11GliedName = (G, R) => G.art === "line" && R.orte.length > 1 ? "Line" : Q11_ARTEN[G.art].name;
+const q11Symbol = art => { const q = document.querySelector(`.tool[data-t="${art}"] svg`); return q ? q.outerHTML : ""; };
+/* where an order ends: the arrow's target, a line's last town, else the town the map jumps to */
+function q11BefehlEnde(b){
+  if (!b || !b.v) return null;
+  if (b.art === "arrow") return MAP.n[b.v.to] ? +b.v.to : null;
+  if (b.art === "line"){ const p = Array.isArray(b.v.pts) ? b.v.pts : [], l = p[p.length - 1]; return MAP.n[l] ? +l : null; }
+  return befehlOrt(b);
+}
+/* the route of an order on the map, as the abstract rows show it: from → to, a line's towns */
+const q11Strecke = b => b.art === "arrow" ? `${q11Ort(+b.v.from)} \u2192 ${q11Ort(+b.v.to)}`
+  : b.art === "line" && Array.isArray(b.v.pts) ? b.v.pts.map(i => q11Ort(+i)).join(" \u2192 ") : befehlOrtName(b);
+/* my orders that carry the op without a link yet: the plan's first order
+   on the map, or the members of the P5 draft box. A single order is no
+   operation to opGraph (it needs an edge) */
+function q11Lose(g, op){
+  const r = [];
+  for (const b of g.knoten.values()) if (b.v && b.v.op === op && !g.comp.has(b.key) && eigenerBefehl(b)) r.push(b.key);
+  return r;
+}
+/* the operation's orders on the map: its ray's members (in ray order), else the loose ones */
+function q11Gesetzte(g, op){
+  for (const [c, o] of g.opVon) if (o === op) return g.glieder.get(c);
+  return q11Lose(g, op);
+}
+/* the operation's last order on the map: the deepest member without a
+   successor; of loose ones the one made last. Measured: a line after a
+   lone drop went back to the origin instead of the drop's target */
+function q11Schwanz(g, op){
+  for (const [c, o] of g.opVon) if (o === op){
+    const enden = g.glieder.get(c).filter(k => !(g.nach.get(k) || []).length);
+    return enden.length ? enden[enden.length - 1] : null;
+  }
+  const lose = q11Lose(g, op);
+  return lose.length ? lose[lose.length - 1] : null;
+}
+/* origin, stages, end - the towns in order */
+const q11Weg = plan => [plan.anfang, ...plan.etappen, plan.ende].filter(i => i !== null);
+/* every member with its towns: by hand where set, else from the one before (start) and the plan's stages (target) */
+function q11Aufloesen(plan, g){
+  g = g || opGraph(alleBefehle(true));
+  const W = q11Weg(plan), s = q11Schwanz(g, plan.op);
+  let cur = s !== null ? q11BefehlEnde(g.knoten.get(s)) : plan.anfang;
+  /* the stage the chain has reached: the greatest stage index over the end
+     towns of ALL the operation's orders on the map - not the tail's alone
+     (measured: a hand arrow past the tail into a town outside the stages
+     aimed the next member back at the first stage, a town the chain had
+     attacked). Nothing on the map, or nothing that ends in the way: the
+     origin (the chain has left it behind) */
+  let pos = -1;
+  for (const k of q11Gesetzte(g, plan.op)){ const e = q11BefehlEnde(g.knoten.get(k)), i = e === null ? -1 : W.indexOf(e); if (i > pos) pos = i; }
+  if (pos < 0 && plan.anfang !== null) pos = 0;
+  const naechste = () => pos + 1 < W.length ? W[pos + 1] : null;
+  const rueck = i => { cur = i; const k = i === null ? -1 : W.indexOf(i); if (k >= 0) pos = k; };
+  return plan.glieder.map(G => {
+    const R = {start: null, ziel: null, orte: [], ende: null};
+    if (G.art === "attack" || G.art === "drop"){
+      R.start = G.von !== null ? G.von : cur;
+      R.ziel = G.zu !== null ? G.zu : naechste();
+      R.ende = R.ziel; rueck(R.ziel);
+    } else if (G.art === "gather"){
+      R.ziel = G.zu !== null ? G.zu : cur;       // the assembly point: where the chain stands
+      R.orte = G.orte.slice();
+      R.ende = R.ziel; rueck(R.ziel);
+    } else {
+      R.orte = G.orte.length ? G.orte.slice() : (cur !== null ? [cur] : []);
+      R.ende = R.orte.length ? R.orte[R.orte.length - 1] : null;
+      if (R.ende !== null) rueck(R.ende);
+    }
+    return R;
+  });
+}
+/* what a requirement asks for in teams - per class the larger of the class number and its types, anfStand's rule */
+function q11Bedarf(req){
+  if (!req) return 0;
+  const je = new Map();
+  for (const z of ANF_KLASSEN) je.set(z.k, {cls: +(req.cls && req.cls[z.k]) || 0, genau: 0});
+  for (const t of MAP.at){ const n = +(req.at && req.at[t.k]) || 0; if (n && je.has(anfKlasseVon(t.k))) je.get(anfKlasseVon(t.k)).genau += n; }
+  let n = 0;
+  for (const z of je.values()) n += Math.max(z.cls, z.genau);
+  return n;
+}
+/* THE STRIP above the field: which operation is being planned, its towns, its members, the building blocks */
+function q11Panel(g, alle, behalten){
+  const alleP = q11Alle(), neuE = opStand.neu;
+  /* a fresh open on a highlighted order: its operation is the one being
+     planned; a loose order shows no plan of another operation - only the
+     one whose op it carries, if any */
+  if (!behalten && opStand.hervor){
+    if (g.comp.has(opStand.hervor)) opStand.plan = g.opVon.get(g.comp.get(opStand.hervor)) || null;
+    else { const b = g.knoten.get(opStand.hervor); opStand.plan = b && b.v && b.v.op ? b.v.op : null; }
+  }
+  const ops = new Map();                        // op -> {name, c}
+  for (const [c, o] of g.opVon) if (o) ops.set(o, {name: g.name.get(c) || "", c});
+  if (opStand.plan && !ops.has(opStand.plan) && !alleP[opStand.plan] && !(neuE && neuE.op === opStand.plan)) opStand.plan = null;
+  const wahl = opStand.plan;
+  for (const o of Object.keys(alleP)) if (o !== wahl) q11LeerWeg(o);   // nothing at all in it, not the choice, not the box: gone
+  const opt = (v, text) => `<option value="${esc(v)}"${v === wahl ? " selected" : ""}>${esc(text)}</option>`;
+  const zahlWort = n => `${n} order${n === 1 ? "" : "s"}`;
+  const optionen = [opt("", "Plan an operation \u2026")];
+  for (const [o, x] of ops) optionen.push(opt(o, `Operation ${x.name || "?"} \u00b7 ${zahlWort(g.glieder.get(x.c).length)}`));
+  if (neuE && !ops.has(neuE.op)) optionen.push(opt(neuE.op, opEntwurfName()));
+  /* every plan by its name or, without one, by its towns - never two alike */
+  for (const o of Object.keys(alleP)){
+    if (ops.has(o) || (neuE && neuE.op === o)) continue;
+    const p = alleP[o], l = q11Lose(g, o).length, W = q11Weg(p);
+    const text = p.name || (W.length ? `New operation \u00b7 ${W.map(q11Ort).join(" \u2192 ")}` : "New operation");
+    optionen.push(opt(o, l ? `${text} \u00b7 ${zahlWort(l)}` : (p.name || !W.length) ? `${text} \u00b7 planned` : text));
+  }
+  optionen.push(opt("neu", "+ New operation"));
+  let leib = "";
+  if (wahl){
+    const plan = q11PlanFuer(wahl), L = q11Aufloesen(plan, g);
+    const feste = q11Gesetzte(g, wahl);          // the members on the map: the operation's ray, or the loose head
+    const klein = `style="font-size:11px;padding:3px 8px"`;
+    const chip = (i, feld, k) => `<span class="q11-chip" data-feld="${feld}"${k !== undefined ? ` data-k="${k}"` : ""}>${esc(q11Ort(i))}<button type="button" class="q11-x" data-q11ortweg="${feld}"${k !== undefined ? ` data-k="${k}"` : ""} title="Remove">\u00d7</button></span>`;
+    const pick = (feld, text) => `<button type="button" class="btn" data-q11pick="${feld}" ${klein}>${text}</button>`;
+    const orte = `<div class="q11-orte">
+        <span class="q11-l">Origin</span>${plan.anfang !== null ? chip(plan.anfang, "anfang") : pick("anfang", "Pick \u2026")}
+        <span class="q11-l">Stages</span><span class="q11-etappen">${plan.etappen.map((i, k) => chip(i, "etappen", k)).join("")}</span>${pick("etappen", "+ Stage")}
+        <span class="q11-l">End</span>${plan.ende !== null ? chip(plan.ende, "ende") : pick("ende", "Pick \u2026")}
+      </div>`;
+    const zeilen = [];
+    let n = 0;
+    for (const k of feste){
+      const b = g.knoten.get(k); n++;
+      const art = b.art === "arrow" ? (b.v.luft ? "para" : b.v.gather ? "gather" : "arrow") : b.art === "line" ? "line" : b.art === "para" ? "parablock" : (b.v && b.v.aufkl ? "aufkl" : "area");
+      /* the route, as the abstract rows show it - the operation's name stays in the head */
+      zeilen.push(`<div class="q11-g q11-fest${k === opStand.hervor ? " q11-hervor" : ""}" data-key="${esc(k)}"><span class="q11-n">${n}</span><span class="q11-art">${q11Symbol(art)}${esc(befehlArtName(b))}</span><span class="q11-was">${esc(q11Strecke(b))}</span><span class="q11-anf">${ZUSTAND_NAME[b.zs] || b.zs}</span></div>`);
+    }
+    plan.glieder.forEach((G, k) => {
+      const R = L[k], A = Q11_ARTEN[G.art]; n++;
+      const ort = (i, hand) => i === null ? "\u2014" : (hand ? `<b>${esc(q11Ort(i))}</b>` : esc(q11Ort(i)));
+      let was;
+      if (G.art === "gather") was = `${R.orte.length ? R.orte.map(i => ort(i, true)).join(", ") : "\u2014"} \u2192 ${ort(R.ziel, G.zu !== null)}`;
+      else if (G.art === "line") was = R.orte.length ? R.orte.map(i => ort(i, G.orte.length > 0)).join(" \u2192 ") : "\u2014";
+      else was = `${ort(R.start, G.von !== null)} \u2192 ${ort(R.ziel, G.zu !== null)}`;
+      const bedarf = q11Bedarf(G.req);
+      const anf = G.art === "line" ? (G.soll ? `${G.soll} team${G.soll === 1 ? "" : "s"}` : `<span style="color:var(--dim2)">no strength</span>`)
+                : (bedarf ? `need ${bedarf}` : `<span style="color:var(--dim2)">no requirement</span>`);
+      zeilen.push(`<div class="q11-g q11-abstrakt" data-gid="${esc(G.id)}"><span class="q11-griff" title="Drag to reorder">\u2807</span><span class="q11-n">${n}</span><span class="q11-art">${q11Symbol(A.tool)}${q11GliedName(G, R)}</span><span class="q11-was">${was}</span><span class="q11-anf">${anf}</span><button type="button" class="q11-x" data-q11weg="${esc(G.id)}" title="Remove">\u00d7</button></div>`);
+    });
+    const bau = Object.keys(Q11_ARTEN).map(a => `<button type="button" class="btn" data-q11neu="${a}" ${klein}>+ ${Q11_ARTEN[a].name}</button>`).join("");
+    leib = `${orte}
+      <div class="q11-liste" id="q11-liste">${zeilen.join("") || `<div class="empty">No orders yet.</div>`}</div>
+      <div class="row" style="align-items:center;flex-wrap:wrap;gap:5px">${bau}<span style="flex:1"></span>${feste.length ? "" : `<input type="text" id="q11-name" value="${esc(plan.name)}" placeholder="Name" maxlength="40" style="width:150px">`}
+        <button type="button" class="btn primary" id="q11-setzen" ${klein}${plan.glieder.length ? "" : " disabled"}>Set on the map</button>
+        <button type="button" class="btn" id="q11-weg" ${klein}>Discard plan</button></div>`;
+  }
+  return `<div id="op-plan"><div class="row" style="align-items:center"><select id="op-plan-wahl" class="mini" style="font-size:12px;padding:3px 6px;max-width:100%">${optionen.join("")}</select></div>${leib}</div>`;
+}
+/* reordering by pointer, one helper for the rows and the stage chips: the
+   handle picks the item up, the item under the pointer takes it; fertig
+   gets both indices. Pointer events only, as the field below (phone). */
+function q11Ziehen(wurzel, itemSel, griffSel, fertig){
+  let zug = null;
+  wurzel.addEventListener("pointerdown", ev => {
+    if (ev.pointerType === "mouse" && ev.button !== 0) return;
+    const t = ev.target instanceof Element ? ev.target : null;
+    if (!t || t.closest(".q11-x")) return;
+    const griff = t.closest(griffSel);
+    if (!griff || !wurzel.contains(griff)) return;
+    const item = griff.closest(itemSel);
+    if (!item) return;
+    zug = {item, von: [...wurzel.querySelectorAll(itemSel)].indexOf(item), ueber: null, bewegt: false};
+    try { wurzel.setPointerCapture(ev.pointerId); } catch (e){}
+    ev.preventDefault();
+  });
+  wurzel.addEventListener("pointermove", ev => {
+    if (!zug) return;
+    if (!zug.bewegt){ zug.bewegt = true; zug.item.classList.add("q11-zieht"); }
+    const u = document.elementFromPoint(ev.clientX, ev.clientY);
+    const it = u && u.closest ? u.closest(itemSel) : null;
+    const ziel = it && wurzel.contains(it) && it !== zug.item ? it : null;
+    if (ziel !== zug.ueber){
+      if (zug.ueber) zug.ueber.classList.remove("q11-ziel");
+      zug.ueber = ziel;
+      if (ziel) ziel.classList.add("q11-ziel");
+    }
+  });
+  const ende = ev => {
+    if (!zug) return;
+    const z = zug; zug = null;
+    z.item.classList.remove("q11-zieht");
+    if (z.ueber) z.ueber.classList.remove("q11-ziel");
+    try { wurzel.releasePointerCapture(ev.pointerId); } catch (e){}
+    if (ev.type !== "pointerup" || !z.ueber) return;
+    fertig(z.von, [...wurzel.querySelectorAll(itemSel)].indexOf(z.ueber));
+  };
+  wurzel.addEventListener("pointerup", ende);
+  wurzel.addEventListener("pointercancel", ende);
+}
+/* the strip's wiring; neu rebuilds the window with its positions kept */
+function q11Verdrahten(neu){
+  const wurzel = document.getElementById("op-plan");
+  if (!wurzel) return;
+  const sel = document.getElementById("op-plan-wahl");
+  sel.addEventListener("change", () => {
+    const v = sel.value, alt = opStand.plan;
+    if (v === "neu"){ const op = "op" + pfeilId(); q11PlanFuer(op); q11Speichern(); opStand.plan = op; }
+    else opStand.plan = v || null;
+    if (alt && alt !== opStand.plan) q11LeerWeg(alt);
+    neu();
+  });
+  const op = opStand.plan;
+  if (!op) return;
+  const plan = q11PlanFuer(op);
+  const merken = () => { const n = document.getElementById("q11-name"); if (n) plan.name = n.value.trim().slice(0, 40); q11Speichern(); };
+  /* the planner shuts on Close or the x: a plan that holds nothing at all goes with it (the name field is read first) */
+  for (const k of [document.getElementById("d-close"), document.querySelector("#dlg .dlg-x")]) if (k) k.addEventListener("click", () => { merken(); q11LeerWeg(op); });
+  wurzel.addEventListener("click", ev => {
+    const t = ev.target instanceof Element ? ev.target : null;
+    if (!t) return;
+    const pick = t.closest("[data-q11pick]");
+    if (pick){ merken(); q11WahlStart(op, null, pick.dataset.q11pick); return; }
+    const ow = t.closest("[data-q11ortweg]");
+    if (ow){ const f = ow.dataset.q11ortweg; if (f === "etappen") plan.etappen.splice(+ow.dataset.k, 1); else plan[f] = null; merken(); neu(); return; }
+    const bau = t.closest("[data-q11neu]");
+    if (bau){ plan.glieder.push({id: pfeilId(), art: bau.dataset.q11neu, von: null, zu: null, orte: [], req: null, soll: null}); merken(); neu(); return; }
+    const weg = t.closest("[data-q11weg]");
+    if (weg){ const k = plan.glieder.findIndex(G => G.id === weg.dataset.q11weg); if (k >= 0) plan.glieder.splice(k, 1); merken(); neu(); return; }
+    if (t.closest("#q11-setzen")){ merken(); q11Setzen(op); return; }
+    if (t.closest("#q11-weg")){
+      q11PlanWeg(op);
+      if (opStand.neu && opStand.neu.op === op){ opEntwurfLoesen(opStand.neu); opStand.neu = null; }   // the P5 draft box of the same operation goes with the plan
+      neu(); return;
+    }
+    const ab = t.closest(".q11-abstrakt");
+    if (ab && !t.closest(".q11-griff")){ merken(); q11GliedDialog(op, ab.dataset.gid); return; }
+    const fest = t.closest(".q11-fest");
+    if (fest){ opStand.hervor = fest.dataset.key; neu(); }
+  });
+  const name = document.getElementById("q11-name");
+  if (name) name.addEventListener("change", merken);
+  const liste = document.getElementById("q11-liste");
+  if (liste) q11Ziehen(liste, ".q11-abstrakt", ".q11-griff", (von, zu) => { const G = plan.glieder.splice(von, 1)[0]; plan.glieder.splice(zu, 0, G); merken(); neu(); });
+  const et = wurzel.querySelector(".q11-etappen");
+  if (et) q11Ziehen(et, ".q11-chip", ".q11-chip", (von, zu) => { const i = plan.etappen.splice(von, 1)[0]; plan.etappen.splice(zu, 0, i); merken(); neu(); });
+}
+/* THE PICK ON THE MAP: the window closes, the next click on a town sets
+   the field; stages and the towns of a line or a gather take several,
+   Escape or empty ground ends; then the window comes back */
+function q11WahlStart(op, gid, feld){
+  q11Wahl = {op, gid, feld};
+  closeDlg();
+  toast(feld === "etappen" || feld === "orte" ? "Click the towns \u2014 Escape ends." : "Click a town.");
+}
+/* the click on the map while a pick is open; true = the click was taken.
+   A town holds one role in the operation: origin, stage or end */
+function q11Klick(i){
+  const w = q11Wahl;
+  if (!w) return false;
+  if (i === null){ q11WahlEnde(); return true; }
+  const plan = q11Alle()[w.op];
+  if (!plan){ q11Wahl = null; return true; }
+  const G = w.gid ? plan.glieder.find(x => x.id === w.gid) : null;
+  if (w.gid && !G){ q11WahlEnde(); return true; }
+  const rolle = () => i === plan.anfang ? "the origin" : plan.etappen.includes(i) ? "a stage" : i === plan.ende ? "the end" : "";
+  let mehr = false;
+  if (w.feld === "etappen"){
+    if (plan.etappen.includes(i)){ toast(`${q11Ort(i)} is in already.`); return true; }
+    if (rolle()){ toast(`${q11Ort(i)} is ${rolle()}.`); return true; }
+    plan.etappen.push(i); mehr = true;
+  }
+  else if (w.feld === "orte"){
+    if (G.orte.includes(i)){ toast(`${q11Ort(i)} is in already.`); return true; }
+    if (G.art === "gather" && G.orte.length >= GATHER_MAX){ toast(`${GATHER_MAX} starts at most.`); q11WahlEnde(); return true; }
+    G.orte.push(i);
+    mehr = G.art === "line" || G.orte.length < GATHER_MAX;
+  }
+  else if (G) G[w.feld] = i;
+  else {
+    if (rolle() && plan[w.feld] !== i){ toast(`${q11Ort(i)} is ${rolle()}.`); return true; }
+    plan[w.feld] = i;
+  }
+  q11Speichern();
+  if (mehr){ toast(`${q11Ort(i)} \u2014 next town, or Escape.`); return true; }
+  q11WahlEnde();
+  return true;
+}
+/* back to the window the pick came from */
+function q11WahlEnde(){
+  const w = q11Wahl; q11Wahl = null;
+  if (!w) return;
+  opDialog(opStand.hervor, true);
+  if (w.gid) q11GliedDialog(w.op, w.gid);
+}
+/* ONE MEMBER'S WINDOW: start and target (by hand - the map, or the towns
+   of the operation - or auto), a gather's starts, a line's towns, the
+   requirement as in the arrow window (anfTabelle on a stand-in: a draft,
+   so Need only, with the templates), a line's planned strength. Back and
+   Save return to the planner. */
+function q11GliedDialog(op, gid){
+  const plan = q11Alle()[op], G = plan && plan.glieder.find(x => x.id === gid);
+  if (!G){ opDialog(opStand.hervor, true); return; }
+  const g = opGraph(alleBefehle(true)), k = plan.glieder.indexOf(G), R = q11Aufloesen(plan, g)[k], A = Q11_ARTEN[G.art];
+  const klein = `style="font-size:11px;padding:3px 8px"`;
+  /* the operation's towns to choose from - origin, stages, end */
+  const auswahl = (feld, i, hand) => {
+    const orte = [];
+    if (plan.anfang !== null) orte.push([plan.anfang, "Origin"]);
+    plan.etappen.forEach((t, j) => orte.push([t, `Stage ${j + 1}`]));
+    if (plan.ende !== null) orte.push([plan.ende, "End"]);
+    if (!orte.length) return "";
+    return `<select class="mini" data-q11aus="${feld}" style="font-size:11px;padding:3px 6px;min-width:96px;max-width:170px"><option value="">Town \u2026</option>${
+      orte.map(([t, r]) => `<option value="${t}"${hand && t === i ? " selected" : ""}>${r} \u00b7 ${esc(q11Ort(t))}</option>`).join("")}</select>`;
+  };
+  const zeile = (titel, feld, i, hand) => `<div class="row" style="align-items:center;flex-wrap:wrap"><span style="font-size:12px;color:var(--dim);flex:1">${titel}</span>
+      <span>${i === null ? "\u2014" : esc(q11Ort(i))}${hand || i === null ? "" : ` <small style="color:var(--dim2)">auto</small>`}</span>
+      ${auswahl(feld, i, hand)}<button type="button" class="btn" data-q11pick="${feld}" ${klein}>Pick on map</button>${hand ? `<button type="button" class="btn" data-q11auto="${feld}" ${klein}>Auto</button>` : ""}</div>`;
+  const liste = titel => `<div class="row" style="align-items:center;flex-wrap:wrap"><span style="font-size:12px;color:var(--dim);flex:1">${titel}</span>
+      ${G.orte.map((i, j) => `<span class="q11-chip" style="cursor:default">${esc(q11Ort(i))}<button type="button" class="q11-x" data-q11ortweg="orte" data-k="${j}" title="Remove">\u00d7</button></span>`).join("")}${
+      !G.orte.length && R.orte.length ? R.orte.map(i => `<span class="q11-chip q11-auto">${esc(q11Ort(i))}</span>`).join("") : ""}
+      <button type="button" class="btn" data-q11pick="orte" ${klein}>+ Town</button></div>`;
+  const stand = {id: "q11:" + G.id, entwurf: 1, req: G.req || undefined, gather: G.art === "gather" ? 1 : undefined,
+                 to: R.ziel !== null ? R.ziel : undefined, from: R.start !== null ? R.start : undefined};
+  const titel = plan.name || (opStand.neu && opStand.neu.op === op ? opEntwurfName() : "") || (() => { for (const [c, o] of g.opVon) if (o === op) return g.name.get(c); return ""; })();
+  /* one wrapper carries the listeners: #dlg lives on, and a listener on it
+     stacked with every reopening (measured: the second Save read the
+     planner's fields and cleared the requirement) */
+  openDlg(`<div id="q11-glied"><div class="dlg-h"><h2>${q11GliedName(G, R)}</h2><p>${esc(titel || "Operation")} \u00b7 step ${k + 1} of ${plan.glieder.length}</p></div>
+    <div class="dlg-b">
+      ${G.art === "attack" || G.art === "drop" ? zeile("Start", "von", R.start, G.von !== null) : ""}
+      ${G.art !== "line" ? zeile("Target", "zu", R.ziel, G.zu !== null) : ""}
+      ${G.art === "gather" ? liste("Starts") : ""}
+      ${G.art === "line" ? liste("Towns") : ""}
+      ${G.art === "line" ? `<div class="row" style="align-items:center"><span style="font-size:12px;color:var(--dim);flex:1">Planned strength</span>
+        <input type="number" id="q11-soll" min="0" max="999" value="${G.soll || ""}" placeholder="\u2014" style="width:70px"></div>` : anfTabelle(stand)}
+    </div>
+    <div class="dlg-f"><button class="btn" id="q11-g-weg">Remove</button><span style="flex:1"></span>
+      <button class="btn" id="q11-g-zurueck">Back</button><button class="btn primary" id="q11-g-ok">Save</button></div></div>`, "wide");
+  if (G.art !== "line"){ anfVerdrahten(); anfVorlagenVerdrahten(); if (G.art === "gather") gatherLuftSperren(stand); }
+  const lesen = () => {
+    if (G.art === "line"){ const e = document.getElementById("q11-soll"), n = e ? Math.round(+e.value || 0) : 0; G.soll = n > 0 ? Math.min(999, n) : null; }
+    else G.req = anfFelderLesen();
+    q11Speichern();
+  };
+  const huelle = document.getElementById("q11-glied");
+  huelle.addEventListener("click", ev => {
+    const t = ev.target instanceof Element ? ev.target : null;
+    if (!t) return;
+    const pick = t.closest("[data-q11pick]");
+    if (pick){ lesen(); q11WahlStart(op, gid, pick.dataset.q11pick); return; }
+    const auto = t.closest("[data-q11auto]");
+    if (auto){ lesen(); G[auto.dataset.q11auto] = null; q11Speichern(); q11GliedDialog(op, gid); return; }
+    const ow = t.closest("[data-q11ortweg]");
+    if (ow){ lesen(); G.orte.splice(+ow.dataset.k, 1); q11Speichern(); q11GliedDialog(op, gid); return; }
+    if (t.closest("#q11-g-weg")){ plan.glieder.splice(k, 1); q11Speichern(); opDialog(opStand.hervor, true); return; }
+    if (t.closest("#q11-g-zurueck")){ opDialog(opStand.hervor, true); return; }
+    if (t.closest("#q11-g-ok")){ lesen(); opDialog(opStand.hervor, true); }
+  });
+  huelle.addEventListener("change", ev => {                       // a town of the operation chosen from the list
+    const aus = ev.target instanceof Element ? ev.target.closest("[data-q11aus]") : null;
+    if (!aus || aus.value === "" || !MAP.n[+aus.value]) return;
+    lesen(); G[aus.dataset.q11aus] = +aus.value; q11Speichern(); q11GliedDialog(op, gid);
+  });
+}
+/* a drop from a field that is not ours: the question the para tool asks,
+   in its words (paraFeldFragen) - here always, whatever side the tool bar
+   shows, because the plan's orders are our side (E4). ja / nein run on
+   the buttons; the x of the window and Escape count as No. Escape shuts
+   the window in the page-wide keydown, which runs first; this listener
+   answers after it and goes with any answer (measured: Escape left the
+   member planned with no planner to come back to) */
+function q11FeldFragen(von, ja, nein){
+  const o = ownerOf(von);
+  const wer = o >= 0 ? `This airfield is held by <b>${esc(FACTIONS[o].name)}</b>.` : "This airfield is held by nobody.";
+  openDlg(`<div class="dlg-h"><h2>${esc(q11Ort(von))}</h2></div>
+    <div class="dlg-b"><div class="note">${wer} Plan the drop from there anyway?</div></div>
+    <div class="dlg-f">
+      <button class="btn" id="para-nein">No</button>
+      <button class="btn primary" id="para-ja">Yes</button>
+    </div>`, "klein");
+  const kNein = document.getElementById("para-nein"), kJa = document.getElementById("para-ja"), x = document.querySelector("#dlg .dlg-x");
+  const taste = ev => { if (ev.key !== "Escape" || document.getElementById("para-nein") !== kNein) return; weg(); nein(); };
+  const weg = () => document.removeEventListener("keydown", taste);
+  document.addEventListener("keydown", taste);
+  kNein.addEventListener("click", () => { weg(); closeDlg(); nein(); });
+  kJa.addEventListener("click", () => { weg(); closeDlg(); ja(); });
+  if (x) x.addEventListener("click", () => { weg(); nein(); });
+}
+/* SET ON THE MAP: every abstract member in order, each one linked after
+   the one before (or after the operation's last order on the map). The
+   towns are resolved once, before the first order is made. A drop from a
+   field that is not ours asks (q11FeldFragen) - No leaves that member and
+   the rest planned, the planner comes back. Withhold asks once (Q2). */
+function q11Setzen(op){
+  const plan = q11Alle()[op];
+  if (!plan || !plan.glieder.length){ toast("Nothing to set."); return false; }
+  if (!darf("operationen")) return darfNicht("operationen");
+  /* Q2: the tools' question, once per session - withholdSteht and not
+     withholdSperrt, because the plan's orders are always our own side,
+     whatever side the tool bar shows */
+  if (withholdSteht() && !withholdZeichnenOk()) return false;
+  const g = opGraph(alleBefehle(true)), s = q11Schwanz(g, op), L = q11Aufloesen(plan, g);
+  /* what the first new order hangs after: the ray's tail - or, without a
+     ray, ALL the loose heads of the box / the operation in strip order
+     (measured: after the last one alone, opVerbinden made a ray of two and
+     opEntwurfLoesen took the op off the other) */
+  const strahl = [...g.opVon.values()].includes(op);
+  let vor = strahl ? (s !== null ? [s] : []) : q11Lose(g, op), n = 0;
+  /* the one word at the end: what was set and why it stopped; grund null =
+     the road itself has said it (the arrow cap), nothing over it */
+  const ende = grund => {
+    q11Speichern();
+    const teile = [];
+    if (n) teile.push(`${n} order${n === 1 ? "" : "s"} set.`);
+    if (grund) teile.push(grund);
+    if (teile.length && grund !== null) toast(teile.join(" "));
+    draw(); ordersZahl(); tally();
+    opDialog(opStand.hervor, true);
+  };
+  const schritt = () => {
+    if (!plan.glieder.length){ ende(""); return; }
+    const G = plan.glieder[0], R = L[0];
+    const machen = () => {
+      const r = q11Anlegen(G, R, plan, !vor.length);
+      if (!r.keys){ ende(r.grund); return; }
+      for (const key of r.keys) for (const p of vor) opVerbinden(p, key);
+      vor = r.keys; n += r.keys.length;
+      plan.glieder.shift(); L.shift(); q11Speichern();
+      schritt();
+    };
+    if (G.art === "drop"){
+      if (R.start === null){ ende("No start."); return; }
+      if (R.ziel === null){ ende("No target."); return; }
+      const p = luftPruefen({sym: paraTyp()}, R.start, R.ziel);
+      if (!p.ok){ ende(p.grund); return; }
+      if (ownerOf(R.start) === clanFaktion()) machen();
+      else q11FeldFragen(R.start, machen, () => ende("Drop not set."));
+      return;
+    }
+    machen();
+  };
+  schritt();
+  return true;
+}
+/* one member onto the map, on the tools' own roads; returns {keys} - the
+   orders made, a gather one arrow per start - or {grund}: why not (null
+   when the road has said it itself, the arrow or line cap). kopf: no
+   order before it - the plan's op and name go on it */
+function q11Anlegen(G, R, plan, kopf){
+  const meine = clanFaktion();
+  let erster = kopf;
+  /* kopf: the op and the name go on the first arrow - on every arrow of a
+     gather, which are heads all alike (measured: the second stayed loose
+     without the op, and the operation would take its name) */
+  const pfeil = (von, bis, extra) => {
+    if (!darfIchNochMalen("arrow")) return null;
+    const a = pfeilAnlegen(von, bis);
+    a.f = meine;                                // always our own side, as the gather (E4)
+    if (G.req) a.req = G.req;
+    if (extra) Object.assign(a, extra);
+    if (erster){ a.op = plan.op; if (plan.name) a.label = plan.name; erster = G.art === "gather"; }
+    pfeilGeaendert(a); save();
+    return a;
+  };
+  if (G.art === "attack" || G.art === "drop"){
+    if (R.start === null) return {grund: "No start."};
+    if (R.ziel === null) return {grund: "No target."};
+    if (R.start === R.ziel) return {grund: "Start and target are the same town."};
+    const a = pfeil(R.start, R.ziel, G.art === "drop" ? {luft: 1, sym: paraTyp()} : null);
+    if (!a) return {grund: null};
+    if (a.luft) luftBoardAnfordern(a);           // the board request when the field is not ours, as a drop by hand
+    return {keys: [a.id]};
+  }
+  if (G.art === "gather"){
+    if (R.ziel === null) return {grund: "No target."};
+    if (ownerOf(R.ziel) !== meine) return {grund: `${q11Ort(R.ziel)} is not ours.`};
+    const starts = R.orte.filter(i => i !== R.ziel).slice(0, GATHER_MAX);
+    if (!starts.length) return {grund: "Gather: pick the start towns."};
+    const fremd = starts.find(i => ownerOf(i) !== meine);       // every start ours, or none is made (as gatherKlick refuses each)
+    if (fremd !== undefined) return {grund: `${q11Ort(fremd)} is not ours.`};
+    const keys = [];
+    for (const von of starts){
+      const a = pfeil(von, R.ziel, {gather: 1});
+      if (!a) break;                             // the cap: what stands, stands
+      keys.push(a.id);
+    }
+    return keys.length ? {keys} : {grund: null};
+  }
+  if (!R.orte.length) return {grund: "No town."};
+  /* one defence per town, as lineEinzelAnlegen keeps it (by hand the road opens the standing one) */
+  if (R.orte.length === 1 && einzelLinieAn(R.orte[0])) return {grund: `${q11Ort(R.orte[0])} has a defence already.`};
+  const k = lineSpeichern(R.orte, R.orte.length === 1);
+  if (!k) return {grund: null};
+  const aend = {f: meine};
+  if (G.soll) aend.soll = G.soll;
+  if (erster){ aend.op = plan.op; if (plan.name) aend.label = plan.name; }
+  befehlSchreiben({art: "line", id: k, key: befehlKey("line", k)}, aend);
+  return {keys: [befehlKey("line", k)]};
+}
 function opDialog(hervorKey, behalten){
   const BW = 170, BH = 60, SX = 230, SY = 76, RAND = 16, ETI = 20, LUFT = 30;
   if (!behalten){ opStand.hervor = hervorKey || null; opStand.lage = new Map(); opStand.kante = null; opStand.pan = {x: 0, y: 0}; }
@@ -7945,7 +8575,8 @@ function opDialog(hervorKey, behalten){
       <p><b>${ops.length}</b> operation${ops.length === 1 ? "" : "s"} \u00b7 <b>${lose.length}</b> order${lose.length === 1 ? "" : "s"} not in one${
         darfZiehen ? "" : " \u00b7 " + esc(rechtSatz("operationen"))}</p></div>
     <div class="dlg-b">
-      <div id="op-feld"><div id="op-welt"><svg id="op-kanten"></svg></div></div>
+      ${q11Panel(g, alle, behalten)}
+      <div id="op-feld"${opStand.plan ? ' class="q11-klein"' : ""}><div id="op-welt"><svg id="op-kanten"></svg></div></div>
     </div>
     <div class="dlg-f"><span style="flex:1"></span><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
   document.getElementById("d-close").addEventListener("click", closeDlg);
@@ -8076,7 +8707,7 @@ function opDialog(hervorKey, behalten){
     if (ev.pointerType === "mouse" && ev.button !== 0) return;
     const ziel = ev.target instanceof Element ? ev.target : null;
     if (!ziel) return;
-    if (ziel.closest(".op-neu-x")){ ev.preventDefault(); opEntwurfLoesen(opStand.neu); opStand.neu = null; neu(); return; }   // P5-B: the draft is discarded, its orders are loose again
+    if (ziel.closest(".op-neu-x")){ ev.preventDefault(); opEntwurfLoesen(opStand.neu); q11KastenWeg(opStand.neu); opStand.neu = null; neu(); return; }   // P5-B: the draft is discarded, its orders are loose again
     const x = ziel.closest(".op-x");
     if (x){
       ev.preventDefault();
@@ -8146,6 +8777,7 @@ function opDialog(hervorKey, behalten){
   feld.addEventListener("pointerup", ende);
   feld.addEventListener("pointercancel", ende);
   feld.addEventListener("wheel", ev => { pan.x -= ev.deltaX; pan.y -= ev.deltaY; legen(); ev.preventDefault(); }, {passive: false});
+  q11Verdrahten(neu);                            // Q11: the plan strip, rebuilt with the window
 }
 /* THE INBOX. Units: my teams with their assignment, then every open order
    of our side, active first. Players: the open role requests of our side,
@@ -18113,6 +18745,7 @@ window.addEventListener("mouseup", e => {
 });
 cv.addEventListener("click", e => {
   if (dragged) return;
+  if (q11Wahl && q11Klick(hitTest(e.offsetX, e.offsetY))) return;   // Q11: a town for the planned operation, before any tool
   /* KAR-6: the stack hangs above the disc; where it reaches over the rim
      it wins, and it opens the bar as well as the column (ENNO 12.09.2026:
      "Beim Anklicken des Stapel wuerde sich dann eine Leiste wie im Spiel
@@ -18240,6 +18873,7 @@ document.addEventListener("keydown", e => {
     else if (paraFlussAktiv()){ paraFlussAbbruch(); draw(); }
     else if (gatherFlussAktiv()){ gatherFlussAbbruch(); draw(); }   // T15
     else if (aufklFluss){ aufklFlussAbbruch(); draw(); }
+    else if (q11Wahl){ q11WahlEnde(); }                             // Q11: the pick ends, the planner comes back
     else if (arrowFrom !== null){ arrowFrom = null; draw(); }
     /* the half-drawn defence line, before the catch-all below clears the
        selection instead and leaves the rubber band hanging */
@@ -59568,7 +60202,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 4a9ee9c68d</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 4d0c4e3070</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -59796,7 +60430,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "4a9ee9c68d";
+const BAU = "4d0c4e3070";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
