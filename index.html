@@ -9720,7 +9720,8 @@ const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
      geupdatet hat." The number stays the points (the rate soldier_kept per
      changed soldier and day), the soldiers stay anonymous. */
   soldier: "Arsenal updated",
-  /* T10, 19.09.2026: recon/lage (2026-09-19_lage.sql) */
+  /* T10, 19.09.2026: recon/lage (2026-09-19_lage.sql); Q5: the hour's first
+     reader reads "War update read first" in the ledger (punkteAktionName, by quelle) */
   lage: "War update read"});
 /* 'done' wird zweimal gebucht, fuer denselben Befehl: auf order fuer jeden,
    der ihn erfuellt hat, auf leader fuer den, der ihn erteilt hat. Gleiche
@@ -9728,7 +9729,12 @@ const PUNKTE_AKTION = Object.assign({}, AUFK_NAME, {
    Beide Aufrufer geben es mit: die Aufschluesselung in punkteZeichnen und die
    Tabelle im Buch. Wer einen vergisst, bekommt "undefined" in die Zelle. */
 const PUNKTE_AKTION_KONTO = {leader: {done: "Order given"}};
-const punkteAktionName = (a, k) => (PUNKTE_AKTION_KONTO[k] || {})[a]
+/* Q5 (Antwortblatt 18.09., 19.09.2026): one action, two rates - a ledger
+   row recon/lage says in its quelle (lage:<hour>#first / #more) whether
+   the reader was the hour's first; the sum per action in the Points tab
+   has no quelle and keeps the one name */
+const punkteAktionName = (a, k, q) => (a === "lage" && /#first$/.test(String(q || "")) ? "War update read first" : null)
+  || (PUNKTE_AKTION_KONTO[k] || {})[a]
   || PUNKTE_AKTION[a] || String(a || "");
 /* WOFUER DER PUNKT WAR, in Worten. Die Sache ist der Schluessel, mit dem der
    Server die Buchung eindeutig haelt - fuer einen Menschen sagt sie nichts.
@@ -9972,7 +9978,7 @@ async function punkteBuch(spieler, name){
       <tbody>${sockelZeile}${zeilen.map(z => `<tr>
         <td>${esc(z.wann ? new Date(z.wann).toLocaleString() : "")}</td>
         <td style="text-align:left">${esc(punkteKontoName(z.konto))}</td>
-        <td style="text-align:left">${esc(punkteAktionName(z.aktion, z.konto))}</td>
+        <td style="text-align:left">${esc(punkteAktionName(z.aktion, z.konto, z.quelle))}</td>
         <td style="text-align:left;color:var(--dim)" title="${esc(z.sache || "")}">${esc(punkteSacheName(z))}</td>
         <td>${esc(z.betrag == null ? 1 : z.betrag)}</td>
         <td style="text-align:left;color:var(--dim2)">${esc(z.quelle || "")}</td>
@@ -53904,10 +53910,18 @@ const PUNKTE_REGEL_FELDER = [
   {k:"aufkl_at_platz", n:"Recon request: per placeholder", std:0.5, dez:1,
    d:"On top, per unit reported without a type; the town's sum is rounded."},
   /* T10 (ToDo 16.9.2026, 19.09.2026) - ENNO 18.09.2026: "Hierfuer gibt es
-     auch Punkte, daher bitte mit in die Config". Paid by warmap_punkte_buchen
-     (branch 11) once 2026-09-19_lage.sql has been run; 1 is FABLE's number. */
-  {k:"lage_read",    n:"War update read off the start page", std:1,
-   d:"To whoever writes the hour's row; once per hour and player."},
+     auch Punkte, daher bitte mit in die Config". Q5 (Antwortblatt 18.09.) -
+     ENNO 19.09.2026: "Loesen wir wie immer bei Punkten ueber den
+     Konfigurator, wir koennen gerne unterscheiden zwischen erstem und jedem
+     weiteren Melder." Two rates on one booking: lage_first for the first to
+     write the hour's row, lage_read for every further reader of that hour -
+     paid by warmap_punkte_buchen (branch 11) once 2026-09-19_lage_first.sql
+     has been run (before that the server pays lage_read to everyone); 2 and
+     1 are FABLE's numbers (Offen 1). */
+  {k:"lage_first",   n:"War update \u00b7 first reader", std:2,
+   d:"The first to write the hour's row."},
+  {k:"lage_read",    n:"War update \u00b7 further readers", std:1,
+   d:"Every further reader of that hour; once per player."},
   /* P2 (Blatt 16.09., Nr. 4, 18.09.2026): THE CLAN EXP - ENNO 17.09.2026:
      "Wir koennen die Punkte auch in eine gemeinsame Waehrung, naemlich bspw.
      'Clan-Exp' umrechnen, die dann den Stufenaufstieg bedingt. Dadurch
@@ -53953,6 +53967,10 @@ const PUNKTE_REGEL_FELDER = [
    under a new rule (KANN-4). Two places, like the server. */
 const EXP_SATZ_VON = {"recon:attr": "attr_ok", "logistic:soldier": "soldier_kept",
                       "order:done": "order_done", "leader:done": "leader_done", "order:battle": "battle_done", "recon:lage": "lage_read"};
+/* Q5 (19.09.2026): recon/lage carries a second rate - lage_first for the
+   hour's first reader, lage_read (above) for every further one; the stand
+   row has only the sum and the count, see expRechnen */
+const EXP_SATZ_ZWEI = {"recon:lage": "lage_first"};
 const expSockelKarte = () => (S.meta.expsockel && S.meta.expsockel.v) || {};
 const nzExp = n => (Math.round((+n || 0) * 100) / 100).toLocaleString("en", {maximumFractionDigits: 2});
 function expRechnen(zeilen, neu, alt){
@@ -53972,10 +53990,23 @@ function expRechnen(zeilen, neu, alt){
     if (!z || !z.spieler || !PUNKTE_KONTEN.some(k => k.k === z.konto)) continue;
     const p = nimm(z.spieler, z.name);
     let betrag = +z.punkte || 0;
-    const rk = EXP_SATZ_VON[z.konto + ":" + z.aktion];
+    const rk = EXP_SATZ_VON[z.konto + ":" + z.aktion], rk2 = EXP_SATZ_ZWEI[z.konto + ":" + z.aktion];
     if (rk && alt && neu !== alt){
-      const sn = satz(neu, rk), sa = satz(alt, rk);
-      betrag = sa > 0 ? betrag * sn / sa : (+z.n || 0) * sn;
+      const sn = satz(neu, rk), sa = satz(alt, rk), n = +z.n || 0;
+      if (rk2){
+        /* two rates on one action (Q5): under the old rule the sum is
+           n1 x first + n2 x further with n1 + n2 = n, which gives n1 when
+           the two old rates differ; the new sum is then n1 x first' + n2 x
+           further'. Equal old rates: scaled by the ratio only when the new
+           ones are equal too, else the row keeps its betrag - a split would
+           be a guess. A sum that does not fit (a rate changed in between)
+           keeps its betrag as well. */
+        const fn = satz(neu, rk2), fa = satz(alt, rk2);
+        if (fa !== sa){
+          const n1 = (betrag - n * sa) / (fa - sa);
+          if (Number.isInteger(n1) && n1 >= 0 && n1 <= n) betrag = n1 * fn + (n - n1) * sn;
+        } else if (fn === sn) betrag = sa > 0 ? betrag * sn / sa : n * sn;
+      } else betrag = sa > 0 ? betrag * sn / sa : n * sn;
     }
     p.exp += betrag * satz(neu, "exp_" + z.konto) * (z.konto === "recon" && z.aktion === "map" ? satz(neu, "exp_radar") : 1);
   }
@@ -59408,7 +59439,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 710a81e5e7</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 6f49681c96</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -59636,7 +59667,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "710a81e5e7";
+const BAU = "6f49681c96";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
