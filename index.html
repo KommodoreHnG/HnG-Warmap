@@ -17244,6 +17244,34 @@ function teamLoeschen(id){
   depotZeichnen(); side(); draw(); kraftLeiste(); tally();
   toast(`${wie} deleted`);
 }
+/* MANY AT ONCE (Q13, Antwortblatt 18.09. - ENNO 19.09.2026: "Bitte ein
+   Button + Auswahlmöglichkeit im Depot, um mehrere Einheiten auszuwählen
+   und zu löschen. Die Warnung bei jedem einzelnen ist nervig wenn man mehr
+   löschen will"). The same road as teamLoeschen - off the map, out of the
+   depot, the groups swept - but asked ONCE and written once: one units row
+   per town they stood in, ONE depot row (setMyDepot -> depotSchreiben),
+   one groups row. Returns whether it deleted, so the window knows whether
+   the pick is spent. Ids that are not in the depot on screen are skipped. */
+function teamsLoeschen(ids){
+  const raus = new Set((ids || []).filter(id => teamById(id)));
+  const n = raus.size;
+  if (!n) return false;
+  const staedte = new Map();
+  for (const id of raus){
+    const t = townOfTeam(id);
+    if (t !== null) staedte.set(t, (staedte.get(t) || 0) + 1);
+  }
+  const aufKarte = [...staedte.values()].reduce((a, b) => a + b, 0);
+  if (!confirm(`Delete ${n} team${n === 1 ? "" : "s"}?\n\n`
+             + (aufKarte ? (aufKarte === 1 ? `1 comes off the map. ` : `${aufKarte} come off the map. `) : ``)
+             + `This cannot be undone.`)) return false;
+  for (const t of staedte.keys()) setMyUnits(t, myUnits(t).filter(u => !raus.has(u.id)));
+  setMyDepot(myDepot().filter(x => !raus.has(x.id)));
+  gruppenAufraeumen();
+  depotZeichnen(); side(); draw(); kraftLeiste(); tally();
+  toast(`${n} team${n === 1 ? "" : "s"} deleted`);
+  return true;
+}
 
 /* ---- GRUPPEN EIGENER ASSAULT TEAMS -----------------------------------
    Mehrere eigene Teams unter einem Namen, damit man sie nicht Stueck fuer
@@ -17473,12 +17501,15 @@ function teamHochstufen(id, zu){
    denselben Teams auch tut - und ruft nach jeder Aenderung
    depotZeichnen(), damit die Spalte dahinter nie etwas anderes zeigt.
    Geschrieben wird ausschliesslich ueber setMyDepot, teamUmbenennen,
-   teamHochstufen, withdrawTeam und teamLoeschen. */
+   teamHochstufen, withdrawTeam, teamLoeschen und teamsLoeschen (Q13). */
 let depotDlgFilter = "all", depotDlgSuche = "";
 let depotLeserBehalten = null;   // T4 (2): the reader tab carried over a rebuild from within the window (wieder)
+let depotWahl = null;            // Q13: the select mode of the Teams tab - a Set of chosen ids while on, null while off
 function depotDialog(tab){
+  if (!depotLeserBehalten) depotWahl = null;   // Q13: a fresh opening starts without the select mode; only wieder() carries it over
   const c = light() ? "#1a2029" : "#e9e2d5";
   const alleD = myDepotAlle();
+  if (depotWahl) for (const id of [...depotWahl]) if (!alleD.some(d => d.id === id)) depotWahl.delete(id);   // a choice outlives a single delete or a fetch: sift it, so the button counts what is still there (Skeptiker Handwerk SOLL-1)
   const teamVon = new Map(alleD.map(d => [d.id, d]));
   const alle = myDepot();
   const fl = FILTER.find(x => x.k === depotDlgFilter) || FILTER[0];
@@ -17496,7 +17527,8 @@ function depotDialog(tab){
     const kinder = atKinder(d.k);
     const g = grVon.get(d.id);
     const heu = `${d.name || ""} ${d.tag || ""} ${atName(d.k)} ${g ? gruppeName(g) : ""}`.toLowerCase();
-    return `<tr data-such="${esc(heu)}">
+    return `<tr data-such="${esc(heu)}">${depotWahl
+        ? `<td><input type="checkbox" class="dm-w" data-id="${esc(d.id)}"${depotWahl.has(d.id) ? " checked" : ""}></td>` : ""}
       <td class="sy">${symbolSVG(d.k, c, 24, 17)}</td>
       <td><input class="dm-n" data-id="${esc(d.id)}" value="${esc(d.name || "")}" spellcheck="false"
             maxlength="${TEAM_NAME_MAX}" placeholder="${esc(d.cut ? "cut off, complete it" : atName(d.k))}"
@@ -17558,11 +17590,16 @@ function depotDialog(tab){
           }).join("")}</div>
           <input id="dm-such" value="${esc(depotDlgSuche)}" placeholder="Filter by name, tag, type or group"
                  spellcheck="false" style="flex:1;min-width:140px;${feldStil}">
+          ${alle.length ? `<button class="btn" id="dm-wahl" ${klein}>${depotWahl ? "Done" : "Select"}</button>` : ""}
         </div>
-        ${mein.length ? `<div class="tw"><table><thead><tr><th></th><th>Team</th><th>Tag</th><th>Type</th>
+        ${mein.length ? `<div class="tw"><table><thead><tr>${depotWahl
+            ? `<th style="white-space:nowrap"><button class="btn" id="dm-wall" ${klein}>All</button> <button class="btn" id="dm-wnone" ${klein}>None</button></th>` : ""}<th></th><th>Team</th><th>Tag</th><th>Type</th>
             <th>Group</th><th>Where</th><th></th><th></th></tr></thead>
           <tbody>${mein.map(zeile).join("")}</tbody></table></div>`
-          : `<div class="empty">${alle.length ? "Nothing of this type." : "Nothing in this depot yet."}</div>`}
+          : `<div class="empty">${alle.length ? "Nothing of this type." : "Nothing in this depot yet."}</div>`}${depotWahl
+          ? `<div class="row" style="align-items:center;gap:8px;margin-top:8px"><span style="flex:1"></span>
+               <button class="btn" id="dm-wdel" ${klein}${depotWahl.size ? "" : " disabled"}>Delete ${depotWahl.size} team${
+                 depotWahl.size === 1 ? "" : "s"}</button></div>` : ""}
       </div>
       <div class="tabp" data-tab="groups">
         ${bereit ? `${gruppen.map(grBlock).join("")}
@@ -17644,6 +17681,60 @@ function depotDialog(tab){
     teamLoeschen(b.dataset.dweg);
     wieder();
   }));
+  /* Q13 (Antwortblatt 18.09. - ENNO 19.09.2026: "Bitte ein Button +
+     Auswahlmöglichkeit im Depot, um mehrere Einheiten auszuwählen und zu
+     löschen. Die Warnung bei jedem einzelnen ist nervig wenn man mehr
+     löschen will"): Select turns the table into a pick list - a box per
+     row, All / None in the head, shift-click for a range (as in the name
+     list of the picture reader), "Delete N teams" below and ONE question
+     (teamsLoeschen). Done or Escape ends it. The chosen ids live in
+     depotWahl across a rebuild (filter), so a pick under one filter is not
+     lost under the next; a spent pick ends the mode, a cancelled question
+     keeps it. The single Delete of a row stays as it is. */
+  document.getElementById("dm-wahl")?.addEventListener("click", ()=>{
+    depotWahl = depotWahl ? null : new Set();
+    wieder();
+  });
+  const kaest = [...document.querySelectorAll("#dlg .dm-w")];
+  const wahlZeigen = () => {
+    const k = document.getElementById("dm-wdel");
+    if (!k || !depotWahl) return;
+    k.disabled = !depotWahl.size;
+    k.textContent = `Delete ${depotWahl.size} team${depotWahl.size === 1 ? "" : "s"}`;
+  };
+  const wahlLesen = () => {
+    if (!depotWahl) return;
+    for (const k of kaest){ if (k.checked) depotWahl.add(k.dataset.id); else depotWahl.delete(k.dataset.id); }
+    wahlZeigen();
+  };
+  let wahlZuletzt = -1;
+  kaest.forEach((k, i) => k.addEventListener("click", ev => {
+    /* shift-click: every box between the last one clicked and this one
+       takes this one's state; rows hidden by the search are left alone */
+    if (ev.shiftKey && wahlZuletzt >= 0 && wahlZuletzt !== i){
+      const von = Math.min(wahlZuletzt, i), bis = Math.max(wahlZuletzt, i);
+      for (let j = von; j <= bis; j++){
+        const tr = kaest[j].closest("tr");
+        if (!tr || !tr.hidden) kaest[j].checked = k.checked;
+      }
+    }
+    wahlZuletzt = i;
+    wahlLesen();
+  }));
+  document.getElementById("dm-wall")?.addEventListener("click", ()=>{
+    for (const k of kaest){ const tr = k.closest("tr"); if (!tr || !tr.hidden) k.checked = true; }
+    wahlLesen();
+  });
+  document.getElementById("dm-wnone")?.addEventListener("click", ()=>{
+    if (depotWahl) depotWahl.clear();
+    for (const k of kaest) k.checked = false;
+    wahlZeigen();
+  });
+  document.getElementById("dm-wdel")?.addEventListener("click", ()=>{
+    if (!depotWahl || !depotWahl.size) return;
+    if (teamsLoeschen([...depotWahl])) depotWahl = null;
+    wieder();
+  });
   document.querySelectorAll("#dlg [data-gname]").forEach(inp => {
     inp.addEventListener("keydown", ev => { if (ev.key === "Enter") inp.blur(); });
     inp.addEventListener("change", ()=>{
@@ -17766,6 +17857,19 @@ function gruppeMitgliederWahl(gid, zurueck){
   });
 }
 document.getElementById("dep-mgr").addEventListener("click", ()=>depotDialog("teams"));
+/* Q13: Escape ends the select mode of the depot window first - the
+   page-wide keydown below would close the window. Capture, so it runs
+   before that one; only while the depot window shows its Teams tab; a
+   text field keeps its own Escape (blur), a box does not. */
+document.addEventListener("keydown", ev => {
+  if (ev.key !== "Escape" || !depotWahl) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName) && ev.target.type !== "checkbox") return;
+  const k = document.getElementById("dm-wahl");
+  if (!k || !document.querySelector('#dlg .tabp.on[data-tab="teams"]')
+      || !document.getElementById("veil").classList.contains("on")) return;
+  ev.stopPropagation(); ev.preventDefault();
+  k.click();
+}, true);
 
 /* ---------------- interaction ----------------
    Everything that has a from and a to is drawn by dragging: arrows, defence
@@ -59304,7 +59408,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 07c9b77c5c</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 710a81e5e7</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -59532,7 +59636,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "07c9b77c5c";
+const BAU = "710a81e5e7";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
