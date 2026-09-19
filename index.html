@@ -330,6 +330,7 @@ body.zieht-h #mapwrap canvas{pointer-events:none}
 #cv.grabbing{cursor:grabbing}
 #cv.dropping{cursor:copy}
 #cv.griff{cursor:move}
+#uhren{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}   /* T12: the clocks, over the map sheet, no pointer */
 .float{position:absolute;background:rgba(22,18,13,.94);border:1px solid var(--line);
   border-radius:var(--r);backdrop-filter:blur(6px);box-shadow:0 4px 18px rgba(0,0,0,.5)}
 #searchbox{top:10px;left:10px;display:flex;gap:5px;align-items:center;padding:4px 6px}
@@ -2588,6 +2589,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 
     <div id="mapwrap">
       <canvas id="cv"></canvas>
+      <canvas id="uhren"></canvas>
       <div id="searchbox" class="float">
         <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--dim2);fill:none;stroke-width:2">
           <circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
@@ -12265,6 +12267,303 @@ function draw(){
     }
   }
 }
+
+/* ---- T12: THE STOPWATCH AT EVERY REPORTED TOWN (ENNO 18.09.2026, ToDo
+   16.9.2026, Stoppuhren für Kartenmeldungen: "Neben jeder aufgeklärten
+   Stadt soll eine Stoppuhr laufen, die die Zeit der letzten Meldung
+   angibt").
+   Its own transparent sheet #uhren over the map, the size of #cv, no
+   pointer events. draw() is not touched: the mantle at the end of this
+   block pulls the clocks after every draw() - a click's selection, a
+   fetched report, the front replay show the right clock at once (FABLE
+   19.09.2026).
+   THE TIME is the last report = when the clan last knew something of the
+   town: the youngest of the Aufmarsch reckoning (aufmarschKarte -
+   sightings, enemy records, own teams; own teams are a report (FABLE
+   19.09.2026, aus ENNO 18.09.2026 "melden, bzw. platzieren")), every est
+   row of the town (hand notes, radar rows with and without a bearing, also
+   where a card stack stands - the rule of estAt in ONE pass over S.est:
+   estAt walks all keys per call, that is where the stack map's 88-102 ms
+   per state at 1.438 reports come from), the fight mark (S.fight[i].t) and
+   the binocular stamp sichtStempel(i): the radar writes a row only on
+   change, a stack watched for three hours is still just reported. The
+   stamp only RAISES the time of a reported town, it adds no town: the radar
+   stamps every town it reads (the S.blick loop over res.erg.besitz, the
+   same as the ownership row), so as a source it would be a clock at all
+   1.438 towns - wallpaper. Every source is capped at zeitReise. Cached per
+   state (zustandLauf, zeitReise, epoche, S, the sichtKarte array - renewed
+   every 1,5 s at most), nothing is reckoned per frame (5.71).
+   TEXT "12 min" / "1 h 05" / "2 d" (minutes, rounded down - a stopwatch
+   counts up; seconds cannot be read on a map, FABLE), in the colour of the
+   AUFM_STUFEN, 9 x uiScale, the names' dark outline. PLACE: lower right
+   of the disc, the mirror of the Aufmarsch count in the north-east (S has
+   the name, E the note, W the para glyph, SW the binoculars, N the plates
+   and the stack) - the corner of the text box on the circle, the text
+   running outward; outside the Aufmarsch ring where the town wears one
+   (switch on and a count above zero). The plates and the row stack stand
+   north (plattenKante is their top edge) and never meet it; a rim stack
+   with a bearing (stapelVon, 5.31) pushes the clock under its box, a
+   pinned note's tail pushes it down. Where the town SHOWS ITS NAME (the
+   rule of the name block in draw(): capitals always, objectives from zoom
+   1,7, all from 3,4, the selection) the clock is the second line, centred
+   under the name - beside it, it ran into the neighbour's name.
+   THE BAR (FABLE 19.09.2026): youngest first; a clock is dropped for this
+   run (uhrenStand.weg, by cause) when its box meets (1) the box of a clock
+   already placed - with a gap of one type height sideways and 1 px up and
+   down, since two clocks flush against each other read as one ("4 h 26"
+   "1 d" = "4 h 261 d"; with 0,4 type heights still "17 h 20 1 h 17
+   4 h 18"); (2) the SLOT of ANOTHER town that shows its name - the disc
+   and the name band, from the top of the disc to 1 px under the band, as
+   wide as disc or name (without it, Altona's "1 min" stood between
+   Hamburg's star and its name and read as Hamburg's clock; no clock line
+   is reserved under a name - a town's own clock, once placed, is a placed
+   clock): tested with the box itself, 1 px sideways, and half a type
+   height upwards unless the clock sits right under its own name (unnamed,
+   or pushed down by ring, note or rim stack) - a clock a hair under a
+   foreign name reads as that name's second line; a clock right under its
+   own name is tested without that air, so two named towns can never drop
+   each other (A falls into B's slot only when A's band lies above B's, and
+   B into A's only the other way round); (3) a DIGIT draw() wrote in this
+   very frame ON THE CLOCK'S LINE - a foreign stack's count on its plate
+   (the plate row from the box in stapelVon, the count's width in the
+   plate's type from stapelKarte's value, centred; an empty radar plate
+   has no digit), the ring's count north-east of the ring (with the ring
+   on) and the own teams' count north of the disc, both by draw()'s
+   formulas, their text from the same reckoning (uhrenRinge, per state) -
+   tested with half a type height sideways and at least half a type height
+   of shared height (a digit staggered by more than half a line sits on
+   another line): "3 h 16" beside a stack's "2" read "23 h 16". One clock
+   fewer rather than a wrong time. The plates of the chain (para threat,
+   battle score, roles) are not in the bar: they stand north, their
+   geometry lives in five label functions.
+   Density on the probe (300 reports at every 4th town, uiScale 1,
+   Ruhr/Benelux; drawn / dropped (at a clock / a slot / a digit) / on a
+   foreign disc without a name / on a foreign stack box / on another clock
+   / on a foreign slot / on a foreign digit):
+   z 1,2: 151/107 (40/23/44)/20/72/0/0/0 - z 1,6: 145/63 (25/16/22)/17/55/
+   0/0/0 - z 2: 124/37 (14/6/17)/5/38/0/0/0 - z 2,5: 89/21 (8/4/9)/6/28/
+   0/0/0 - z 3,5: 40/30 (0/29/1)/0/6/0/0/0 - z 4 (276 names): 34/25
+   (0/24/1)/0/4/0/0/0; with the ring on 127/131, 129/79, 107/54, 81/29,
+   31/39, 29/30 (round 3, without the digit bar and with a clock line in
+   the slot: 180/78, 162/46, 138/23, 96/14, -, 34/25). From zoom 3,4 on
+   most drops are the neighbour's disc under the clock line (z 3,5: 20 of
+   29) - the names are 4,6 px there, the clock 9 px. No two named towns
+   drop each other; what looks so is a chain (A at B's name, B at C's).
+   TICK on the full minute (the first run waits for it, then 60 s,
+   re-aligned each time) and after every draw() - the display is never
+   more than a minute behind. From zoom UHREN_AB_ZOOM on, further out it
+   is wallpaper (FABLE 18.09.2026: one step past the stack count's 0,8).
+   LOAD (headless Chrome, no GPU, 1400 x 1000, 300 reports, real time,
+   bauer4/erg_last_http.txt; the second row is the Skeptiker's measurement
+   of round 3 on a machine at 82 % CPU, sk-hand3_erg_last_http_1/2.txt):
+   146 clocks at zoom 1,2 and uiScale 1 in 0,9-1,0 ms median (p90 1,6-2,5,
+   max 2,7), 123 with the ring on in 0,7-0,8 ms, 135 at zoom 1,6 in 1,1-1,2
+   ms, 35 at zoom 4 with 276 names shown in 0,7 ms, 105 at uiScale 1,25 in
+   0,7 ms; a run with nothing to draw 0,0 ms; draw() itself 4,5 ms.
+   uhrenKarte per state 0,2 ms, with 30 members' shared stamps 1,2 ms. At
+   a report in all 1.438 towns: 234 clocks (965 dropped) in 2,0-4,1 ms
+   (p90 3,4-5,9; draw() 18-34 ms there).
+   Skeptiker, round 3, at 82 % CPU: 169 clocks at zoom 1,2 in 2,0 ms
+   median (p90 2,7-3,5), ring 1,3-2,0, zoom 1,6 1,1-1,2, zoom 4 0,9-1,15,
+   1.438 towns 4,2-4,75 ms.
+   Target < 3 ms holds at the median under double load, the threshold
+   stays at 1,1. The stack map's cold cost at 1.438 reports (88-102 ms per
+   state) is the standing state and draw()'s - uhrenKarte does not read it.
+   (Flicks/flick_todo16_t12.py, 19.09.2026, round 4) */
+const UHREN_AB_ZOOM = 1.1;
+const UHREN_TAKT = 60000;
+const uhrenCv = document.getElementById("uhren"), uhrenCtx = uhrenCv.getContext("2d");
+let uhrenCache = null, uhrenRinge = [], uhrenLauf = -1, uhrenZeit = null, uhrenEpoche = null, uhrenS = null, uhrenSicht = null;
+let uhrenLeer = true;                     // the sheet is blank - a run with nothing to draw costs nothing
+let uhrenStand = {n: 0, weg: 0, wegUhr: 0, wegSchlitz: 0, wegZiffer: 0, ms: 0, z: 0};   // the last run: clocks drawn, dropped by the bar (and why), milliseconds, zoom
+const uhrenBreite = new Map();            // town -> its name's width at 20 px (600 for a capital), for the name band
+function uhrText(t){
+  const m = Math.floor(Math.max(0, alter(t))/60000);
+  if (m < 60) return m + " min";
+  const h = Math.floor(m/60);
+  if (h < 24) return h + " h " + String(m % 60).padStart(2, "0");
+  return Math.floor(h/24) + " d";
+}
+/* the towns with a report and the time of the youngest one, youngest first, per state; beside it
+   (uhrenRinge) every town with an Aufmarsch count: the ring's count text and the own count, as
+   draw() writes them - the bar keeps the clocks off those digits */
+function uhrenKarte(){
+  const ep = epoche(), sicht = sichtKarte();
+  if (uhrenCache && uhrenLauf === zustandLauf && uhrenZeit === zeitReise && uhrenEpoche === ep && uhrenS === S && uhrenSicht === sicht) return uhrenCache;
+  const je = new Map(), ringe = [];
+  const melde = (town, t) => {
+    if (!(t > 0) || (zeitReise && t > zeitReise)) return;
+    const u = je.get(town);
+    if (u){ if (t > u.t) u.t = t; } else je.set(town, {town, t, gesamt: 0});
+  };
+  /* 1 sightings, enemy records, own teams - the count for the ring's width; the ring's count text
+       (enemies, "/" own) and the own count as draw() writes them */
+  const eigenF = clanFaktion();
+  for (const d of aufmarschKarte().values()) if (d.gesamt){
+    melde(d.town, d.t); const u = je.get(d.town); if (u) u.gesamt = d.gesamt;
+    ringe.push({town: d.town, gesamt: d.gesamt, txt: (d.gesamt - d.je[eigenF]) + (d.eigen ? "/" + d.eigen : ""), eigen: d.eigen});
+  }
+  /* 2 every est row: hand notes, radar rows with and without a bearing (the rule of estAt, one pass) */
+  for (const k of Object.keys(S.est || {})){
+    const e = S.est[k];
+    if (!imKrieg(e) || !Array.isArray(e.v) || !e.v.length) continue;
+    const town = +k.slice(0, k.indexOf(":"));
+    if (!MAP.n[town]) continue;
+    for (const x of e.v) if (x) melde(town, x.t || e.t);
+  }
+  /* 3 the fight mark */
+  for (const k of Object.keys(S.fight || {})) if (MAP.n[+k] && fightAt(k)) melde(+k, S.fight[k].t);
+  /* 4 the binocular stamp raises the time of a reported town; it adds no town (see above) */
+  for (const u of je.values()){ const t = sicht[u.town] || 0; if (t > u.t && !(zeitReise && t > zeitReise)) u.t = t; }
+  uhrenCache = [...je.values()].sort((a, b) => b.t - a.t); uhrenRinge = ringe;
+  uhrenLauf = zustandLauf; uhrenZeit = zeitReise; uhrenEpoche = ep; uhrenS = S; uhrenSicht = sicht;
+  return uhrenCache;
+}
+function uhrenZeichnen(){
+  const t0 = performance.now();
+  const w = cv.width, h = cv.height, c = uhrenCtx, z = view.z;
+  if (uhrenCv.width !== w || uhrenCv.height !== h){ uhrenCv.width = w; uhrenCv.height = h; uhrenLeer = true; }   // a new size wipes the sheet
+  const liste = (z > UHREN_AB_ZOOM && w > 0 && h > 0) ? uhrenKarte() : [];
+  if (!liste.length){
+    if (!uhrenLeer){ c.setTransform(1,0,0,1,0,0); c.clearRect(0, 0, w, h); uhrenLeer = true; }
+    uhrenStand = {n: 0, weg: 0, wegUhr: 0, wegSchlitz: 0, wegZiffer: 0, ms: performance.now() - t0, z};
+    return;
+  }
+  c.setTransform(1,0,0,1,0,0); c.clearRect(0, 0, w, h);
+  c.setTransform(dpr,0,0,dpr,0,0);
+  const WW = w/dpr, HH = h/dpr;
+  const r0 = ortRadius(), fh = 9*uiScale, sq = Math.sqrt(z);
+  const rA = i => isCap(i) ? r0*STERN_RAGT : r0;
+  const schrift = `600 ${fh}px ui-monospace,Consolas,monospace`;
+  c.font = schrift; c.textAlign = "left"; c.textBaseline = "top";
+  c.lineJoin = "round"; c.miterLimit = 2; c.lineWidth = 2.5;
+  c.strokeStyle = "rgba(5,8,12,.92)";     // the names' outline (since T7 there is one look, the dark one)
+  const trifft = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+  /* the towns in view that show their name, by the rule of the name block in draw(): the band of the
+     name, and the slot - the disc and the name, to 1 px under the band - that a reader gives to that town */
+  const namen = new Map();
+  if (showNames) for (let i = 0; i < MAP.n.length; i++){
+    const cap = isCap(i), min = cap ? 0 : (isObj(i) ? 1.7 : 3.4);
+    if (z < min && i !== sel) continue;
+    const p = MAP.n[i], [x, y] = toScr(p[1], p[2]);
+    if (x < -60 || y < -20 || x > WW + 60 || y > HH + 40) continue;
+    const nah = Math.min(1, Math.max(0, (z - min)/2.5));
+    const gr = (cap ? 4.8 + Math.min(10.2, 6.4*sq)*nah : 4.2 + Math.min(8.8, 5.6*sq)*nah)*uiScale*ortScale;
+    let nb = uhrenBreite.get(i);
+    if (nb === undefined){                 // once per town: the name's width at 20 px
+      c.font = `${cap ? "600 " : ""}20px "Segoe UI",system-ui,sans-serif`;
+      nb = c.measureText(p[0]).width; uhrenBreite.set(i, nb);
+      c.font = schrift;
+    }
+    const ra = rA(i), mitte = y + Math.max(1.03*r0, ra + 2) + gr*0.62, halb = nb*gr/40, hs = Math.max(ra, halb);
+    namen.set(i, {x0: x - halb, x1: x + halb, y0: mitte - gr*0.5, y1: mitte + gr*0.5,
+                  schlitz: {x0: x - hs, x1: x + hs, y0: y - ra, y1: mitte + gr*0.5 + 1}});
+  }
+  /* the digits draw() put on #cv in this frame: every stack's count on its plate (the plate row from
+     the box in stapelVon - 4 px in, th high - and the count's width in the plate's type, centred, the
+     count from stapelKarte, which draw() has just reckoned for this state; an empty radar plate has no
+     digit), the own teams' count north of the disc and, with the ring on, the ring's count north-east
+     of it - the two counts by the formulas of draw() (type, place), their text from uhrenKarte's
+     reckoning. Filed in cells of 64 x 32 px: a candidate meets a handful, not every stack in view. */
+  const ziffern = new Map();
+  const zelle = (cx, ry) => (ry + 8)*1024 + cx + 8;
+  const ablegen = b => { for (let r = Math.floor(b.y0/32), re = Math.floor(b.y1/32); r <= re; r++) for (let q = Math.floor(b.x0/64), qe = Math.floor(b.x1/64); q <= qe; q++){ const k = zelle(q, r); let a = ziffern.get(k); if (!a){ a = []; ziffern.set(k, a); } a.push(b); } };
+  if (stapelVon.size){
+    const th = Math.max(9, 7.5*sq)*uiScale, stk = stapelKarte(), zb = new Map();
+    c.font = `700 ${th*0.9}px ${SCHMAL}`;
+    const zbreite = t => { let b = zb.get(t); if (b === undefined){ b = c.measureText(t).width; zb.set(t, b); } return b; };
+    for (const [i, kaesten] of stapelVon){
+      const d = stk.get(i); let b = 0;
+      if (d) for (const st of d.stapel) if (!st.nurRadar){ const w = zbreite(String(st.n)); if (w > b) b = w; }
+      if (b) for (const k of kaesten){ const cx = (k.x0 + k.x1)/2; ablegen({town: i, x0: cx - b/2, x1: cx + b/2, y0: k.y0 + 4, y1: k.y0 + 4 + th}); }
+    }
+  }
+  if (uhrenRinge.length){
+    const fz = Math.max(9, 8*sq)*uiScale, zb = new Map();
+    c.font = `600 ${fz}px ui-monospace,Consolas,monospace`;
+    const zbreite = t => { let b = zb.get(t); if (b === undefined){ b = c.measureText(t).width; zb.set(t, b); } return b; };
+    for (const q of uhrenRinge){
+      const p = MAP.n[q.town], [x, y] = toScr(p[1], p[2]);
+      if (x < -60 || y < -60 || x > WW + 60 || y > HH + 60) continue;
+      if (q.eigen){ const b = zbreite(String(q.eigen)); ablegen({town: q.town, x0: x - b/2, x1: x + b/2, y0: y - r0 - 2 - fz, y1: y - r0 - 2}); }
+      if (showAufmarsch){
+        const br = Math.max(2, (1.6 + Math.min(q.gesamt, 40)*0.12)*sq)*uiScale, rr = rA(q.town) + 8*uiScale + br/2;
+        const b = zbreite(q.txt), tx = x + rr*0.72, ty = y - rr*0.72;
+        ablegen({town: q.town, x0: tx, x1: tx + b, y0: ty - fz, y1: ty});
+      }
+    }
+  }
+  c.font = schrift;                        // back to the clocks' type after measuring the digits
+  /* a clock SHARES THE LINE of a foreign digit: the boxes meet (the clock's widened by half a type height
+     sideways) and overlap by at least half a type height in height - a digit staggered by more than half
+     a line sits on another line and does not read into the time (the Skeptiker's measure of round 3) */
+  const ziffer = (q, town) => { for (let r = Math.floor(q.y0/32), re = Math.floor(q.y1/32); r <= re; r++) for (let c0 = Math.floor(q.x0/64), ce = Math.floor(q.x1/64); c0 <= ce; c0++){ const a = ziffern.get(zelle(c0, r)); if (a) for (const b of a) if (b.town !== town && trifft(q, b) && Math.min(q.y1, b.y1) - Math.max(q.y0, b.y0) >= fh/2) return true; } return false; };
+  /* pinned notes: the speech mark's tail reaches 0,95 s below the middle, east of the disc */
+  const notiz = new Set();
+  for (const [,e] of livePosts()) if (e.v.town != null) notiz.add(e.v.town);
+  const sN = Math.max(7, 5.5*sq)*uiScale;
+  const ringZu = 8*uiScale + 1.5*uiScale + Math.max(1, 1.1*sq)*uiScale/2;
+  const breiten = new Map();               // text -> width, a few dozen strings per run
+  const gesetzt = [];                      // the boxes of the clocks placed in this run
+  const luft = fh;                         // the gap the bar keeps sideways, one type height: two clocks flush against each other read as one ("4 h 26" "1 d" = "4 h 261 d")
+  let n = 0, wegUhr = 0, wegSchlitz = 0, wegZiffer = 0;
+  for (const u of liste){
+    const p = MAP.n[u.town];
+    if (!p) continue;
+    const [x, y] = toScr(p[1], p[2]);
+    if (x < -20 || y < -20 || x > WW + 20 || y > HH + 60) continue;
+    const ra = rA(u.town);
+    /* outside the Aufmarsch ring where the town wears one - as its count sits in the north-east */
+    const R = showAufmarsch && u.gesamt ? ra + ringZu + Math.max(2, (1.6 + Math.min(u.gesamt, 40)*0.12)*sq)*uiScale : ra + 1;
+    const txt = uhrText(u.t);
+    let bw = breiten.get(txt);
+    if (bw === undefined){ bw = c.measureText(txt).width; breiten.set(txt, bw); }
+    let tx, ty;
+    const eigen = namen.get(u.town);
+    if (eigen){                            // the second line under the name, centred; clear of the ring
+      tx = x - bw/2; ty = Math.max(eigen.y1 + 1, y + R + 1);
+    } else {
+      tx = x + R*0.72; ty = y + R*0.72;
+    }
+    if (notiz.has(u.town)) ty = Math.max(ty, y + 0.95*sN + 1);
+    /* a stack on the rim (bearing) in the way: under its box */
+    const kaesten = stapelVon.get(u.town);
+    if (kaesten) for (const k of kaesten)
+      if (tx < k.x1 && tx + bw > k.x0 && ty < k.y1 && ty + fh > k.y0) ty = k.y1 + 1;
+    /* the bar: a clock already placed (with the gap around the candidate); the slot of another town
+       that shows its name (the box itself, 1 px sideways - upwards half a type height unless the clock
+       sits right under its own name); a foreign digit on the clock's line (half a type height sideways) */
+    const kasten = {x0: tx - luft, x1: tx + bw + luft, y0: ty - 1, y1: ty + fh + 1};
+    const eng = {x0: tx - 1, x1: tx + bw + 1, y0: ty - (eigen && ty === eigen.y1 + 1 ? 0 : fh/2), y1: ty + fh + 1};
+    let grund = 0;
+    for (const g of gesetzt) if (trifft(kasten, g)){ grund = 1; break; }
+    if (!grund) for (const [i, b] of namen) if (i !== u.town && trifft(eng, b.schlitz)){ grund = 2; break; }
+    if (!grund && ziffer({x0: tx - fh/2, x1: tx + bw + fh/2, y0: ty, y1: ty + fh}, u.town)) grund = 3;
+    if (grund){ if (grund === 1) wegUhr++; else if (grund === 2) wegSchlitz++; else wegZiffer++; continue; }
+    gesetzt.push({x0: tx, x1: tx + bw, y0: ty, y1: ty + fh});
+    c.fillStyle = aufmStufe(u.t).f;
+    c.strokeText(txt, tx, ty); c.fillText(txt, tx, ty);
+    n++;
+  }
+  uhrenLeer = n === 0;
+  uhrenStand = {n, weg: wegUhr + wegSchlitz + wegZiffer, wegUhr, wegSchlitz, wegZiffer, ms: performance.now() - t0, z};
+}
+/* the tick on the full minute: the first run waits for it, then every
+   UHREN_TAKT, re-aligned each time - its own sheet, never the map. Set
+   here, after the block: the orders' 60-s tick stands before draw() in the
+   file, where UHREN_TAKT is not yet initialised. A fault is reported, as
+   in the mantle, and the tick goes on. */
+function uhrenTakt(){
+  try { uhrenZeichnen(); } catch(e){ console.error("uhren", e); }
+  setTimeout(uhrenTakt, UHREN_TAKT - jetzt() % UHREN_TAKT);
+}
+setTimeout(uhrenTakt, UHREN_TAKT - jetzt() % UHREN_TAKT);
+/* the mantle: every draw() pulls the clocks after it, the body of draw()
+   stays untouched. The two requestAnimationFrame(draw) callers read the
+   binding when they run and get this one. A fault in the clocks never
+   stops the map. */
+const drawKarte = draw;
+draw = function(){ drawKarte(); try { uhrenZeichnen(); } catch(e){ console.error("uhren", e); } };
 
 /* Fuenfzackiger Stern, Spitze nach oben. */
 /* The star's outer radius for a disc of radius r. Below eight points it
@@ -57412,7 +57711,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 742d48103f</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 9b3f21c0c6</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -57640,7 +57939,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "742d48103f";
+const BAU = "9b3f21c0c6";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
