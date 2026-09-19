@@ -1182,6 +1182,16 @@ i.prio{margin-right:5px;vertical-align:-1px}
 .gf-kit-c{display:flex;flex-wrap:wrap;gap:4px}
 .gf-kit-c .chip{color:#2b2416;border-color:#b9ab8a;text-transform:none;letter-spacing:0;font-size:11px}
 .gf-kit-c .chip b{cursor:pointer;padding:0 0 0 5px;font-size:12px}
+/* the player cards read off the game (Antwortblatt 18.09., Q7): one line per
+   card under the board block, the state line over them. Rebuilt every tick
+   like the desk, buttons on pointerdown as everything here. */
+.gf-pk{margin-top:12px}
+.gf-pk-s{font-size:12px;color:#2b2416;margin:4px 0}
+.gf-pk-v{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;line-height:1.5;color:#2b2416;padding:2px 0;border-top:1px dotted #b9ab8a}
+.gf-pk-v b{font-weight:700}
+.gf-pk-v .mini{font-size:10px;padding:0 5px;line-height:16px;cursor:pointer}
+.gf-pk-v .mini:disabled{opacity:.45;cursor:default}
+.gf-pk-v .gf-pk-o{color:#9a8a63;font-style:italic}
 .kb-links{grid-area:links;width:260px;background:#0e1013;border-right:1px solid #22252c;
   padding:14px;color:#a9b0b8;font-size:13px;line-height:1.5;overflow:auto}
 .kb-links h3{margin:0 0 6px;font-size:10px;letter-spacing:.14em;color:#6d7680;text-transform:uppercase}
@@ -39533,6 +39543,9 @@ function gefNeu(){
           /* the scoreboard (BAT-1): entries, queue and the last complete
              look live here, made on the first look that finds the board */
           tafel: null,
+          /* the player card (Antwortblatt 18.09., Q7): its own look, queue
+             and proposals, made by pkStart with the capture */
+          karte: null,
           endbild: null, ende: null, endbildGemeldet: null,
           geschrieben: null, gesendet: 0, orteSchluessel: null,
           /* pause: another capture room holds the picture, the tick does not
@@ -39552,6 +39565,524 @@ function gefOrte(){
   for (let i = 0; i < MAP.n.length; i++) if (fightAt(i)) aus.push(i);
   return aus;
 }
+/* ==== THE PLAYER CARD (Antwortblatt 18.09., Q7 - Bitte 2; MESSUNG-Q7, MESSER
+   19.09.2026). ENNO 19.09.2026: "Da klicke ich in einem Kriegskampf sowohl
+   das eigene als auch das Gegnerteam durch"; ENNO 17.09.2026: "Das Tool
+   wuerde die gelesen Sachen dann als Vorschlaege erfassen, die man dann noch
+   bestaetigen muss."
+   WHAT WAS MEASURED (35 cards, 4K Erfurt): the card stands at one place,
+   around the picture's centre, 452 by 161 HUD points (4K 1693..2144 x
+   999..1159), open 0,4..3,0 s (median 0,8), the board dimmed meanwhile
+   (GEF_TAFEL.DUNKEL - the board reader confirms only, so this reader keeps
+   its own gate). Two numbers at the fixed place - the coloured share of
+   the head bar (red or blue) and the grey share of the body - are the gate:
+   cards >= 0,845 / 0,776, everything else <= 0,041 / 0,377 (309 card frames,
+   763 others: windows without the card, the killcam bar with the same red
+   strip 808 points lower, the end screen). The first frame of a card is a
+   skeleton without values (<= 0,1 s): KAMPFDAUER has no ink there, 99..160
+   points once loaded. A look every 250 ms catches 35 of 35 cards, the
+   second's look 22..25. The fields read with the page's own reader
+   (bildAufbereiten + ocrMitZuv, psm 7): name 279 of 286 to the board's
+   names (0 wrong, 7 Cyrillic), weapon and vehicle 286 of 286 to the game's
+   titles (0 wrong) - an empty line has not one ink point, and without that
+   rule the reader reads "BE" there. The class stands as a badge on the
+   portrait, not as a word: 33 by 30 points, three templates (infantry x,
+   recon (+), armor bar), own >= 0,978, foreign <= 0,783; pilots and
+   paratroopers were not met.
+   WHAT THIS WRITES: nothing by itself. A card becomes a PROPOSAL under the
+   board block; "Add" goes the Kit button's road (gefKitEintragen: register
+   row, then the arsenal), "x" drops it. One proposal per card (name, weapon,
+   vehicle). A piece of the other faction (the card's favourite counts the
+   whole account: 5 of 34 cards) is shown and never written, as the Kit mask
+   lists the row's side only. The class is shown, not written - the row's
+   role comes from the squad name on the board and goes to the clan as
+   before. */
+const PK = {
+  DX: 227, DY: 81, B: 452, H: 161,                 // the card around the picture's centre, HUD points (kpFaktor as the board)
+  KOPF: [2, 2, 449, 38], KOERPER: [2, 44, 449, 158],   // the gate's two boxes inside the card (4K 1695..2142 x 1001..1037 / 1043..1157)
+  FARBE_MIN: 0.5, GRAU_MIN: 0.5,                   // the rule of the sheet: 309 of 309 cards, 0 of 763 others
+  GRAU_SPANNE: 25, GRAU_LO: 85, GRAU_HI: 140,      // a grey point: channels within 25, mean 85..140 (the body's median is 111)
+  FELD: {name: [52, 1, 402, 31], waffe: [1, 102, 179, 124], fz: [183, 102, 361, 124], dauer: [363, 142, 451, 161]},   // relative to the card
+  ABZ: [417, 43, 450, 73],                         // the class badge on the portrait, 33 by 30
+  TINTE: 40, TINTE_MIN: 10,                        // ink = points over the field's median + 40; the skeleton has 0, a loaded card >= 99 in KAMPFDAUER, an empty line 0
+  TAKT: 250,                                       // a look every 250 ms: 35 of 35 (500 ms: 31..35, 1000 ms: 22..25)
+  ABZ_MIN: 0.9,                                    // own template >= 0,978, foreign <= 0,783
+  NAME_LEV: 1,                                     // name -> row: namKey, one edit, a lead of one (279 right, 0 wrong)
+  NAME_X2: 2,                                      // a name without a row is read once more off the strip enlarged this much (round 3: "Dijo")
+  GLEICH: 0.9,                                     // the name strip's print: under this the card changed while open
+  SCHLANGE_MAX: 12, VORSCHLAEGE_MAX: 40
+};
+const PK_KLASSE = {inf: "Infantry", recon: "Recon", armor: "Armor"};
+/* the three badge templates, 33 by 30 grey, mean of the loaded card frames of
+   each class (216 infantry, 40 recon, 30 armor; scratch abzeichen_vorlagen.json) */
+const PK_ABZEICHEN = {b: 33, h: 30,
+  inf: "b29wb3BwcHBwb3BvcG9wcHBwb29wb3BvcG9vb29rb3BwZ2xvb29vb29vb29vb29wb29vb29vb29vb29vb29rb29vZG1pbG9vb29vb29vb3Bvb2hUU2hvb29vb29vb29rb29vYF9tdWpvb29vb29vb29vahkDAxlrb29vb29vb29rb29vYGRlYnlsbG9vb29vb29kGCHCwB0YZG9vb29vb29rb29vZWVjZ2Bvdmtvb29vb2sYG8Hj48AWF2tvb29vb29rb29vbXBuYmxgbndrb29vZRYgwt/Fxd/CHRZlb29vb29rb29vbWZwc29tYG91bG9qFxvCvDUaGjW7wRYWam9vb29rb29vcGhndG9mcWJxbmQXIMPLIQEAAAEhy8EcF2Vvb29rb29vdHZybWlpYXhicBYbwuSVAgAAAAABleTAGBdsb29rb29vc3d4dGhmY2trFSDD5ONvAQAAAAAAb+PkwRwXZG9rb29vdHF3d3FmZVgaGsPk5OOTAQAAAAABk+Pk48EWF2prb29vaGx2e3dyYBQfweTl5OXFHwEAAAEfxuTk5OTBHBdgb29vZWx2d3VrFRvC5OTk5OTjvjABAC+94+Tk5OTkwBgWbG9vamt0cGcZIcLk5OTk5NyZ1+PV1ePXmdzk5OTk5MEfGGhvZWVtbkwCweTk5OTk5M0ESOPj4+RIBMrk5OTk4+TBA1RvZWdmZEgCweTk5OTk5OSwEkjZ2UcRruTk5OTk5OTCAlRvY2VsbWkZH8Hl5OTk5OTksApNTQet4+Tk5OTk5MMhGGhvXGRoZ2tmFhnB5OTk5OTj5K8GB63j4+Pk5OTjwhoWam9vVl5NQ0pLRBAfwuXk5OTj5EkND0rj5OTk5OXCHxhgb29vN0RCMTNHREEPGcLk5OTZSBC3uhJI2eTk5MIaF2trb29vJhgfEw8UFhcYBiHB5eNEB67j5LAKQ+PkwyAWZG9rb29vCw0PDw8PEA4LCAIZwb4nrOTk5OSuKcDCGRdqb29rb29vDRAWHB0hIB8cFRAEH8DT4+Tj4+Tj08IfF2Rvb29rb29vGBEPEhofICAbFw0QBRjC5OTk5OPkwxoXa29vb29rb29vKiQbHSAmMy4fEgQEBwIgweTk5OTCIBhlb29vb29rb29vHB8bGR8tPDQlGgQBAwQHGcHk48IaF2tvb29vb29rb29vISMnHhwrOzMtKwUCAxo6Dx/BwCAXZG9vb29vb29rb29vLx4jJyguPiceGQQDDjZDRREDAhZqb29vb29vb29rb29vPyghKSwwRDgbGAoEJkJHSUU4PWNvb29vb29vb29rb29v",
+  recon: "b29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29wb29vb29vb29vb29vb29vb29vb29vb29vb29vb29vb29wb2lTVGhvb29vb29vb29vb29vb29vb29vb29vb29vcG9vahsEBBlrb29vb29vb29vb29vcG9vb29vb29vb29vb29kGCLCvx8aZW9vb29vb29vb29vcHBwb29vb29vb29vb2sYG8Hi48AXGGtvb29vb29vb29vY25vb29vb29vb3BvZBcgwt7Exd/CHRdlb29vb29vb29vjFlsb3Bwb3Bvb29qFhvCvDQaGja8wRYWam9vb29vb29vkqd5Wm5wb29vb2QWIMPKIQABAAAhy8IcFmdvb29vb29vmZmdnF1scG9vahYbweSVAgEAAAABleTBFhZqb29vb29vmZmYm6Nba29kFiDC5ONvAQABAAAAb+PkwRwXZHBvb29vlpmanZmXYGgYHMPk5OSTAQAAAAAAk+Pk5MEXF2pvb29vmZWXlJmXgBIgwuTl5uXGHwEAAAAfxeTk5OXAHBhlb29vk5KRk46MHxvC5OTj4+TjvzABADC+4+Pk5eTkwBgXam9vlI6KkIsfIMLk5eTj5OTj5OTV1uTk4+Tk5OTk5MIeGGlwjoSEiW8EwuXj5OTk5OTj5KZcXKfl4+Pk5OTl5OXAA1Ruj46KhW8DwOTj5eTl5ePMNwwHCAs4zOPk5OTk5eTDA1RvkpCMjYcgIMHl5eTk5OQxKLUyMrYoMuTk5OTk5MMhGGlvi42NhpKMHBjB5OLm5ZgOu+Q4OeO4DZfj5OPkwhoWam9vjJKNj5mVgRwgweTk5E0MOz4REj48DEvj5OXCIBdlb29wj5iSkpqalIYdGMHk40gJMzgNDjo0CEfj5MIbGGpvb29vjZSSkZGWk457GR/B5YoSv+M4OeS/E4nkwyEWZG9vb29vjpOMjpKYlZKFexkYwuMfQMI2OMI+H+PCGhdocG9wcG9vgZKMhZCTkYmEf24RIMK8HhcMDBcevcIgF2Rwb29vb29wg5GAf5KUkoqEfHVHFhjB4n0+PnziwxoXa3Bvb29vb29vfpJ/f5CSj5ODgHVMZhcfweTj5OPCIBdlb29vb29vb29vfpOEhYmNkpODhHxgbmsWGMHk5cMaF2tvb3Bvb3Bvb29vfZuMg4aNjoeAhntvYG9kFh/BwSAXZG9vb3Bvb29vb29vd5mPhoiDhoN7h3t1Um9vahkCAxlrb29vb29vb29vb29vg5qOhJCLhH93iYB3SW9vb2lTU2hvb29vb29vb29vb29v",
+  armor: "b25ub29vb29ub29wb3Bwb29vb29vb3Bvb29vb29vb29vcG9wcG9wcG9vb29vb29vb29vb29vb29vb29vb29vb29vbWBhZ21wb29vb29wb3Bvb2lTVWhvcG9vb29vb29vb29vncfRwItjbXBvcG9vb29vbRkDBBpsb29vb25vb29vb29v3tLb6PTPkGNqb3Bvbm9lFyDCwR4YZG9vcG9vb29vb29vp8DDwMI8T5ONY29wb2wWG8Lj5MAXF21vb29vb29vcG9vabh8nY5TRi1LloFjYRcgweDFxd/AHRZlb25vbm9vb25vcH9dn4dOUVBGNGjCHRzCvDMaGTW7wRYVa3Bvbm9vbm9vZGpckrFiTFFRUVgnIMPLIAIBAAEhy8IdF2Vubm9vb29wWWJTceN5UU9OShMcw+SVAQEBAAABluTBGBVtb29ubm5vRFtHWN6BUFBIEh/D4+RvAgAAAAABbuPkwBwYZG9vbm9vO25LSMSMTksSHMHk5OSUAQEBAAABleTj478XGWpvb29vK2pNSoZ8TRIhwuTk4uLGHgEAAAEgx+Tk5OTAHBhkb25uJ0deQlZxERvE4+Pk5ePjvy8BADC95OTk4+TlwBkXbW9wMB5ANi0fIMPl4+Pk4+Ti4uTV1uPk5OLk5OTm5MMfF2hvQC0iMCECwuTk5OPj49i6uLi2uLa2udrj4uPj5OXABFNvMjQ6NCMCweTj4+TkiQoODg4OEA8PDQmH4+Pj4+XDAlVvFhciIRwGH8Dj5OOoC4e4urq4urq7uYUKquTl5cIiGGlvLSIdJCciBxjB5ONVLNjj4+Pl5OXk5dkrVeTkwRkXa29uPTMwMzhARQ4gwuRtHcjl5eLk5OPl48kdb+PCIBZlb29wMjA3QExWYFUJGsLUHCx8fn9+fn59eiwc1sMbGGxvb29uKigzQ1pucm8uBB/BwmYuLCwsLCwqLGbEwR8XZG9wcG9vMC0hGi1mfH5WCAIaweTk5OTj5eXj5ePAGhZub29wbnBvWVtaOBgrZYZjDgIFIMDj5OPl5eTj48MeGGVvb29vb29vVDg+PysrT3NADwowFRjE4+Xj4+PjwhkXa29vb29vb29veisdMS04ZGozLzxiYxUhwOPm5eTDIhZjbnBvb29vb29vVUIpPDtAb0RJWHBvcGsXGcDj48MaGGpwb29vb29vb29vX1E9PD9JXlo6aW9vcG9lGCDBwiEYY29vb29vb29vb29vZFY/PD1BTHJbb29vb3BwahkCAhlqb29vb29vb29vb29vZE5MRkRHTFZfaHBvbm9vb2hUVWlvb25vcG5vb29vb29v"};
+/* the game's weapon and vehicle titles in its twelve languages (D:/Programme/
+   HnG/AnimationBin/localiser/HnG_Ingame_<lang>.xml, weapontemplate/<N>Title
+   and vehicletemplate/<N>Title), as unitsKey, the Latin ones, one string per
+   template number - and the template number's key in the page's own lists
+   (MAP.arms / MAP.veh): the English title where it stands in the list word
+   for word, the sheet's table where it does not (MESSUNG-Q7 § 6). A title
+   without a page key (civilian bicycle, tank guns, bombs) is read and shown,
+   and there is nothing to add. */
+const PK_TITEL = {w: {"537":"75mmkwk40l48|75mmlikkwk40l48|kwk40l4875mm|kwk40l48de75mm","30":"85mmdelod5t|85mmgund5t|85mmkanoned5t|85mmlikgund5t|armad5t85mm|canond5tde85mm","539":"2x792mmmg34|bow792mmmg34|donermonteli792mmlikmg34|metralhadora34rotativa792mm|mg34frontalde792mm|mg34monteesurrotulede792mm|pridovy792mmmg34|wbudowany792mmmg34","33":"ppsch41|ppsh41","536":"792mmkoaxmg34|792mmlikeseksenlimg34|coaxial792mmmg34|koaxialni792mmmg34|mg34coaxial792mm|mg34coaxialde792mm|mg34coaxialede792mm|sprzezony792mmmg34","5":"m3engrasador|m3greasegun","66":"ametralladoraligerajohnsonm1941|johnsonm1941lmg|metralhadoralevejohnsonm1941|mitrailleusejohnsonm1941","14":"tokarevsvt40","79":"bolsamedicasovietica|estuchemedicosovietico|radzieckatorbasanitariusza|sacochedinfirmiersovietique|sovetskabrasnamedika|sovietmedicpouch|sowjetischenotfalltasche","511":"76mmlikm1a2l55|76mmm1a2l55|m1a2l5576mm|m1a2l55de76mm","107":"792mmlikmg17|792mmmg17|mg17792mm|mg17de792mm","6":"maschinenpistole34","69":"85mmd5tl52|85mmlikd5tl52|d5tl5285mm|d5tl52de85mm|m3l5285mm","118":"20mm151|20mmmg151|mg15120mm|mg151de20mm","532":"50caliberm2hb|50kalibrelikm2hb|kaliber50m2hb|kalibru50m2hb|m2hbcalibre50|m2hbdecalibre50|raze50m2hb","58":"nagantm1895","22":"tulatokarev33","129":"762mmlikshkas|762mmshkas|shkas762mm|shkasde762mm","535":"2cmkwk30l55|2cmlikkwk30l55|kwk30l552cm|kwk30l55de20mm","26":"122mmdelod25t|122mmgund25t|122mmkanoned25t|armad25t122mm|canond25tde122mm","56":"carabinam1a1|carabinem1a1|karabinekm1a1|m1a1carbine|m1a1karabina","528":"75mmlikm2|75mmm2|m275mm|m2de75mm","87":"762mmdelokt28l25|762mmgeschutzkt28l25|762mmgunkt28l25|armakt28l25762mm|canonde762mmkt28l25|canonkt28l25de762mm","527":"792mmlikmg37|792mmmg37|mg37792mm|mg37de792mm","59":"panzerwurfminelang","7":"p08parabellum","39":"fab100","103":"20k45mm|20kde45mm|45mm20k|45mmlik20k","542":"m1919","545":"50mmkwk39l60|50mmlikkwk39l60|kwk39l6050mm|kwk39l60de50mm","109":"anm230montada|anm230montee|monteanm230|montiertesanm230|mountedanm230|upevnenyanm230|zamocowanyanm230","57":"pps43","114":"20mmlikshvak|20mmschwak|20mmshvak|shvak20mm|shvakde20mm","90":"korovintk|korowintk","526":"792mmlikmg37|792mmmg37|mg37792mm|mg37de792mm","8":"m1917revolver|m1917toplutabanca|revolverm1917","36":"rpg43","100":"paracaidast5|parachutet5|paraquedast5|spadochront5|t5fallschirm|t5parachute|t5parasutu|vysadkarskat5","529":"37mmdelom5|37mmgunm5|37mmkanonem5|armam537mm|canonm5de37mm|m5canonde37mm","18":"tm35","148":"maschinengewehr13","534":"m1919a4","9":"degtyarevdp28","512":"pmm191030","525":"37mmkwk38l478|37mmkwk38tl478|37mmlikkwk38l478|kwk38l47837mm|kwk38l478de37mm|kwk38tl478de37mm","86":"20kl4645mm|20kl46de45mm|45mm20kl46|45mmlik20kl46","131":"50caliberm2|50kalibrelikm2|kaliber50m2|m2calibre50|m2decalibre50|m2kalibru50|raze50m2","50":"carabinam2|carabinem2|karabinekm2|m2carbine|m2karabina","544":"88mmlikpak43l71|88mmpak43l71|pak43l71de88mm","76":"1903pockethammerless|kapesni1903bezuderniku","37":"20mmlikshvak|20mmschwak|20mmshvak|shvak20mm|shvakde20mm","77":"1934model|model1934|modell1934|modelo1934","104":"20mmkwk38l55|20mmlikkwk38l55|kwk38l5520mm|kwk38l55de20mm","74":"botiquindeprimerosauxiliossovietico|kitdepremierssoinssovietique|kitdeprimeirossocorrossovietico|radzieckizestawpierwszejpomocy|sovetskalekarnicka|sovietfirstaidkit|sowjetischererstehilfekasten","28":"762mmf34l42|762mmlikf34l42|f34l42de762mm","17":"pmk40","110":"anm230","89":"bolsamedicaalema|deutschenotfalltasche|estuchemedicoaleman|germanmedicpouch|nemeckabrasnamedika|niemieckatorbasanitariusza|sacochedinfirmierallemand","132":"m1919a4","533":"m1919a4","15":"rgd33","119":"13mmmg131|mg13113mm|mg131de13mm","108":"mg15792mmmontada|mg15792mmmontee|mg15de792mmmontada|monte792mmlikmg15|montiertes792mmmg15|mounted792mmmg15|upevneny792mmmg15|zamocowanymg15792mm","38":"127mmberesinub|127mmlikubsmg|127mmubsmg|berezinubde127mm|metralhadoraubs127mm|ubsmgde127mm","538":"792mmkoaxmg34|792mmlikeseksenlimg34|coaxial792mmmg34|koaxialni792mmmg34|mg34coaxial792mm|mg34coaxialde792mm|mg34coaxialede792mm|sprzezony792mmmg34","12":"mosinnagant189130","73":"botiquindeprimerosauxiliosaleman|deutschererstehilfekasten|germanfirstaidkit|kitdepremierssoinsallemand|kitdeprimeirossocorrosalemao|nemeckalekarnicka|niemieckizestawpierwszejpomocy","130":"127mmberesinub|127mmberezinub|127mmlikberezinub|berezinub127mm|berezinubde127mm","543":"88mmkwk43l71|88mmlikkwk43l71|kwk43l7188mm|kwk43l71de88mm","67":"p38parabellum","144":"degtyarevdt29","101":"paracaidasrz20|parachuterz20|paraquedasrz20|rz20fallschirm|rz20parachute|rz20parasutu|spadochronrz20|vysadkarskarz20","636":"127mmdshk1938|127mmlikdshk1938|dshk1938de127mm","115":"127mmlikubk|127mmubk|ubk127mm|ubkde127mm","29":"85mmliks53l52|85mms53l52|s53l5285mm|s53l52de85mm","27":"45mmdelomodel32|45mmgunmodel32|45mmlikmodel32tabanca|45mmpistolemodel32|armamodelo3245mm|canonde45mmmodelo32|modele32de45mm","75":"americkalekarnicka|amerykanskizestawpierwszejpomocy|botiquindeprimerosauxiliosestadounidense|erstehilfekastenderusa|kitdepremierssoinsamericain|kitdeprimeirossocorrosamericano|usfirstaidkit","530":"75mmlikpak39l48|75mmpak39l48|pak39l4875mm|pak39l48de75mm","78":"americkabrasnamedika|amerykanskatorbasanitariusza|bolsamedicaamericana|estuchemedicoestadounidense|notfalltaschederusa|sacochedinfirmieramericain|usmedicpouch","116":"monte127mmlikubt|montiertes127mmubt|mounted127mmubt|ubt127mmmontada|ubtde127mmmontada|ubtde127mmmontee|upevneny127mmubt|zamocowanyda127mm","531":"792mmlikmg34aa|792mmmg34|aa792mmmg34|mg34aa792mm|mg34aade792mm|mg34de792mm","140":"50caliberm2|50kalibrelikm2|kaliber50m2|m2calibre50|m2decalibre50|m2kalibru50|raze50m2","145":"maximtokarevmt","120":"13mmmg131|mg13113mm|mg131de13mm","117":"762mmlikshkas|762mmshkas|shkas762mm|shkasde762mm","111":"pv1","10":"granadamkii|granatmkii|grenademkii|handgranatemkii|mkiigrenade","513":"45mml46|45mmlikl46|l4645mm|l46de45mm","11":"stielhandgranatem24","121":"anm57250lb|anm57250lbs|anm57250livres|anm57de250lbs","112":"762mmdamontada|762mmdamontee|dade762mmmontada|monte762mmlikda|montiertes762mmda|mounted762mmda|upevneny762mmda|zamocowanyda762mm","122":"fab250","1":"bojovynuz1219c2|combatknife1219c2|couteaudecombat1219c2|cuchillodecombate1219c2|facadecombate1219c2|kampfmesser1219c2|nozbojowy1219c2","105":"75mmkwk42l70|75mmlikkwk42l70|kwk42l7075mm|kwk42l70de75mm","123":"bombasc250|bombesc250|sc250bomb|sc250bomba|sc250bombe","20":"1911pistol|pistola1911|pistole1911|pistolet1911","21":"pistolac96|pistolc96|pistolec96|pistoletc96","2":"seitengewehr98","31":"maschinenpistole40","157":"balicekrgd33|feixergd33|grenademultiplergd33|paquetergd33|rgd33bundelgranate|rgd33bundle|rgd33paketi|wiazkargd33","25":"mpl50","32":"thompsonm1a1","155":"rg42","3":"lopatkam1910|m1910grabwerkzeug|m1910kurek|m1910spade|paladetrincheram1910|pam1910|pelledetrancheem1910|saperkam1910","40":"m1garand","156":"balicekstielhandgranatem24|feixestielhandgranatem24|grenademultiplestielhandgranatem24|paquetestielhandgranatem24|stielhandgranatem24bundelgranate|stielhandgranatem24bundle|stielhandgranatem24paketi|wiazkastielhandgranatem24","41":"durbunlukarabiner98kurz|k98kspuskohledem|kar98kmitzielfernrohr|karabiner98kurzalunette|karabiner98kurzcommira|karabiner98kurzconmira|karabiner98kurzscoped|karabiner98kurzzluneta","158":"bouracisadam1propechotu|infanteriezerstorungssatzm1|infantrydemolitionkitm1|kitdedemolicaodeinfantariam1|kitdedemoliciondeinfanteriam1|kitdedemolitiondinfanteriem1|zestawburzacym1piechoty","42":"durbunlum1903tufegi|fusilm1903alunette|fuzilm1903commira|gewehrm1903mitzielfernrohr|karabinm1903zluneta|kulovnicem1903spuskohledem|riflem1903conmira|riflem1903scoped","43":"karabiner98kurz","154":"granadaofensivamkiiia1|granatzaczepnymkiiia1|grenadeoffensivemkiiia1|mkiiia1offensivegrenade|mkiiia1offensivgranate|utocnygranatmkiiia1","44":"gewehr43","13":"durbunlumosinnagant189130|mosinnagant189130alunette|mosinnagant189130commira|mosinnagant189130conmira|mosinnagant189130mitzielfernrohr|mosinnagant189130scoped|mosinnagant189130spuskohledem|mosinnagant189130zcelownikiemoptycznym","126":"anm57250lb|anm57250lbs|anm57250livres|anm57de250lbs","55":"avs36bayonet|avs36sungusu|bagnetkarabinuavs36|baionetaavs36|baionnetteavs36|bajonetavs36|bajonettfuravs36|bayonetaavs36","45":"automatickapuskam1918|barm1918|fusilautomaticom1918|fuzilautomaticom1918|m1918automaticrifle|m1918automatischesgewehr|m1918bar|m1918otomatiktufegi","125":"fab100","124":"bombasc250|bombesc250|sc250bomb|sc250bomba|sc250bombe","46":"fusilm1903|fuzilm1903|gewehrm1903|karabinm1903|m1903tufegi|puskam1903|riflem1903","541":"bowm1919|donermontelim1919|koaxm1919|m1919frontal|m1919rotativa|mitrailleusem1919monteesurrotule|pridovym1919|wbudowanym1919","540":"bugm1919|coaxialm1919|eseksenlim1919|koaxialnim1919|m1919coaxial|m1919coaxiale|sprzezonym1919","49":"sturmgewehr44","4":"lopatkaschanzzeug|paladetrincheraschanzzeug|paschanzzeug|pelledetrancheeschanzzeug|schanzzeuggrabwerkzeug|schanzzeugsaperka|schanzzeugspade","501":"88cmkwk36l56|88mmkwk36l56|88mmlikkwk36l56|kwk36l5688mm|kwk36l56de88mm","502":"75cmkwk40l48|75mmkwk40l48|75mmlikkwk40l48|kwk40l4875mm|kwk40l48de75mm","503":"75mmlikm3l40|75mmm3l40|m3l4075mm|m3l40de75mm","504":"76mmlikm1a2l55|76mmm1a2l55|m1a2l5576mm|m1a2l55de76mm","137":"1941modelampulomet|ampulometmodel1941|ampulometmodelo1941|ampulometz1941|ampulomjotmodell1941","136":"granatbuchse39","506":"20mmhispanom1|20mmlikhispanom1|hispanom120mm|hispanom1de20mm","146":"20k45mm|20kde45mm|45mm20k|45mmlik20k","507":"20mmlikmgff|20mmmgff|metralhadoraff20mm|mgffde20mm","135":"panzerbuche39|panzerbuchse39","508":"50mmkwk39l60|50mmlikkwk39l60|5cmkwk39l60|kwk39l6050mm|kwk39l60de50mm","16":"carabinam1|carabinem1|karabinekm1|m1carbine|m1karabina","139":"automatickapuskam18bezzpetnehorazu|canonsinretrocesom18|fusilm18sansrecul|fuzilm18semrecuo|karabinbezodrzutowym18|m18geritepmesiztufek|m18recoillessrifle|m18ruckstossfreiesgewehr","134":"bazookam9a1|bazucam9a1|bazukam9a1","509":"37mmlikm6l53|37mmm6l53|m6l5337mm|m6l53de37mm","901":"flammenwerfer41","902":"lancachamasroks3|lanceflammesroks3|lanzallamasroks3|miotaczogniaroks3|plamenometroks3|roks3alevmakinesi|roks3flamethrower|roks3flammenwerfer","143":"blindageenacier|ocelovypancir|placablindadadeacero|placablindadadeaco|stahlpanzerung|stalowypancerz|steelarmorplate","900":"lancachamasm2|lanceflammesm2|lanzallamasm2|m2alevmakinesi|m2flamethrower|m2flammenwerfer|miotaczogniam2|plamenometm2","239":"762mmdt|762mmlikdt|dt762mm|dtde762mm","147":"762mmdt|762mmlikdt|dt762mm|dtde762mm","19":"capadefragmentacaom24|envolturadefragmentacionm24|m24fragmentationsleeve|m24parcalanmakolu|m24splitterring|manchondefragmentationm24|stepnepouzdrom24","159":"machinecarbinemki|samopalmachinecarbinevz1","34":"ptrd1941","23":"couteaudeclaireurnr40|cuchillodeexploradornr40|nozzwiadowcynr40|nr40facadeescoteiro|nr40fahrtenmesser|nr40nuzpropruzkumniky|nr40scoutsknife","510":"75mmlikm6l39|75mmm6l39|m6l3975mm|m6l39de75mm","24":"ppd40","516":"762mmdt|762mmlikdt|dt762mm|dtde762mm","51":"panzerfaust60","520":"90mmlikm3l52|90mmm3l52|m3l5290mm|m3l52de90mm","151":"batedelapta|battedelapta|laptabat|laptaschlager|palkalapta|tacodelapta","150":"baseballbat|baseballovapalka|baseballschlager|batedebeisbol|battedebaseball|kijbejsbolowy|tacodebeisebol","521":"90mmlikm3l52|90mmm3l52|m3l52de90mm","149":"baseballbat|baseballovapalka|baseballschlager|batedebeisbol|battedebaseball|kijbejsbolowy|tacodebeisebol","522":"90mmlikm3l52|90mmm3l52|m3l52de90mm","52":"bazookam1a1|bazucam1a1|bazukam1a1","153":"easteregg|huevodepascua|jajkowielkanocne|osterei|ovosdepascoa|velikonocnivajicko","53":"panzerschreckrpzb54","102":"adjustablewrench|ayarlanabiliranahtar|chaveajustavel|cleanglaise|kluczregulowany|llaveinglesa|nastavitelnyklic|verstellschlussel","152":"boladeneve|boladenieve|bouledeneige|kartopu|schneeball|snehovakoule|sniezka|snowball","601":"50calibermg532|50kalibrelikmg532|kaliber50mg532|kmmg532kalibru50|mg532calibre50|mg532decalibre50|mitrailleusemg532|raze50mg532","603":"792mmlikmg17|792mmmg17|mg17|mg17792mm|mg17de792mm","605":"ametralladoramontadam1919|m1919montemakinelitufek|metralhadoram1919montada|mitrailleusem1919montee|montiertesm1919maschinengewehr|mountedm1919machinegun|upevnenykulometm1919|zamocowanykmm1919","606":"50caliberm2hbmounted|50kalibrelikmontem2hb|kaliber50montiertesm2hb|m2hbmontadacalibre50|m2hbmontadadecalibre50|mitrailleusem2hb|upevnenyraze50m2hb|zamocowanykmm2hbkalibru50","638":"792mmlikmg42|792mmmg42mounted|792mmmontiertesmg42|maschinengewehr42montee|mg42montada792mm|mg42montadade792mm|upevneny792mmmg42|zamocowanymg42792mm","607":"792mmlikmg34|792mmmg34mounted|792mmmontiertesmg34|maschinengewehr34montee|mg34montada792mm|mg34montadade792mm|upevneny792mmmg34|zamocowanymg34792mm","608":"maschinengewehr34montada|maschinengewehr34montee|montemaschinengewehr34|montiertesmaschinengewehr34|mountedmaschinengewehr34|upevnenymaschinengewehr34|zamocowanymaschinengewehr34","609":"792mmmg34|mg34792mm|mg34coaxiale|mg34de792mm","60":"ametralladoram2hb|kmm2hb|kulometm2hb|m2hbmachinegun|m2hbmakinelitufek|m2hbmaschinengewehr|metralhadoram2hb|mitrailleusem2hb","47":"fallschirmjagergewehr42","54":"avs36","610":"m1919a4|mitrailleusem1919monteesurrotule","611":"792mmlikmg42|792mmmg42|mg42792mm|mg42de792mm","612":"maschineng42montee|maschinengewehr42montada|mg42montada|montemaschinengewehr42|montiertesmg42|mountedmaschinengewehr42|upevnenymg42|zamocowanymg42","160":"bouracisadam1propechotu|infanteriezerstorungssatzm1|infantrydemolitionkitm1|kitdedemolicaodeinfantariam1|kitdedemoliciondeinfanteriam1|kitdedemolitiondinfanteriem1|zestawburzacym1piechoty","637":"50caliberm2hbmounted|50kalibrelikmontem2hb|kaliber50montiertesm2hb|m2hbmontadacalibre50|m2hbmontadadecalibre50|mitrailleusem2hb|upevnenyraze50m2hb|zamocowanykmm2hbkalibru50","613":"50caliberm2hbmounted|50kalibrelikmontem2hb|kaliber50montiertesm2hb|m2hbmontadacalibre50|m2hbmontadadecalibre50|mitrailleusem2hb|upevnenyraze50m2hb|zamocowanykmm2hbkalibru50","138":"ptrs1941","614":"ametralladoramontadam2hb|m2hbmontemakinelitufek|metralhadoram2hbmontada|mitrailleusem2hb|montiertesm2hbmaschinengewehr|mountedm2hbmachinegun|uupevnenykulometm2hb|zamocowanykmm2hb","615":"2x792mmmg34bug|bow792mmmg34|donermonteli792mmlikmg34|metralhadora34rotativa792mm|mg34frontalde792mm|mg34monteesurrotulede792mm|pridovy792mmmg34|wbudowanymg34792mm","616":"coaxialmg34|eseksenlimg34|koaxialnimg34|koaxmg34|mg34coaxial|mg34coaxiale|sprzezonymg34","161":"fp45liberator","617":"2x792mmmg34bug|bow792mmmg34|donermonteli792mmlikmg34|metralhadora34rotativa792mm|mg34frontalde792mm|mg34monteesurrotulede792mm|pridovy792mmmg34|wbudowanymg34792mm","618":"coaxialm1919|eseksenlim1919|koaxialnim1919|koaxm1919|m1919coaxial|m1919coaxiale|sprzezonym1919","133":"beresinb20|berezinb20","619":"ametralladoramontadam1919|bowm1919mg|bugm1919mg|donermontelim1919mg|metralhadoram1919rotativa|mitrailleusem1919monteesurrotule|pridovym1919mg|wbudowanykmm1919","61":"maschinengewehr42","620":"m1919a4montada|m1919a4mounted|mitrailleusem1919montee|montem1919a4|montiertesm1919a4|upevnenym1919a4|zamocowanykmm1919","621":"792mmlikmg13|792mmmg13|mg13792mm|mg13de792mm","517":"37mmlikm6l53|37mmm6l53|m6l5337mm|m6l53de37mm","631":"bowm1919|donermontelim1919|koaxm1919|m1919frontal|m1919rotativa|mitrailleusem1919monteesurrotule|pridovym1919|wbudowanym1919","622":"20mmkwk30l55|20mmlikkwk30l55|kwk30l5520mm|kwk30l55de20mm","624":"792mmlikmg13|792mmmg13|mg13792mm|mg13de792mm","625":"coaxialm1919|eseksenlim1919|koaxialnim1919|koaxm1919|m1919coaxial|m1919coaxiale|sprzezonym1919","626":"coaxialm1919|eseksenlim1919|koaxialnim1919|koaxm1919|m1919coaxial|m1919coaxiale|sprzezonym1919","514":"762mmdt|762mmlikdt|dt762mm|dtde762mm","65":"pmm191030","627":"ametralladoramontadam1919|bowm1919mg|bugm1919mg|donermontelim1919mg|metralhadoram1919rotativa|mitrailleusem1919monteesurrotule|pridovym1919mg|wbudowanykmm1919","628":"maschinengewehr34montada|maschinengewehr34montee|montemaschinengewehr34|montiertesmaschinengewehr34|mountedmaschinengewehr34|upevnenymaschinengewehr34|zamocowanymaschinengewehr34","68":"762mmdt|762mmdts|762mmlikdt|dt762mm|dtde762mm","70":"762mmdt|762mmlikdt|dt762mm|dtde762mm","127":"20mmlikmgff|20mmmgff|metralhadoraff20mm|mgff20mm|mgffde20mm","62":"ametralladoram1919a6|kmm1919a6|m1919a6mg|metralhadoram1919a6|mitrailleusem1919a6","128":"792mmlikmg17|792mmmg17|mg17792mm|mg17de792mm","63":"maschinengewehr34","701":"anm64|anm65a1","702":"sc250","71":"1942model76mmlikzis3tl52|76mmzis3tmodel1942l52|76mmzis3tmodell1942l52|zis3tde76mmmodelo1942l52|zis3tmodele1942l52de76mm|zis3tmodelo1942l5276mm","801":"20mmkwk38l1125|20mmlikkwk38l1125|kwk30de20mm|kwk38l112520mm|kwk38l1125de20mm","80":"minas|mines|smine","81":"m2a3","82":"tellermine42","83":"m1a1","629":"50caliberm2hb|50kalibrelikm2hb|calibre50m2hb|kaliber50m2hb|kalibru50m2hb|m2hbcalibre50|m2hbdecalibre50|raze50m2hb","84":"hafthohlladungh3","85":"granadastno74|stgranatc74|stgranatenr74|stgrenadeno74","95":"carte|harita|karte|map|mapa","98":"dienstglas6x30","99":"nkm36x30","113":"50caliberm2|50kalibrem2|kaliber50m2|kulometm2raze50|m2calibre50|m2decalibre50|m2kalibru50","523":"100mmd10sm1944l55|100mmlikd10sm1944l55|d10sm1944l55de100mm","35":"762mmdtmounted|762mmlikmontedt|dtde762mmmontada|dtmontada762mm|mitrailleusede762mmmontee|montiertes762mmdt|upevneny762mmmg34|zamocowany762mmdt","709":"50caliberm2hb|50kalibrelikm2hb|kaliber50m2hb|kalibru50m2hb|m2hbcalibre50|m2hbdecalibre50|raze50m2hb","142":"ametralladoramg131|karabinmaszynowymg131|kulometmg131|metralhadoramg131|mg131machinegun|mg131makinelitufegi|mg131maschinengewehr|mitrailleusemg131","141":"ametralladorapesadamg151|canhaomg151|canonmg151|kulometmg151|mg151machinecannon|mg151makinelitopu|mg151maschinengewehr","623":"20mmkwk30l55|20mmlikkwk30l55|kwk30l5520mm|kwk30l55de20mm","64":"20mmkwk38l1125|20mmlikkwk38l1125|kwk38l112520mm|kwk38l1125de20mm","72":"76mmdelom1|76mmgunm1|76mmkanonem1|armam176mm|canonm1de76mm|m1canon76mm","635":"792mmlikmg34|792mmmg34mounted|792mmmontiertesmg34|maschinengewehr34montee|mg34montada792mm|mg34montadade792mm|upevneny792mmmg34|zamocowanymg34792mm","88":"3inchgunm7|3palcovedelom7|3zollgeschutzm7|armam73polegadas|canonde3pulgadasm7|canonm73pouces","708":"fab100","707":"fab100","706":"anm57a1","705":"anm64a1","704":"sc500","634":"m1919a4montada|m1919a4mounted|mitrailleusem1919montee|montem1919a4|montiertesm1919a4|upevnenym1919a4|zamocowanykmm1919","703":"sc250","633":"dp28","632":"pmm191030","903":"einstossflammenwerfer46|flammenwerfer46","48":"nk6x30|nkm36x30"},
+  v: {"44":"ba64b","10":"panzerkampfwagenvitiger","38":"panzerkampfwageniiausfc","77":"curtisso52owl","55":"m29weasel","26":"dortlumaximm4|maximm4quad|quadmaximm4","66":"caminhaodecargacckw|camiondecargacckw|camiondetransportcckw|cckwcargotruck|cckwfrachtlaster|ciezarowkatransportowacckw|nakladnivuzcckw","45":"charlegerm2a2|lehkytankm2a2|leichterpanzerm2a2|m2a2lighttank|tanquelevem2a2|tanqueligerom2a2","50":"jagdpanzer38thetzer","53":"sdkfz71","51":"panzerkampfwagenvitigerii","67":"1934modelt28|t28model1934|t28modele1934|t28modell1934|t28modelo1934","63":"kv85","42":"m4a1sherman","78":"curtissp40nwarhawk","84":"severskyp35a","65":"su76m","64":"blitzkamyon|blitzlaster|blitztruck|caminhaoblitz|camionblitz|ciezarowkablitz|nakladnivuzblitz","70":"amphibienfahrzeugqmc4|obojzivelnikqmc414ton|qmc414tonamphibian|qmc414tonneamphibie|qmc4anfibiode14t|samochodterenowyqmc414ton","56":"panzerkampfwagenausfg|panzerkampfwagenpantherausfg","54":"m16|m16mgmc","58":"cazadordetanquesm10|chasseurdecharsm10|destruidordetanquesm10|m10jagdpanzer|m10tankdestroyer|m10tankmuhribi|stihactankum10","47":"ba6","6":"1944modelis2|is2model1944|is2modell1944|is2modelo1944|js2modele1944","7":"gaz67","48":"1942modelt70|t70model1942|t70modele1942|t70modell1942|t70modelo1942","85":"messerschmittbf109d1","81":"ciagnikuniversal1|tracteuruniversal1|tractoruniversal1|traktoruniversal1|tratoruniversal1|universal1tractor|universal1traktor","83":"mikojangurewichmig3|mikoyangourevitchmig3|mikoyangurevichmig3","39":"panzerkampfwagen38tausfe","79":"petlyakovpe3bis","59":"camiongazaaa|gazaaa|gazaaacargo","9":"1942modelt3476|t3476model1942|t3476modele1942|t3476modell1942|t3476modelo1942","36":"panzerkampfwagenivausfh","8":"1937modelbt7|bt7model1937|bt7modele1937|bt7modell1937|bt7modelo1937","57":"t20komsomolci|t20komsomolec|t20komsomolets|t20komsomolez","75":"henschelhs126b1","49":"camiongazaaam4maxim|gazaaam4maxim","11":"stugiiiausfg","52":"panzerkampfwageniiausfl","37":"m3lee","69":"166tipischwimmwagen|schwimmwagen166|schwimmwagentipo166|schwimmwagentyp166|typ166schwimmwagen|type166schwimmwagen","12":"m18hellcat","76":"polikarpovrz","13":"m4a3e8sherman","14":"panzerkampfwageniiiausfj|panzerkampfwageniiiausfj1","15":"m5a1stuart|stuartm5a1","16":"panzerkampfwageniausfa","17":"m24chaffee","1":"caminhao14ton4x4|camion14tonne4x4|cwierctonowaciezarowka4x4|kamyon14ton4x4|truck14ton4x4|vehiculotodoterreno|willysmb","20":"messerschmittbf109e4","21":"p38light|p38lightning","22":"c47askytrain","23":"junkersju523m","28":"m26pershing","2":"kubelwagentyp82|kubelwagentype82","35":"sdkfz2kettenkradhk101","30":"155mmlikm1howitzer|haubicam1155mm|howitzerm1de155mm|m1155mmhowitzer|obusm1de155mm","31":"flakvierling38","32":"sfh18","33":"dortlum55|m55quad|quadm55","34":"caminhaocivil|camioncivil|civiliantruck|civilninakladak|cywilnaciezarowka|sivilkamyon|zivillaster","3":"bicicletacivil|civilianbicycle|civilnikolo|cywilnyrower|sivilbisiklet|velocivil|zivilfahrrad","40":"drbaureihe52|drbclass52|drbclasse52|drbrada52","41":"drbvagon|drbwagon|drwagen|wagondrb","4":"r75avecsidecar|r75comcarrolateral|r75considecar|r75mitbeiwagen|r75sesajdkarou|r75withsidecar|r75zkoszem|sepetlir75","5":"42wla","60":"m3a1","27":"ba64","19":"su85","61":"sdkfz2511","18":"1944modelt3485|t3485model1944|t3485modele1944|t3485modell1944|t3485modelo1944|t3485modelz1944","71":"sdkfz222","72":"m8greyhound","24":"jak9|yak9","43":"1937modelt38|t38model1937|t38modele1937|t38modell1937|t38modelo1937","46":"1933modelt26|t26model1933|t26modele1933|t26modell1933|t26modelo1933","99":"r75","100":"m72","101":"m72avecsidecar|m72comsidecar|m72considecar|m72mitbeiwagen|m72sesajdkarou|m72withsidecar|m72zwozkiembocznym|sepetlim72","98":"42wlaavecsidecar|42wlacomsidecar|42wlaconsidecar|42wlamitbeiwagen|42wlasesajdkarou|42wlawithsidecar|42wlazwozkiembocznym|sepetli42wla","68":"m4a3e2shermanjumbo|shermanm4a3e2jumbo","95":"gepanzertesnutzfahrzeugm20|m20armoredutilitycar|m20utilitycarblindado|obrnenevozidlom20|pojazdpancernym20|transportadorblindadodepessoalm20|vehiculeblindem20","96":"sdkfz2503","80":"messerschmittme410b2","92":"mustangp51d|p51dmustang","90":"su100","89":"panzerjagervjagdpanther","88":"cazadordetanquesm36|chasseurdecharsm36|destruidordetanquesm36|m36jagdpanzer|m36tankdestroyer|m36tankmuhribi|stihactankum36","87":"cazadordetanquesm36b1|chasseurdecharsm36b1|destruidordetanquesm36b1|m36b1panzerjager|m36b1tankdestroyer|m36b1tankmuhribi|stihactankum36b1","86":"lavochkinla7|lavockinla7|lawotschkinla7","93":"fockewulfffw190d9|fockewulffw190d9","91":"sdkfz2342puma","97":"ba11","94":"stuartreccet8e1|t8e1stuartrecce"}};
+const PK_SEITE = {w: {"33":"ppsh_41","5":"m3_grease_gun","66":"johnson_m1941_lmg","14":"tokarev_svt_40","79":"soviet_medic_pouch","6":"maschinenpistole_34","58":"nagant_m1895","22":"tula_tokarev_33","56":"m1a1_carbine","59":"panzerwurfmine_lang","7":"p08_parabellum","57":"pps_43","90":"korovin_tk","8":"m1917_revolver","36":"rpg_43","100":"t_5_parachute","18":"tm_35","148":"mg_13","534":"m1919a4","9":"degtyarev_dp_28","50":"m1_m2_carbine","76":"1903_pocket_hammerless","77":"model_1934","74":"soviet_first_aid_kit","17":"pmk_40","89":"german_medic_pouch","132":"m1919a4","533":"m1919a4","15":"rgd_33","12":"mosin_nagant_1891_30","73":"german_first_aid_kit","67":"p38_parabellum","144":"degtyarev_dt_29","101":"rz20_parachute","75":"u_s_first_aid_kit","78":"u_s_medic_pouch","145":"maxim_tokarev","10":"mk_ii","11":"stielhandgranate_24","1":"combat_knife_1219c2","20":"1911_pistol","21":"pistol_c96","2":"seitengewehr_98","31":"maschinenpistole_40","157":"rgd_33_bundle","32":"thompson_m1a1","155":"rg_42","3":"m_1910_spade","40":"m1_garand","156":"stielhandgranate_24_bundle","41":"karabiner_98_kurz_scoped","158":"demolition_kit_m1","42":"springfield_m1903_scoped","43":"karabiner_98_kurz","154":"mk_iiia1","44":"gewehr_43","13":"mosin_nagant_1891_30_scoped","55":"avs_36_bayonet","45":"m1918_automatic_rifle","46":"rifle_m1903","49":"sturmgewehr_44","4":"schanzzeug_spade","137":"ampulomet_41","136":"granatbuchse_39","135":"panzerbuchse_39","16":"m1_carbine","139":"m18_recoilless_rifle","134":"bazooka_m9a1","901":"flammenwerfer41","902":"roks3","900":"m2_flamethrower","19":"m24_frag_sleeve","159":"machine_carbine_mk_i","34":"ptrd_1941","23":"nr_40_scouts_knife","24":"ppd_40","51":"panzerfaust_60","151":"lapta_bat","150":"baseball_bat","149":"baseball_bat","52":"bazooka_m1a1","153":"easter_egg","53":"panzerschreck_rpzb_54","102":"adjustable_wrench","152":"snowball","47":"fallschirmj_gergewehr_42","54":"avs_36","610":"m1919a4","160":"demolition_kit_m1","138":"ptrs_41","161":"fp_45_liberator_pistol","61":"maschinengewehr_42","63":"maschinengewehr_34","80":"s_mine","81":"m2a3","82":"tellermine_42","83":"m1a1","84":"hafthohlladung_h3","85":"s_t_grenade_no_74","98":"dienstglas_6x30","99":"n_k_m3_6x30","903":"einstossflammenwerfer46","48":"n_k_6x30"},
+  v: {"44":"ba_64b","10":"panzerkampfwagen_vi_tiger","38":"panzerkampfwagen_ii_ausf_c","77":"curtiss_o_52_owl","55":"m29_weasel","66":"gmc_cckw_352","45":"m2a2_light_tank","50":"jagdpanzer_38_t_hetzer","53":"sd_kfz_7_1","51":"panzerkampfwagen_vi_tiger_ii","67":"t_28_model_1934","63":"kv_85","42":"m4a1_sherman","78":"curtiss_p_40n_warhawk","84":"seversky_p_35a","65":"su_76m","64":"opel_blitz","70":"ford_gpa","56":"panzerkampfwagen_v_ausf_g","54":"m16_multiple_gun_motor_carriage","58":"m10_wolverine","47":"ba_6","6":"is_2_model_1944","7":"gaz_67","48":"t_70_model_1942","85":"messerschmitt_bf_109d_1","83":"mikoyan_gurevich_mig_3","39":"panzerkampfwagen_38_t_ausf_e","79":"petlyakov_pe_3bis","59":"gaz_aaa_cargo","9":"t_34_76_model_1942","36":"panzerkampfwagen_iv_ausf_h","8":"bt_7_model_1937","57":"t_20_komsomolets","75":"henschel_hs_126_b_1","49":"ggaz_aaa_m_4_maxim","11":"sturmgeschutz_iii","52":"panzerkampfwagen_ii_ausf_l","37":"m3_lee","69":"typ_166_schwimmwagen","12":"m18_hellcat","76":"polikarpov_r_z","13":"m4a3e8_sherman","14":"panzerkampfwagen_iii_ausf_j","15":"m5a1_stuart","16":"panzerkampfwagen_i_ausf_a","17":"m24_chaffee","1":"willys_mb","20":"messerschmitt_bf_109e","21":"p_38_lightning","22":"douglas_c_47a_skytrain","23":"junkers_ju_52_3m","28":"m26_pershing","2":"kubelwagen_typ_82","35":"sdkfz_2_kettenkrad_hk_101","4":"r75_sidecar","5":"42wla_solo","60":"m3a1","27":"ba_64b","19":"su_85","61":"sdkfz_251_d","18":"t_34_85_model_1944","71":"sdkfz_222","72":"m8_greyhound","24":"yakovlev_yak_9d","43":"t_38_model_1937","46":"t_26_model_1933","99":"r75_solo","100":"m72_solo","101":"m72_sidecar","98":"42wla_sidecar","68":"m4a3e2_jumbo_sherman","95":"m20","96":"sdkfz_250_3","80":"messerschmitt_me_410_b_2_u2","92":"mustang_p_51d","90":"su_100","89":"jagdpanzer_v_jagdpanther","88":"m36_jackson","87":"m36b1_jackson","86":"lavochkin_la_7","93":"focke_wulff_fw_109_d_9","91":"sdkfz_234_2_puma","97":"ba_11","94":"t8e1_stuart_recce"}};
+let pkTitelKeys = null;
+function pkTitelListe(art){
+  if (!pkTitelKeys) pkTitelKeys = {w: [], v: []};
+  const L = pkTitelKeys[art];
+  if (!L.length) for (const nr of Object.keys(PK_TITEL[art])) for (const k of PK_TITEL[art][nr].split("|")) L.push([nr, k]);
+  return L;
+}
+let pkAbzeichenV = null;
+function pkAbzeichenVorlagen(){
+  if (pkAbzeichenV) return pkAbzeichenV;
+  const Z = PK_ABZEICHEN, n = Z.b*Z.h;
+  pkAbzeichenV = [];
+  for (const name of ["inf", "recon", "armor"]){
+    const bin = atob(Z[name] || ""), v = new Uint8Array(n);
+    for (let i = 0; i < n && i < bin.length; i++) v[i] = bin.charCodeAt(i);
+    pkAbzeichenV.push({name, v: abdruckNorm(v)});
+  }
+  return pkAbzeichenV;
+}
+function pkNeu(){
+  return {bildNr: 0, live: null, laeuft: false, liest: false,
+          offen: false, gelesen: false, abdruck: null,    // the card seen open at the last look, read already, the name strip's print
+          schlange: [], vorschlaege: [], gesehen: new Set(), zaehler: 0,
+          zeile: null,                                     // the state line: "Kit read · <Name>"
+          blicke: 0, karten: 0, tor: null, zeiten: []};    // for the desk and the probe
+}
+function pkStart(z){
+  if (!z) return;
+  if (z.karte && z.karte.live) clearInterval(z.karte.live);
+  z.karte = pkNeu();
+  z.karte.live = setInterval(() => pkTick(z), PK.TAKT);
+}
+/* the look ends with the capture; the proposals stay as the board's stand
+   stays, so "Add" goes after the battle - the next capture makes a new state */
+function pkStop(z){
+  const K = z && z.karte;
+  if (!K) return;
+  if (K.live){ clearInterval(K.live); K.live = null; }
+  K.offen = false; K.gelesen = false; K.abdruck = null; K.schlange.length = 0;
+}
+async function pkTick(z){
+  const K = z && z.karte;
+  if (!K || !K.live || K.laeuft || z !== GEF || !z.live || z.pause) return;
+  if (!bildNeu(K)) return;
+  K.laeuft = true;
+  let bild = null;
+  try {
+    bild = await bildLive();
+    if (!K.live || z !== GEF) return;
+    pkBlick(bild, bild.width, bild.height, z);
+  } catch(e){
+    /* a share that ended is the tick's business (gefTick stops the capture);
+       this look stays quiet */
+  } finally {
+    if (bild && bild.close) bild.close();
+    K.laeuft = false;
+  }
+}
+/* ONE LOOK: the card box drawn at HUD scale, the gate, the ink of KAMPFDAUER,
+   the name strip's print; a loaded card not read yet is cut at the
+   picture's own scale and queued for the reader. Returns what the look saw. */
+function pkBlick(bild, W, H, z){
+  const K = z.karte || (z.karte = pkNeu()), fk = z.kpFaktor || 1;
+  K.blicke++;
+  const Wh = W/fk, Hh = H/fk;
+  const x0 = Math.round(Wh/2) - PK.DX, y0 = Math.round(Hh/2) - PK.DY;
+  const aus = {offen: false, geladen: false, farbe: null, farbeAnteil: 0, grauAnteil: 0, tinte: 0, neu: false};
+  if (x0 < 0 || y0 < 0 || x0 + PK.B > Wh || y0 + PK.H > Hh){ K.offen = false; K.tor = aus; return aus; }
+  const f = gefFlaeche("karte", PK.B, PK.H);
+  f.g.imageSmoothingEnabled = fk !== 1;
+  f.g.drawImage(bild, x0*fk, y0*fk, PK.B*fk, PK.H*fk, 0, 0, PK.B, PK.H);
+  let px = null;
+  try { px = f.g.getImageData(0, 0, PK.B, PK.H).data; } catch(e){ K.offen = false; K.tor = aus; return aus; }
+  const tor = pkTor(px, PK.B);
+  aus.farbe = tor.farbe; aus.farbeAnteil = tor.farbeAnteil; aus.grauAnteil = tor.grauAnteil;
+  aus.offen = tor.farbeAnteil >= PK.FARBE_MIN && tor.grauAnteil >= PK.GRAU_MIN;
+  if (!aus.offen){ K.offen = false; K.gelesen = false; K.abdruck = null; K.tor = aus; return aus; }
+  aus.tinte = pkTinte(px, PK.B, PK.FELD.dauer);
+  aus.geladen = aus.tinte >= PK.TINTE_MIN;
+  /* the skeleton: the card is open and loads - or loads AGAIN without
+     closing (measured twice in 35): what comes after it is read anew */
+  if (!aus.geladen){ K.offen = true; K.gelesen = false; K.abdruck = null; K.tor = aus; return aus; }
+  const abdruck = pkAbdruck(px, PK.B, PK.FELD.name);
+  if (K.offen && K.gelesen && K.abdruck){
+    let d = 0; for (let i = 0; i < abdruck.length; i++) d += abdruck[i]*K.abdruck[i];
+    if (d < PK.GLEICH) K.gelesen = false;      // another card took the place without a frame between
+  }
+  K.offen = true; K.abdruck = abdruck; K.tor = aus;
+  if (K.gelesen) return aus;
+  K.gelesen = true; K.karten++; aus.neu = true;
+  /* the card at the picture's own scale for the reader (at factor 1 the same points) */
+  const c = document.createElement("canvas"); c.width = Math.round(PK.B*fk); c.height = Math.round(PK.H*fk);
+  c.getContext("2d").drawImage(bild, x0*fk, y0*fk, PK.B*fk, PK.H*fk, 0, 0, c.width, c.height);
+  K.schlange.push({c, t: jetzt(), farbe: tor.farbe, fk});
+  while (K.schlange.length > PK.SCHLANGE_MAX) K.schlange.shift();
+  pkSchlange(z);
+  return aus;
+}
+/* the gate's two numbers on the card box: the coloured share of the head bar
+   (OpenCV's hue, 0..180: red under 8 or over 172 with saturation > 140 and
+   value > 100, blue 95..112 with saturation > 130 - the bar is (150,42,42)
+   red and (50,100,143) blue) and the grey share of the body */
+function pkTor(px, bw){
+  const [kx0, ky0, kx1, ky1] = PK.KOPF, [bx0, by0, bx1, by1] = PK.KOERPER;
+  let rot = 0, blau = 0, nk = 0;
+  for (let y = ky0; y < ky1; y++) for (let x = kx0, i = (y*bw + kx0)*4; x < kx1; x++, i += 4){
+    const r = px[i], g = px[i+1], b = px[i+2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), dl = mx - mn;
+    nk++;
+    if (mx <= 100 || !dl) continue;
+    const sat = dl*255/mx;
+    let h = mx === r ? 30*(g - b)/dl : mx === g ? 60 + 30*(b - r)/dl : 120 + 30*(r - g)/dl;
+    if (h < 0) h += 180;
+    if (sat > 140 && (h < 8 || h > 172)) rot++;
+    else if (sat > 130 && h >= 95 && h <= 112) blau++;
+  }
+  let grau = 0, ng = 0;
+  for (let y = by0; y < by1; y++) for (let x = bx0, i = (y*bw + bx0)*4; x < bx1; x++, i += 4){
+    const r = px[i], g = px[i+1], b = px[i+2];
+    ng++;
+    if (Math.max(r, g, b) - Math.min(r, g, b) < PK.GRAU_SPANNE){ const m = (r + g + b)/3; if (m >= PK.GRAU_LO && m <= PK.GRAU_HI) grau++; }
+  }
+  const farbe = rot >= blau ? "r" : "b";
+  return {farbe, farbeAnteil: nk ? Math.max(rot, blau)/nk : 0, grauAnteil: ng ? grau/ng : 0};
+}
+/* ink in a field of the card box: points brighter than the field's median
+   plus PK.TINTE (the sheet's rule; the field's ground is flat grey) */
+function pkTinte(px, bw, box){
+  const [x0, y0, x1, y1] = box, hist = new Uint32Array(256);
+  let n = 0;
+  for (let y = y0; y < y1; y++) for (let x = x0, i = (y*bw + x0)*4; x < x1; x++, i += 4){ hist[Math.round(0.299*px[i] + 0.587*px[i+1] + 0.114*px[i+2])]++; n++; }
+  let s = 0, med = 0;
+  for (let v = 0; v < 256; v++){ s += hist[v]; if (s >= n/2){ med = v; break; } }
+  let tinte = 0;
+  for (let v = Math.min(255, med + PK.TINTE + 1); v < 256; v++) tinte += hist[v];
+  return tinte;
+}
+/* the name strip brought to 32 by 4, mean-free and at length one - the same
+   card at the next look gives about 1, another name much less */
+function pkAbdruck(px, bw, box){
+  const [x0, y0, x1, y1] = box, B = 32, H = 4, g = new Float32Array(B*H);
+  const zw = (x1 - x0)/B, zh = (y1 - y0)/H;
+  for (let j = 0; j < H; j++) for (let i = 0; i < B; i++){
+    let s = 0, n = 0;
+    for (let y = Math.floor(y0 + j*zh); y < Math.floor(y0 + (j + 1)*zh); y++) for (let x = Math.floor(x0 + i*zw); x < Math.floor(x0 + (i + 1)*zw); x++){ const o = (y*bw + x)*4; s += Math.max(px[o], px[o+1], px[o+2]); n++; }
+    g[j*B + i] = n ? s/n : 0;
+  }
+  return abdruckNorm(g);
+}
+/* the class badge held against the three templates, one point of play each
+   way at the card's scale; the best must clear PK.ABZ_MIN */
+function pkAbzeichen(c, fk){
+  const V = pkAbzeichenVorlagen(), Z = PK_ABZEICHEN, n = Z.b*Z.h, [ax0, ay0] = PK.ABZ;
+  const bw = Z.b + 2, bh = Z.h + 2;
+  const k = gefFlaeche("karteabz", bw, bh);
+  k.g.imageSmoothingEnabled = true; try { k.g.imageSmoothingQuality = "high"; } catch(e){}
+  k.g.drawImage(c, (ax0 - 1)*fk, (ay0 - 1)*fk, bw*fk, bh*fk, 0, 0, bw, bh);
+  let px = null;
+  try { px = k.g.getImageData(0, 0, bw, bh).data; } catch(e){ return {klasse: null, wert: 0, zweit: 0}; }
+  const alle = new Map(), g = new Uint8Array(n);
+  for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 3; dx++){
+    for (let yy = 0, j = 0; yy < Z.h; yy++){
+      let i = ((yy + dy)*bw + dx)*4;
+      for (let xx = 0; xx < Z.b; xx++, i += 4, j++) g[j] = (px[i] + px[i+1] + px[i+2])/3;
+    }
+    const v = abdruckNorm(g);
+    for (const T of V){
+      let s = 0; for (let j = 0; j < n; j++) s += v[j]*T.v[j];
+      if (!alle.has(T.name) || s > alle.get(T.name)) alle.set(T.name, s);
+    }
+  }
+  const sortiert = [...alle.entries()].sort((a, b) => b[1] - a[1]);
+  if (!sortiert.length) return {klasse: null, wert: 0, zweit: 0};
+  const wert = sortiert[0][1], zweit = sortiert.length > 1 ? sortiert[1][1] : 0;
+  return {klasse: wert >= PK.ABZ_MIN ? sortiert[0][0] : null, wert, zweit};
+}
+/* THE QUEUE: one card a turn through the reader, as the board's queue; it
+   ends by itself when the state it works for is gone */
+async function pkSchlange(z){
+  const K = z && z.karte;
+  if (!K || K.liest) return;
+  K.liest = true;
+  try {
+    while (z.karte === K && K.schlange.length){
+      const job = K.schlange.shift();
+      const t0 = performance.now();
+      try { await pkLesen(z, job); } catch(e){}
+      K.zeiten.push(Math.round(performance.now() - t0)); if (K.zeiten.length > 100) K.zeiten.shift();
+    }
+  } finally { K.liest = false; }
+}
+/* the line "Name    N KILLS": the kills off the end, the name in front */
+const pkZeileTeilen = t => { const m = /^(.*?)\s*(\d+)\s*K[Il1]LLS?\s*$/i.exec(t || ""); return m ? {name: m[1].trim(), kills: +m[2]} : {name: (t || "").trim(), kills: null}; };
+/* a read title to the nearest game title (template number): unitsKey,
+   at most max(1, len/5) edits (286 of 286, 0 wrong); a long name that runs
+   into "N KILLS" is tried once more with that tail cut off */
+function pkTitel(text, art){
+  const L = pkTitelListe(art);
+  const such = t => {
+    const k = unitsKey(t);
+    if (k.length < 2) return null;
+    let best = null, bd = 1e9;
+    for (const [nr, tk] of L){ if (Math.abs(tk.length - k.length) > Math.max(1, tk.length/5)) continue; const d = levenshtein(k, tk); if (d < bd){ bd = d; best = [nr, tk]; } }
+    return best && bd <= Math.max(1, Math.floor(best[1].length/5)) ? {nr: best[0], key: best[1], d: bd} : null;
+  };
+  let t = such(text);
+  if (!t){ const t2 = String(text || "").replace(/\s*\d*\s*K[Il1]LLS?\s*$/i, ""); if (t2 !== text) t = such(t2); }
+  return t;
+}
+/* a read field of the card: the page's own reader on the card canvas; with
+   gross > 1 the field is first drawn enlarged that much on its own canvas
+   (smooth) and the reader takes the whole of it - the second road for a name
+   that met no row (round 3, SOLL-2) */
+async function pkFeld(c, box, fk, gross){
+  const [x0, y0, x1, y1] = box;
+  let quelle = c, rahmen = {x: x0*fk/c.width, y: y0*fk/c.height, w: (x1 - x0)*fk/c.width, h: (y1 - y0)*fk/c.height};
+  if (gross > 1){
+    const d = document.createElement("canvas"); d.width = Math.round((x1 - x0)*fk*gross); d.height = Math.round((y1 - y0)*fk*gross);
+    const g = d.getContext("2d"); g.imageSmoothingEnabled = true; try { g.imageSmoothingQuality = "high"; } catch(e){}
+    g.drawImage(c, x0*fk, y0*fk, (x1 - x0)*fk, (y1 - y0)*fk, 0, 0, d.width, d.height);
+    quelle = d; rahmen = {x: 0, y: 0, w: 1, h: 1};
+  }
+  const feld = await bildAufbereiten(quelle, rahmen, false);
+  const r = await ocrMitZuv(feld, 7, null, "");
+  return String((r && r.text) || "").trim().replace(/\s+/g, " ");
+}
+/* one card: the name, the two lines (an empty line - no ink - is not read),
+   the badge; then the proposal */
+async function pkLesen(z, job){
+  const K = z.karte, c = job.c, fk = job.fk || 1;
+  const g = c.getContext("2d", {willReadFrequently: true});
+  let px = null;
+  try { px = g.getImageData(0, 0, c.width, c.height).data; } catch(e){ px = null; }
+  const tinte = box => px ? pkTinte(px, c.width, [Math.round(box[0]*fk), Math.round(box[1]*fk), Math.round(box[2]*fk), Math.round(box[3]*fk)]) : PK.TINTE_MIN;
+  const L = {t: job.t, farbe: job.farbe, name: "", name2: null, waffeText: "", fzText: "", waffeKills: null, fzKills: null, klasse: null, abz: null, w: null, v: null, wNr: null, vNr: null};
+  L.name = await pkFeld(c, PK.FELD.name, fk);
+  /* no row for the name: once more off the strip enlarged twice (round 3,
+     SOLL-2 - "Dijo" read "- Dip," at the card's scale, "- Dio," enlarged);
+     the second reading is the name when it meets a row, or when the first
+     read nothing at all (round 4, H3), else it stands beside the first for
+     the sheet's later search */
+  if (!pkEintrag(z, L.name)){
+    const n2 = await pkFeld(c, PK.FELD.name, fk, PK.NAME_X2);
+    if (n2 && (!L.name || pkEintrag(z, n2))) L.name = n2;
+    else if (n2 && n2 !== L.name) L.name2 = n2;
+  }
+  if (tinte(PK.FELD.waffe) >= PK.TINTE_MIN){ const t = pkZeileTeilen(await pkFeld(c, PK.FELD.waffe, fk)); L.waffeText = t.name; L.waffeKills = t.kills; }
+  if (tinte(PK.FELD.fz) >= PK.TINTE_MIN){ const t = pkZeileTeilen(await pkFeld(c, PK.FELD.fz, fk)); L.fzText = t.name; L.fzKills = t.kills; }
+  try { L.abz = pkAbzeichen(c, fk); L.klasse = L.abz.klasse; } catch(e){ L.abz = null; }
+  if (L.waffeText){ const t = pkTitel(L.waffeText, "w"); if (t){ L.wNr = t.nr; L.w = PK_SEITE.w[t.nr] || null; } }
+  if (L.fzText){ const t = pkTitel(L.fzText, "v"); if (t){ L.vNr = t.nr; L.v = PK_SEITE.v[t.nr] || null; } }
+  if (z.karte !== K) return L;
+  pkVorschlag(z, L);
+  return L;
+}
+/* the read name to a row of the board: namKey, one edit, a lead of one over
+   the nearest OTHER name. The board holds one name on two entries as its
+   own road to "sure" (gefTafelLesung: the same name read on another entry
+   of another look counts as the second reading), so the entries are grouped
+   by key and the lead is asked between different keys only (round 2,
+   Skeptiker Handwerk SPERRER-1). Three rounds: the stand's rows first (one
+   row, one player - two rows a stroke apart are two players, the lead
+   stands), then the sure or typed entries gone from the stand ("Seen
+   earlier"), then - still without a row - every entry with a name. Of one
+   key the typed entry wins, then the sure one, then the one on the stand,
+   then the latest. Null without a row.
+   Round 3 (SOLL-1): the EXACT sure or typed entry outside the stand is
+   asked before the stand's round is decided - it beats a stand row a stroke
+   away (the card "Waldlaeufer", the stand row "Waldlaeufer1", the sure
+   "Waldlaeufer" gone from the stand: that one), and two stand rows a stroke
+   away each; at distance 0 on both the group's rank decides (typed > sure >
+   on the stand), so the typed twin outside beats the stand row and the sure
+   stand row beats its sure twin outside.
+   Round 4 (H1): at distance > 0 the exact entry outside beats the stand row
+   ONLY when that row is neither typed nor sure - the board reads T25149 as
+   "125149" (43 of 43 raw readings), he types the stand row, the sure twin
+   "125149" stands outside: his typed row wins, and so does a sure stand row
+   (the same person, the stand row is the one on the board). A fresh, unsure
+   stand row a stroke away still loses to the sure exact entry outside. */
+function pkEintrag(z, name){
+  const T = z && z.tafel, k = namKey(name || "");
+  if (!T || k.length < 2) return null;
+  const stand = new Set();
+  if (T.stand) for (const t of T.stand.tafeln) for (const zl of t.zeilen) if (zl.e) stand.add(zl.e);
+  const rang = e => (e.hand ? 4 : 0) + (e.sicher ? 2 : 0) + (stand.has(e) ? 1 : 0);
+  const besser = (e, g) => rang(e) > rang(g) || (rang(e) === rang(g) && e.zuletzt > g.zuletzt);
+  let exakt = null;
+  for (const e of T.eintraege){
+    if (stand.has(e) || !(e.hand || e.sicher)) continue;
+    const n = gefTafelName(e);
+    if (n && namKey(n) === k && (!exakt || besser(e, exakt))) exakt = e;
+  }
+  const runden = [e => stand.has(e), e => !stand.has(e) && (e.hand || e.sicher), e => true];
+  for (let r = 0; r < runden.length; r++){
+    const drin = runden[r];
+    const gruppen = new Map();
+    for (const e of T.eintraege){
+      if (!drin(e)) continue;
+      const n = gefTafelName(e); if (!n) continue;
+      const ek = namKey(n);
+      if (Math.abs(ek.length - k.length) > PK.NAME_LEV) continue;
+      const d = ek === k ? 0 : levenshtein(k, ek);
+      if (d > PK.NAME_LEV) continue;
+      const g = gruppen.get(ek);
+      if (!g) gruppen.set(ek, {d, e});
+      else if (besser(e, g.e)) g.e = e;
+    }
+    if (!gruppen.size) continue;                     // nothing near in this round: the next
+    let best = null, bd = 1e9, zweit = 1e9;
+    for (const g of gruppen.values()){ if (g.d < bd){ zweit = bd; bd = g.d; best = g.e; } else if (g.d < zweit) zweit = g.d; }
+    if (r === 0 && exakt){                           // the exact entry outside the stand (round 3; round 4: not over a typed or sure stand row)
+      const nah = [...gruppen.values()].filter(g => g.d === bd);
+      if (bd > 0 ? nah.every(g => !g.e.hand && !g.e.sicher) : rang(exakt) > rang(best)) return exakt;
+    }
+    return zweit > bd ? best : null;                 // two names as near: no row, not the next round's
+  }
+  return null;
+}
+/* the side the kit is written to: the stand's board of the row (head sign,
+   badge majority - gefTafelSeite), else the register's (gefKitSeite) */
+function pkSeite(z, e){
+  const T = z && z.tafel, B = T && T.stand, kam = gefTafelKameraden();
+  if (B) for (const t of B.tafeln) if (t.zeilen.some(zl => zl.e === e)) return gefKitSeite({n: gefTafelName(e)}, gefTafelSeite(t, kam).f);
+  if (B && e.seite){ const t = B.tafeln.find(x => x.lage === e.seite); if (t){ const f = gefTafelSeite(t, kam).f; if (f !== null && f !== undefined) return f; } }
+  if (e.abz && e.abz.f !== null && e.abz.f !== undefined) return e.abz.f;
+  return gefKitSeite({n: gefTafelName(e)}, null);
+}
+/* the proposal: once per card (name, weapon, vehicle - VoLiNe stood twice
+   with the same card and gets one line); the state line "Kit read · Name".
+   A card whose name was not read gives the state line alone: without a
+   name there is no row and never an Add (round 2, KANN-1). */
+const pkMerk = (kopf, w, v) => [kopf, w || "", v || ""].join("|");
+function pkVorschlag(z, L){
+  const K = z.karte;
+  const name = String(L.name || "").trim(), name2 = L.name2 ? String(L.name2).trim() : null;
+  if (!name){ K.zeile = "Kit read \u00b7 ?"; if (z.tafel) z.tafel.version++; if (z === GEF) gefZeichnen(); return null; }
+  const e = pkEintrag(z, name) || (name2 ? pkEintrag(z, name2) : null);
+  /* the mark: the read name (two readings of one name differ by a stroke of
+     the strip's edge - namKey drops it) AND the row when one was met, so the
+     same card before and after the row appeared is one proposal (round 3,
+     KANN-1); a row with this weapon and vehicle proposed already (the row
+     bound on the sheet since, E6) is not proposed again */
+  const w = L.w || L.wNr || "", v = L.v || L.vNr || "";
+  const merk = [pkMerk(namKey(name), w, v)];
+  if (e) merk.push(pkMerk("e" + e.id, w, v));
+  K.zeile = `Kit read \u00b7 ${e ? gefTafelName(e) : name}`;
+  /* the proposals without a row bound here first (round 4, H2): with the
+     desk shut the sheet is not built and binds nothing, and the same card
+     read again with a raw name a letter off would stand twice */
+  if (e) for (const V of K.vorschlaege) if (V.e === null) pkBinden(z, V);
+  const schon = merk.some(m => K.gesehen.has(m)) || (e && K.vorschlaege.some(V => V.e === e.id && (V.w || V.wNr || "") === w && (V.v || V.vNr || "") === v));
+  for (const m of merk) K.gesehen.add(m);
+  if (schon) return null;
+  const V = {id: ++K.zaehler, t: L.t, name, name2, e: e ? e.id : null, farbe: L.farbe, klasse: L.klasse,
+             w: L.w, v: L.v, wText: L.waffeText, vText: L.fzText, wNr: L.wNr, vNr: L.vNr};
+  K.vorschlaege.push(V);
+  while (K.vorschlaege.length > PK.VORSCHLAEGE_MAX) K.vorschlaege.shift();
+  if (z.tafel) z.tafel.version++;
+  if (z === GEF) gefZeichnen();
+  return V;
+}
+/* the row of a proposal: the one bound, else looked for again (E6: the board
+   is often read after the card) - both readings of the name asked; a row
+   found now is marked as seen with the card's content (round 3, KANN-1) */
+function pkBinden(z, V){
+  const T = z && z.tafel, K = z && z.karte;
+  if (!T) return null;
+  let e = V.e !== null ? T.eintraege.find(x => x.id === V.e) || null : null;
+  if (!e){
+    e = pkEintrag(z, V.name) || (V.name2 ? pkEintrag(z, V.name2) : null);
+    V.e = e ? e.id : null;
+    if (e && K) K.gesehen.add(pkMerk("e" + e.id, V.w || V.wNr, V.v || V.vNr));
+  }
+  return e;
+}
+/* the piece fits the row's side as the Kit mask lists it (fuerSeite); the
+   other faction's piece - the card's favourite counts the whole account, 5 of
+   34 cards carry one - is shown and never written (round 3, KANN-2) */
+const pkPasst = (art, k, f) => { const L = art === "w" ? ARM : VEH; return !!k && (f === 0 || f === 1 || f === 2) && (!L[k] || fuerSeite(L[k], f)); };
+/* the block under the board: the state line, one line per proposal. A name
+   without a row is looked for again at every build - the board is often read
+   after the card. "Add" is shut where the Kit button is shut. */
+function pkBlatt(){
+  const z = GEF, K = z && z.karte;
+  if (!K || (!K.vorschlaege.length && !K.zeile)) return "";
+  const T = z.tafel, kam = gefTafelKameraden(), recht = darf("aufklaerung");
+  const gebunden = !!(T && T.stand && gefTafelHaelt(z, T.stand));
+  const imStand = e => !!(T && T.stand && T.stand.tafeln.some(t => t.zeilen.some(zl => zl.e === e)));
+  const zeilen = K.vorschlaege.map(V => {
+    const e = pkBinden(z, V);
+    const n = e ? gefTafelName(e) : null;
+    const wir = !!(n && kam.has(namKey(n)));
+    const f = e ? pkSeite(z, e) : null;
+    const unsicher = !!(e && !(e.hand || e.sicher));
+    const wOk = f !== null && pkPasst("w", V.w, f), vOk = f !== null && pkPasst("v", V.v, f);
+    const was = [[V.klasse ? PK_KLASSE[V.klasse] : "", true], [V.w ? ((ARM[V.w] && ARM[V.w].name) || V.w) : (V.wText || ""), f === null || !V.w || wOk],
+                 [V.v ? ((VEH[V.v] && VEH[V.v].name) || V.v) : (V.vText || ""), f === null || !V.v || vOk]].filter(x => x[0]);
+    /* the word on a shut Add: "name not sure" only for a row of the stand (the name is on the desk); an unsure entry gone from the stand is not under "Seen earlier" either - shut without a word (WORT W3) */
+    const zu = !e ? "no row" : wir ? "us" : !recht ? rechtSatz("aufklaerung") : !gebunden ? "" : f === null ? "side not read" : unsicher ? (imStand(e) ? "name not sure - click the name and type it" : "") : !wOk && !vOk ? "wrong side" : null;
+    return `<div class="gf-pk-v" data-pk="${V.id}"><b>${esc(n || V.name || "?")}</b>${n && namKey(n) !== namKey(V.name) ? ` <span class="gf-pk-o">${esc(V.name)}</span>` : ""}${
+      was.map(([w, ok]) => ` <span${ok ? "" : ` class="gf-pk-o" title="wrong side"`}>\u00b7 ${esc(w)}</span>`).join("")}${
+      V.w || V.v ? `<button class="mini" data-pkok="${V.id}"${zu !== null ? ` disabled${zu ? ` title="${esc(zu)}"` : ""}` : ""}>Add</button>` : ""
+      }<button class="mini" data-pknein="${V.id}" title="Drop">\u00d7</button></div>`;
+  }).join("");
+  return `<div class="gf-pk"><div class="kb-titel">Player cards \u00b7 ${K.vorschlaege.length}</div>${K.zeile ? `<div class="gf-pk-s">${esc(K.zeile)}</div>` : ""}${zeilen}</div>`;
+}
+function pkVerdrahten(blatt){
+  if (blatt.dataset.karte === "1") return;
+  blatt.dataset.karte = "1";
+  blatt.addEventListener("pointerdown", ev => {
+    if (!GEF || !GEF.karte) return;
+    const ok = ev.target.closest(".gf-pk [data-pkok]"), nein = ev.target.closest(".gf-pk [data-pknein]");
+    if (ok){ ev.preventDefault(); if (!ok.disabled) pkNehmen(+ok.dataset.pkok); }
+    else if (nein){ ev.preventDefault(); pkVerwerfen(+nein.dataset.pknein); }
+  });
+}
+/* "Add": the Kit button's road - the mask's state on this row, gefKitEintragen
+   for the weapon and the vehicle (register row first, then the arsenal, the
+   first find credited there), the mask's state put back as it was (a mask
+   open on this row stays open, round 2 KANN-2) and the sheet drawn again in
+   any case: gefKitEintragen draws the sheet with the mask of this row, and
+   that drawing must not stand (KANN-4) */
+function pkNehmen(id){
+  const z = GEF, K = z && z.karte, T = z && z.tafel;
+  if (!K || !T) return;
+  const V = K.vorschlaege.find(x => x.id === id);
+  if (!V) return;
+  const e = pkBinden(z, V);
+  if (!e) return;
+  const n = gefTafelName(e);
+  if (!n || gefTafelKameraden().has(namKey(n))) return;
+  const f = pkSeite(z, e);
+  if (!(f === 0 || f === 1 || f === 2)) return;
+  const wOk = pkPasst("w", V.w, f), vOk = pkPasst("v", V.v, f);   // nothing of the other side is written (round 3, KANN-2)
+  if (!wOk && !vOk) return;
+  const vorher = T.kit;
+  T.kit = {id: e.id, such: "", w: wOk ? V.w : null, v: vOk ? V.v : null};
+  try {
+    if (wOk) gefKitEintragen("w", V.w, f);
+    if (vOk) gefKitEintragen("v", V.v, f);
+  } finally { T.kit = vorher || null; }
+  const dran = feindArsenal(spielerKey(n), f);
+  if ((!wOk || dran.w.includes(V.w)) && (!vOk || dran.v.some(x => (x && x.k ? x.k : x) === V.v)))
+    K.vorschlaege = K.vorschlaege.filter(x => x.id !== id);
+  T.version++; gefZeichnen();
+}
+function pkVerwerfen(id){
+  const z = GEF, K = z && z.karte;
+  if (!K) return;
+  K.vorschlaege = K.vorschlaege.filter(x => x.id !== id);
+  if (z.tafel) z.tafel.version++;
+  gefZeichnen();
+}
 function gefLiveStart(){
   if (!GEF || GEF.live) return;
   if (!darf("aufklaerung")){ GEF.status = rechtSatz("aufklaerung"); gefZeichnen(); return; }
@@ -39565,6 +40096,7 @@ function gefLiveStart(){
   GEF.ende = null; GEF.endbild = null; GEF.endbildGemeldet = null;
   GEF.tafel = null;                       // the scoreboard of the last battle goes with the new capture (Paket 20)
   GEF.live = setInterval(gefTick, GEF_TAKT);
+  pkStart(GEF);                           // the player card's own look (Q7), a new state with the new capture
   GEF.status = "Live";
   gefZeichnen(); gefTick();
 }
@@ -39581,6 +40113,7 @@ function gefLiveStart(){
 function gefLiveStop(auchFreigabe){
   if (!GEF) return;
   if (GEF.live){ clearInterval(GEF.live); GEF.live = null; }
+  pkStop(GEF);                            // the card's look ends with the tick; its proposals stay like the stand (Q7)
   GEF.stand = null; GEF.anker = null; GEF.proben = []; GEF.kastenY = null; GEF.marke = null;
   /* the countdown and the objective row go with the tick as well - a stopped
      capture that still counts down or shows three boxes reads like a running
@@ -40020,6 +40553,7 @@ function gefZeichnen(){
         })()}</div></div>`;
     })()}
     ${gefTafelBlatt()}
+    ${pkBlatt()}
     ${!darf("aufklaerung") ? `<div class="note" style="margin-top:16px">${esc(rechtSatz("aufklaerung"))} Nothing is sent.</div>`
       : GEF.ort === null || GEF.ort === undefined ? `<div class="note" style="margin-top:16px">Pick a town on the left, or nothing is sent to the clan.</div>`
       : GEF.gesendet ? (() => {
@@ -40086,6 +40620,7 @@ function gefZeichnen(){
     if (overtimeStart(i, V.t)){ side(); draw(); gefZeichnen(); }
   });
   gefTafelVerdrahten(blatt);
+  pkVerdrahten(blatt);
   gefPult();
 }
 /* THE HEAD BUTTON CARRIES THE CAPTURE (Blatt 16.09., P3 (a)): "an" while
@@ -61180,7 +61715,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 6c036af918</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 34d87c2e76</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -61408,7 +61943,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "6c036af918";
+const BAU = "34d87c2e76";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
