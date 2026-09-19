@@ -1979,6 +1979,8 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 .tw tr.anf-kl > td{background:var(--panel2)}
 .tw tr.anf-kl td.zat-name{font-weight:600}
 .tw tr.anf-aus{display:none}
+/* T15 (19.09.2026): the air rows of a gather without an airfield at the target */
+.tw tr.anf-luft-zu{opacity:.45}
 .tw input.zan{width:48px}
 .bar{height:5px;background:var(--panel2);border-radius:3px;overflow:hidden;min-width:52px}
 .bar i{display:block;height:100%;background:var(--accent)}
@@ -2514,6 +2516,12 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <button class="tool" data-t="area" aria-pressed="false">
         <svg viewBox="0 0 24 24"><path d="M4 11.2L7.6 4.6l7.5-.6 5.2 4.4-1.9 7.2-6.5 4-6.3-2.7z"/></svg>
         <span class="lbl" data-txt="tool.area">Area</span><span class="kb">7</span></button>
+      <!-- GATHER (T15, ENNO 18.09.2026: "4 Pfeile die auf eine Stadt
+           zeigen"). Four arrows from the corners to the middle, the same
+           24 grid and stroke as the neighbours. Key 8 was free. -->
+      <button class="tool" data-t="gather" aria-pressed="false" data-tip="Gather: click the target, then the start towns" title="Gather: click the target, then the start towns">
+        <svg viewBox="0 0 24 24"><path d="M3.5 3.5l6.3 6.3M9.8 5.3v4.5H5.3M20.5 3.5l-6.3 6.3M14.2 5.3v4.5h4.5M3.5 20.5l6.3-6.3M9.8 18.7v-4.5H5.3M20.5 20.5l-6.3-6.3M14.2 18.7v-4.5h4.5"/></svg>
+        <span class="lbl" data-txt="tool.gather">Gather</span><span class="kb">8</span></button>
       <!-- FADENKREUZ UEBER FERNGLAS, seine Vorgabe vom 05.09.: "mit einem
            Fadenkreuz und Fernglas untereinander als Symbol". Vorher war es
            nur das Fadenkreuz - und ein Fernglas gab es im Haus, aber an
@@ -4321,6 +4329,9 @@ let paraWahl = (() => {
   return w;
 })();
 let paraFluss = null;       // {start, ziel, felder:Set, ring:{r}|null, drin:[]} while marks stand
+let gatherFluss = null;     // T15: {ziel, starts:[], kette:[]} while the gather tool collects its start towns
+let gatherSchliesst = false; // T15: true from the chain's close until its window stands - no click opens a new flow meanwhile
+const GATHER_MAX = 4;       // T15, ENNO 18.09.2026: "4 Pfeile die auf eine Stadt zeigen"
 let aufklFluss = null;      // {id} while the recon tool may add towns to that request with Ctrl-clicks
 const aufklFarbe = () => light() ? "#0a7c8c" : "#4fc3f7";   // a recon request's rim when no outline colour is chosen, per theme
 const AUFKL_RAND = 6;            // hull margin around an asked town, map units
@@ -5823,11 +5834,12 @@ function setWithhold(an){
   toast(an ? "Withhold set" : "Withhold lifted");
   return true;
 }
-/* the tools that CREATE an order of our side; T15 appends "gather" here */
-const WITHHOLD_WERKZEUGE = ["arrow", "line", "para", "area"];
+/* the tools that CREATE an order of our side; "gather" since T15 (19.09.2026) */
+const WITHHOLD_WERKZEUGE = ["arrow", "line", "para", "area", "gather"];
 /* does withhold bar this tool right now? Only for the clan's own side:
-   drawn for another side the same tools record sightings. */
-const withholdSperrt = t => withholdSteht() && WITHHOLD_WERKZEUGE.includes(t) && faction === clanFaktion();
+   drawn for another side the same tools record sightings. A gather is
+   always our own side (T15), so it is barred whatever side is chosen. */
+const withholdSperrt = t => withholdSteht() && WITHHOLD_WERKZEUGE.includes(t) && (faction === clanFaktion() || t === "gather");
 const WITHHOLD_TIPP = `<b>Withhold</b> \u00b7 `;
 /* the top-bar tile, while it stands */
 function withholdKachel(){
@@ -6699,7 +6711,7 @@ function zustandSetzen(key, v, st, leise){
        angriffsWegNeu and not angriffsWeg: the cache there serves active
        arrows only, and at this moment the arrow is still planned. */
     let weg;
-    if (st === 1 && !w.luft && w.from !== w.to && MAP.n[w.from] && MAP.n[w.to]){
+    if (st === 1 && !w.luft && !w.gather && w.from !== w.to && MAP.n[w.from] && MAP.n[w.to]){   // T15: a gather writes no route
       try {
         const z = angriffsWegNeu(w);
         weg = z && Array.isArray(z.weg) && z.weg.length > 1 ? z.weg.slice(1) : undefined;
@@ -6808,7 +6820,7 @@ function okVerdrahten(wurzel){ zustandVerdrahten(wurzel); }
    every one of its towns - the asked ones, or those inside a drawn area
    -, see aufklStand. */
 const zielGenommen = a => {
-  if (!(a && !a.entwurf && !a.luft && a.f === clanFaktion()
+  if (!(a && !a.entwurf && !a.luft && !a.gather && a.f === clanFaktion()
       && MAP.n[a.to] && ownerOf(a.to) === a.f && befehlZustand(a.id, a) === "aktiv")) return false;
   /* who held the target when the arrow went active: our own town makes it
      a move, never "taken". Older arrows without that memory still count. */
@@ -7261,7 +7273,7 @@ function befehlOrt(b){
   return best;
 }
 const befehlOrtName = b => { const i = befehlOrt(b); return i !== null && MAP.n[i] ? MAP.n[i][0] : ""; };
-const befehlArtName = b => b.art === "arrow" ? (b.v && b.v.luft ? "Drop" : "Attack")
+const befehlArtName = b => b.art === "arrow" ? (b.v && b.v.gather ? "Gather" : b.v && b.v.luft ? "Drop" : "Attack")
   : b.art === "line" && istEinzelLinie(b.v) ? "Defence"
   : (b.art === "area" && b.v && b.v.aufkl ? "Recon" : (ZUORD_ART_NAME[b.art] || b.art));
 /* who made the order: the arrow carries it in itself, the others in their row */
@@ -7342,7 +7354,17 @@ function zusageVorrat(){
 /* teams onto an order by hand: they leave any other row of mine, join my
    row on this order, and the row stands accepted - picking is accepting */
 function zuordZuweisen(b, ids){
-  const neu = (ids || []).filter(Boolean);
+  let neu = (ids || []).filter(Boolean);
+  /* T15 (ENNO 18.09.2026: "Fuer luftgebundene Truppen muesste dies ein
+     Flugplatz sein, sonst muessen diese ATs ausgegraut sein"): no air team
+     onto a gather whose target has no airfield. Every road ends here - the
+     pick, "+", the box, auto-assign, the chain, the inbox - so the bar
+     stands here once more, whatever the caller asked before */
+  const gv = b && b.art === "arrow" ? (b.v || liveArrows().find(x => String(x.id) === String(b.id))) : null;
+  if (gv && gv.gather && !istFlugplatz(gv.to)){
+    const meine = myDepotAlle();
+    neu = neu.filter(id => { const d = meine.find(x => x.id === id); return !(d && fliegt(d.k)); });
+  }
   if (!neu.length) return false;
   /* picking is accepting - on anybody's order, my own included (ENNO
      08.09.2026, see YOUR OWN ORDER IS NOT YOURS TO ACCEPT) */
@@ -7405,11 +7427,12 @@ function zuordNachruecken(){
       const zusammen = (da ? da.ats : []).filter(id => depot.has(id));
       const neuDazu = ats.some(id => !zusammen.includes(id));
       for (const id of ats) if (!zusammen.includes(id)) zusammen.push(id);
-      /* a recon request takes scouts within reach only; the rest stay off it */
-      if (weiter.art === "area" && weiter.v && weiter.v.aufkl){
-        const meine = myDepotAlle(), lage = aufklLage(aufklPunkte(weiter.v));
+      /* a recon request takes scouts within reach only, a gather without
+         an airfield no air team (T15); the rest stay off it */
+      if ((weiter.art === "area" && weiter.v && weiter.v.aufkl) || (weiter.art === "arrow" && weiter.v && weiter.v.gather)){
+        const meine = myDepotAlle(), lage = weiter.v.aufkl ? aufklLage(aufklPunkte(weiter.v)) : null;
         const ok = zusammen.filter(id => { const d = meine.find(x => x.id === id); return !d || !aufklSperre(weiter, d, lage); });
-        if (ok.length !== zusammen.length){ zusammen.length = 0; zusammen.push(...ok); toast("Only scouts within reach move on to the recon request."); }
+        if (ok.length !== zusammen.length){ zusammen.length = 0; zusammen.push(...ok); toast(weiter.v.aufkl ? "Only scouts within reach move on to the recon request." : "Air teams stay off a gather without an airfield."); }
       }
       /* teams that arrive by the chain wait for the owner's word; a row
          that already held them all keeps what it had */
@@ -7542,7 +7565,7 @@ function zuordWahl(b, zurueck){
 let ordersFilter = {art: "", by: "", byN: "", zs: ""};   // byN: der Anzeigename zu by, nur fuer den Knopf
 let ordersVorlageName = "";
 /* die sieben Arten, mit den Namen, die befehlArtName vergibt */
-const ORDERS_ARTEN = ["Attack", "Drop", "Defence", "Line", "Recon", "Area", "Para-block"];
+const ORDERS_ARTEN = ["Attack", "Drop", "Gather", "Defence", "Line", "Recon", "Area", "Para-block"];
 /* DIE PRIVATEN FILTER-VORLAGEN LIEGEN IM BROWSER, NICHT AM KONTO (5.48,
    ENNO 16.09.2026: "keine ahnung." - der Stand bleibt). Nachgesehen am
    11.09.2026 (fable/Listen/ANSCHLUSS-ORDERS.md, Abschnitt 5): kein Topf
@@ -7617,7 +7640,7 @@ function ortStand(i){
    Pruefung wie dort -, sonst angriffsWegNeu: eine Suche ueber MAP.e, bis
    ~1 M Vergleiche, wie sie das Pfeilfenster fuer sammelzeit schon zahlt. */
 function befehlStrecke(a){
-  if (!a || a.luft || a.from === a.to || !MAP.n[a.from] || !MAP.n[a.to]) return null;
+  if (!a || a.luft || a.gather || a.from === a.to || !MAP.n[a.from] || !MAP.n[a.to]) return null;   // T15: a gather has no route
   if (fremdeSeite(a)) return null;
   const alt = angriffsWegSpeicher.get(a.id);
   const schl = a.from + "|" + a.to + "|" + a.f + "|" + pfeilBauch(a);
@@ -8261,7 +8284,7 @@ function ordersDialog(tab){
     const go = ort !== null ? ` data-go="${ort}" style="cursor:pointer"` : "";
     const details = ordersDetail(b, st, hab, g);
     return `<tr${go}>
-      <td>${esc(befehlArtName(b))}</td>
+      <td>${b.art === "arrow" && b.v && b.v.gather ? gatherSvg(12) + " " : ""}${esc(befehlArtName(b))}</td>
       <td style="text-align:left${drin ? ";padding-left:18px" : ""}">${prioKreis(b.v)}${b.v.folge ? `<small style="color:var(--dim)">#${+b.v.folge}</small> ` : ""}${esc(b.name)}</td>
       <td style="text-align:left">${esc(befehlOrtName(b))}</td>
       <td style="text-align:left">${zsSpan(b.zs)}</td>
@@ -8393,8 +8416,8 @@ function ordersDialog(tab){
     if (!ziel || ziel.fremd || ziel.entwurf || ziel.zs === "fertig"){ toast("That order is gone."); wieder(); return; }
     const depot = new Set(aufSeite(myDepotAlle(), clanFaktion()).map(d => d.id));
     let ids = z.ats.filter(id => depot.has(id));
-    if (ziel.art === "area" && ziel.v && ziel.v.aufkl){
-      const meineT = myDepotAlle(), lage = aufklLage(aufklPunkte(ziel.v));
+    if ((ziel.art === "area" && ziel.v && ziel.v.aufkl) || (ziel.art === "arrow" && ziel.v && ziel.v.gather)){   // T15: a gather without an airfield takes no air team
+      const meineT = myDepotAlle(), lage = ziel.v.aufkl ? aufklLage(aufklPunkte(ziel.v)) : null;
       ids = ids.filter(id => { const d = meineT.find(x => x.id === id); return !d || !aufklSperre(ziel, d, lage); });
     }
     if (!ids.length){ zuordLoeschen({art: z.art, id: z.id}); toast("No team of that row can move on."); wieder(); return; }
@@ -9092,6 +9115,12 @@ function aufklFensterZeilen(a, id){
 }
 /* why a team may not take a recon request; "" when it may */
 function aufklSperre(b, d, lage){
+  /* T15 (ENNO 18.09.2026: "Fuer luftgebundene Truppen muesste dies ein
+     Flugplatz sein, sonst muessen diese ATs ausgegraut sein"): a gather on
+     a town without an airfield takes no air team. The pick window asks
+     here, and so do the chain's hand-on and the inbox (their guards know
+     the gather); zuordZuweisen filters once more, so no road slips past */
+  if (b && b.art === "arrow" && b.v && b.v.gather && !istFlugplatz(b.v.to) && fliegt(d.k)) return "no airfield";
   if (!(b && b.art === "area" && b.v && b.v.aufkl)) return "";
   if (!kannAufklaeren(d.k)) return "not a scout";
   const L = lage || aufklLage(aufklPunkte(b.v));
@@ -9168,7 +9197,7 @@ function startPunktZeichnen(){
      (startRingOrt); a drop's airfield keeps its own pulsing mark */
   const o = startRingOrt();
   if (!o || o.art === "para") return;
-  const i = o.i, fc = col(FACTIONS[o.art === "line" && lineDraft ? lineDraft.f : faction]);
+  const i = o.i, fc = col(FACTIONS[o.art === "line" && lineDraft ? lineDraft.f : (o.art === "gather" ? clanFaktion() : faction)]);   // T15: a gather is our side
   const [x, y] = toScr(MAP.n[i][1], MAP.n[i][2]);
   const r0 = ortRadius();
   /* 8,5 auch dann, wenn der Regler "Everything" kleiner als 100 Prozent
@@ -9293,6 +9322,10 @@ function startRingOrt(){
     const F = paraFluss, i = F ? F.start : null;
     return (i === null || i === undefined || !MAP.n[i]) ? null : {i, R: paraMarkeLage(i).r, art: "para"};
   }
+  if (tool === "gather"){                       // T15: the target on the start ring, the X ends the flow
+    const i = gatherFluss ? gatherFluss.ziel : null;
+    return (i === null || i === undefined || !MAP.n[i]) ? null : {i, R: startRingR(i, ortRadius()), art: "gather"};
+  }
   if (tool === "line"){
     const i = lineDraft && lineDraft.pts.length ? lineDraft.pts[0] : null;
     return (i === null || i === undefined || !MAP.n[i]) ? null : {i, R: startRingR(i, ortRadius()), art: "line"};
@@ -9305,6 +9338,7 @@ function startXAufheben(){
   const o = startRingOrt();
   if (!o) return;
   if (o.art === "para") paraFlussAbbruch();
+  else if (o.art === "gather") gatherFlussAbbruch();   // T15: the chain closes as on Escape
   else if (o.art === "line") lineDraft = null;
   else arrowFrom = null;
 }
@@ -13535,6 +13569,195 @@ function paraTipp(){
   return (paraWahl.modus === "start" ? "Start first: click the airfield, then the target. "
                                      : "Target first: click the target, then an airfield. ") + was;
 }
+/* ---- T15 GATHER (ToDo 16.9.2026, Z56-Z59; FABLE 19.09.2026) -----------
+   ENNO 18.09.2026: "4 Pfeile die auf eine Stadt zeigen" - "Angabe der
+   Truppenstaerke etc. wie bei Angriffsbefehl" - "Fuer luftgebundene
+   Truppen muesste dies ein Flugplatz sein, sonst muessen diese ATs
+   ausgegraut sein" - "Ziel nur auf verbuendete Staedte moeglich".
+   The flow runs like the para tool's "target first": the first click is
+   the target, a town our clan's side holds (ownerOf === clanFaktion),
+   then up to GATHER_MAX start towns of our side, one arrow each -
+   arrow:<id> with gather: 1, from = start, to = target, f = our side.
+   NOT v.art: the server writes v.art on every arrow row itself
+   (warmap_stempeln: 1 when the writer may give orders, else 0), so a word
+   there would not survive one sync round; gather stands beside luft and
+   aufkl. The chain closes through ketteAbschliessen - ONE window for all
+   arrows, as the drops have it (BEF-12): the fourth start, Escape, Enter,
+   the right button, a click on empty ground, the X on the target ring or
+   a tool change. A gather has no attack route (angriffsWeg is for
+   attacks). Points: the page books nothing new; the server today treats
+   a gather set done like an attack (warmap_punkte_abschluss books
+   order_done/leader_done when a battle at the start or the target was
+   reported inside the order's window, or gefecht_pflicht is 0) - until
+   its own migration reads v.gather and swaps the battle duty for "teams
+   at the target" (Kopfblock SOLL-7, open). The page shows the state:
+   gatherStand counts the assigned teams that stand at the target
+   (units:<target>:<who>). Air: the target must be an airfield for the
+   branches airborne and airforce (fliegt); otherwise those rows of the
+   request table are dimmed, emptied and without handles (Save and the
+   template's Load skip them), and the pick window, "+", auto-assign, the
+   chain and the inbox leave those teams out (aufklSperre, anfZuordStand,
+   zuordZuweisen). */
+const GATHER_PFAD = "M3.5 3.5l6.3 6.3M9.8 5.3v4.5H5.3M20.5 3.5l-6.3 6.3M14.2 5.3v4.5h4.5M3.5 20.5l6.3-6.3M9.8 18.7v-4.5H5.3M20.5 20.5l-6.3-6.3M14.2 18.7v-4.5h4.5";
+/* the sign inline, for the orders table */
+const gatherSvg = px => `<svg viewBox="0 0 24 24" width="${px}" height="${px}" style="vertical-align:-2px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round"><path d="${GATHER_PFAD}"/></svg>`;
+/* a row of the request table flies when its branch's first type does -
+   fliegt is the page's one word for airborne + airforce */
+const gatherLuftZweig = z => fliegt(anfKlasseSym(z));
+const gatherFlussAktiv = () => !!(gatherFluss && gatherFluss.ziel !== null);
+/* the flow ends; the chain closes (one window), the caller redraws */
+function gatherFlussAbbruch(){
+  if (!gatherFluss) return;
+  const kette = gatherFluss.kette;
+  gatherFluss = null; tips();
+  if (kette.length){
+    /* the window opens once the jump has landed (ketteAbschliessen); a
+       click on a town until then would quietly make it the next target */
+    gatherSchliesst = true;
+    setTimeout(() => { gatherSchliesst = false; }, LUFT_SPRUNG_MS + 80);
+  }
+  ketteAbschliessen(kette);
+}
+/* one click on a town while the gather tool is up */
+function gatherKlick(i){
+  if (!MAP.n[i] || gatherSchliesst) return;
+  if (withholdSperrt("gather")){ toast("Withhold stands."); return; }   // T11: the same bar setTool holds
+  const meine = clanFaktion();
+  if (ownerOf(i) !== meine){ toast(`${MAP.n[i][0]} is not ours.`); return; }
+  const F = gatherFluss || (gatherFluss = {ziel: null, starts: [], kette: []});
+  if (F.ziel === null){ F.ziel = i; sel = i; tips(); return; }
+  if (i === F.ziel){ toast("Now click the start towns."); return; }
+  if (F.starts.includes(i)){ toast(`${MAP.n[i][0]} is a start already.`); return; }
+  if (!darfIchNochMalen("arrow")) return;
+  const a = pfeilAnlegen(i, F.ziel);
+  a.gather = 1; a.f = meine;                   // always our own side (E2)
+  pfeilGeaendert(a); save();
+  F.starts.push(i); F.kette.push(a.id);
+  if (F.starts.length >= GATHER_MAX){ gatherFlussAbbruch(); return; }
+  tips();
+  toast(`${F.starts.length} of ${GATHER_MAX} starts. Next start, or Escape.`);
+}
+/* the tip box's line for the tool */
+function gatherTipp(){
+  const F = gatherFluss;
+  if (F && F.ziel !== null && MAP.n[F.ziel]) return `${MAP.n[F.ziel][0]}: ${F.starts.length} of ${GATHER_MAX} starts \u2014 click the next start town, Escape ends.`;
+  return `click the target town, then up to ${GATHER_MAX} start towns.`;
+}
+/* how many of the assigned teams stand at the target - every player's row
+   (zuord) against the units rows at the target; the state, no booking */
+function gatherStand(a){
+  let n = 0, da = 0;
+  const dort = unitsAt(a.to);
+  for (const z of zuordVon({art: "arrow", id: a.id})){
+    const g = dort.find(x => x.who === z.who);
+    for (const id of z.ats){ n++; if (g && g.list.some(u => u.id === id)) da++; }
+  }
+  return {n, da};
+}
+const gatherStandText = a => {
+  const st = gatherStand(a);
+  return st.n ? `At ${esc(MAP.n[a.to][0])}: <b>${st.da}/${st.n}</b> assigned team${st.n === 1 ? "" : "s"}.` : "";
+};
+/* the request table of a gather whose target has no airfield: the air
+   rows dimmed and without handles, one line above the table */
+function gatherLuftSperren(a){
+  if (!(a && a.gather) || !MAP.n[a.to] || istFlugplatz(a.to)) return;
+  const zeilen = [...document.querySelectorAll("#dlg tr[data-kl]")].filter(tr => gatherLuftZweig(tr.dataset.kl));
+  if (!zeilen.length) return;
+  for (const tr of zeilen){
+    tr.classList.add("anf-luft-zu");
+    /* off AND empty: Save and the template's Load skip a disabled field,
+       so no air number reaches the arrow by any road */
+    tr.querySelectorAll("input").forEach(el => { if (el.type === "checkbox") el.checked = false; else el.value = ""; el.disabled = true; });
+    /* the minus stays open where a team already hangs: dragged onto a target without an airfield, it must be releasable here (Skeptiker Handwerk R2 KANN-1) */
+    tr.querySelectorAll("button").forEach(el => { if (el.dataset.azminus !== undefined && !el.disabled) return; el.disabled = true; });
+  }
+  const tafel = zeilen[0].closest(".tw");
+  if (tafel) tafel.insertAdjacentHTML("beforebegin", `<div class="note" id="a-luft-zu">Airborne \u00b7 Air Force: no airfield.</div>`);
+}
+/* the gather arrows on one target, our side, that are drawn this frame -
+   in the order drawArrow walks them; the last one carries the shield */
+function gatherGruppe(a){
+  return liveArrows().filter(x => x.gather && x.to === a.to && x.f === a.f && !befehlVersteckt(x.id, x) && gatherLang(x));
+}
+/* drawArrow skips an arrow under 8 px on screen - such an arrow must not be
+   the group's last one (it would carry a shield nobody draws; Skeptiker Handwerk R2 KANN-2) */
+function gatherLang(x){
+  const A = MAP.n[x.from], B = MAP.n[x.to];
+  if (!A || !B) return false;
+  const p = toScr(A[1], A[2]), q = toScr(B[1], B[2]);
+  return Math.hypot(q[0] - p[0], q[1] - p[1]) >= 8;
+}
+/* the group rows of every arrow of the target, summed (schildGruppen per arrow) */
+function gatherGruppenSumme(gps){
+  const g = {};
+  let ist = 0, soll = 0, grob = 0;
+  for (const k of SCHILD_GRUPPEN) g[k] = {k, sym: anfKlasseSym(k), ist: 0, soll: 0, istFlug: 0, sollFlug: 0};
+  for (const p of gps){
+    ist += p.ist; soll += p.soll; grob += p.grob;
+    for (const e of p.reihe){ const z = g[e.k]; if (!z) continue; z.ist += e.ist; z.soll += e.soll; z.istFlug += e.istFlug; z.sollFlug += e.sollFlug; }
+  }
+  if (!soll) return null;
+  const reihe = SCHILD_GRUPPEN.filter(k => g[k].soll || g[k].ist).map(k => g[k]);
+  const fehlt = ist < soll ? SCHILD_GRUPPEN.filter(k => g[k].ist < g[k].soll).map(k => g[k].sym) : [];
+  return {reihe, fehlt, ist, soll, grob, prozent: Math.round(100*ist/soll)};
+}
+/* the sign for the shield, rastered once per colour (96x64 like pfeilSymbolBild) */
+const GATHER_BILDER = new Map();
+function gatherZeichenBild(farbe){
+  let c = GATHER_BILDER.get(farbe);
+  if (c) return c;
+  c = document.createElement("canvas"); c.width = 96; c.height = 64;
+  const g = c.getContext("2d"), k = 64/24;
+  g.translate(16, 0); g.scale(k, k);
+  g.strokeStyle = farbe; g.lineWidth = 2.6; g.lineCap = "round"; g.lineJoin = "round";
+  g.stroke(new Path2D(GATHER_PFAD));
+  GATHER_BILDER.set(farbe, c);
+  return c;
+}
+/* ONE shield at the target, below its name: the sign, the name, the summed strength and
+   the summed group row of every gather arrow on that target; zoomed out
+   the percent plate. Drawn by the last arrow of the group that drawArrow
+   walks - draw() stays untouched. */
+function gatherSchildZeichnen(a, fb, f, vor){
+  const grp = gatherGruppe(a);
+  if (!grp.length || grp[grp.length - 1] !== a || view.z <= 0.55 || !MAP.n[a.to]){ schildVon.delete(a.id); return; }
+  const fremd = fremdeSeite(a);
+  let ist = 0, name = "";
+  const gps = [];
+  for (const x of grp){
+    const zus = joinOf(x.id).reduce((s, j) => s + j.n, 0);
+    ist += fremd ? zus : zuordIst("arrow", x.id, zus);
+    if (!fremd){ const g = schildGruppen(x); if (g) gps.push(g); }
+    if (!name && x.label) name = x.label;
+  }
+  const gp = gps.length ? gatherGruppenSumme(gps) : null;
+  const z = view.z, [tx, ty] = toScr(MAP.n[a.to][1], MAP.n[a.to][2]);
+  /* UNDER THE TOWN, below its name. Above the disc live the team count,
+     the plates (para threat, battle, clock, roles) and the unit stack -
+     all drawn after the arrows, so a shield there is covered by them
+     (seen in the probe: the stack pin sat on the plate). Below the disc
+     only the name is drawn (the town loop: baseline max(1,03 r0, rAussen
+     + 2) + 0,62 size, for ordinary towns from zoom 3,4, objectives 1,7,
+     capitals always, the chosen town always) - the shield hangs under it.
+     Its height is befehlSchild's / befehlProzent's own sum. */
+  const r0 = ortRadius(), cap = isCap(a.to), rA = cap ? r0*STERN_RAGT : r0;
+  const min = cap ? 0 : (isObj(a.to) ? 1.7 : 3.4), nah = Math.min(1, Math.max(0, (z - min)/2.5));
+  const gn = showNames && (z >= min || a.to === sel)
+    ? (cap ? 4.8 + Math.min(10.2, 6.4*Math.sqrt(z))*nah : 4.2 + Math.min(8.8, 5.6*Math.sqrt(z))*nah)*uiScale*ortScale : 0;
+  const unten = gn ? Math.max(1.03*r0, rA + 2) + gn*0.62 + gn*0.55 : rA + 2;
+  const schild = z > 1.1;
+  const gr = schild ? Math.min(13, 7.8*Math.sqrt(z))*uiScale : Math.max(9, Math.min(11, 7.8*Math.sqrt(z)))*uiScale;
+  const h = schild ? gr*((name ? 1.25 : 0) + (ist || gp ? 1.0 : 0) + (gp && gp.soll ? 0.45 : 0) + 0.605) : gr*1.5;
+  const my = ty + unten + h/2 + 4*uiScale;
+  const farbe = light() ? "#1a1409" : "#f4ead9";
+  ctx.save(); ctx.globalAlpha = vor ? .72 : 1;
+  let kasten = null;
+  if (schild) kasten = befehlSchild(tx, my, {name, ist, bild: gatherZeichenBild(farbe), farbe: fb || null, seite: f, gruppen: gp});
+  else if (gp) kasten = befehlProzent(tx, my, {prozent: gp.prozent, fehlt: gp.fehlt, grob: gp.grob, farbe: fb || null, seite: f});
+  ctx.restore();
+  if (kasten) schildVon.set(a.id, kasten); else schildVon.delete(a.id);
+}
 /* How far an arrow bows out, as a share of the straight line between its
    two towns. Sixteen hundredths is what every arrow used to have. */
 const PFEIL_BAUCH = 0.16, PFEIL_BAUCH_MAX = 0.62;
@@ -13612,7 +13835,9 @@ function drawArrow(a){
      Die Platte bleibt, wie sie ist - sie haengt am Zoom und nicht an der
      Staerke, und mitwachsen liesse sie bei einem Pfeil ohne Zusagen ein
      Schild ohne Pfeil darunter stehen. */
-  const breite = Math.max(3.6, (4.2 + Math.min(staerke,24)*0.62)*Math.sqrt(view.z))*uiScale;
+  /* T15: a gather arrow stays narrow - its strength stands on the one shield at the target */
+  const breite = a.gather ? Math.max(3.6, 4.2*Math.sqrt(view.z))*uiScale
+    : Math.max(3.6, (4.2 + Math.min(staerke,24)*0.62)*Math.sqrt(view.z))*uiScale;
   const pfad = pfeilForm(x1,y1,cx,cy,x2,y2,breite);
   pfadVon.set(a.id, pfad);
   const mitte = [];                       // fuer die Trefferpruefung, siehe griffTol
@@ -13626,7 +13851,7 @@ function drawArrow(a){
      aktiver eigener Bodenpfeil bekommt ihn, alles Weitere entscheidet
      angriffsWeg - hier steht nur der Aufruf. Farbe wie der Rand des
      Pfeils: die gewaehlte, sonst die der Fraktion. */
-  angriffsWegZeichnen(a, pfeilFarbe(a.farbe) || f);
+  if (!a.gather) angriffsWegZeichnen(a, pfeilFarbe(a.farbe) || f);   // T15: no route for a gather
 
   /* Ein Vorschlag sieht aus wie einer: blass, gestrichelt umrandet. Wer ueber
      die Karte schaut, soll auf einen Blick sehen, was gilt und was jemand
@@ -13679,8 +13904,10 @@ function drawArrow(a){
   /* DIE GRUPPEN DES SCHILDS (ist/soll je Gruppe, aus dem Zwischenspeicher
      je Pfeil - schildGruppen): nur ein eigener Pfeil mit Anforderung, und
      nur, wo eine Platte stehen kann (view.z > 0.55). FABLE 13.09.2026 */
-  const gp = (!fremd && sprung >= 1 && view.z > 0.55) ? schildGruppen(a) : null;
-  if (sprung >= 1 && view.z > 1.1 && (staerke || a.label || a.sym || gp)){
+  const gp = (!fremd && !a.gather && sprung >= 1 && view.z > 0.55) ? schildGruppen(a) : null;
+  if (a.gather){
+    gatherSchildZeichnen(a, fb, f, vor);       // T15: one shield at the target, drawn by the last arrow of the group
+  } else if (sprung >= 1 && view.z > 1.1 && (staerke || a.label || a.sym || gp)){
     const mx = .25*x1 + .5*cx + .25*x2, my = .25*y1 + .5*cy + .25*y2;
     const bild = a.sym ? pfeilSymbolBild(a.sym, light() ? "#1a1409" : "#f4ead9") : null;
     ctx.save(); ctx.globalAlpha = vor ? .72 : (fertig ? .55 : 1);
@@ -13846,6 +14073,7 @@ const anfZuordSatz = (fest, offen) => `Assigned: <b>${fest}</b> team${fest === 1
    stellt). typVon: Kennung -> Typ, fuer "-" und das Menue. */
 function anfZuordStand(a){
   const b = {art: "arrow", id: a.id};
+  const luftZu = !!(a.gather && !istFlugplatz(a.to));   // T15: the target has no airfield
   const meine = aufSeite(myDepotAlle(), clanFaktion());
   const da = zuordVon(b).find(z => z.mine) || null;
   const drin = new Set(da ? da.ats : []);
@@ -13856,7 +14084,7 @@ function anfZuordStand(a){
     if (!(d.k in zu)) continue;
     typVon.set(d.id, d.k);
     if (drin.has(d.id)) zu[d.k]++;
-    else if (!belegt.has(d.id)) frei[d.k].push(d.id);
+    else if (!belegt.has(d.id) && !(luftZu && fliegt(d.k))) frei[d.k].push(d.id);   // T15: no air team onto a gather without an airfield
   }
   return {b, da, meine, drin, belegt, zu, frei, typVon};
 }
@@ -14207,6 +14435,7 @@ function anfVorlagenVerdrahten(){
     /* jedes Feld, auch das vom Klassenfilter versteckte: was die Vorlage
        nicht nennt, wird leer */
     document.querySelectorAll("#dlg input[data-anft], #dlg input[data-anfk]").forEach(el => {
+      if (el.disabled) return;                 // T15: a barred air row (gather without an airfield) takes no number
       const n = el.dataset.anft ? v.req.at[el.dataset.anft] : v.req.cls[el.dataset.anfk];
       el.value = n || "";
     });
@@ -15299,6 +15528,7 @@ function griffLoslassen(x, y){
     const von = ed.kind === "from" ? ziel : a.from;
     const bis = ed.kind === "to"   ? ziel : a.to;
     if (von === bis){ toast("An arrow needs two different towns."); return; }
+    if (a.gather && ownerOf(ziel) !== clanFaktion()){ toast(`${MAP.n[ziel][0]} is not ours.`); return; }   // T15: a gather stays on our towns
     if (von === a.from && bis === a.to) return;
     a.from = von; a.to = bis; a.t = jetzt();
     pfeilWegNachziehen(a);                    // P1 Runde 2: the route follows the new end
@@ -17438,6 +17668,7 @@ cv.addEventListener("click", e => {
       if (k !== null){ paraFlussKlick(k, e.ctrlKey || e.metaKey); side(); draw(); tally(); return; }
       paraFlussAbbruch(); draw();
     }
+    else if (tool === "gather" && gatherFlussAktiv()){ gatherFlussAbbruch(); draw(); }   // T15: empty ground ends the gather
     else { sel = null; side(); draw(); }
     return;
   }
@@ -17469,6 +17700,8 @@ cv.addEventListener("click", e => {
     sel = i; save();
   } else if (tool === "para"){
     paraFlussKlick(i, e.ctrlKey || e.metaKey);
+  } else if (tool === "gather"){
+    gatherKlick(i);                            // T15
   } else if (tool === "aufkl"){
     aufklKlick(i, e.ctrlKey || e.metaKey);
   } else if (tool === "parablock"){
@@ -17495,18 +17728,19 @@ document.addEventListener("keydown", e => {
      die Zustimmung waere weg, ohne dass jemand etwas anklickt. */
   if (dlgPflicht){ if (e.key === "Escape") dlgRuetteln(); return; }
   const k = e.key.toLowerCase();
-  /* 8 ist frei: Unit und Sighting sind aus der Leiste raus, und eine
-     Taste, die ein unsichtbares Werkzeug waehlt, ist eine Falle.
-     3 oeffnet seit dem 11.09.2026 den Operationsplaner (Kachel "Operation").
-     Die uebrigen Ziffern bleiben, wo sie waren. */
+  /* 8 is Gather since T15 (19.09.2026); Unit and Sighting are out of the
+     bar, and a key that picks an invisible tool is a trap. 3 opens the
+     operation planner since 11.09.2026 (tile "Operation"). The other
+     digits stay where they were. */
   const t = {"1":"inspect","2":"owner","3":"op","4":"arrow","5":"line","6":"para",
-             "7":"area","9":"battle","0":"erase"}[e.key];
+             "7":"area","8":"gather","9":"battle","0":"erase"}[e.key];
   if (t){ setTool(t);
           if (t === "para" && tool === "para") paraMenueWechsel();                 // 6 brings the menu along
           if (t === "line" && tool === "line") lineMenueWechsel();                 // 5 likewise
           return; }
   if (k === "b"){ document.getElementById("b-board").click(); return; }
   if (k === "enter" && lineDraft){ lineFertig(); return; }
+  if (k === "enter" && gatherFlussAktiv()){ gatherFlussAbbruch(); draw(); return; }   // T15: Enter closes the gather
   if (k === "q"){ setFaction(0); return; }
   if (k === "w"){ setFaction(1); return; }
   if (k === "e"){ setFaction(2); return; }
@@ -17522,6 +17756,7 @@ document.addEventListener("keydown", e => {
     if (document.getElementById("veil").classList.contains("on")) closeDlg();
     else if (editing){ editing = null; draw(); }
     else if (paraFlussAktiv()){ paraFlussAbbruch(); draw(); }
+    else if (gatherFlussAktiv()){ gatherFlussAbbruch(); draw(); }   // T15
     else if (aufklFluss){ aufklFlussAbbruch(); draw(); }
     else if (arrowFrom !== null){ arrowFrom = null; draw(); }
     /* the half-drawn defence line, before the catch-all below clears the
@@ -17588,11 +17823,12 @@ function setTool(t){
      man zieht eine Linie ueber zwanzig Staedte, laesst los, und sie ist
      weg. Dieselbe Vorgabe wie bei den Rechten, nur auf Mengen angewandt -
      wer am Anschlag ist, soll das Werkzeug gar nicht erst waehlen. */
-  const marke = {arrow:"arrow", line:"line", area:"area", aufkl:"area", para:"arrow"}[t];
+  const marke = {arrow:"arrow", line:"line", area:"area", aufkl:"area", para:"arrow", gather:"arrow"}[t];
   if (marke && !darfIchNochMalen(marke)) return false;
   const vorher = tool;
   tool = t; arrowFrom = null; hoverObj = null; editing = null; lineDraft = null;
   if (t !== vorher) paraFlussAbbruch();                  // the drop's marks go with a real tool change
+  if (t !== vorher) gatherFlussAbbruch();                // T15: the gather closes too
   if (t !== vorher) aufklFlussAbbruch();                 // the recon flow too
   if (t !== "para") paraMenueZu();                       // its menu with any other tool
   if (t !== "line") lineMenueZu();                       // and the defence menu likewise
@@ -17842,6 +18078,7 @@ cv.addEventListener("contextmenu", ev => {
      Fallschirmfluss; bei einem halben Pfeil und einer halben Linie kam das
      Browsermenue ueber die Karte. */
   if (paraFlussAktiv()){ ev.preventDefault(); paraFlussAbbruch(); draw(); return; }
+  if (gatherFlussAktiv()){ ev.preventDefault(); gatherFlussAbbruch(); draw(); return; }   // T15
   if (aufklFluss){ ev.preventDefault(); aufklFlussAbbruch(); draw(); return; }
   if (arrowFrom !== null){ ev.preventDefault(); arrowFrom = null; draw(); return; }
   if (lineDraft){ ev.preventDefault(); lineDraft = null; toast("Defence line cancelled"); draw(); return; }
@@ -17909,6 +18146,7 @@ function tips(){
     arrow:  `<b>Attack</b> — drag from origin to target. For <b>${p}</b>.${entwurfModus ? " <b>Draft</b>." : ""}`,
     line:   `<b>Defence</b> — ${lineEinzel() ? "click the town to hold" : "drag across the towns"}. For <b>${p}</b>.${entwurfModus ? " <b>Draft</b>." : ""}`,
     para:   `<b>Plan parablock</b> — ${paraTipp()} For <b>${p}</b>.${entwurfModus ? " No draft for blocks." : ""}`,
+    gather: `<b>Gather</b> — ${gatherTipp()} For <b>${FACTIONS[clanFaktion()].name}</b>.${entwurfModus ? " <b>Draft</b>." : ""}`,
     parablock: `<b>Active parablock</b> — click a town that is blocked right now, or drag across several; click again to clear one. For <b>${p}</b>.${entwurfModus ? " No draft for blocks." : ""}`,
     brush:  `<b>Paint</b> · ${PINSEL_ZUG_MAX} per stroke.${pinselRueck ? ` <button class="btn" id="tip-rueck" style="padding:1px 7px;font-size:10.5px">Undo last stroke</button>` : ""}`,
     area:   `<b>Area</b> — draw a shape, then label it. For <b>${p}</b>.${entwurfModus ? " <b>Draft</b>." : ""}`,
@@ -19518,11 +19756,13 @@ function multiKasten(a, frisch){
   const alle = [a].concat(g), n = alle.length;
   const schreibt = !!a.entwurf || darfZustand(a.id, a, a);
   const gem = schreibt && !!(a.multiGem || frisch);
-  const ziel = x => x === a ? `<b>${esc(MAP.n[x.to][0])}</b>` : esc(MAP.n[x.to][0]);
+  /* T15: a gather's batch names its start towns */
+  const sammeln = !!a.gather, wort = sammeln ? "starts" : "drops";
+  const ziel = x => { const o = esc(MAP.n[sammeln ? x.from : x.to][0]); return x === a ? `<b>${o}</b>` : o; };
   return `<div class="note" id="a-multi">
-    <div><b>Batch of ${n} drops</b> — ${alle.map(ziel).join(", ")}</div>
+    <div><b>${sammeln ? `Gather from ${n} towns` : `Batch of ${n} drops`}</b> — ${alle.map(ziel).join(", ")}</div>
     ${schreibt ? `<div class="row" style="align-items:center">
-      <span style="flex:1">Same settings for all ${n} drops</span>
+      <span style="flex:1">Same settings for all ${n} ${wort}</span>
       <label class="toggle"><input type="checkbox" id="a-multi-gem"${gem ? " checked" : ""}><span></span></label>
     </div>` : ""}
     <div id="a-multi-liste"${gem ? ` style="display:none"` : ""}>${alle.map(x => `<div class="row" style="align-items:center">
@@ -19554,7 +19794,7 @@ function arrowDialog(a, frisch){
   /* Der Satz zur Anforderung. Einmal gerechnet, nicht zweimal im Rumpf. */
   const anfW = fremd ? "" : anfText(a);
   openDlg(`
-    <div class="dlg-h"><h2>${esc(MAP.n[a.from][0])} → ${esc(MAP.n[a.to][0])}</h2>
+    <div class="dlg-h"><h2>${a.gather ? "Gather \u00b7 " : ""}${esc(MAP.n[a.from][0])} → ${esc(MAP.n[a.to][0])}</h2>
       ${fremd ? "" : withholdAbsatz()}
       ${frisch ? "" : `<p>${zustandText(a.id, a, a.n || (a.by === S.me ? (S.name||"you") : a.by))}</p>`}
       ${fremd || frisch ? "" : streckeAbsatz({art: "arrow", id: a.id, v: a})}
@@ -19562,7 +19802,8 @@ function arrowDialog(a, frisch){
       ${!fremd && (a.sym || a.luft) ? `<p>${paraTextSicher(() => paraErfuellbarText(paraBefehlTypen(a), {art: "arrow", id: a.id}))}</p>` : ""}
       ${fremd ? "" : `${anfW ? `<p>${anfW}</p>` : ""}<p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
           <b>${gesamt}</b> assault teams.` : "Nobody has committed to this arrow yet."}</p>
-      <p>${sammelText(a)}</p>`}</div>
+      ${a.gather && gatherStandText(a) ? `<p id="a-gather-stand">${gatherStandText(a)}</p>` : ""}
+      ${a.gather ? "" : `<p>${sammelText(a)}</p>`}`}</div>
     <div class="dlg-b">
       ${zielGenommen(a) ? `<div class="note">Target taken, mark it done.</div>` : ""}
       ${mit.length && !fremd ? `<div class="tw"><table><thead><tr><th>Player</th><th>Teams</th></tr></thead>
@@ -19592,8 +19833,8 @@ function arrowDialog(a, frisch){
         <label class="toggle"><input type="checkbox" id="a-entwurf" ${a.entwurf ? "checked" : ""}><span></span></label>
       </div>` : ""}
       ${a.entwurf ? ENTWURF_WARNUNG : ""}
-      ${fremd ? "" : (() => {
-        /* THE ORDER'S OWN KIND. Switching it on asks the two questions the
+      ${fremd || a.gather ? "" : (() => {
+        /* THE ORDER'S OWN KIND. (T15: a gather is no drop - no row.) Switching it on asks the two questions the
            map can answer: is the start an airfield, and is the target
            within reach. Who holds the airfield is asked afterwards - a
            drop out of enemy land may be PLANNED, it just does not become
@@ -19650,6 +19891,7 @@ function arrowDialog(a, frisch){
     zuordWahl(b, ()=>arrowDialog(a));
   });
   anfVerdrahten();
+  gatherLuftSperren(a);                        // T15: no airfield at the target - the air rows off
   anfVorlagenVerdrahten();
   anfZuordVerdrahten(a);
   document.getElementById("a-op")?.addEventListener("click", ()=>opDialog(befehlKey("arrow", a.id)));
@@ -19703,7 +19945,7 @@ function arrowDialog(a, frisch){
        darf, sieht Zahlen statt Feldern, und dann bleibt stehen, was steht.
        Auch eine versteckte Zeile wird gelesen: der Filter versteckt, er
        loescht nicht. Alles leer raeumt die Anforderung ganz weg. */
-    const anfFelder = [...document.querySelectorAll("#dlg input[data-anft], #dlg input[data-anfk]")];
+    const anfFelder = [...document.querySelectorAll("#dlg input[data-anft], #dlg input[data-anfk]")].filter(el => !el.disabled);   // T15: barred air rows are not read
     if (anfFelder.length){
       const req = {at: {}, cls: {}};
       for (const el of anfFelder){
@@ -56559,7 +56801,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 3250052004</span></p></div>
+         installation. <span style="color:var(--dim2)">· build ca63b7734e</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -56787,7 +57029,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "3250052004";
+const BAU = "ca63b7734e";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
