@@ -34935,6 +34935,24 @@ function kriegsendeStart(){
    and the next one (war_ended_won_by / current_war_new), a war past day 30
    (the days line then says months and days - two digit words, tage stays
    null; his picture is asked for on the sheet).
+   THE DAYS ARE GAME DAYS (Antwortblatt 18.09., Q9 - ENNO 19.09.2026:
+   "Ehrlicherweise ist diese Zeitangabe aber auch irgendwie Unsinn, weil
+   gestern abend noch ein Krieg lief, dieser wohl beendet wurde und jetzt
+   schon wieder 2 Tage da steht, was garnicht sein kann."). Measured on
+   his video Zeitskalierung Krieg.mkv and 227 stills with a file time
+   (Listen/MESSUNG-KRIEGSTAGE.md, Messungen/messung_q9_1.py): the war
+   clock in the map's head band ("02 T 15 S 45 M") runs 4,70 game minutes
+   per real minute (bounds 4,699-4,700 over five wars of 24-87 h), one
+   game day is 306,4 real minutes = 5 h 06 min, and "Dieser Krieg dauerte
+   N Tage" is the whole game days of that clock (5/5 counter-checks: war
+   ends 18/9/26 days, start pages 1 and 2 days). His case: war 126 began
+   19.09. 03:12, the page's cut of 18.09. 20:31 still lay in war 125, and
+   "2 Tage" at 16:46 were 13 h 34 min. So the table head says "game day
+   N · A–B h" with A = N and B = N+1 game days in real hours
+   (LAGE_SPIELTAG_MIN); the page's meta:epoch is no measure of it (set
+   13,6 h after the real start). The clock itself (dd T dd S dd M, x
+   0,262-0,332 W, y 0,118-0,134 H, dark type 0,0167 H tall, refreshed
+   every 60 s) is NOT read - its place is on the sheet, section 10.
    THE READER runs beside the war end reader on the same share (bildLive
    only while the stream stands - never a question of its own, Widerspruch
    5), with a gate of its own. It collects over the session (majority per
@@ -34949,6 +34967,7 @@ const LAGE_EINS_VERH = 0.36, LAGE_PUNKT_HOEHE = 0.35;  // the one by width/heigh
 const LAGE_SCHREIB_ABSTAND = 15000;                   // the row grows at most every 15 s
 const LAGE_SAMMEL_VERFALL = 120000;                   // a collection starts over after two minutes without the gate
 const LAGE_GESAGT_ABSTAND = 600000;                   // "too small" once per ten minutes
+const LAGE_SPIELTAG_MIN = 306.4;                     // real minutes in one game day (Q9: 4,70 game minutes per real minute, MESSUNG-KRIEGSTAGE.md)
 const LAGE_STERNE_N = 13;                             // the map's capitals ("9 der 13"): a star row votes only when all of them are seen (round 3)
 /* the places as parts of width and height (MESSUNG-T10.md, 1, 4 and 5) */
 const LAGE_FELD = {
@@ -35792,7 +35811,10 @@ function lageTafelHtml(){
     </tr>`;
   };
   const rest = (typeof v.naechsteT === "number" ? v.naechsteT : z.t + (v.naechste || 60)*60000) - jetzt();
-  const kopf = [v.nr ? `War ${v.nr}` : "", v.tage ? `day ${v.tage}` : "", v.fuehrt !== null && v.fuehrt !== undefined && FACTIONS[v.fuehrt] ? `${FACTIONS[v.fuehrt].tag} leads${v.fehlt ? ` \u00b7 ${v.fehlt} to win` : ""}` : ""].filter(Boolean).join(" \u00b7 ");
+  /* "day N" of the start page is whole game days (Q9): the head gives the real span too, "game day 2 · 10–15 h" */
+  const tagH = n => Math.round(n * LAGE_SPIELTAG_MIN / 60);
+  const tage = typeof v.tage === "number" || (typeof v.tage === "string" && /^[0-9]+$/.test(v.tage)) ? +v.tage : NaN;
+  const kopf = [v.nr ? `War ${v.nr}` : "", Number.isInteger(tage) && tage >= 0 ? `game day ${tage} \u00b7 ${tagH(tage)}–${tagH(tage + 1)} h` : "", v.fuehrt !== null && v.fuehrt !== undefined && FACTIONS[v.fuehrt] ? `${FACTIONS[v.fuehrt].tag} leads${v.fehlt ? ` \u00b7 ${v.fehlt} to win` : ""}` : ""].filter(Boolean).join(" \u00b7 ");
   return `<div id="lage-tafel">
     <p style="margin:0 0 8px;font-size:12px;color:var(--dim)">${esc(kopf)}${kopf ? " \u00b7 " : ""}read ${esc(v.stand)} by ${esc(werWar(z))} \u00b7 ${rest > 0 ? `next in ${Math.ceil(rest/60000)} min` : "update due"} \u00b7 map: ${umkaempft} contested</p>
     <div class="tw"><table>
@@ -59546,7 +59568,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build fc1385d355</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 4a9ee9c68d</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -59774,7 +59796,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "fc1385d355";
+const BAU = "4a9ee9c68d";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
