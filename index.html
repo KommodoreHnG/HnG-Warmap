@@ -1048,7 +1048,7 @@ i.prio{margin-right:5px;vertical-align:-1px}
   text-transform:uppercase;color:#7a6a48;display:flex;align-items:center;gap:6px}
 .sp-liste h4 b{color:#2b2416;font-size:13px;letter-spacing:0}
 .sp-n{margin-left:auto;font-size:11px;color:#8a7a52}
-.sp-z{display:grid;grid-template-columns:26px 1fr auto auto;gap:6px;align-items:center;
+.sp-z{display:grid;grid-template-columns:14px 26px 1fr auto auto;gap:6px;align-items:center;
   border-top:1px solid rgba(122,106,72,.28);padding:3px 0;font-size:13px;min-height:24px}
 .sp-z.leer{color:#a2937012}
 .sp-z .nr{font-size:10px;color:#8a7a52;text-align:right}
@@ -1074,6 +1074,15 @@ i.prio{margin-right:5px;vertical-align:-1px}
 .sp-griff{cursor:pointer;color:#7a6a48;font-size:12px;padding:0 3px;border-radius:2px}
 .sp-griff:hover{background:#3a2b12;color:#f0b13a}
 .sp-griff.an,.sp-griff.an:hover{color:#4f7a3a;background:none;cursor:default}
+/* H3 (ToDo 20.09.2026): the box of a row for the multiple choice - on the
+   player sheet, the board sheet and in the floating windows (the same set
+   per room); the row of "Confirm N" / "Keep N" under the lists */
+.sp-kaest{width:12px;height:12px;border:1px solid #7a6a48;border-radius:2px;cursor:pointer;box-sizing:border-box;position:relative;flex:none}
+.sp-kaest.an{background:#4f7a3a;border-color:#4f7a3a}
+.sp-kaest.an::after{content:"";position:absolute;left:3px;top:0;width:4px;height:7px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.sp-kaest.leer{visibility:hidden}
+.sp-wahl{display:flex;gap:8px;align-items:center;margin-top:8px}
+.sp-liste h4 .sp-n .mini{font-size:10px;padding:0 4px;line-height:14px;cursor:pointer;margin-left:4px}
 /* the dictionary's proposal behind a reading (T9 (c)) */
 .sp-vor{font-size:10px;color:#7a6a48;margin-left:6px}
 /* the strength table off the battle window (BAT-2): three blocks, eighteen
@@ -1159,7 +1168,7 @@ i.prio{margin-right:5px;vertical-align:-1px}
    two to a line 232, stacked 758 at twice the height, strip over field 293 at
    half again the height); the mark column takes "us · on record" whole (70) */
 .gf-tf .sp-liste{flex:1 1 400px;min-width:min(400px,100%)}
-.gf-tf .sp-z{grid-template-columns:22px 96px minmax(0,280px) 44px 72px 34px 30px}
+.gf-tf .sp-z{grid-template-columns:14px 22px 96px minmax(0,280px) 44px 72px 34px 30px}
 .gf-tf .sp-z .gr{white-space:nowrap}
 .gf-tf .sp-z img{height:16px;max-width:96px;image-rendering:pixelated;background:#2b2e33;border-radius:2px;display:block}
 .gf-tf .sp-z input{width:100%;font:inherit;font-size:12px;background:#fff8e6;border:1px solid #b9ab8a;border-radius:2px;padding:0 4px;min-width:0}
@@ -1427,6 +1436,17 @@ body.kb-zieht{user-select:none}
 .gf-schwebe .gf-sz.un .n{color:#c9a85a}
 .gf-schwebe .gf-sz .g{cursor:pointer;color:#a9b0b8;padding:0 4px;flex:none}
 .gf-schwebe .gf-sz .g:hover{color:#f0b13a}
+/* H3 (ToDo 20.09.2026): the box in a window row, the "Confirm N" row, the
+   hand field in the window; the head of the player room's window */
+.gf-schwebe .sp-kaest{border-color:#6b7078}
+.gf-schwebe .sp-kaest.an{background:#4f7a3a;border-color:#4f7a3a}
+.gf-schwebe .gf-sz.knopf{justify-content:flex-end}
+.gf-schwebe .gf-sz.knopf .g{color:#e8d9a8;font-weight:700}
+.gf-schwebe .gf-sz .n{cursor:text}
+.gf-schwebe .gf-sz .n small{color:#a9b0b8;font-size:10px;margin-left:4px}
+.gf-schwebe .gf-sz .n input{width:100%;font:inherit;font-size:12px;height:13px;line-height:13px;background:#fff8e6;color:#2b2416;border:1px solid #b9ab8a;border-radius:2px;padding:0 3px;box-sizing:border-box}
+.gf-schwebe .pg-kopf{font-size:18px;font-weight:700;letter-spacing:.04em;color:#e8d9a8;line-height:1.2;padding:8px 0 0;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gf-schwebe .pg-jetzt{font-size:11px;color:#a9b0b8;height:16px;line-height:16px;margin:2px 0 6px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* the sheet */
 .kb-blatt{background:#e9dfc6;color:#2b2416;border-radius:2px;padding:14px 18px 18px;
   box-shadow:0 8px 30px rgba(0,0,0,.5), inset 0 0 0 1px #d7ccb0;
@@ -29656,6 +29676,31 @@ function kbPult(){
   if (schw && !schw.disabled) schw.addEventListener("click", ()=>{ if (kbSchwebe){ kbSchwebeZu(); kbSchwebeZugemacht = true; kbZeichnen(); } else kbSchwebeAuf(); });
 }
 
+/* ONE FLOATING WINDOW PER PAGE (H3, ToDo 20.09.2026 - Kopfblock 3, the rule
+   of F1). Four rooms open a Document Picture-in-Picture window: the cabin's
+   strip (kbSchwebeAuf), the depot list (dlSchwebeAuf), the battle desk
+   (gefSchwebeAuf) and the player room (pgSchwebeAuf). What Chrome does with
+   the first window when a second requestWindow comes is not measured
+   (FABLE 13.09.2026, BAT-12 Runde 2, not measured: closes it, or refuses the
+   second) - so nothing is left to it:
+   whoever opens a window CLOSES the other room's window first, through
+   that room's own close function, and writes itself down here. Two lines
+   in each opener before its requestWindow, nothing else changed there.
+   The battle desk keeps capturing with its desk hidden (Blatt 16.09., P3
+   (a)), so it is the one whose window another room can take away: that is
+   remembered as ONE bit (gefSchwebeVermisst) and the desk gets its window
+   back when its desk is next opened (gefstandAuf - the click on the head
+   button is the gesture, requestWindow its first await). BAT-12's "nothing
+   is remembered" is changed by exactly this bit. The Alt keys stay with
+   the cabin and the depot list. */
+let schwebeHalter = {raum: null, zu: null}, gefSchwebeVermisst = false;
+function schwebeFremdesZu(raum){
+  const h = schwebeHalter;
+  if (!h.raum || h.raum === raum || !h.zu) return;
+  if (h.raum === "gefstand" && typeof gefSchwebe !== "undefined" && gefSchwebe) gefSchwebeVermisst = true;
+  try { h.zu(); } catch(e){}
+}
+
 /* ---- the floating strip (Document Picture-in-Picture) ---------------------
    Chrome/Edge 116+: window.documentPictureInPicture.requestWindow() gives an
    always-on-top window with an empty same-origin document. The page's one
@@ -29714,6 +29759,8 @@ async function kbSchwebeAuf(){
   const breite = Math.max(380, Math.min(screen.availWidth - 60, Math.round(t * Math.max(6, Math.min(KB.N || 8, 16)) + 28)));
   let w;
   /* Q12: under 500 wide the buttons stand in two rows (measured 19.09.2026 at 380: 251 points) - 40 more */
+  schwebeFremdesZu("kabine");                        /* H3: one floating window per page - the other room's goes first */
+  schwebeHalter = {raum: "kabine", zu: kbSchwebeZu};
   try { w = await window.documentPictureInPicture.requestWindow({width: breite, height: breite < 520 ? 280 : 240}); }   /* must be the first await after the click */
   catch(e){ KB.status = "The floating window could not be opened - " + ((e && e.message) || e); kbZeichnen(); return e; }
   /* the room may have closed while the window was being opened (the first
@@ -32322,6 +32369,90 @@ async function gfName(c, spalte, ay, melde){
   return {name, zuv: t.zuv, schrift: t.schrift || null, zweit, unlesbar, bekannt};
 }
 
+/* THE OTHER WAYS OF READING ONE LINE (H3, ToDo 20.09.2026 - ENNO 20.09.2026:
+   "Und das erneute Messen des Namens klappt noch nicht so super, dann steht
+   immer einfach ein Fragezeichen da"). The first way (gfName above, variant
+   G) is deterministic: the same standing line read again gives the same
+   text, the arrow had rejected that text, and after three such tries "?"
+   stood - "?" was the rule, not the exception. The arrow now reads with
+   ANOTHER machine. Measured on the 384 rows of the detail view
+   (Listen/MESSUNG-H3.md, 21.09.2026) at the 58 wrong first readings:
+     1  psm 13 + GF_WEISSLISTE on the WHOLE field (506 points, so the
+        preparation scales it 2.77x instead of 4x - that is the whole
+        difference, shown with a padded field), Latin only, and the tail of
+        "=" / "0" words the raw-line mode hangs on the empty right-hand part
+        cut off (25 of 326 right names carried one, no true name ends so):
+        19 of 58 back, 21 "same", 14 of 326 spoilt
+     2  psm 7 + GF_WEISSLISTE on the cut field, Latin only: +3 (an empty
+        reading - psm 7 leaves 14 clean fields empty - means the next way)
+     3  the five foreign models, forced, on the cut field, both
+        preparations, the surest of them, no bar against Latin, no early
+        stop (the page's own order with the stop at 85 gives 0: chi_sim at
+        86 ended the search before jpn at 91): +2
+   24 of 58 in all; F (psm 13 without the list) 0 of 58, A and E nothing
+   after 1. The 34 that remain are for the hand, and the dictionary catches
+   26 of them at the key. A "same" reading is SHOWN ("read again: X
+   (same)") with the hand field open - never "?" for a line that carries a
+   reading (FABLE's reading of his 18.09.2026, Widerspruch 7). The board's
+   strips are not measured (166 points wide, 4x either way); the same three
+   machines run there, the display carries it. The field is copied first
+   (the surface under it is redrawn by the next beat); its frame is
+   gfName's own, computed by the caller. Returns null where the way read
+   nothing. Says nothing while it reads (the state line is the caller's). */
+const GF_WEGE = 3;
+async function gfNameWeg(c, x0, y0, breit, h, ende, weg){
+  if (!(breit > 0 && h > 0)) return null;
+  const k = document.createElement("canvas"); k.width = breit; k.height = h;
+  k.getContext("2d", {willReadFrequently: true}).drawImage(c, x0, y0, breit, h, 0, 0, breit, h);
+  const w = Math.max(16, Math.min(ende || breit, breit));
+  /* the clean-up at the end of gfName */
+  const saeubern = (text, schrift) => {
+    let name = unitsCjkEng(text || "", schrift || null).trim().replace(/\s+/g, " ");
+    name = name.replace(/^[\s"'`´,;]+|[\s"'`´,;]+$/g, "").replace(/\s*_\s*/g, "_");
+    return name.length < 2 ? null : name;
+  };
+  /* the Latin pass with the underscore rescue as gfName guards it (G-9) */
+  const latein = async (breite, psm) => {
+    const feld = await bildAufbereiten(k, {x: 0, y: 0, w: breite/breit, h: 1}, false);
+    const rL = await ocrMitZuv(feld, psm, null, GF_WEISSLISTE);
+    let t = (rL.text || "").trim().replace(/\s+/g, " ");
+    const t1 = unitsUnterstrich(t, rL.symbole, feld);
+    if (t1 !== t && t1.length === t.length){ let aus = "";
+      for (let i = 0; i < t.length; i++){ const v = t[i - 1] || "", n = t[i + 1] || "";
+        aus += (t[i] === " " && t1[i] === "_" && (v === "_" || n === "_")) ? " " : t1[i]; }
+      t = aus; } else t = t1;
+    return {text: t, zuv: rL.zuv};
+  };
+  if (weg === 1){
+    const r = await latein(breit, 13);
+    let name = saeubern(r.text, null);
+    if (name) name = name.replace(/( [=0]+)+$/, "");
+    return name && name.length >= 2 ? {name, zuv: r.zuv, schrift: null, weg} : null;
+  }
+  if (weg === 2){
+    const r = await latein(w, 7);
+    const name = saeubern(r.text, null);
+    return name ? {name, zuv: r.zuv, schrift: null, weg} : null;
+  }
+  /* the five models, both preparations each, as unitsTextSchriften runs
+     them - without its bar and without its stop */
+  const fS = unitsSchlicht(k, {x: 0, y: 0, w, h}, 3);
+  const fR = document.createElement("canvas"); fR.width = w; fR.height = h;
+  fR.getContext("2d", {willReadFrequently: true}).drawImage(k, 0, 0, w, h, 0, 0, w, h);
+  let top = null;
+  for (const sp of UNITS_SCHRIFTEN){
+    try {
+      const wk = await unitsFremdWorker(sp);
+      const rA = await wk.recognize(fS), rB = await wk.recognize(fR);
+      const zA = Math.round((rA.data && rA.data.confidence) || 0), zB = Math.round((rB.data && rB.data.confidence) || 0);
+      const r = zB > zA ? rB : rA, zuv = Math.max(zA, zB);
+      const name = saeubern(((r.data && r.data.text) || "").trim().replace(/\s+/g, " "), sp);
+      if (name && (!top || zuv > top.zuv)) top = {name, zuv, schrift: sp, weg};
+    } catch(e){}
+  }
+  return top;
+}
+
 /* ================= THE DICTIONARY (T9 (c), ToDo 16.9.2026) ============
    ENNO 18.09.2026: "Im besten Fall werden die richtigen Erkennungen auch
    direkt zum Training genutzt. Ginge das?" - no model is trained here: the
@@ -32378,6 +32509,8 @@ function pgNeu(){
           sichtbar: 0, namen: new Map(), leer: new Set(), liest: null,
           fehl: new Map(), tippt: false,
           abgelehnt: new Map(),                 // T9 (d): key -> the readings the arrow rejected
+          weg: new Map(),                       // H3: key -> the way the arrow read with last (gfNameWeg)
+          wahl: new Set(), wahlZuletzt: null,   // H3: the multiple choice (keys), the last box pressed
           frame: null, hell: null, gain: 1, status: "Waiting for the game window …",
           /* the strength table (BAT-2): the last reading, the R it came
              from, its cost, its own status line, what was last written to
@@ -32426,35 +32559,180 @@ function pgEintrag(g, f){
    fixed - the known name when one was proposed, else the reading - and
    the name goes into the session's dictionary. Not into the register: that
    is "Keep the sheet". */
-function pgBestaetigen(k){
+function pgBestaetigen(k, leise){
   const v = PG && PG.namen.get(k);
   if (!v) return;
   if (v.vorschlag){ pgDoppelWeg(v.vorschlag, v.f, k); v.name = v.vorschlag; v.vorschlag = null; v.bekannt = true; v.zuv = 100; v.gespeichert = false; }
   v.bestaetigt = true; v.unlesbar = false;
   namenBestaetigen(v.name);
   PG.fehl.delete(k);
+  if (leise) return;                          /* H3: "Confirm N" ticks the rows in one pass and draws once */
   PG.status = `${v.name} confirmed.`;
   pgZeichnen();
 }
-/* THE ARROW: the row goes back into the queue and the reading it carried is
-   REJECTED - ENNO 18.09.2026: "Eine zweite Prüfung muss dann den ersten
-   Namen auch als falsche Interpretation wahrnehmen." The next beat reads
-   the line anew; a reading equal to a rejected one is not taken (pgTick):
-   the other alphabet's reading stands in, else the try counts as no reading
-   and after PG_VERSUCHE the line is set aside for the hand. */
-function pgNeuLesen(k){
+/* THE ARROW (H3, ToDo 20.09.2026): the reading it carried is REJECTED - ENNO
+   18.09.2026: "Eine zweite Prüfung muss dann den ersten Namen auch als
+   falsche Interpretation wahrnehmen." (G-1: the proposal too - a rejected
+   name never comes back, not as reading and not as the dictionary's
+   proposal) - and the line is read AT ONCE with the next of the other ways
+   (gfNameWeg: whole field, line mode, other scripts, then round again) on
+   the last look the room holds (PG.R). Until T9 (d) the row went back into
+   the queue and the beat read it with the same machine: the same text came
+   back, was rejected again, and after three tries "?" stood - ENNO
+   20.09.2026: "dann steht immer einfach ein Fragezeichen da". What comes
+   back now is SHOWN: a new reading takes the row ("read again: X"); the
+   same reading stays on the row and the sheet says "read again: X (same)"
+   with the hand field open and the cursor in it - "same" is the same TEXT;
+   a reading that differs only in its key (an underscore for a blank, an
+   accent) is the rescue itself. Nothing from any way: the
+   line counts as unreadable (PG.fehl, PG_VERSUCHE - "?" only for lines no
+   machine reads). A line outside the last look (scrolled away) stays as it
+   is and the state line says so (the state line is written on its own
+   wherever a hand field holds the sheet - pgStatusZeigen, round 4). `doc`:
+   the floating window's document
+   when the arrow was pressed there - the hand field opens where the eyes
+   are. The row leaves the choice (round 2): the arrow is his word that
+   the name is wrong, and "Confirm N" must never take it up. */
+function pgNeuLesen(k, doc){
   const v = PG && PG.namen.get(k);
   if (!PG) return;
-  if (!v){   /* the "?" line: the tries start over */
-    PG.fehl.delete(k); PG.leer.delete(k);
-    PG.status = `Line ${(+k.split(":")[1] || 0) + 1} will be read again.`;
-    pgZeichnen(); return;
-  }
+  const platz = +k.split(":")[0], i = +k.split(":")[1] || 0, nr = i + 1;
   const ab = PG.abgelehnt.get(k) || [];
-  for (const n of [v.name, v.vorschlag]) if (n && !ab.includes(n)) ab.push(n);   // G-1: the proposal too - a rejected name never comes back
+  if (v){
+    for (const n of [v.name, v.vorschlag]) if (n && !ab.includes(n)) ab.push(n);
+    /* the tick falls with the arrow (round 4, the board's rule): his arrow
+       says the name is wrong, so the row is confirmed no more, marked as on
+       record no more, and the dictionary's proposal goes with the reading -
+       the tick on the row is his look again, and it takes what the row
+       shows, never the proposal the arrow rejected (G-1) */
+    v.bestaetigt = false; v.gespeichert = false; v.vorschlag = null; v.bekannt = null;
+  }
   PG.abgelehnt.set(k, ab);
-  PG.namen.delete(k); PG.fehl.delete(k); PG.leer.delete(k);
-  PG.status = `Line ${(+k.split(":")[1] || 0) + 1} will be read again.`;
+  PG.wahl.delete(k);
+  if (!v) PG.leer.add(k);                      /* the beat leaves the line to this reading; the tries (PG.fehl) go on counting */
+  const R = PG.R, s = R && R.da ? R.seiten.find(x => x.platz === platz) : null, kk = R ? i - R.erste : -1;
+  if (!s || kk < 0 || kk >= R.sichtbar){
+    PG.status = `Line ${nr} is not in view.`;
+    pgZeichnen(); pgStatusZeigen(); return;
+  }
+  /* the frame of gfName, line for line */
+  const ay = R.anker + kk*GF_ZEILE;
+  const y0 = Math.max(GF_FENSTER.y - 4, ay - 4), y1 = Math.min(GF_FENSTER.y + GF_FENSTER.h, ay + 34);
+  const x0 = Math.max(GF_RAHMEN.x1 + 2, s.spalte - 6);
+  const breit = (s.spalte === GF_SPALTE[2] ? GF_BAHN.links : s.spalte + GF_BREIT) - x0;
+  if (y1 - y0 < 16){ PG.status = `Line ${nr} is cut off.`; pgZeichnen(); pgStatusZeigen(); return; }
+  const ende = gfTinteEnde(R.c, x0, y0, breit, y1 - y0);
+  /* the line as it stands at the press, for every way of this press: the
+     look (R.c) is painted anew by the beat, and the second way must not
+     read a line that scrolled in meanwhile (round 2) */
+  const hoch = y1 - y0, feld = document.createElement("canvas"); feld.width = breit; feld.height = hoch;
+  feld.getContext("2d", {willReadFrequently: true}).drawImage(R.c, x0, y0, breit, hoch, 0, 0, breit, hoch);
+  const weg = (PG.weg.get(k) || 0) % GF_WEGE + 1;
+  PG.weg.set(k, weg);
+  PG.liest = k;
+  PG.status = `Reading line ${nr} again \u2026`;
+  pgZeichnen();
+  (async () => {
+    let g = null, w = weg;
+    try {
+      for (let n = 0; n < GF_WEGE && !g; n++){
+        w = (weg - 1 + n) % GF_WEGE + 1;
+        g = await gfNameWeg(feld, 0, 0, breit, hoch, ende, w);
+      }
+    } catch(e){ g = null; }
+    if (!PG || PG.namen.get(k) !== v) return;    /* the room closed, or the row changed under the reading (a hand, New sheet) */
+    if (PG.liest === k) PG.liest = null;
+    PG.weg.set(k, w);
+    if (!g){
+      /* no machine reads the line: the rejected reading goes, the beat reads the line anew as before */
+      const n = (PG.fehl.get(k) || 0) + 1;
+      PG.fehl.set(k, n); PG.namen.delete(k);
+      if (n >= PG_VERSUCHE){ PG.leer.add(k); PG.status = `Line ${nr} could not be read in ${PG_VERSUCHE} tries — skipped.`; }
+      else { PG.leer.delete(k); PG.status = `Line ${nr} could not be read — try ${n} of ${PG_VERSUCHE}.`; }
+      pgZeichnen(); pgStatusZeigen(); return;
+    }
+    PG.leer.delete(k);
+    /* the same TEXT: a reading equal in key only ("Funky_Deutscher" for the
+       rejected "Funky Deutscher") is the rescue the ways are there for. The
+       state line names the READING, the row keeps what it had (round 3) */
+    const gleich = ab.includes(g.name);
+    if (gleich){
+      if (!v) PG.namen.set(k, pgEintrag({name: g.name, zuv: g.zuv, schrift: g.schrift, zweit: null, unlesbar: false, bekannt: null}, s.f));
+      PG.status = `read again: ${g.name} (same)`;
+      pgZeichnen();
+      pgHandfeld(k, doc);
+      return;
+    }
+    let bek = namenBekannt(g.name);
+    if (bek && bek !== g.name && ab.some(a => namKey(a) === namKey(bek))) bek = null;   // G-1: a rejected name never comes back as the proposal
+    pgDoppelWeg(g.name, s.f, k);
+    PG.namen.set(k, pgEintrag({name: g.name, zuv: g.zuv, schrift: g.schrift, zweit: null, unlesbar: false, bekannt: bek}, s.f));
+    PG.status = `read again: ${g.name}`;
+    pgZeichnen(); pgStatusZeigen();          /* a hand field may hold the sheet: the state line says it anyway (round 4) */
+  })();
+}
+/* THE MULTIPLE CHOICE (H3, ToDo 20.09.2026 - ENNO 20.09.2026: "Das Confirmen
+   von Spielernamen ist noch zu holprig, hier brauche ich auch mehrfachauswahl
+   etc."): a box on every row with a reading that is not on record yet, on
+   the sheet and in the floating window - one set (PG.wahl). Shift on a box
+   takes every row between the last box pressed and this one along (within
+   the order handed in: one side's list, or the window's rows); "All" /
+   "None" in a side's head; under the lists "Confirm N" (the tick on each
+   row, one pass) and "Keep N" (the register, the chosen rows only); Escape
+   ends the choice before it closes the room. The single tick stays. A row
+   whose name the arrow rejected and the machine brought back ("same")
+   carries NO box (round 2): the collective tick never takes a name he
+   called wrong; the single tick on the row is his conscious look. A typed
+   name clears the rejections, a new reading is not among them - the box
+   comes back with either. */
+function pgKaest(k, v){
+  return !!(v && !v.gespeichert && !(PG.abgelehnt.get(k) || []).includes(v.name));
+}
+function pgWahl(k, bereich, reihe){
+  if (!PG || !pgKaest(k, PG.namen.get(k))) return;
+  const an = !PG.wahl.has(k);
+  let ks = [k];
+  if (bereich && PG.wahlZuletzt && reihe){
+    const a = reihe.indexOf(PG.wahlZuletzt), b = reihe.indexOf(k);
+    if (a >= 0 && b >= 0) ks = reihe.slice(Math.min(a, b), Math.max(a, b) + 1);
+  }
+  for (const x of ks){ if (an) PG.wahl.add(x); else PG.wahl.delete(x); }
+  PG.wahlZuletzt = k;
+  pgZeichnen();
+}
+/* the keys of a side's rows that carry a box, in the sheet's order */
+function pgWahlReihe(platz){
+  if (!PG) return [];
+  return [...PG.namen].filter(([k, v]) => pgKaest(k, v) && +k.split(":")[0] === platz).map(([k]) => k)
+    .sort((a, b) => (+a.split(":")[1]) - (+b.split(":")[1]));
+}
+/* the chosen rows that carry a box - the count on the buttons, the rows they act on */
+function pgWahlGueltig(){
+  return PG ? [...PG.wahl].filter(k => pgKaest(k, PG.namen.get(k))) : [];
+}
+function pgWahlAlle(platz, an){
+  if (!PG) return;
+  for (const k of pgWahlReihe(platz)){ if (an) PG.wahl.add(k); else PG.wahl.delete(k); }
+  pgZeichnen();
+}
+function pgWahlEnde(){
+  if (!PG) return;
+  PG.wahl.clear(); PG.wahlZuletzt = null;
+  pgZeichnen();
+}
+function pgWahlBestaetigen(){
+  if (!PG || !PG.wahl.size) return;
+  let n = 0;
+  for (const k of pgWahlGueltig()){ pgBestaetigen(k, true); n++; }
+  PG.wahl.clear(); PG.wahlZuletzt = null;
+  PG.status = `${n} confirmed.`;
+  pgZeichnen();
+}
+function pgWahlBehalten(){
+  if (!PG || !PG.wahl.size) return;
+  const n = pgBehalten(new Set(pgWahlGueltig()));
+  if (n === false || !PG) return;
+  PG.wahl.clear(); PG.wahlZuletzt = null;
   pgZeichnen();
 }
 /* THE SAME PERSON, ONE LINE ONLY. A line is filed under its PLACE in the
@@ -32616,6 +32894,7 @@ function pgLiveStart(){
   PG.live = setInterval(pgTick, 250);
   PG.status = "Live.";
   kbRauschenAn(); pgZeichnen(); pgTick();
+  pgSchwebeSelbst();                          /* H3: the floating window with the first gesture once the share stands */
 }
 function pgLiveStop(auchFreigabe){
   if (!PG || !PG.live) return;
@@ -32635,6 +32914,7 @@ async function pgBild(datei){
   if (!PG) return;
   const R = await gfLesen(datei);
   if (!PG) return;
+  PG.R = R;                                   /* H3: the arrow reads on the last look in file mode as well */
   pgVerarbeiten(R);
   if (R.da){
     if (PG.stadt === null){ const st = await gfStadt(R.c); if (st) PG.stadt = st.i; }
@@ -32914,10 +33194,12 @@ function pgZelleBearbeiten(zelle){
 }
 /* Into the register. A name goes in with the side it fought on - that is
    the whole point of reading them here. */
-function pgBehalten(){
-  if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return; }
+function pgBehalten(nur){
+  if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return false; }
+  const nurDiese = nur && typeof nur.has === "function" ? nur : null;   /* H3: "Keep N" - the chosen rows only (the button hands an event, not a set) */
   let n = 0, schon = 0;
   for (const [k, v] of PG.namen){
+    if (nurDiese && !nurDiese.has(k)) continue;
     if (v.gespeichert){ schon++; continue; }
     if (merkeSpieler(v.name, v.f)){ v.gespeichert = true; v.bestaetigt = true; namenBestaetigen(v.name); n++; }
   }
@@ -32925,6 +33207,7 @@ function pgBehalten(){
   toast(n ? `${n} player${n === 1 ? "" : "s"} on record${schon ? `, ${schon} were already` : ""}`
           : schon ? "All of them are already on record" : "Nothing to keep yet");
   pgZeichnen();
+  return n;
 }
 /* What the register already knows about a name read off the sheet: one
    label - the clan tag, else the number of scouted teams, else the side on
@@ -32951,6 +33234,11 @@ function pgEtikett(name){
   const text = clan || (dep.length ? `${dep.length} team${dep.length === 1 ? "" : "s"}` : seite || "on record");
   return {text, tip: teile.join(" \u00b7 ")};
 }
+/* the count the head shows (P8): the side's count where it was read, the rows seen with ink otherwise */
+function pgSollZahl(){
+  return PG.seiten.length ? PG.seiten.reduce((a, s) => a + (pgKopfZahl(s.platz) !== null ? pgKopfZahl(s.platz) : (PG.ende[s.platz] || 0)), 0)
+                          : Object.values(PG.ende).reduce((a, b) => a + (b || 0), 0);
+}
 function pgZeichnen(){
   if (!PG) return;
   /* while a name is being typed the sheet must not be rebuilt under the
@@ -32961,8 +33249,7 @@ function pgZeichnen(){
   const ortName = PG.stadt !== null && PG.stadt !== undefined ? MAP.n[PG.stadt][0] : null;
   const gelesen = PG.namen.size;
   /* P8: the counter's figure is the side's count where it was read; the rows seen with ink otherwise */
-  const soll = PG.seiten.length ? PG.seiten.reduce((a, s) => a + (pgKopfZahl(s.platz) !== null ? pgKopfZahl(s.platz) : (PG.ende[s.platz] || 0)), 0)
-                                : Object.values(PG.ende).reduce((a, b) => a + (b || 0), 0);
+  const soll = pgSollZahl();
   kopfEl.innerHTML = `
     <div class="rd-kf weit ${ortName ? "ort" : ""}"><div class="t">Battle at</div>
       <div class="v">${ortName ? `<b class="kb-ortname">${kbEsc(ortName)}</b>`
@@ -32998,6 +33285,7 @@ function pgZeichnen(){
         const et = v ? pgEtikett(v.name) : null;
         zeilen.push(`<div class="sp-z ${v ? "" : imFenster ? "wartet" : "leer"} ${
           PG.liest === k ? "schreibt" : ""}" data-k="${k}">
+          <div class="sp-kaest${pgKaest(k, v) ? (PG.wahl.has(k) ? " an" : "") : " leer"}"${pgKaest(k, v) ? ` data-w="${k}"` : ""}></div>
           <div class="nr">${i + 1}</div>
           <div class="nm ${v && !v.bestaetigt && (v.zuv < 60 || v.unlesbar) ? "unsicher" : ""}" data-k="${k}"
             title="${v && v.bestaetigt ? "click to correct"
@@ -33020,10 +33308,15 @@ function pgZeichnen(){
             }</div></div>`);
       }
       return `<div class="sp-liste"><h4>${kbEsc(kbSeiteName(s.f))}
-        <span class="sp-n">${[...PG.namen.values()].filter(v => v.f === s.f).length} of ${kopfZahl !== null ? kopfZahl : (n || "?")}</span></h4>
+        <span class="sp-n">${[...PG.namen.values()].filter(v => v.f === s.f).length} of ${kopfZahl !== null ? kopfZahl : (n || "?")}${
+          pgWahlReihe(s.platz).length ? `<button class="mini" data-alle="${s.platz}">All</button><button class="mini" data-keine="${s.platz}">None</button>` : ""}</span></h4>
         ${zeilen.join("")}</div>`;
-    }).join("")}</div>` : `<div class="kb-hinweis">No battle window seen yet.</div>`}`;
+    }).join("")}</div>${(() => {
+      const nW = pgWahlGueltig().length;        /* H3: the choice's buttons, once a box is set */
+      return nW ? `<div class="sp-wahl"><button class="mini" id="sp-wahl-ok">Confirm ${nW}</button><button class="mini" id="sp-wahl-keep">Keep ${nW}</button></div>` : "";
+    })()}` : `<div class="kb-hinweis">No battle window seen yet.</div>`}`;
   pgPult();
+  pgSchwebeZeichnen();                         /* H3: the floating window follows the sheet */
 }
 /* ENNO 18.09.2026: "Ich brauche aber in der Oberfläche keine Kommentare." - the
    foot of this desk ("The game must run borderless or windowed. Names go into
@@ -33033,6 +33326,7 @@ function pgZeichnen(){
 function pgPult(){
   const pult = document.getElementById("sp-pult");
   const live = !!PG.live;
+  const pip = ("documentPictureInPicture" in window);
   pult.innerHTML = `
     <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="sp-kraft">${ICO_CAPTURE}${
       live ? "Capture running" : "Capture the game"}</button>
@@ -33042,54 +33336,129 @@ function pgPult(){
     <div class="kb-abstand"></div>
     <button class="rd-schalter" id="sp-keep" ${[...PG.namen.values()].some(v => !v.gespeichert) ? "" : "disabled"}>Keep the sheet</button>
     <div class="kb-abstand"></div>
+    <button class="rd-schalter ${pgSchwebe ? "an" : ""}" id="sp-schweben" ${pip ? "" : 'disabled title="Needs Chrome or Edge 116 or newer"'}>${pgSchwebe ? "Floating - close it" : "Float over the game"}</button>
+    <div class="kb-abstand"></div>
     <button class="rd-schalter" id="sp-leer">New sheet</button>`;
+  /* the desk's buttons on pointerdown, as the board's are (H3, round 4): the
+     desk is rewritten with the sheet, and a click that came after the blur
+     of a standing hand field landed on a button that was no longer there.
+     The press keeps the field's focus (preventDefault), the field closes as
+     the blur would (pgHandfeldZu, E8), then the button acts; the press is
+     the gesture the share and the floating window need. */
+  const knopf = (id, tu) => {
+    const b = document.getElementById(id);
+    if (!b || b.disabled) return;
+    b.addEventListener("pointerdown", ev => { if (ev.button !== 0) return; ev.preventDefault(); pgHandfeldZu(); if (PG) tu(); });
+  };
   /* the user's own switch: off means off, sharing included */
-  document.getElementById("sp-kraft").addEventListener("click", () => { PG.live ? pgLiveStop(true) : pgLiveStart(); });
+  knopf("sp-kraft", () => { PG.live ? pgLiveStop(true) : pgLiveStart(); });
   /* share again: end the share and ask once; declined, the tick stops the room itself */
-  document.getElementById("sp-teilen")?.addEventListener("click", async () => { await bildFreigabeNeu(); if (PG) pgPult(); });
-  document.getElementById("sp-ton").addEventListener("click", () => {
-    kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); pgPult(); });
-  document.getElementById("sp-keep").addEventListener("click", pgBehalten);
-  document.getElementById("sp-leer").addEventListener("click", () => {
-    const live = PG.live; pgLiveStop(); PG = pgNeu(); if (live) pgLiveStart(); pgZeichnen(); });
+  knopf("sp-teilen", async () => { await bildFreigabeNeu(); if (PG) pgPult(); });
+  knopf("sp-ton", () => { kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); pgPult(); });
+  knopf("sp-keep", () => pgBehalten());
+  /* H3: the floating window's switch */
+  knopf("sp-schweben", () => { if (pgSchwebe){ pgSchwebeZugemacht = true; pgSchwebeZu(); } else pgSchwebeAuf(); });
+  knopf("sp-leer", () => { const live = PG.live; pgLiveStop(); PG = pgNeu(); if (live) pgLiveStart(); pgZeichnen(); });
 }
-/* Correcting a name by hand - the reader is good, not infallible. */
+/* Correcting a name by hand - the reader is good, not infallible. The name
+   cell itself is on pointerdown with the grips since H3 (round 3, the
+   sheet's pointerdown listener): a click after a blur landed on a sheet
+   already redrawn. */
 function pgBearbeiten(ev){
   const zelle = ev.target.closest(".sp-zelle[data-z]");
   if (zelle){ ev.stopPropagation(); pgZelleBearbeiten(zelle); return; }
   const tausch = ev.target.closest(".sp-tausch[data-k]");
   if (tausch){ ev.stopPropagation(); pgSchriftTauschen(tausch.dataset.k); return; }
-  const feld = ev.target.closest(".nm[data-k]");
-  if (!feld || feld.querySelector("input")) return;
-  const k = feld.dataset.k, v = PG.namen.get(k);
-  const alt = v ? v.name : "";
+}
+/* a typed name lands on its row (T9 (c): the strongest confirmation there is) */
+function pgHandName(k, neu){
+  if (!PG) return;
+  const s = PG.seiten.find(x => x.platz === +k.split(":")[0]);
+  if (neu.length >= 2){
+    pgDoppelWeg(neu, s ? s.f : null, k);
+    PG.namen.set(k, {name: neu, zuv: 100, f: s ? s.f : null, gespeichert: false, bestaetigt: true});
+    PG.fehl.delete(k); PG.leer.delete(k); PG.abgelehnt.delete(k);
+    namenBestaetigen(neu);
+    PG.status = `${neu} confirmed.`;           /* the state line must not go on saying "(same)" (round 2) */
+  } else PG.namen.delete(k);
+}
+/* THE HAND FIELD, in the sheet's row or in the floating window's row (H3,
+   ToDo 20.09.2026 - the Q12 pattern of the depot list): the input takes the
+   name cell, the sheet and the window hold their rebuild while it stands
+   (PG.tippt), Enter and blur commit, Escape puts the row back. One field at
+   a time (round 2): a second one closes the first - its value is taken -
+   and looks its own cell up again, since the sheet and the window are
+   redrawn with that. A field left as it was is looked at, not confirmed -
+   the board's rule (gefTafelHand): after "same" the field opens by itself
+   and holds the name the arrow rejected, and with one screen (Z25) the
+   click into the game is the blur. */
+let pgHandfeldOffen = null;                    /* the open field: {k, doc, zu} */
+function pgHandfeldSuchen(k, doc){
+  return doc && pgSchwebe && pgSchwebe.document === doc ? doc.querySelector(`.gf-sz .n[data-k="${k}"]`)
+       : document.querySelector(`#sp-blatt .nm[data-k="${k}"]`);
+}
+function pgHandfeldIn(feld, k){
+  if (!PG || !feld) return;
+  const doc = feld.ownerDocument;
+  if (pgHandfeldOffen){
+    if (pgHandfeldOffen.k === k && pgHandfeldOffen.doc === doc) return;
+    pgHandfeldOffen.zu(true);
+    feld = pgHandfeldSuchen(k, doc);
+    if (!PG || !feld) return;
+  }
+  if (feld.querySelector("input")) return;
+  const v = PG.namen.get(k), alt = v ? v.name : "";
   feld.innerHTML = `<input type="text" value="${kbEsc(alt)}" dir="auto" spellcheck="false">`;
   const el = feld.querySelector("input");
-  el.focus(); el.select();
   PG.tippt = true;
-  const fertig = () => {
+  const offen = {k, doc, zu: null};
+  const zu = schreiben => {
+    if (pgHandfeldOffen !== offen) return;    /* closed already (Enter, then the blur it causes) */
+    pgHandfeldOffen = null;
+    el.removeEventListener("blur", blur);
+    if (!PG) return;
     PG.tippt = false;
     const neu = el.value.trim();
-    const s = PG.seiten.find(x => x.platz === +k.split(":")[0]);
-    if (neu.length >= 2){
-      pgDoppelWeg(neu, s ? s.f : null, k);
-      PG.namen.set(k, {name: neu, zuv: 100, f: s ? s.f : null, gespeichert: false, bestaetigt: true});
-      PG.fehl.delete(k); PG.leer.delete(k); PG.abgelehnt.delete(k);
-      namenBestaetigen(neu);                  // T9 (c): a typed name is the strongest confirmation there is
-    } else PG.namen.delete(k);
+    if (schreiben && neu !== alt) pgHandName(k, neu);
+    pgSchwebeSatz = null;                      /* the field must go from the window even when nothing changed */
     pgZeichnen();
   };
-  el.addEventListener("blur", fertig);
+  const blur = () => zu(true);
+  offen.zu = zu; pgHandfeldOffen = offen;
+  el.addEventListener("blur", blur);
   el.addEventListener("keydown", e => {
-    if (e.key === "Enter"){ e.preventDefault(); el.blur(); }
+    /* Enter finishes here, not through blur - a window without focus never fires it */
+    if (e.key === "Enter"){ e.preventDefault(); zu(true); }
     if (e.key === "Escape"){
       /* IN THE FIELD, NOT IN THE ROOM. The document also listens for Escape
          and closed the whole room, sheet and all. */
-      e.stopPropagation();
-      el.removeEventListener("blur", fertig);
-      PG.tippt = false; pgZeichnen();
+      e.stopPropagation(); zu(false);
     }
   });
+  el.focus(); el.select();
+}
+/* the hand field of row k, opened by the arrow's "same": in the window that
+   asked (doc) when it still stands, else in the sheet. A field he is typing
+   in stands: the machine never closes it (round 3) - the state line alone
+   says "(same)", and he clicks the name himself. */
+function pgHandfeld(k, doc){
+  if (pgHandfeldOffen){ pgStatusZeigen(); return; }
+  const feld = pgHandfeldSuchen(k, doc);
+  if (feld) pgHandfeldIn(feld, k);
+}
+/* the state line alone, without a rebuild - while a hand field holds the sheet (round 3) */
+function pgStatusZeigen(){
+  if (!PG) return;
+  const j = document.querySelector("#sp-links .kb-jetzt");
+  if (j) j.textContent = PG.status;
+  if (pgSchwebe){ try { const p = pgSchwebe.document.querySelector(".pg-jetzt"); if (p) p.textContent = PG.status; } catch(e){} }
+}
+/* a grip pressed while a hand field stands: the field closes first, as the
+   blur closes it (E7 - changed: the name is taken; unchanged: nothing), then
+   the grip acts and the sheet is drawn (round 3; the grips are on
+   pointerdown with preventDefault, so no blur comes before them) */
+function pgHandfeldZu(){
+  if (pgHandfeldOffen) pgHandfeldOffen.zu(true);
 }
 async function spielerraumAuf(){
   if (pgOffen) return;
@@ -33108,6 +33477,7 @@ function spielerraumZu(){
   pgOffen = false;
   pgLiveStop(true); kbRauschenAus(); kbOszAus();
   document.getElementById("spieler").classList.remove("an");
+  pgSchwebeGesteLoesen(); pgSchwebeZu();      /* H3: the floating window goes with the room */
   PG = null;
   unitsFremdSchliessen();
 }
@@ -33118,12 +33488,164 @@ document.getElementById("sp-blatt").addEventListener("click", ev => { if (PG) pg
    and a click needs press and release on the same node */
 document.getElementById("sp-blatt").addEventListener("pointerdown", ev => {
   if (!PG) return;
-  const g = ev.target.closest(".sp-griff[data-ok],.sp-griff[data-neu]");
-  if (!g) return;
+  const g = ev.target.closest(".sp-griff[data-ok],.sp-griff[data-neu],.sp-kaest[data-w],.sp-liste [data-alle],.sp-liste [data-keine],#sp-wahl-ok,#sp-wahl-keep");
+  if (!g){
+    /* H3 (round 3): the name cell opens its hand field here, on the press -
+       a click came after the blur of a standing field, and that blur had
+       the sheet redrawn under it. The caret inside an open field is the
+       browser's own business. */
+    const nm = ev.target.closest(".nm[data-k]");
+    if (!nm || nm.querySelector("input")) return;
+    ev.preventDefault(); ev.stopPropagation();
+    pgHandfeldIn(nm, nm.dataset.k);
+    return;
+  }
   ev.preventDefault(); ev.stopPropagation();
-  if (g.dataset.ok !== undefined) pgBestaetigen(g.dataset.ok); else pgNeuLesen(g.dataset.neu);
+  pgHandfeldZu();                              /* H3 (round 3): a standing hand field closes as the blur would, then the grip acts */
+  if (!PG) return;
+  if (g.dataset.ok !== undefined) pgBestaetigen(g.dataset.ok);
+  else if (g.dataset.neu !== undefined) pgNeuLesen(g.dataset.neu);
+  /* H3: the boxes, All / None, Confirm N, Keep N - on pointerdown like the grips */
+  else if (g.dataset.w !== undefined) pgWahl(g.dataset.w, ev.shiftKey, pgWahlReihe(+g.dataset.w.split(":")[0]));
+  else if (g.dataset.alle !== undefined) pgWahlAlle(+g.dataset.alle, true);
+  else if (g.dataset.keine !== undefined) pgWahlAlle(+g.dataset.keine, false);
+  else if (g.id === "sp-wahl-ok") pgWahlBestaetigen();
+  else pgWahlBehalten();
 });
-document.addEventListener("keydown", ev => { if (ev.key === "Escape" && pgOffen) spielerraumZu(); });
+/* Escape ends a standing choice first (H3), the room after */
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && pgOffen){ if (PG && PG.wahl.size) pgWahlEnde(); else spielerraumZu(); } });
+
+/* ---- the floating window of the player room (H3, ToDo 20.09.2026) ----------
+   ENNO 20.09.2026 (ToDo 20.09., Z25): "Bitte hier auch overlay, damit leute
+   mit nur einem Bildschirm besser abgleichen können." ENNO 18.09.2026: "Wie
+   beim AT Grabber auch ein Overlay Fenster, welches sich genau neben die
+   Spielernamen im Spiel setzt, und wo man die Namen dann bestätigen kann
+   oder eine erneute Prüfung anstößt". The battle desk's window
+   (gefSchwebeAuf) is the pattern: the same Document Picture-in-Picture
+   window, 420 wide, 96 + 14 a row high, eighteen rows at most - the
+   sheet's rows with a reading that is not confirmed yet (the tick, Keep or
+   a typed name), in sheet order: box, name, tick, arrow, and "Confirm N"
+   under them while a box is set; the head carries the town, the count and
+   the room's state line ("read again: X (same)"). A click on the name opens
+   the hand field in the window (pgHandfeldIn). Opens with the first gesture
+   in the room once the share stands (the cabin's hook, kbSchwebeSelbst) and
+   by the button in the desk; closes with the room (spielerraumZu); closed
+   from its corner it is not handed to him again this session (the button
+   stays). One window per page: schwebeFremdesZu before requestWindow. H2
+   (ToDo 20.09.) takes this opener into the battle desk with the pg*
+   functions. The Alt keys stay with the cabin and the depot list. */
+let pgSchwebe = null, pgSchwebeSatz = null, pgSchwebeGeste = null, pgSchwebeZugemacht = false;
+function pgSchwebeGesteLoesen(){
+  const h = pgSchwebeGeste; pgSchwebeGeste = null;
+  const raum = document.getElementById("spieler");
+  if (h && raum){ raum.removeEventListener("pointerdown", h, true); raum.removeEventListener("keydown", h, true); }
+}
+function pgSchwebeSelbst(){
+  if (pgSchwebeGeste || pgSchwebe || pgSchwebeZugemacht || !("documentPictureInPicture" in window)) return;
+  const raum = document.getElementById("spieler");
+  if (!raum) return;
+  const h = ev => {
+    if (!PG || !PG.live || pgSchwebe || pgSchwebeZugemacht){ pgSchwebeGesteLoesen(); return; }
+    /* Escape closes the room, a bare modifier is no gesture the browser counts */
+    if (ev.type === "keydown" && (ev.key === "Escape" || /^(Alt|Shift|Control|Meta)$/.test(ev.key))) return;
+    if (ev.type === "keydown" && ev.target && /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName)) return;
+    if (ev.target && ev.target.closest && ev.target.closest("#sp-schweben,#sp-zu,#sp-kraft")) return;   /* the switch, the X and the capture button are no wish of this hook */
+    /* no share yet (the picker is open, or declined): the next gesture */
+    if (!(bildStrom && bildStrom.active)) return;
+    pgSchwebeGesteLoesen();
+    /* requestWindow is the first await inside - the gesture is still fresh;
+       refused for want of activation, the hook hangs once more */
+    pgSchwebeAuf().then(e => { if (e && e.name === "NotAllowedError"){ pgSchwebeSelbst(); if (PG) pgZeichnen(); } });
+  };
+  pgSchwebeGeste = h;
+  raum.addEventListener("pointerdown", h, true);
+  raum.addEventListener("keydown", h, true);
+}
+async function pgSchwebeAuf(){
+  if (pgSchwebe || !PG || !("documentPictureInPicture" in window)) return;
+  const hoch = 96 + 14*pgSchwebeZeilen().length;
+  schwebeFremdesZu("spieler");                       /* one floating window per page - the other room's goes first */
+  schwebeHalter = {raum: "spieler", zu: pgSchwebeZu};
+  let w;
+  try { w = await window.documentPictureInPicture.requestWindow({width: 420, height: hoch}); }   /* must be the first await after the gesture */
+  catch(e){ PG.status = "The floating window could not be opened - " + ((e && e.message) || e); pgZeichnen(); return e; }
+  /* the room may have closed while the window was being opened: no orphan window */
+  if (!PG || !pgOffen){ try { w.close(); } catch(e){} return null; }
+  pgSchwebe = w; pgSchwebeSatz = null;
+  const doc = w.document;
+  for (const sh of document.styleSheets){
+    try { const st = doc.createElement("style"); st.textContent = [...sh.cssRules].map(r => r.cssText).join("\n"); doc.head.appendChild(st); }
+    catch(e){ if (sh.href){ const l = doc.createElement("link"); l.rel = "stylesheet"; l.href = sh.href; doc.head.appendChild(l); } }
+  }
+  doc.body.className = "gf-schwebe pg-schwebe";
+  doc.body.innerHTML = "";
+  /* the grips on the window's own document by delegation, set once: the
+     body is rewritten at every change */
+  doc.body.addEventListener("pointerdown", ev => {
+    if (!PG || !ev.target || !ev.target.closest) return;
+    const g = ev.target.closest(".gf-sz .g[data-ok],.gf-sz .g[data-neu],.gf-sz .w[data-w],.gf-sz .g[data-confirm]");
+    if (!g){
+      /* the name opens its hand field on the press, as on the sheet (round 3) */
+      const n = ev.target.closest(".gf-sz .n[data-k]");
+      if (!n || n.querySelector("input")) return;
+      ev.preventDefault();
+      pgHandfeldIn(n, n.dataset.k);
+      return;
+    }
+    ev.preventDefault();
+    pgHandfeldZu();                            /* a standing hand field closes as the blur would, then the grip acts (round 3) */
+    if (!PG) return;
+    if (g.dataset.ok !== undefined) pgBestaetigen(g.dataset.ok);
+    else if (g.dataset.neu !== undefined) pgNeuLesen(g.dataset.neu, doc);
+    else if (g.dataset.w !== undefined) pgWahl(g.dataset.w, ev.shiftKey, pgSchwebeZeilen().filter(z => z.kaest).map(z => z.k));
+    else pgWahlBestaetigen();
+  });
+  /* closed from its own corner or by the browser: forget it (a hand field
+     in it goes unwritten), relabel the desk - and do not hand it to him
+     again this session (pgSchwebeSelbst) */
+  w.addEventListener("pagehide", () => { if (pgSchwebe === w){ pgSchwebe = null; pgSchwebeSatz = null; pgSchwebeZugemacht = true; pgHandfeldWeg(w); if (PG){ pgZeichnen(); pgPult(); } } });
+  pgSchwebeZeichnen();
+  pgPult();
+  return null;
+}
+/* the hand field standing in window w is gone with it - unwritten, as the board's (gefSchwebeEdit) */
+function pgHandfeldWeg(w){
+  let d = null; try { d = w && w.document; } catch(e){}
+  if (pgHandfeldOffen && d && pgHandfeldOffen.doc === d) pgHandfeldOffen.zu(false);
+}
+function pgSchwebeZu(){
+  const w = pgSchwebe; pgSchwebe = null; pgSchwebeSatz = null;
+  if (!w) return;
+  pgHandfeldWeg(w); try { w.close(); } catch(e){}
+  if (PG && pgOffen) pgPult();                 /* the desk's button says so at once - another room may have taken the window (round 3) */
+}
+/* the sheet's rows for the window: a reading, not confirmed, in sheet order; eighteen at most; kaest = the row carries a box (pgKaest) */
+function pgSchwebeZeilen(){
+  if (!PG) return [];
+  const aus = [], ks = [...PG.namen.keys()].sort((a, b) => (+a.split(":")[0] - +b.split(":")[0]) || (+a.split(":")[1] - +b.split(":")[1]));
+  for (const k of ks){
+    const v = PG.namen.get(k);
+    if (!v || v.bestaetigt || v.gespeichert) continue;
+    aus.push({k, n: v.name, u: v.zuv < 60 || !!v.unlesbar, vor: v.vorschlag || null, kaest: pgKaest(k, v)});
+    if (aus.length >= 18) break;
+  }
+  return aus;
+}
+function pgSchwebeZeichnen(){
+  if (!pgSchwebe || !PG) return;
+  const zeilen = pgSchwebeZeilen(), nW = pgWahlGueltig().length;
+  const ortName = PG.stadt !== null && PG.stadt !== undefined ? MAP.n[PG.stadt][0] : null;
+  const soll = pgSollZahl();
+  let html = `<div class="pg-kopf">${esc(ortName || "Battle")} \u00b7 ${PG.namen.size} of ${soll || "?"}</div><div class="pg-jetzt">${esc(PG.status || "")}</div>`;
+  if (zeilen.length) html += `<div class="gf-sz-block">${zeilen.map(z => `<div class="gf-sz${z.u ? " un" : ""}"><span class="w sp-kaest${z.kaest ? (PG.wahl.has(z.k) ? " an" : "") : " leer"}"${z.kaest ? ` data-w="${z.k}"` : ""}></span><span class="n" data-k="${z.k}">${esc(z.n)}${z.vor ? ` <small>known: ${esc(z.vor)}</small>` : ""}</span><span class="g" data-ok="${z.k}" title="Confirm">\u2713</span><span class="g" data-neu="${z.k}" title="Read again">\u21bb</span></div>`).join("")}${
+    nW ? `<div class="gf-sz knopf"><span class="g" data-confirm="1">Confirm ${nW}</span></div>` : ""}</div>`;
+  if (html === pgSchwebeSatz) return;
+  try {
+    pgSchwebe.document.body.innerHTML = html; pgSchwebeSatz = html;
+    const hoch = 96 + 14*(zeilen.length + (nW ? 1 : 0));
+    if (pgSchwebe.innerHeight && Math.abs(pgSchwebe.innerHeight - hoch) > 2){ try { pgSchwebe.resizeBy(0, hoch - pgSchwebe.innerHeight); } catch(e){} }
+  } catch(e){}
+}
 
 async function kabineAuf(){
   if (kbOffen) return;
@@ -37748,7 +38270,8 @@ function gefTafelNeu(){
   return {eintraege: [], schlange: [], liest: false, stand: null, offen: null, zuletzt: 0, dunkelZuletzt: 0, kopfZeit: 0,
           kopf: null, ortGewaehlt: null,           // the head block's last reading (type, town) - the stand takes it from here (round 3, H2)
           blickNr: 0, zaehler: 0, kopfOffen: false, tippt: false, wb: null, wbZeit: 0, zeiten: [],
-          version: 0, blatt: null};                // change counter and the desk block built for it (round 3, H7)
+          version: 0, blatt: null,
+          wahl: new Set(), wahlZuletzt: null, meldung: ""};   // H3: the multiple choice (entry ids), the last box, the arrow's word                // change counter and the desk block built for it (round 3, H7)
 }
 let gefTafelZeichenV = null;
 function gefTafelZeichenVorlagen(){
@@ -38757,6 +39280,7 @@ function gefTafelBlatt(){
         ars.v.map(x => { const k = x && x.k ? x.k : x; return chip((VEH[k] && VEH[k].name) || k, "v", k); }).join("")}</div>` : ""}
       <div><button class="mini" data-kitzu>Done</button></div></div>`;
   };
+  const wahlDa = [];                          /* H3: the ids of the rows drawn with a box */
   const zeile = (l, k, sf, frueh) => {
       const e = l.eintrag;
       if (e.bild && !e.url){
@@ -38772,7 +39296,9 @@ function gefTafelBlatt(){
       const cls = !l.n ? "leer" : (l.u ? "unsicher" : "");
       const hinweis = !l.n ? ` placeholder="${e.unlesbar ? "unreadable — click and type it" : "not read yet"}"`
         : e.vorschlag && !e.hand ? ` title="read as &quot;${esc(e.name)}&quot;"` : l.u ? ` title="read once, ${e.zuv} of 100"` : "";
-      return `<div class="sp-z" data-e="${e.id}"><div class="nr">${k + 1}</div>
+      const kaest = gefTafelKaest(l);
+      if (kaest) wahlDa.push(e.id);
+      return `<div class="sp-z" data-e="${e.id}"><div class="sp-kaest${kaest ? (T.wahl && T.wahl.has(e.id) ? " an" : "") : " leer"}"${kaest ? ` data-w="${e.id}"` : ""}></div><div class="nr">${k + 1}</div>
         <div>${e.url ? `<img src="${e.url}" alt="">` : ""}</div>
         <div><input type="text" class="${cls}" value="${esc(wertFeld)}" data-e="${e.id}" dir="auto" spellcheck="false"${hinweis}></div>
         <div class="rl">${l.r ? esc(kurz[l.r] || l.r) : ""}</div>
@@ -38784,17 +39310,24 @@ function gefTafelBlatt(){
   };
   const seiten = B.tafeln.map(t => gefTafelSeite(t, kam));
   let listen = seiten.map(s => `<div class="sp-liste"><h4>${esc(wort(s.farbe))} · ${s.f === 0 || s.f === 1 || s.f === 2 ? esc(FACTIONS[s.f].name) : "side not read"} · ${
-      s.n !== null ? s.n + " players" : "players not counted"}${s.bots ? ` · ${s.bots} bots` : ""}</h4>${s.leute.map((l, k) => zeile(l, k, s.f)).join("")}</div>`).join("");
+      s.n !== null ? s.n + " players" : "players not counted"}${s.bots ? ` · ${s.bots} bots` : ""}${(() => {
+        const ids = s.leute.filter(gefTafelKaest).map(l => l.eintrag.id).join(",");   /* H3: All / None for this side */
+        return ids ? `<span class="sp-n"><button class="mini" data-alle="${ids}">All</button><button class="mini" data-keine="${ids}">None</button></span>` : ""; })()}</h4>${s.leute.map((l, k) => zeile(l, k, s.f)).join("")}</div>`).join("");
   /* the rows gone from the stand, sure or typed: kept with the others (SOLL 2) */
   const frueher = gefTafelFrueher(T, B, new Map(seiten.map(s => [s.lage, s.f])), kam);
   if (frueher.length) listen += `<div class="sp-liste"><h4>Seen earlier · ${frueher.length}</h4>${frueher.map((l, k) => zeile(l, k, l.f, true)).join("")}</div>`;
   T.blatt = {schluessel, t: nun, namen, html: `${widerspruch}
     <div class="sp-listen">${listen}</div>
-    <div style="margin-top:8px"><button class="mini" id="gf-tf-keep"${namen && gebunden && recht ? "" : " disabled"}>Keep ${namen} name${namen === 1 ? "" : "s"}</button></div>`};
+    ${(() => {
+      /* H3: while a choice stands its buttons take the row - "Confirm N" (the tick on each) and "Keep N" (the register, the chosen only) */
+      const nW = T.wahl ? wahlDa.filter(id => T.wahl.has(id)).length : 0;
+      return nW ? `<div style="margin-top:8px"><button class="mini" id="gf-tf-wok">Confirm ${nW}</button> <button class="mini" id="gf-tf-wkeep"${gebunden && recht ? "" : " disabled"}>Keep ${nW}</button></div>`
+                : `<div style="margin-top:8px"><button class="mini" id="gf-tf-keep"${namen && gebunden && recht ? "" : " disabled"}>Keep ${namen} name${namen === 1 ? "" : "s"}</button></div>`; })()}`};
   }
   return `<div class="gf-tf">
     <div class="kb-titel">Tab board${B.art ? " · " + esc(gefTafelArtWort(B.art) || B.art) : ""}${B.ort !== null && B.ort !== undefined && MAP.n[B.ort] ? " · " + esc(MAP.n[B.ort][0]) : ""} · seen ${esc(alterText(B.t))}</div>
     ${gefTafelMarkeZeile(B, recht)}
+    ${T.meldung ? `<div class="note" data-meldung style="margin-top:6px">${esc(T.meldung)}</div>` : ""}
     ${T.blatt.html}</div>`;
 }
 /* the sheet's wiring: typing holds the rebuild (GEF.tafel.tippt, as
@@ -38817,10 +39350,7 @@ function gefTafelVerdrahten(blatt){
          hand away again (round 4, Skeptiker H2: "Handname" stood on after
          the field was put back to "abznt"); the mark of the register goes
          with a name that changed */
-      if (e){ const v = el.value.trim(), vorher = gefTafelName(e);
-              if (v === vorher && e.handGeerbt){ /* looked at, not changed: the inherited hand stays inherited (round 4) */ }
-              else if (v.length < 2 || v === (e.vorschlag || e.name || "")){ e.hand = null; e.handGeerbt = false; } else { e.hand = v; e.handGeerbt = false; namenBestaetigen(v); }   // T9 (c), G-2: a typed name is a confirmation in the board as well
-              if (gefTafelName(e) !== vorher) e.gespeichert = false; GEF.tafel.version++; }
+      if (e) gefTafelHand(e, el.value);         /* the same rule for the sheet and the floating window (H3) */
       GEF.tafel.tippt = false;
       gefZeichnen();
     });
@@ -38831,12 +39361,24 @@ function gefTafelVerdrahten(blatt){
     });
     blatt.addEventListener("pointerdown", ev => {
       const gr = ev.target.closest(".gf-tf .sp-griff[data-ok],.gf-tf .sp-griff[data-neu]");   // T9 (d)
-      if (gr){ ev.preventDefault(); ev.stopPropagation(); if (gr.dataset.ok !== undefined) gefTafelBestaetigen(+gr.dataset.ok); else gefTafelNeuLesen(+gr.dataset.neu); return; }
+      /* H3 (round 3): a name field he is typing in (sheet or window) closes
+         BEFORE the grip, as the blur would close it (E7); the grip's values
+         are read first, since that blur redraws the sheet under the target */
+      if (gr){ ev.preventDefault(); ev.stopPropagation(); const ok = gr.dataset.ok, neu = gr.dataset.neu; gefTafelFeldZu();
+               if (ok !== undefined) gefTafelBestaetigen(+ok); else gefTafelNeuLesen(+neu); return; }
+      /* H3: the boxes (shift: the range within this list), All / None, Confirm N, Keep N */
+      const kx = ev.target.closest(".gf-tf .sp-kaest[data-w]");
+      if (kx){ ev.preventDefault(); ev.stopPropagation(); const w = +kx.dataset.w, reihe = gefTafelWahlReihe(kx); gefTafelFeldZu(); gefTafelWahl(w, ev.shiftKey, reihe); return; }
+      const al = ev.target.closest(".gf-tf [data-alle],.gf-tf [data-keine]");
+      if (al){ ev.preventDefault(); const an = al.dataset.alle !== undefined, ids = (an ? al.dataset.alle : al.dataset.keine).split(",").map(Number); gefTafelFeldZu(); gefTafelWahlAlle(ids, an); return; }
+      if (ev.target.closest("#gf-tf-wok")){ ev.preventDefault(); gefTafelFeldZu(); gefTafelWahlBestaetigen(); return; }
+      if (ev.target.closest("#gf-tf-wkeep")){ ev.preventDefault(); gefTafelFeldZu(); gefTafelWahlBehalten(); return; }
+      /* the field first, one rule for every grip of the board (H3, round 4); the values before the blur redraws the sheet */
       const t = ev.target.closest(".gf-tf .sp-tausch[data-e]");
-      if (t){ ev.preventDefault(); ev.stopPropagation(); gefTafelTauschen(+t.dataset.e); return; }
-      if (ev.target.closest("#gf-tf-keep")){ ev.preventDefault(); gefTafelBehalten(); return; }
+      if (t){ ev.preventDefault(); ev.stopPropagation(); const id = +t.dataset.e; gefTafelFeldZu(); gefTafelTauschen(id); return; }
+      if (ev.target.closest("#gf-tf-keep")){ ev.preventDefault(); gefTafelFeldZu(); gefTafelBehalten(); return; }
       const mk = ev.target.closest("#gf-tf-marke");
-      if (mk && !mk.disabled){ ev.preventDefault(); gefTafelMarkieren(+mk.dataset.ort); }
+      if (mk && !mk.disabled){ ev.preventDefault(); const ort = +mk.dataset.ort; gefTafelFeldZu(); gefTafelMarkieren(ort); }
     });
     /* THE KIT MASK (Paket 20). Its state lives on GEF.tafel.kit and the block
        is rebuilt from it at every tick; a control of the mask holds the sheet
@@ -38905,7 +39447,7 @@ function gefTafelTauschen(id){
    name the sheet shows (gefTafelName: the hand, else the register's
    proposal, else the reading) stays and goes into the session's dictionary.
    Not into the register: that is "Keep N names". */
-function gefTafelBestaetigen(id){
+function gefTafelBestaetigen(id, leise){
   const T = GEF && GEF.tafel, e = T && T.eintraege.find(x => x.id === id);
   if (!e) return;
   const n = gefTafelName(e);
@@ -38913,40 +39455,218 @@ function gefTafelBestaetigen(id){
   e.sicher = true; e.bestaetigt = true; e.unlesbar = false;
   namenBestaetigen(n);
   T.version++;
+  if (leise) return;                          /* H3: "Confirm N" ticks in one pass and draws once */
+  T.meldung = "";                             /* the arrow's word is answered */
   gefZeichnen();
 }
-/* THE ARROW on a board row: the reading is rejected and the row is read
-   anew at the next look - gefTafelSchneiden queues a name job for a row
-   that is neither settled nor open, so everything that made it settled goes
-   (the readings, the hand, the tries). ENNO 18.09.2026: "Eine zweite
-   Prüfung muss dann den ersten Namen auch als falsche Interpretation
-   wahrnehmen." - gefTafelLesung holds the next reading against abgelehnt. */
-function gefTafelNeuLesen(id){
+/* THE ARROW on a board row (H3, ToDo 20.09.2026): the reading is rejected -
+   ENNO 18.09.2026: "Eine zweite Prüfung muss dann den ersten Namen auch als
+   falsche Interpretation wahrnehmen." (the proposal too, even behind a hand
+   name; gefTafelLesung holds any later reading against abgelehnt) - and the
+   row's strip (e.bild, its name part in e.lage) is read AT ONCE with the
+   next of the other ways (gfNameWeg), as the player room's arrow does.
+   Until now the row was emptied and the beat read it again with the same
+   machine, which gave the same text and, rejected three times, "unreadable".
+   What comes back is shown: a new reading takes the row; the same reading
+   stays and the sheet says "read again: X (same)" with the cursor in the
+   row's field (in the floating window when the arrow was pressed there);
+   that line is written into the standing note when a field holds the sheet
+   (gefStatusZeigen, round 4).
+   The beat does not read the row again on its own after this (versuche =
+   PG_VERSUCHE: the arrow decides now); nothing from any way leaves the row
+   unreadable, for the hand. Without a strip kept (none yet) the row goes
+   back to the beat as before. The board's strips are not measured for the
+   ways (MESSUNG-H3 Par. 8). The row leaves the choice (round 2): "Confirm
+   N" must never take up a name he called wrong. */
+function gefTafelNeuLesen(id, doc){
   const T = GEF && GEF.tafel, e = T && T.eintraege.find(x => x.id === id);
   if (!e) return;
   const alt = gefTafelName(e);
   e.abgelehnt = e.abgelehnt || [];
   for (const n of [alt, e.name, e.vorschlag]) if (n && !e.abgelehnt.includes(n)) e.abgelehnt.push(n);   // the proposal too, even behind a hand name
-  e.lesungen = []; e.name = null; e.zuv = 0; e.schrift = null; e.zweit = null;
-  e.sicher = false; e.bestaetigt = false; e.unlesbar = false; e.versuche = 0;
-  e.bekannt = false; e.vorschlag = null; e.gespeichert = false;
+  e.sicher = false; e.bestaetigt = false; e.gespeichert = false;
+  e.bekannt = false; e.vorschlag = null;
   e.hand = null; e.handGeerbt = false; e.handVon = null;
-  T.version++;
+  if (T.wahl) T.wahl.delete(id);
+  if (!e.bild || !e.lage || !(e.lage.nw > 0)){
+    e.lesungen = []; e.name = null; e.zuv = 0; e.schrift = null; e.zweit = null; e.unlesbar = false; e.versuche = 0;
+    T.version++; gefZeichnen(); return;
+  }
+  const weg = (e.weg || 0) % GF_WEGE + 1;
+  e.weg = weg; e.versuche = PG_VERSUCHE;
+  T.meldung = "Reading again \u2026";
+  T.version++; gefZeichnen();
+  (async () => {
+    let g = null, w = weg;
+    try {
+      for (let n = 0; n < GF_WEGE && !g; n++){
+        w = (weg - 1 + n) % GF_WEGE + 1;
+        g = await gfNameWeg(e.bild, e.lage.nx, 0, e.lage.nw, e.bild.height, e.lage.nw, w);
+      }
+    } catch(err){ g = null; }
+    if (!GEF || GEF.tafel !== T || !T.eintraege.includes(e)) return;
+    e.weg = w;
+    if (e.hand){ T.meldung = ""; T.version++; gefZeichnen(); gefStatusZeigen(); return; }   /* a name typed while it read: the hand stands */
+    if (!g){
+      e.lesungen = []; e.name = null; e.zuv = 0; e.schrift = null; e.zweit = null; e.unlesbar = true;
+      T.meldung = "read again: nothing";
+      T.version++; gefZeichnen(); gefStatusZeigen(); return;
+    }
+    const gleich = e.abgelehnt.includes(g.name);   /* the same TEXT, as in the player room */
+    if (!gleich || !e.name){
+      e.name = g.name; e.zuv = g.zuv; e.schrift = g.schrift; e.zweit = null; e.unlesbar = false;
+      e.lesungen = [{name: g.name, zuv: g.zuv, schrift: g.schrift, zweit: null}];
+      let bek = gleich ? null : gefTafelBekannt(T, e.name);
+      if (bek && bek !== e.name && e.abgelehnt.some(a => namKey(a) === namKey(bek))) bek = null;   // G-1
+      e.bekannt = !!bek; e.vorschlag = bek && bek !== e.name ? bek : null;
+    }
+    T.meldung = `read again: ${g.name}${gleich ? " (same)" : ""}`;   /* the READING, as the player room says it (round 3) */
+    T.version++; gefZeichnen(); gefStatusZeigen();   /* the line under the title at once, even while a field holds the sheet (round 4) */
+    if (gleich) gefTafelHandfeldAuf(e.id, doc);
+  })();
+}
+/* THE MULTIPLE CHOICE on the board (H3): the same as the player room's -
+   T.wahl holds entry ids; shift on a box takes the range within the order
+   handed in (one list, or the window's rows); All / None per side; "Confirm
+   N" ticks each chosen row, "Keep N" writes the chosen rows to the
+   register; Escape ends the choice before it closes the desk. A row whose
+   shown name the arrow rejected ("same") carries no box (round 2, as
+   pgKaest); a typed name stands above that. */
+function gefTafelKaest(l){
+  const e = l && l.eintrag;
+  return !!(l && l.n && e && !e.gespeichert && (e.hand || !(e.abgelehnt && e.abgelehnt.includes(l.n))));
+}
+/* the same rule from the entry alone (the window's rows) */
+function gefSchwebeKaest(id){
+  const T = GEF && GEF.tafel, e = T && T.eintraege.find(x => x.id === id);
+  return gefTafelKaest(e ? {n: gefTafelName(e), eintrag: e} : null);
+}
+function gefTafelWahl(id, bereich, reihe){
+  const T = GEF && GEF.tafel; if (!T || !gefSchwebeKaest(id)) return;
+  T.wahl = T.wahl || new Set();
+  const an = !T.wahl.has(id);
+  let ids = [id];
+  if (bereich && T.wahlZuletzt !== null && T.wahlZuletzt !== undefined && reihe){
+    const a = reihe.indexOf(T.wahlZuletzt), b = reihe.indexOf(id);
+    if (a >= 0 && b >= 0) ids = reihe.slice(Math.min(a, b), Math.max(a, b) + 1);
+  }
+  for (const x of ids){ if (an) T.wahl.add(x); else T.wahl.delete(x); }
+  T.wahlZuletzt = id; T.version++;
   gefZeichnen();
+}
+/* the ids of the boxes in the same list as this one, in the sheet's order */
+function gefTafelWahlReihe(kx){
+  const liste = kx && kx.closest ? kx.closest(".sp-liste") : null;
+  return liste ? [...liste.querySelectorAll(".sp-kaest[data-w]")].map(x => +x.dataset.w) : [];
+}
+function gefTafelWahlAlle(ids, an){
+  const T = GEF && GEF.tafel; if (!T) return;
+  T.wahl = T.wahl || new Set();
+  for (const id of ids) if (Number.isFinite(id)){ if (an) T.wahl.add(id); else T.wahl.delete(id); }
+  T.version++; gefZeichnen();
+}
+function gefTafelWahlEnde(){
+  const T = GEF && GEF.tafel; if (!T || !T.wahl) return;
+  T.wahl.clear(); T.wahlZuletzt = null; T.version++; gefZeichnen();
+}
+function gefTafelWahlBestaetigen(){
+  const T = GEF && GEF.tafel; if (!T || !T.wahl || !T.wahl.size) return;
+  let n = 0;
+  for (const id of [...T.wahl]) if (gefSchwebeKaest(id)){ gefTafelBestaetigen(id, true); n++; }
+  T.wahl.clear(); T.wahlZuletzt = null; T.meldung = `${n} confirmed.`;
+  T.version++; gefZeichnen();
+}
+function gefTafelWahlBehalten(){
+  const T = GEF && GEF.tafel; if (!T || !T.wahl || !T.wahl.size) return;
+  const n = gefTafelBehalten(new Set([...T.wahl].filter(gefSchwebeKaest)));
+  if (n === false || !GEF || GEF.tafel !== T) return;
+  T.wahl.clear(); T.wahlZuletzt = null;
+  T.version++; gefZeichnen();
+}
+/* a typed name on a board row - the sheet's rule (round 4), shared with the
+   floating window (H3): the field set back to the reading or the register's
+   name takes the hand away again; the mark of the register goes with a name
+   that changed; a typed name is a confirmation in the board as well (T9 (c), G-2) */
+function gefTafelHand(e, wert){
+  const T = GEF && GEF.tafel; if (!T || !e) return;
+  const v = String(wert || "").trim(), vorher = gefTafelName(e);
+  if (v === vorher && e.handGeerbt){ /* looked at, not changed: the inherited hand stays inherited (round 4) */ }
+  else if (v.length < 2 || v === (e.vorschlag || e.name || "")){ e.hand = null; e.handGeerbt = false; }
+  else { e.hand = v; e.handGeerbt = false; namenBestaetigen(v); }
+  if (gefTafelName(e) !== vorher){ e.gespeichert = false; T.meldung = ""; }   /* a name changed by hand answers the arrow's word */
+  T.version++;
+}
+/* the hand field in the floating window (H3, the Q12 pattern): the input
+   takes the name cell; while it stands the window is not rewritten
+   (gefSchwebeEdit); Enter and blur commit, Escape puts the row back */
+function gefTafelHandfeld(n, id, doc){
+  const T = GEF && GEF.tafel, e = T && T.eintraege.find(x => x.id === id);
+  if (!e || !n || gefSchwebeEdit || n.querySelector("input")) return;
+  const el = doc.createElement("input"); el.type = "text"; el.spellcheck = false; el.value = gefTafelName(e) || "";
+  const zu = schreiben => {
+    if (gefSchwebeEdit !== id) return;
+    gefSchwebeEdit = null; gefSchwebeEditZu = null; gefSchwebeSatz = null;   /* the field must go even when nothing changed */
+    if (schreiben) gefTafelHand(e, el.value);
+    gefZeichnen();
+  };
+  gefSchwebeEdit = id; gefSchwebeEditZu = zu;   /* the closer is kept: a grip on the desk closes the window's field first (round 3) */
+  el.addEventListener("keydown", ev => {
+    if (ev.key === "Enter"){ ev.preventDefault(); zu(true); }
+    else if (ev.key === "Escape"){ ev.preventDefault(); ev.stopPropagation(); zu(false); }
+  });
+  el.addEventListener("blur", () => zu(true));
+  n.innerHTML = ""; n.appendChild(el); el.focus(); el.select();
+}
+/* the cursor into the row's field after "same": in the window that asked
+   when it still stands, else on the desk. A field he is typing in (the
+   desk's, or the window's) stands: the machine never takes it (round 3) -
+   the line under the title says "(same)" (gefStatusZeigen), he clicks the
+   name himself. */
+function gefTafelHandfeldAuf(id, doc){
+  const T = GEF && GEF.tafel;
+  if (!T || T.tippt || gefSchwebeEdit) return;
+  if (doc && gefSchwebe && gefSchwebe.document === doc){
+    const n = doc.querySelector(`.gf-sz .n[data-n="${id}"]`);
+    if (n) gefTafelHandfeld(n, id, doc);
+    return;
+  }
+  const el = document.querySelector(`#gf-blatt .gf-tf input[data-e="${id}"]`);
+  if (el){ el.focus(); el.select(); }
+}
+/* a grip pressed while a name field is being typed in (the desk's field in
+   focus, or the window's hand field): the field closes first, as the blur
+   closes it (gefTafelHand, E7), then the grip acts (round 3). The desk's
+   focusout redraws the sheet, so the grip's values are read before this. */
+function gefTafelFeldZu(){
+  const a = document.activeElement;
+  if (a && a.closest && a.closest(".gf-tf input[data-e]")) a.blur();
+  if (gefSchwebeEditZu) gefSchwebeEditZu(true);
+}
+/* the arrow's line alone, without a rebuild - while a name field holds the
+   sheet (round 4, as pgStatusZeigen on the player sheet): the note the last
+   draw put under the title gets the new word; without one the next draw
+   brings it */
+function gefStatusZeigen(){
+  const T = GEF && GEF.tafel; if (!T) return;
+  const n = document.querySelector("#gf-blatt .gf-tf [data-meldung]");
+  if (!n) return;
+  if (T.meldung) n.textContent = T.meldung; else n.remove();
 }
 /* "Keep N names": every row with a name goes into the register with its
    board's side, as the player room's "Keep the sheet" does - no tick per
    row (question 5) - and with them the rows seen earlier in this battle and
    gone from the stand (gefTafelFrueher, SOLL 2). merkeSpieler asks for the
    right itself and says nothing; the word is said here, once. */
-function gefTafelBehalten(){
-  if (!GEF || !GEF.tafel || !GEF.tafel.stand) return;
-  if (!gefTafelHaelt(GEF, GEF.tafel.stand)) return;   // no town, or the board names another: nothing to the register (5.16; held on the stand, Paket 20)
-  if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return; }
+function gefTafelBehalten(nur){
+  if (!GEF || !GEF.tafel || !GEF.tafel.stand) return false;
+  if (!gefTafelHaelt(GEF, GEF.tafel.stand)) return false;   // no town, or the board names another: nothing to the register (5.16; held on the stand, Paket 20)
+  if (!darf("aufklaerung")){ toast(rechtSatz("aufklaerung")); return false; }
   const T = GEF.tafel, B = T.stand, kam = gefTafelKameraden(), fVon = new Map();
   let n = 0, schon = 0;
+  const nurDiese = nur && typeof nur.has === "function" ? nur : null;   /* H3: "Keep N" - the chosen rows only */
   const nimm = (l, f) => {
     if (!l.n) return;
+    if (nurDiese && !nurDiese.has(l.eintrag.id)) return;
     if (l.eintrag.gespeichert){ schon++; return; }
     if (merkeSpieler(l.n, f === 0 || f === 1 || f === 2 ? f : undefined)){ l.eintrag.gespeichert = true; n++; }
   };
@@ -38955,6 +39675,7 @@ function gefTafelBehalten(){
   T.version++;
   toast(n ? `${n} player${n === 1 ? "" : "s"} on record${schon ? `, ${schon} were already` : ""}` : schon ? "All of them are already on record" : "Nothing to keep yet");
   gefZeichnen();
+  return n;
 }
 /* ---- TEST BENCH FOR THE BOARD READER (probe only, through window) -----
    gefProbeTafel(quelle, opts): one picture down gefLesen with ONE state
@@ -40426,7 +41147,10 @@ function gefEndeSatz(){
    OPENING NEEDS ITS OWN GESTURE (browser rule, not ours): the button in the
    desk, on pointerdown like gf-klang - the desk is rewritten every tick, and
    a click needs press and release on the same node. The button is an on/off
-   switch and nothing more: nothing is remembered, and "Capture the game"
+   switch and nothing more: nothing is remembered - except, since H3 (ToDo
+   20.09.2026), whether another room took the window away while the desk was
+   hidden (gefSchwebeVermisst, one bit, see schwebeFremdesZu: the desk gets
+   it back at the next gefstandAuf) - and "Capture the game"
    never opens it - requestWindow and getDisplayMedia both need a fresh user
    gesture and both consume it, so one click cannot do both (FABLE
    13.09.2026, BAT-12 Runde 2). Open the desk and share, then press the
@@ -40440,16 +41164,18 @@ function gefEndeSatz(){
    desk shows the last entry - so his next battle says whether Chrome hides
    the window over an exclusive full screen or keeps it up (SOLL-7: no advice
    about the window mode in here). */
-let gefSchwebe = null, gefSchwebeSatz = null;
+let gefSchwebe = null, gefSchwebeSatz = null, gefSchwebeEdit = null, gefSchwebeEditZu = null;   /* gefSchwebeEdit (H3): the entry whose hand field is open in the window; gefSchwebeEditZu closes it (round 3) */
 async function gefSchwebeAuf(){
   if (gefSchwebe || !GEF || !("documentPictureInPicture" in window)) return false;
   let w;
-  /* 340 x 96: three lines of the box fit - the longest server reason
+  schwebeFremdesZu("gefstand");                      /* H3: one floating window per page - the other room's goes first */
+  schwebeHalter = {raum: "gefstand", zu: gefSchwebeZu};
+  /* 340 x 96 (420 x 96 since H3, ToDo 20.09.2026 - the box of each row): three lines of the box fit - the longest server reason
      (pushGrund keeps 80 characters) takes three, every other sentence two
      (measured 13.09.2026, see the flick). Chrome puts it bottom right, the
      player moves it - ENNO 12.09.2026 (BAT-12): "Den genauen Look und die
      Position koennen wir dann noch feinjustieren." */
-  try { w = await window.documentPictureInPicture.requestWindow({width: 340, height: 96}); }   /* must be the first await after the gesture */
+  try { w = await window.documentPictureInPicture.requestWindow({width: 420, height: 96}); }   /* must be the first await after the gesture */
   catch(e){ GEF.status = "The floating window could not be opened - " + ((e && e.message) || e); gefZeichnen(); return false; }
   if (!GEF){ try { w.close(); } catch(e){} return false; }     // the desk closed while the browser was asked
   gefSchwebe = w; gefSchwebeSatz = null;
@@ -40472,7 +41198,7 @@ async function gefSchwebeAuf(){
   log("opened");
   doc.addEventListener("visibilitychange", () => log(doc.visibilityState === "hidden" ? "hidden" : "visible"));
   /* closed from its own corner or by the browser: forget it, relabel the desk */
-  w.addEventListener("pagehide", () => { if (gefSchwebe === w){ gefSchwebe = null; gefSchwebeSatz = null; } log("closed"); gefPult(); });
+  w.addEventListener("pagehide", () => { if (gefSchwebe === w){ gefSchwebe = null; gefSchwebeSatz = null; gefSchwebeEdit = null; gefSchwebeEditZu = null; } log("closed"); gefPult(); });
   gefSchwebeZeichnen();
   gefPult();
   return true;
@@ -40495,7 +41221,7 @@ function gefSchwebeLogZeile(){
   return `<div class="note" style="margin-top:6px">Floating window · ${esc(satz)}</div>`;
 }
 function gefSchwebeZu(){
-  const w = gefSchwebe; gefSchwebe = null; gefSchwebeSatz = null;
+  const w = gefSchwebe; gefSchwebe = null; gefSchwebeSatz = null; gefSchwebeEdit = null; gefSchwebeEditZu = null;
   if (w){ try { w.close(); } catch(e){} }
 }
 /* the box while it stands, the reading line otherwise (P3 (e)); written
@@ -40537,7 +41263,17 @@ function gefSchwebeZeichnen(){
      The grips are read on the window's own document by delegation, set
      once: the body is rewritten at every change. */
   const zeilen = gefSchwebeZeilen();
-  if (zeilen.length) html += `<div class="gf-sz-block">${zeilen.map(z => `<div class="gf-sz${z.u ? " un" : ""}"><span class="n">${esc(z.n)}</span><span class="g" data-ok="${z.id}" title="Confirm">✓</span><span class="g" data-neu="${z.id}" title="Read again">↻</span></div>`).join("")}</div>`;
+  /* H3 (ToDo 20.09.2026): a box per row for the multiple choice (T.wahl, the
+     set the desk's sheet ticks as well), one row "Confirm N" under them while
+     a box is set, and a click on the name opens the hand field in the window
+     (gefTafelHandfeld) - 420 wide for the box; while a hand field stands the
+     body is not rewritten (gefSchwebeEdit). */
+  const W = GEF && GEF.tafel && GEF.tafel.wahl;
+  const nW = W ? [...W].filter(gefSchwebeKaest).length : 0;
+  if (zeilen.length) html += `<div class="gf-sz-block">${zeilen.map(z => { const kaest = gefSchwebeKaest(z.id);
+    return `<div class="gf-sz${z.u ? " un" : ""}"><span class="w sp-kaest${kaest ? (W && W.has(z.id) ? " an" : "") : " leer"}"${kaest ? ` data-w="${z.id}"` : ""}></span><span class="n" data-n="${z.id}">${esc(z.n)}</span><span class="g" data-ok="${z.id}" title="Confirm">✓</span><span class="g" data-neu="${z.id}" title="Read again">↻</span></div>`; }).join("")}${
+    nW ? `<div class="gf-sz knopf"><span class="g" data-confirm="1">Confirm ${nW}</span></div>` : ""}</div>`;
+  if (gefSchwebeEdit) return;
   if (html === gefSchwebeSatz) return;
   try {
     const doc = gefSchwebe.document;
@@ -40545,13 +41281,30 @@ function gefSchwebeZeichnen(){
     if (!doc.body.dataset.griffe){
       doc.body.dataset.griffe = "1";
       doc.body.addEventListener("pointerdown", ev => {
-        const g = ev.target && ev.target.closest ? ev.target.closest(".gf-sz .g[data-ok],.gf-sz .g[data-neu]") : null;
-        if (!g) return;
+        if (!ev.target || !ev.target.closest) return;
+        const g = ev.target.closest(".gf-sz .g[data-ok],.gf-sz .g[data-neu],.gf-sz .w[data-w],.gf-sz .g[data-confirm]");
+        if (!g){
+          /* the name opens its hand field on the press (round 3): a desk
+             field in focus closes first, and its focusout rewrites this
+             body - so the cell is looked up again */
+          const n = ev.target.closest(".gf-sz .n[data-n]");
+          if (!n || n.querySelector("input")) return;
+          ev.preventDefault();
+          const id = +n.dataset.n; gefTafelFeldZu();
+          const n2 = doc.querySelector(`.gf-sz .n[data-n="${id}"]`);
+          if (n2) gefTafelHandfeld(n2, id, doc);
+          return;
+        }
         ev.preventDefault();
-        if (g.dataset.ok !== undefined) gefTafelBestaetigen(+g.dataset.ok); else gefTafelNeuLesen(+g.dataset.neu);
+        const ok = g.dataset.ok, neu = g.dataset.neu, w = g.dataset.w;
+        gefTafelFeldZu();                      /* a field being typed in closes as the blur would, then the grip acts (round 3) */
+        if (ok !== undefined) gefTafelBestaetigen(+ok);
+        else if (neu !== undefined) gefTafelNeuLesen(+neu, doc);
+        else if (w !== undefined) gefTafelWahl(+w, ev.shiftKey, gefSchwebeZeilen().map(z => z.id).filter(gefSchwebeKaest));
+        else gefTafelWahlBestaetigen();
       });
     }
-    const hoch = 96 + 14*zeilen.length;
+    const hoch = 96 + 14*(zeilen.length + (nW ? 1 : 0));
     if (gefSchwebe.innerHeight && Math.abs(gefSchwebe.innerHeight - hoch) > 2){ try { gefSchwebe.resizeBy(0, hoch - gefSchwebe.innerHeight); } catch(e){} }
   } catch(e){}
 }
@@ -40832,6 +41585,9 @@ async function gefstandAuf(){
   if (gefOffen) return;
   raeumeSchliessen("gefstand");
   gefOffen = true;
+  /* H3 (ToDo 20.09.2026): the window another room took away comes back with
+     this click - requestWindow must be the first await after the gesture */
+  if (gefSchwebeVermisst){ gefSchwebeVermisst = false; if (GEF && GEF.live && !gefSchwebe) await gefSchwebeAuf(); }
   /* THE CAPTURE OUTLIVES THE DESK (Blatt 16.09., P3 (a)). ENNO 17.09.2026:
      "Der battlereader soll uebrigens als eine kleine Ausnahme auch
      weiterlaufen, wenn man den Raum verlaesst". A running GEF is taken up
@@ -40879,7 +41635,8 @@ function gefstandZu(){
 }
 document.getElementById("b-gefstand").addEventListener("click", gefstandAuf);
 document.getElementById("gf-zu").addEventListener("click", gefstandZu);
-document.addEventListener("keydown", ev => { if (ev.key === "Escape" && gefOffen) gefstandZu(); });
+/* Escape ends a standing choice on the board first (H3), the desk after */
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && gefOffen){ const T = GEF && GEF.tafel; if (T && T.wahl && T.wahl.size) gefTafelWahlEnde(); else gefstandZu(); } });
 
 /* ONE ROOM AT A TIME. All four full-screen rooms sit on the same
    position:fixed inset:0 z-index:120, and none of them asked after the
@@ -50697,6 +51454,8 @@ async function dlSchwebeAuf(){
   const hoehe = Math.max(320, Math.min(screen.availHeight - 80, 66 * Math.max(5, Math.min(DL.zeilen.length || 7, 10)) + 120));
   let w;
   dlSchwebeOeffnet = true;                              /* one window, however many gestures land here */
+  schwebeFremdesZu("depot");                         /* H3: one floating window per page - the other room's goes first */
+  schwebeHalter = {raum: "depot", zu: dlSchwebeZu};
   try { w = await window.documentPictureInPicture.requestWindow({width: 420, height: hoehe}); }   /* must be the first await after the click */
   catch(e){ dlSchwebeOeffnet = false; DL.status = "The floating window could not be opened - " + ((e && e.message) || e); dlZeichnen(); return e; }
   dlSchwebeOeffnet = false;
@@ -62162,7 +62921,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f11532345b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build d70196ff72</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -62390,7 +63149,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f11532345b";
+const BAU = "d70196ff72";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
