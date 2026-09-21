@@ -1458,6 +1458,12 @@ body.kb-zieht{user-select:none}
 .kb-z .f.bes{text-overflow:clip}
 .kb-z .f.bes.lang{font-size:13px}
 .kb-z .f.bes.sehrlang{font-size:11.5px;letter-spacing:-.01em}
+/* D1: the soldier of an own unit - small behind the owner in the strip, on
+   a small line of his own under the owner in the sheet row (the row clips at
+   the column's edge, and a soldier's name is as long as any) */
+.kb-sold{font-size:11px;opacity:.75;margin-left:4px;white-space:nowrap}
+.kb-z .f.bes.mit-sold{line-height:1.15}
+.kb-z .f.bes .kb-sold{display:block;margin-left:0}
 /* and a long unit name goes on two lines inside its ruling instead of
    being cut - the Kommodore: "die Namen muessen immer ganz sichtbar sein" */
 .kb-z .f.nam.lang{white-space:normal;font-size:11.5px;line-height:15px;max-height:34px;text-overflow:clip;overflow:hidden;word-break:break-word;display:flex;align-items:safe center}
@@ -26224,8 +26230,20 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
     let fremd = null;
     if (bes.schrift && !unitsFremdSchrift(name.text))
       fremd = await unitsFremdLesen(c, UNITS_KASTEN.x0, o+Z.name.dy, B, Z.name.h, bes.schrift);
+    /* THE TALLER BOX HAS A THIRD LINE, AND IT IS NOT THE OWNER. D1 (ENNO
+       20.09.2026, Z10): "Der Besitzer ist nach dem Tool der Spielername
+       gemeinsam mit dem Soldatennamen. Das ist aber ja Unsinn, das Tool
+       muss hier erkennen, das es um die eigenen ATs geht". The game shows
+       one's own unit with "BESITZER: KOMMODORE" and, on the line below,
+       the SOLDIER who leads it ("TRICKBETRÜGER") - every own team hangs on
+       a soldier with a name of his own. Read as a line of its own: the
+       soldier goes with the reading for the sheet, the owner is the first
+       line alone. Measured 21.09.2026 on the 04.09. picture: glued, the
+       owner came back as "KOMMODORE TRICKBETRUGER" and the name test
+       against S.name failed (0 of 1); alone it holds (1 of 1). */
     let bes2 = null;
     if (Z.besitzer2) bes2 = await unitsText(c, UNITS_KASTEN.x0, o+Z.besitzer2.dy, B, Z.besitzer2.h, null, "dunkel");
+    const soldat = bes2 && bes2.text ? atStrichZuI(String(bes2.text).trim()) || null : null;
     const hp = await unitsStaerke(c, d, o);
     /* "GE-008 - AT008 - KATSARIDAS": the tag is what stands before the first
        dash, the rest is the name */
@@ -26243,7 +26261,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
        in capitals at the start counts as a label as long as something
        follows it; failing that, the whole line stands. It only comes back
        empty when the line really is. */
-    const bzRoh = atStrichZuI(((bes.text || "") + (bes2 && bes2.text ? " " + bes2.text : "")).trim());
+    const bzRoh = atStrichZuI((bes.text || "").trim());   /* the owner line alone (D1) */
     const bmFrei = atAufschriftAb(bzRoh);
     const bm = bmFrei ? [null, bmFrei]
       : /^\s*(?:BESITZER|OWNER|PROPRIETARIO|PROPRIETAIRE|PROPRI\u00c9TAIRE|PROPIETARIO|W\u0141A\u015aCICIEL|\u0412\u041b\u0410\u0414\u0415\u041b\u0415\u0426)\s*[:;.\-]?\s*(.*)$/iu.exec(bzRoh)
@@ -26446,6 +26464,7 @@ async function unitsLesen(quelle, melde, letzteReihe, art, hand){
       name: unitsCjkEng(nameText, name.schrift || (fremd && fremd.schrift) || null),
       nameZuv: name.zuv,
       besitzer: bzName, besitzerRoh: bes.text, besitzerZuv: bes.zuv,
+      soldat,                      /* D1: the soldier of an own unit - shown, never filed */
       hp, form: R.form,
       zeiten: uhr
     };
@@ -26819,7 +26838,7 @@ function unitsReihenSeite(R){
 function unitsZeileAus(R){
   const e = R.einheit; if (!e) return null;
   const rs = unitsReihenSeite(R);
-  return {tag: e.tag, name: e.name, besitzer: e.besitzer, hp: e.hp,
+  return {tag: e.tag, name: e.name, besitzer: e.besitzer, soldat: e.soldat || null, hp: e.hp,
           seite: rs !== null ? rs : R.seite, linie: R.linie || null, stadt: R.stadt ? R.stadt.i : null,
           nameZuv: e.nameZuv, besitzerZuv: e.besitzerZuv,
           zuLang: !!e.zuLang,          /* read longer than the game allows, cut (T1 (e)) */
@@ -27318,7 +27337,7 @@ function kbSchonDa(e){
 /* A line back to empty - the type and the side stay, they come from the
    card in the bar and not from the reading. */
 function kbZeileLeeren(z){
-  Object.assign(z, {status: "vermutet", tag: "", name: "", besitzer: "", hp: null,
+  Object.assign(z, {status: "vermutet", tag: "", name: "", besitzer: "", soldat: null, eigenBleibt: false, hp: null,
                     unsicher: false, kandidat: null, unsicherGrund: null, abweichung: null, bekannt: null,
                     nameZuv: 0, zwilling: null, gespeichert: false, schriftHand: null, neuLesen: null, typNeu: null});
 }
@@ -27851,7 +27870,14 @@ function kbVerarbeiten(R, vorgabe){
       /* never into the parked block: it is no part of the bar, and the
          window can reach past the active lines while the vote catches up */
       if (!z || z.fort) return;
-      z.eigen = k.seite === "gelb";
+      /* D1 (ENNO 20.09.2026, Z10): a yellow card says "own"; a card of any
+         other colour does NOT say "not own" against the box reading or the
+         hand. Measured 21.09.2026 on the 04.09. picture: the picked own
+         card stood faded (median 177/177/177, 0 of 5460 points in the
+         yellow rule), inherited the row's USSR, and this line took the own
+         unit with it - "Keep the sheet" would have filed it in the enemy
+         book (0 of 1 in the own depot). */
+      z.eigen = k.seite === "gelb" || !!z.eigenBleibt;
       if (!z.eigen){
         const s = k.seite === "US" ? 0 : k.seite === "GE" ? 1 : k.seite === "SU" ? 2 : (reihenSeite >= 0 ? reihenSeite : null);
         if (s !== null) z.seite = s;
@@ -28018,8 +28044,14 @@ function kbVerarbeiten(R, vorgabe){
                           schrift: e.schrift || z.schrift || null});
       else if (e.bild) z.bild = e.bild;      // the print stays fresh either way
       if (e.nameBild) z.nameBild = e.nameBild;   // the picture too - sheet only, never the depot
-      Object.assign(z, {status: "erfasst", besitzer: e.besitzer, hp: e.hp,
-                        eigen: !!e.eigen, seite: e.seite !== null && e.seite !== undefined ? e.seite
+      Object.assign(z, {status: "erfasst", besitzer: e.besitzer, soldat: e.soldat || null, hp: e.hp,
+                        /* D1: what the READING says about "own" (the owner is
+                           the member's name, or the taller box) is kept beside
+                           the bit itself - the card pass below may set eigen
+                           from a yellow card, but never clears what the box
+                           reading established (eigenBleibt) */
+                        eigen: !!e.eigen, eigenBleibt: !!e.eigen,
+                        seite: e.seite !== null && e.seite !== undefined ? e.seite
                                               : (z.seite !== null && z.seite !== undefined ? z.seite
                                               : (KB.reiheSeite !== null && KB.reiheSeite !== undefined ? KB.reiheSeite : null)),
                         zwilling: zwilling ? da.i + 1 : null});
@@ -29372,7 +29404,7 @@ function kbZeichnen(){
         : (z.unlesbar && z.nameBild ? `<img class="kb-nbild" src="${z.nameBild}" alt="">` : "")
           + ((z.unlesbar && !z.beschrieben) ? "unreadable — click and describe it"
              : zeig(z, "name", z.name))}</div>
-      <div class="f bes ${(z.besitzer || "").length > 17 ? "sehrlang" : (z.besitzer || "").length > 13 ? "lang" : ""}" data-f="besitzer" title="${kbEsc(z.besitzer || "")} — click to correct">${z.status === "erfasst" ? zeig(z, "besitzer", z.besitzer || "") : ""}</div>
+      <div class="f bes ${(z.besitzer || "").length > 17 ? "sehrlang" : (z.besitzer || "").length > 13 ? "lang" : ""} ${z.soldat ? "mit-sold" : ""}" data-f="besitzer" title="${kbEsc(z.besitzer || "")}${z.soldat ? " \u00b7 " + kbEsc(z.soldat) : ""} — click to correct">${z.status === "erfasst" ? zeig(z, "besitzer", z.besitzer || "") + (z.soldat && !(KB.schreibt && KB.schreibt.i === z.i) ? `<span class="kb-sold">\u00b7 ${kbEsc(z.soldat)}</span>` : "") : ""}</div>
       <div class="f hp" data-f="hp" title="click to correct">${z.status !== "erfasst" ? ""
         : (KB.schreibt && KB.schreibt.i === z.i) ? zeig(z, "hp", (z.hp || []).map(h => h ? `${h[0]}/${h[1]}` : "?").join("  "))
         : kbStaerkeHTML(z)}</div>
@@ -29671,7 +29703,7 @@ function kbSchwebeZeichnen(){
   const soll = KB.abreiseUnklar
     ? `<b>A unit left the bar.</b>`
     : z
-    ? `<b data-f="tag">${kbEsc(z.tag) || "?"}</b> <span data-f="name">${kbEsc(z.name) || "?"}</span><br><span data-f="besitzer">${kbEsc(z.besitzer) || "?"}</span><br><small>${z.typ ? kbEsc(atName(z.typ)) : "type ?"} \u00b7 ${z.eigen ? "own" : kbSeiteName(z.seite)} \u00b7 line ${wahl + 1}${kbFestName(z) && kbFestTyp(z) ? " \u00b7 \u{1F512}" : ""}</small><div class="hp">${kbStaerkeHTML(z)}</div>`
+    ? `<b data-f="tag">${kbEsc(z.tag) || "?"}</b> <span data-f="name">${kbEsc(z.name) || "?"}</span><br><span data-f="besitzer">${kbEsc(z.besitzer) || "?"}${z.soldat ? `<span class="kb-sold">\u00b7 ${kbEsc(z.soldat)}</span>` : ""}</span><br><small>${z.typ ? kbEsc(atName(z.typ)) : "type ?"} \u00b7 ${z.eigen ? "own" : kbSeiteName(z.seite)} \u00b7 line ${wahl + 1}${kbFestName(z) && kbFestTyp(z) ? " \u00b7 \u{1F512}" : ""}</small><div class="hp">${kbStaerkeHTML(z)}</div>`
     : kbEsc(KB.status);
   /* Q12: while a correction field is open the box is his, not the tick's */
   if (kbSchwebeEdit){ /* the field stays */ }
@@ -29978,7 +30010,7 @@ function kbBearbeiten(ev){
   }
   const fertig = () => {
     const v = el.value;
-    if (feld === "seite"){ z.eigen = v === "eigen"; z.seite = v === "" || v === "eigen" ? (v === "eigen" ? z.seite : null) : +v; }
+    if (feld === "seite"){ z.eigen = v === "eigen"; z.eigenBleibt = z.eigen; z.seite = v === "" || v === "eigen" ? (v === "eigen" ? z.seite : null) : +v; }   /* D1: the hand's word holds through the card pass */
     else if (feld === "typ"){ z.typ = v || null; }
     else if (feld === "schrift"){ z.schriftHand = v || null; }
     else if (feld === "hp"){ z.hp = [...v.matchAll(/(\d+)\s*\/\s*(\d+)/g)].map(m => [+m[1], +m[2]]); }
@@ -40997,6 +41029,7 @@ async function kbProbeBild(quelle, opts){
                      nameZuv: u.nameZuv, besitzerZuv: u.besitzerZuv,
                      tagZuv: (u.tagInfo && u.tagInfo.zuv) || null, tagInfo: u.tagInfo || null,
                      unlesbar: !!u.unlesbar, schrift: u.schrift || null, hp: u.hp, form: u.form, eigen: !!e.eigen,
+                     soldat: u.soldat || null,
                      tuer: {ok: geschrieben, zeile: geschrieben ? KB.probeSchrieb : null,
                             tuersteher: tuerEcht, grund: geschrieben ? null : KB.status}};
         E.ocrZeiten = u.zeiten || null;
@@ -41029,7 +41062,7 @@ async function kbProbeBild(quelle, opts){
     if (!KB) throw new Error("the room was closed during the run");
     E.zeilen = KB.zeilen.map(z => ({i: z.i, status: z.status, tag: z.tag, name: z.name, besitzer: z.besitzer,
       typ: z.typ, seite: z.seite, nameZuv: z.nameZuv, unlesbar: !!z.unlesbar, schrift: z.schrift || null,
-      eigen: !!z.eigen, unsicher: !!z.unsicher, unsicherGrund: z.unsicherGrund || null,
+      eigen: !!z.eigen, soldat: z.soldat || null, unsicher: !!z.unsicher, unsicherGrund: z.unsicherGrund || null,
       tagZuv: E.gelesen && E.gelesen.ziel === z.i ? E.gelesen.tagZuv : null,
       tuer: E.gelesen && E.gelesen.ziel === z.i ? E.gelesen.tuer : null}));
     E.status = KB.status;
@@ -61843,7 +61876,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 5c7449717c</span></p></div>
+         installation. <span style="color:var(--dim2)">· build a67ce4c5e3</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -62071,7 +62104,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "5c7449717c";
+const BAU = "a67ce4c5e3";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
