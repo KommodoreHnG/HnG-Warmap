@@ -51040,7 +51040,7 @@ function kartenRaster(quelle){
     /* Zeilenlagen und Zahlengruppen als Anteile - dieselben Werte, die der
        Regelweg als Ausgangspunkt nimmt. Die Gruppen sitzen gemessen bei
        -0,035 / +0,789 / +1,613 Kartenhoehen neben der Kachel, gut 0,78 breit. */
-    const zwei  = [[0.070*P, 0.235*P], [0.310*P, 0.441*P]];
+    const zwei  = [[0.070*P, 0.29*P], [0.310*P, 0.441*P]];   /* R3: name band to the descenders, as in the main way */
     const zZahl = [0.577*P, 0.770*P];
     const gruppen = [-0.035, 0.789, 1.613].map(a =>
       [Math.max(0, Math.round(x0 + a*P)), Math.min(W-1, Math.round(x0 + (a+0.78)*P))])
@@ -51150,7 +51150,22 @@ function kartenRaster(quelle){
   const hMed = median(bestStapel.map(k=>k.h));
   const voll = bestStapel.filter(k => Math.abs(k.h/hMed - 1) < 0.15);
   const anker = voll.length >= 2 ? voll : bestStapel;
-  const Panker = (anker[anker.length-1].cy - anker[0].cy) / (anker.length-1);
+  /* R3 (21.09.2026): the anchors are not always consecutive - a box cut by
+     the list's edge or by a bar over it falls out of `voll`, and the span
+     divided by count-1 came out 236,7 for a pitch of 142 (lade_010) and 265
+     for 213 (Map zoomed in) -> "P != Panker" -> short way, 2 of 6 cards.
+     Each gap divided by its whole multiple of the stack's pitch instead, the
+     median of those: lade_010 2 -> 6 cards, Map zoomed in/out 2 -> 7, the
+     other 95 pictures unchanged, false alarms 0 of 31 (Listen/MESSUNG-R3.md
+     2a). */
+  const Panker = (() => {
+    const d = [];
+    for (let i = 1; i < anker.length; i++){
+      const g = anker[i].cy - anker[i-1].cy;
+      d.push(g / Math.max(1, Math.round(g/bestP)));
+    }
+    return d.length ? median(d) : bestP;
+  })();
   if (!(Panker >= 8)) return kurzWeg();
 
   /* ---- Panelspalten: was sich mit der Periode wiederholt -------------- */
@@ -51486,6 +51501,10 @@ function kartenRaster(quelle){
   };
   /* Am Kriegsfenster nachgemessene Lagen, als Anteil der Kartenhoehe:
      Name 0,070..0,235, Kuerzel und Ort 0,310..0,441, Zahlen 0,577..0,770.
+     R3 (21.09.2026): the name band ends at 0,29 - its ink reaches 0,289 P
+     (the descenders of g in "Panzergrenadiere", "Maengel"), and a band that
+     ended at 0,235 P + 4 px read g as a; names 77 -> 98 of 132
+     (Listen/MESSUNG-R3.md 4, 5). The tag band holds its ink (0,317..0,451).
      Die Tintensuche verfeinert sie nur - sie ersetzt sie nicht mehr. Frueher
      entschied allein die Suche, und wenn sie zwei Zeilen zu einer zog, stand
      der Name der einen Einheit bei der anderen. */
@@ -51505,7 +51524,7 @@ function kartenRaster(quelle){
      Ortsname schwarz). Die Richtung darf also nicht vorgegeben sein. */
   const abwText = Math.max(30, 0.5*(p90 - p10));
   const textB = bandSuche(0.02*P, 0.52*P, v => Math.abs(v - hellBg) > abwText, 0.25);
-  const zwei = [feinern(sollBand(0.070, 0.235), textB),
+  const zwei = [feinern(sollBand(0.070, 0.29), textB),
                 feinern(sollBand(0.310, 0.441), textB)];
   const zZahl = [feinern(sollBand(0.577, 0.770),
                          bandSuche(0.50*P, 0.82*P, v => v > hellBg, 0.30))];
@@ -51806,7 +51825,7 @@ function zeichenLesen(quelle, x0, y0, breit, hoch){
 }
 
 /* Ein Ausschnitt als eigenes, aufbereitetes Bild - fuer die Einzelzeilen. */
-function feldBild(quelle, x, y, w, h, faktor, beidseitig, dunkelKanal){
+function feldBild(quelle, x, y, w, h, faktor, beidseitig, dunkelKanal, tinteDunkel){
   x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y));
   w = Math.min(quelle.width - x, Math.round(w));
   h = Math.min(quelle.height - y, Math.round(h));
@@ -51843,7 +51862,42 @@ function feldBild(quelle, x, y, w, h, faktor, beidseitig, dunkelKanal){
      demselben grauen Grund. Wer sich fuer eine Richtung entscheidet, wirft
      eines von beiden weg. Es zaehlt der Abstand zum Grund. */
   const grund = perz(.5);
-  if (!beidseitig){
+  if (!beidseitig && tinteDunkel && grund - perz(.02) > perz(.98) - grund){
+    /* R3 (21.09.2026, measured on his recording of the war map's depot list,
+       Listen/MESSUNG-R3.md 4): the list's letters are BLACK (p2 = 0..3 in
+       the brightest channel) on a mid-grey card (median 96..127, under the
+       mouse 176..195), nothing is white (p98 <= 140) - at Full HD, 1440p
+       and 4K alike. The majority rule below takes median < 128 for light
+       letters and turned the terrain behind the half-transparent panel into
+       ink in 97 of 122 name fields, the letters into holes. Here the
+       direction is given: black on white, no inversion - but only where the
+       dark side of the field is the larger one (ground - p2 above p98 -
+       ground): in the soldier window the names stand WHITE on a dark card
+       (measured: p2 96..107, median 108..117, p98 176..255; the war map:
+       p2 0, median 105..130, p98 <= 139), and a field of that kind falls
+       through to the rule below as before (R3 round 2: without this test
+       the soldier window read 0 of 10 names). Not a hard cut - a ramp from
+       the ink (p2) up to 0,85 of the ground keeps the letters' halo, and a
+       one-point widening at the scaled size gives the thin strokes weight:
+       a hard cut at half the ground read the tag's "1" (BODEN1, Full HD)
+       in 2 of 10 scroll positions, the ramp in 8 of 10, as the old way did;
+       without the widening the tags fell 76 -> 64 of 132. tinteDunkel 2
+       squares the ramp (mid-tones darker): the flag of a "1" is one point
+       wide where a line has to be enlarged fourfold (Full HD, band 21 px)
+       and came out light grey (80 -> 200), read as a bar; squared it stays
+       dark (80 -> 156) and the ground above 0,85 stays white. Names 46 ->
+       106 of 132 cards, tags 58 -> 76 on the same 20 pictures. Only the
+       depot list's two text lines set this switch; the town reader of the
+       map keeps the rule. */
+    const lo = Math.min(perz(.02), 0.25*grund), hi = Math.max(lo + 14, 0.85*grund), pot = tinteDunkel > 1 ? 2 : 1;
+    const v0 = new Uint8ClampedArray(n);
+    for (let j=0; j<n; j++){ let t = (grau[j]-lo)/(hi-lo); t = t < 0 ? 0 : t > 1 ? 1 : t; v0[j] = 255*(pot > 1 ? t*t : t); }
+    const Wc = c.width, Hc = c.height, R = 1;
+    const a = new Uint8ClampedArray(n), v1 = new Uint8ClampedArray(n);
+    for (let y=0; y<Hc; y++) for (let x=0; x<Wc; x++){ let m = 255; for (let k=-R; k<=R; k++){ const xx = x+k; if (xx >= 0 && xx < Wc && v0[y*Wc+xx] < m) m = v0[y*Wc+xx]; } a[y*Wc+x] = m; }
+    for (let y=0; y<Hc; y++) for (let x=0; x<Wc; x++){ let m = 255; for (let k=-R; k<=R; k++){ const yy = y+k; if (yy >= 0 && yy < Hc && a[yy*Wc+x] < m) m = a[yy*Wc+x]; } v1[y*Wc+x] = m; }
+    for (let i=0, j=0; j<n; i+=4, j++){ d[i] = d[i+1] = d[i+2] = v1[j]; d[i+3] = 255; }
+  } else if (!beidseitig){
     /* Der Regelfall: nur die Mehrheitsrichtung. Beidseitig waere hier teuer -
        das Panel im Kriegsfenster ist halbdurchsichtig, die Landkarte dahinter
        weicht ueberall vom Grund ab, und aus dem Feld wird Rauschen, an dem
@@ -51970,7 +52024,7 @@ async function depotAusRaster(quelle, melde, merk){
       let bestZ = -1;
       for (const dunkel of [false, true]){
         const nb = feldBild(quelle, r.textX, k.name[0]-2,
-                            rNam - r.textX, k.name[1]-k.name[0]+4, 0, false, dunkel);
+                            rNam - r.textX, k.name[1]-k.name[0]+4, 0, false, dunkel, k.name[1]-k.name[0]+4 <= 25 ? 2 : 1);   /* R3: the ink is dark; the ramp squared where the line is enlarged fourfold (Full HD) */
         if (!nb) continue;
         const a = await ocrMitZuv(nb, 7, ()=>{});
         /* the AT-Grabber's lessons: the glyph book's doorman (check only,
@@ -51992,7 +52046,7 @@ async function depotAusRaster(quelle, melde, merk){
       for (const beid of [false, true]){
         for (const dunkel of [false, true]){
           const kb = feldBild(quelle, r.textX, k.kuerzel[0]-2,
-                              rKue - r.textX, k.kuerzel[1]-k.kuerzel[0]+4, 0, beid, dunkel);
+                              rKue - r.textX, k.kuerzel[1]-k.kuerzel[0]+4, 0, beid, dunkel, 1);   /* R3: dark ink on the one-sided pass */
           if (!kb) continue;
           const a = await ocrMitZuv(kb, 7, ()=>{});
           const txt = saeubern(a.text);
@@ -61811,7 +61865,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build e278b0ecce</span></p></div>
+         installation. <span style="color:var(--dim2)">· build a35dcd7f99</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -62039,7 +62093,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "e278b0ecce";
+const BAU = "a35dcd7f99";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
