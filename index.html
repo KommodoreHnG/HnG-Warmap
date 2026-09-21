@@ -2727,25 +2727,25 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
       <!-- Die Flugplatzbrille. Sie sitzt neben Radius, weil beide dieselbe
            Frage beantworten: wie weit reicht etwas. -->
       <button class="tool row" id="b-flug" aria-pressed="false"
-        title="Airfields — planes can only sit here. Pick a capital to see which ones threaten it.">
+        title="Airfields. Pick a capital to see which threaten it.">
         <svg viewBox="0 0 24 24"><path d="M12 3.4 13.1 10l7.4 3.3-.1 1.7-7.3-1.6-.6 4.9 2.6 1.9v1.3L12 20.4l-3.1 1.1v-1.3l2.6-1.9-.6-4.9-7.3 1.6-.1-1.7L10.9 10z"/></svg>
         <span class="lbl" data-txt="view.airfields">Airfields</span></button>
       <!-- Das Fernglas. Es steht neben der Flugplatzbrille, weil beide
            dasselbe Thema haben: was von wo aus zu sehen ist. -->
       <button class="tool row" id="b-blick" aria-pressed="false"
-        title="When the clan last looked at each town — green just now, red long ago. Towns with no mark have not been scanned.">
+        title="The clan's last look at each town">
         <svg viewBox="0 0 24 24"><circle cx="7" cy="14.5" r="4.2"/><circle cx="17" cy="14.5" r="4.2"/><path d="M10.6 13.2h2.8M7 10.3V4.6h2.6M17 10.3V4.6h-2.6"/></svg>
         <span class="lbl" data-txt="view.blick">Coverage</span></button>
       <!-- The Aufmarsch, next to the binoculars: both live off what was last
            seen - this one shows WHAT stood there, not only WHEN. -->
       <button class="tool row" id="b-aufmarsch" aria-pressed="false"
-        title="Last seen — sightings, enemy records and own teams in each town; ring coloured by side and sized by count, the outer ring says how fresh (green under five minutes, red after an hour).">
+        title="Last seen: ring by side and count, outer ring by age.">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.1" fill="currentColor" stroke="none"/><path d="M12 3.4a8.6 8.6 0 0 1 8.6 8.6"/><path d="M20.6 12a8.6 8.6 0 0 1-8.6 8.6" stroke-dasharray="2.6 2.6"/><path d="M12 20.6A8.6 8.6 0 0 1 3.4 12"/></svg>
         <span class="lbl" data-txt="view.aufmarsch">Last seen</span></button>
       <button class="tool row" id="b-names" aria-pressed="true">
         <svg viewBox="0 0 24 24"><path d="M4.4 7.6V5.2h15.2v2.4"/><path d="M12 5.2v13.6"/><path d="M8.9 18.8h6.2"/></svg>
         <span class="lbl" data-txt="view.names">Labels</span></button>
-      <button class="tool row" id="b-entwurf" aria-pressed="false" title="Attacks, defences and areas stay private until you publish them. A para-block or a recon request always goes to the clan.">
+      <button class="tool row" id="b-entwurf" aria-pressed="false" title="Private until published; para-blocks and recon go to the clan.">
         <svg viewBox="0 0 24 24"><path d="M4.5 19.5l3.2-.7 10.4-10.4-2.5-2.5L5.2 16.3z"/><path d="M14.2 7.3l2.5 2.5"/></svg>
         <span class="lbl" data-txt="view.entwurf">Drafts</span></button>
       <button class="tool row" id="b-fertig" aria-pressed="false" title="Show orders that are done">
@@ -5077,11 +5077,11 @@ const feindDepot = key => feindDepotNormieren(S.edep[key] && Array.isArray(S.ede
    beide, und der Zufall entscheidet nicht. */
 const AUFK_ARTEN = [
   {k:"pl", n:"Players", feind:1,
-   d:"Somebody from the other side written into the register for the first time."},
+   d:"First record of an enemy player."},
   {k:"at", n:"Their teams", feind:1,
    d:"An enemy assault team recorded for the first time, wherever it stood."},
   {k:"wp", n:"Their kit", feind:1,
-   d:"A weapon or a vehicle on one of their soldiers, recorded for the first time."},
+   d:"First record of a weapon or vehicle."},
   {k:"sp", n:"Positions", feind:1,
    d:"A sighting on the map: which unit stood where."},
   {k:"ow", n:"Our own", feind:0,
@@ -6145,9 +6145,9 @@ function setLeader(player){ stamp("meta", "leader", player || null); save(); kop
    ENNO 07.09.2026: "Befoerderung durch Leader/autorisierte Offiziere"). */
 const RECHTE = [
   {k:"befehl",      n:"Give orders",
-   d:"May set their own arrows, lines, areas and para blocks active or done."},
+   d:"Sets their own orders active or done."},
   {k:"bestaetigen", n:"Confirm orders",
-   d:"May set any order of our side active, done or back to planned."},
+   d:"Sets any order of our side active or done."},
   {k:"loeschen",    n:"Clear other people's marks",
    d:"Take anybody's arrow, line, area or board post off the map."},
   {k:"anfordern",   n:"Request roles",
@@ -6951,7 +6951,7 @@ function zustandSetzen(key, v, st, leise){
   if (jetztZs !== ziel && !leise){
     const e = okEintrag(key);
     toast(!chef && e ? `Set by ${e.n || e.by}. Only somebody who may confirm can change that.`
-                     : "Its author set that in the order itself. Only they can change it.");
+                     : "Only its author can change that.");
   }
   /* a finished drop leaves an active para block on its target, unless our
      side already holds an active one there: none, another side's or our
@@ -7706,7 +7706,7 @@ function zuordWahl(b, zurueck){
     .filter(g => g.ats.length);
   openDlg(`
     <div class="dlg-h"><h2>Assign to ${esc(b.name || "")}</h2>
-      <p>${esc(befehlArtName(b))}${ort ? ` \u00b7 ${esc(ort)}` : ""} \u00b7 ${ZUSTAND_NAME[b.zs] || b.zs || "planned"}${
+      <p>${esc(befehlArtName(b))}${b.v && b.v.aufkl ? ` \u00b7 ${esc(aufklZiele(b.v))}` : ort ? ` \u00b7 ${esc(ort)}` : ""} \u00b7 ${ZUSTAND_NAME[b.zs] || b.zs || "planned"}${
         b.art !== "arrow" && b.v && +b.v.soll ? ` \u00b7 target ${+b.v.soll}` : ""}</p></div>
     <div class="dlg-b">
       ${frei.length ? `<div class="zuord-liste">${frei.map(d => { const grund = aufklSperre(b, d); return `<label${
@@ -9150,7 +9150,6 @@ function ordersDialog(tab){
           <tbody>${befehlZeilen}</tbody></table></div>`
           : quelle.length ? `<div class="empty">No order matches the filter.</div>`
           : `<div class="empty">No open orders on our side.</div>`}
-        <div class="note">Assigned teams count before commitments.</div>
       </div>
       <div class="tabp" data-tab="players">
         ${rollePostfachInhalt()}
@@ -9776,7 +9775,7 @@ function aufklKlick(i, mehr){
   const k = areaSpeichern(aufklHuelle([i]), {aufkl: 1, orte: [i]});
   if (!k) return;
   aufklFluss = {id: k}; tips();
-  toast(`Eyes asked on ${MAP.n[i][0]}. Ctrl-click adds towns, Escape ends.`);
+  toast(`Eyes asked on ${MAP.n[i][0]}.`);
 }
 function aufklTipp(){
   const e = aufklFluss && S.area[aufklFluss.id];
@@ -10276,7 +10275,7 @@ function gefEndeAlterHalten(rest, e){
 /* the side panel line under the battle switch */
 function overtimeSatz(e){
   const ms = otMs(e);
-  if (ms >= OT_DAUER) return {text: "Overtime is over (60:00): defenders win unless the attackers took all three.", vorbei: true};
+  if (ms >= OT_DAUER) return {text: "Overtime over - 60:00.", vorbei: true};
   /* the starter, from the clock itself where it stands - the row's author is
      whoever wrote last, and since the battle reader writes into this row every
      fifteen seconds, that is no longer the person who started the clock. */
@@ -10291,7 +10290,7 @@ function overtimeZeile(i){
   return `<div class="ot-zeile" id="ot-zeile">
         <div><span id="ot-text"${s.vorbei ? ' style="color:var(--warn,#d08b3a)"' : ""}>${esc(s.text)}</span>
           ${zeitReise ? "" : `<button class="mini" id="ot-clear">Clear</button>`}</div>
-        <div class="note" id="ot-hint"${s.vorbei ? ' style="display:none"' : ""}>Defenders win at 60:00, attackers as soon as they hold all three objectives.</div></div>`;
+        <div class="note" id="ot-hint"${s.vorbei ? ' style="display:none"' : ""}></div></div>`;
 }
 /* only the text is pulled along every second; true while the clock runs */
 function overtimeZeileNachziehen(i){
@@ -10656,8 +10655,7 @@ function punkteZeichnen(zeilen){
       ${PUNKTE_KONTEN.map(spalte).join("")}
     </div>
     <div class="note"><b>Recon</b> - first finds, battles marked, map kept. <b>Logistic</b> - depot.
-      <b>Order</b> - orders done. <b>Leader</b> - your orders, once done.
-      <b>EXP</b> - the four accounts by the clan's factors, plus a rank set by hand.</div>`;
+      <b>Order</b> - orders done. <b>Leader</b> - your orders, once done.</div>`;
   feld.querySelectorAll("tr[data-pk]").forEach(tr => tr.addEventListener("click", () => {
     const d = tr.nextElementSibling;
     if (!d || d.dataset.pd === undefined) return;
@@ -11555,10 +11553,10 @@ function rollePostfachInhalt(){
         <b>${esc(MAP.n[mein.stadt][0])}</b>${meinW ? " \u00b7 " + esc(meinW) : ""}.${
         rolleDrinMs(meinZu) ? ` You have been in the battle for <b style="color:var(--us)">${
           esc(rolleDrinKurz(meinZu))}</b>.` : ""}
-        You can hold one role at a time.</div>
+        One role at a time.</div>
       ${rolleFrageZeile(mein.id, meinZu)}${rolleRausZeile(mein.id, meinZu)}` : ""}
     <div class="note">${darfAnf
-        ? "Open a town that is fighting and use <b>Ask for roles</b> to add one."
+        ? "<b>Ask for roles</b> in a fighting town."
         : esc(rechtSatz("anfordern"))}</div>`;
 }
 
@@ -11979,7 +11977,7 @@ function feindTreffer(depot, neu){
 }
 /* the mark behind a cut name wherever the register is shown */
 function feindCutMarke(u){
-  return feindCut(u) ? `<span style="color:var(--dim2)" title="Name cut off in the game. A later reading, the owner line or the hover window completes it.">\u2026</span>` : "";
+  return feindCut(u) ? `<span style="color:var(--dim2)" title="Name cut off in the game.">\u2026</span>` : "";
 }
 
 /* ---- how a depot grew over time ----
@@ -14680,7 +14678,7 @@ function paraTipp(){
     return `${MAP.n[F.hs][0]}: ${n} airfield${n === 1 ? "" : "s"} left \u2014 click the airfield the drops start from. Escape ends. ${was}`;
   }
   if (F && F.ziel !== null) return `Now click one of the marked airfields. ${was}`;
-  if (F && F.start !== null) return `Now click a town inside the ring. Hold Ctrl to add more targets from this airfield. ${was}`;
+  if (F && F.start !== null) return `Click a town inside the ring - Ctrl adds more. ${was}`;
   return (paraWahl.modus === "start" ? "Start first: click the airfield, then the target. "
                                      : "Target first: click the target, then an airfield. ") + was;
 }
@@ -16479,7 +16477,7 @@ function sammelText(a){
     z.quelle === "zugeordnet" ? " of the assigned teams"
       : z.quelle === "zugesagt" ? " of the types the players put in their commitment"
       : z.quelle === "grob" ? " of what the committed players have on the map"
-      : " (nobody has taken this order yet, so the game's slowest type is assumed)"}.</span>`;
+      : ""}.</span>`;
 }
 
 /* WIE GROSS IST EIN ORT AUF DER KARTE? der Auftrag: "Bitte alle Kreise
@@ -17892,9 +17890,7 @@ function neuerKrieg(){
      neue Krieg begaenne mit einer neutralen Karte ohne Hauptstaedte, und
      zurueck gibt es keinen Weg. */
   if (!darf("aufklaerung")){
-    toast("A new war has to set the three start towns, and that needs File "
-        + "intel. Without it the map would start empty. "
-        + "Ask the leader for the right first.");
+    toast("A new war needs the File intel right - ask the leader.");
     return false;
   }
   /* AUS EINEM LEEREN BILD WIRD NICHT GESCHNITTEN. Der Strich unten wird aus
@@ -19484,7 +19480,7 @@ function tips(){
     line:   `<b>Defence</b> — ${lineEinzel() ? "click the town to hold" : "drag across the towns"}. For <b>${p}</b>.${entwurfModus ? " <b>Draft</b>." : ""}`,
     para:   `<b>Plan parablock</b> — ${paraTipp()} For <b>${p}</b>.${entwurfModus ? " No draft for blocks." : ""}`,
     gather: `<b>Gather</b> — ${gatherTipp()} For <b>${FACTIONS[clanFaktion()].name}</b>.${entwurfModus ? " <b>Draft</b>." : ""}`,
-    parablock: `<b>Active parablock</b> — click a town that is blocked right now, or drag across several; click again to clear one. For <b>${p}</b>.${entwurfModus ? " No draft for blocks." : ""}`,
+    parablock: `<b>Active parablock</b> — click or drag across towns; click again to clear. For <b>${p}</b>.${entwurfModus ? " No draft for blocks." : ""}`,
     brush:  `<b>Paint</b> · ${PINSEL_ZUG_MAX} per stroke.${pinselRueck ? ` <button class="btn" id="tip-rueck" style="padding:1px 7px;font-size:10.5px">Undo last stroke</button>` : ""}`,
     area:   `<b>Area</b> — draw a shape, then label it. For <b>${p}</b>.${entwurfModus ? " <b>Draft</b>." : ""}`,
     aufkl:  `<b>Recon</b> — ${aufklTipp()}${entwurfModus ? " No draft for requests." : ""}`,
@@ -19520,7 +19516,7 @@ document.getElementById("b-blick").addEventListener("click", function(){
 if (!SICHT_SERVERREGEL_DA){
   const bBlick = document.getElementById("b-blick");
   if (bBlick) bBlick.title =
-    "When YOU last looked at each town — green just now, red long ago. "
+    "Your last look at each town. "
   + "Right now it shows only this machine.";
 }
 document.getElementById("b-radius").addEventListener("contextmenu", ev => {
@@ -19560,7 +19556,7 @@ function sichtDialog(){
       <div class="tw"><table>
         <thead><tr><th>Step</th><th>Types</th><th>Vision (as in game)</th></tr></thead>
         <tbody>${stufen.map(zeile).join("")}</tbody></table></div>
-      ${darf ? `<div class="note">Map scale: a circle must cover the same towns as in game. Saved for the clan.</div>` : ""}
+      ${darf ? `<div class="note">Map scale - match the game's circle.</div>` : ""}
     </div>
     <div class="dlg-f">
       <button class="btn" id="sc-std"${aus}>Reset</button>
@@ -19594,7 +19590,7 @@ document.getElementById("b-entwurf").addEventListener("click", function(){
   entwurfModus = !entwurfModus;
   this.setAttribute("aria-pressed", String(entwurfModus));
   tips();
-  toast(entwurfModus ? "Draft mode: attacks, defences and areas stay with you. Para-blocks and recon requests do not."
+  toast(entwurfModus ? "Draft mode: arrows, lines and areas stay with you."
                      : "Draft mode off: new orders go to the clan at once");
 });
 document.getElementById("b-names").addEventListener("click", function(){
@@ -20127,7 +20123,7 @@ function depotZeichnen(){
           <span class="zeile2"><input class="tname" data-id="${esc(d.id)}" value="${esc(d.name||"")}"
               placeholder="${esc(d.cut ? "cut off, complete it" : atName(d.k))}" spellcheck="false" maxlength="${TEAM_NAME_MAX}"
               ${d.name ? `readonly title="${d.cut ? "Name cut off in the game. Double-click to complete it" : "Double-click to rename"}"` : ""}>${
-            d.cut ? `<span style="flex:0 0 auto;color:var(--dim2)" title="Name cut off in the game. Hover the unit in the game or type the rest.">…</span>` : ""}
+            d.cut ? `<span style="flex:0 0 auto;color:var(--dim2)" title="Name cut off - type the rest.">…</span>` : ""}
             <input class="ttag" data-id="${esc(d.id)}" value="${esc(d.tag||"")}"
               placeholder="TAG" spellcheck="false" maxlength="10"
               ${d.tag ? 'readonly title="Double-click to change"' : ""}></span>
@@ -20385,7 +20381,7 @@ document.getElementById("dep-add").addEventListener("click", ()=>{
       return;
     }
     if (!qaName.checked){
-      feld.innerHTML = `Added without a name — the type stands in for it until you type one.`;
+      feld.innerHTML = `Added without a name.`;
       return;
     }
     const nr = naechsteAtNr(myDepot()), n = wieviel();
@@ -20421,7 +20417,7 @@ function kopfzeile(){
     el.classList.toggle("unbenannt", !gesetzt);
     el.title = gesetzt ? ""
       : (istLeader() ? "No clan name yet — set it under War."
-                     : "No clan name has been set yet. Only the leader can set it.");
+                     : "No clan name yet.");
   }
   const f = clanFaktion();
   document.getElementById("war-label").innerHTML =
@@ -20680,9 +20676,6 @@ function side(){
             Paras have to start from an airfield you hold, within
             ${Math.round(luftReichweite({sym: paraTyp()}))} map units.</div>`;
         })()}
-        ${feindWeit.length > 6 ? `<div class="hint" style="color:var(--dim)">
-          Blocking every one of them is unlikely — the para drop only pays off
-          if the ones that matter are already tied up.</div>` : ""}
         ${feindWeit.length === 0 && alleWeit.length ? `<div class="hint" style="color:var(--dim)">
           Nothing hostile in range as far as the map knows.</div>` : ""}
       </div>`;
@@ -21206,8 +21199,7 @@ function arrowDialog(a, frisch){
         <input type="hidden" id="a-prio" value="${befehlPrio(a)}">
         <div class="pf-prio">${prioKnoepfe(a)}</div>
       </div>
-      <div class="note">You have <b>${habe}</b> teams on the map in total. Committing here is a plan,
-        it does not move anything by itself.</div>`}
+      <div class="note">You have <b>${habe}</b> teams on the map.</div>`}
     </div>
     <div class="dlg-f">
       ${darfWeg(a) ? `<button class="btn danger" id="a-del">${a.gather && a.from === a.to ? "Delete" : "Delete arrow"}</button>` : ""}
@@ -21428,8 +21420,7 @@ function bildQuelleHTML(id){
     <div class="hint" data-bild="hint">${
       bildAufnahmeMoeglich()
         ? `<b>Capture</b> asks which window it may see — pick the Heroes &amp; Generals window.`
-        : `Capturing a window needs the page to run over https; on a local file the
-           browser does not allow it.`}</div>`;
+        : `Capture needs https - not on a local file.`}</div>`;
 }
 
 /* Ein Bild aus der laufenden Freigabe. Beim ersten Mal fragt der Browser, was
@@ -21582,7 +21573,7 @@ async function bildStromFragen(){
        text is the hint, so no room reads on from a screen. */
     if (art === "monitor"){
       bildFreigabeBeenden();
-      const hinweis = "Only the game window is captured, not a whole screen. The sharing was stopped.";
+      const hinweis = "Share the game window, not a screen.";
       toast(hinweis);
       const err = new Error(hinweis); err.nurFenster = true;
       throw err;
@@ -23171,7 +23162,7 @@ function bildUrteil(w, keinFix){
      echt ist, entscheidet sein ORT - das prueft feuerLesen. Hier steht nur
      ein Wert, den keine Flammenstufe je erreicht hat. */
   if (w.feuer > 0.12) return {art: "feuer",
-    text: "Far too much of the picture reads as fire — check the colour settings."};
+    text: "Too much reads as fire - check colours."};
   /* Der NO-FIX-Fall vom 31.08.: hell 65, satt 29 - beides ausserhalb
      der Eichung, aber ueber der harten 45er-Schwelle, und das Pult
      schwieg. NUR im NO-FIX-Fall melden: die braune Abendphase liegt auch
@@ -27782,7 +27773,7 @@ function kbAbreiseFolgen(a){
        stop the count vote from ever finishing. */
     KB.nRing = [];
     KB.status = aus && aus.geparkt
-      ? `A unit left the bar - the sheet has been shifted, its line is parked at the end (line ${aus.wo + 1}).`
+      ? `Left the bar - line parked at ${aus.wo + 1}.`
       : "A unit left the bar - the sheet has been shifted.";
     return;
   }
@@ -28842,7 +28833,7 @@ async function kbEinreihen(F, G){
      a NAME on the wrong line is worse than the shifted types this package
      set out to stop. */
   if (KB.abreiseUnklar){
-    KB.status = "A unit left the bar - which one is unclear. Clear the note on the sheet first.";
+    KB.status = "A unit left the bar - clear the note first.";
     return;
   }
   /* THE LINE IS BOUND FIRST - this is the unit that stood in the box when
@@ -28859,7 +28850,7 @@ async function kbEinreihen(F, G){
      wrong either. The reading is then bound to the box, not to a place. */
   const ziel = G.leiste ? kbWahl() : KB_OHNE_LEISTE;
   if (ziel === null || ziel === undefined || (ziel !== KB_OHNE_LEISTE && !KB.zeilen[ziel])){
-    KB.status = "Unit in the box, no card picked - drag the frame onto it.";
+    KB.status = "No card picked - drag the frame onto it.";
     kbZeichnen();
     return false;
   }
@@ -29104,7 +29095,7 @@ async function kbSchlange(){
       /* its line went away while it waited, see kbZeigerUmsetzen */
       if (job.tot){
         if (job.bmp && job.bmp.close) job.bmp.close();
-        KB.status = "The line that picture belonged to is gone - the reading was dropped.";
+        KB.status = "Line gone - reading dropped.";
         kbZeichnen(); continue;
       }
       if (job.art === "tooltip"){ await kbTooltipLesen(job); continue; }
@@ -29132,7 +29123,7 @@ async function kbSchlange(){
          town, most likely. The line number belongs to the old sheet. */
       if ((KB.leerzahl || 0) !== leerVor){
         KB.arbeit = null;
-        KB.status = "The sheet changed while that was being read - the reading was dropped.";
+        KB.status = "Sheet changed - reading dropped.";
         kbZeichnen(); continue;
       }
       const gebraucht = jetzt() - t0;
@@ -29339,7 +29330,7 @@ function kbZeichnen(){
     <h3 style="margin-top:14px">Set</h3>
     <div class="kb-geraet">${kbFunkgeraetSVG()}<span class="kb-bandhalter"></span></div>
     <h3 style="margin-top:14px">How it works</h3>
-    Click the units left to right. On a line without a name, click the battle first.`;
+    Click the units left to right.`;
     links.dataset.gebaut = "1";
     /* THE FIELD SAYS SO ITSELF when a hand lies in it. document.activeElement
        is no reliable witness here: with the window not in front it names the
@@ -29454,8 +29445,8 @@ function kbZeichnen(){
       r.className = "kb-rahmen" + (KB.handAn ? " hand" : "");
       r.tabIndex = 0;
       r.title = KB.handAn
-        ? "Led by hand - drag along the strip, arrow keys step, double-click hands it back to the game"
-        : "The unit the game has picked - drag it to set it by hand";
+        ? "Led by hand - double-click releases"
+        : "The game's pick - drag to set by hand";
       r.style.left = ziel.offsetLeft + "px"; r.style.top = ziel.offsetTop + "px";
       r.style.width = ziel.offsetWidth + "px"; r.style.height = ziel.offsetHeight + "px";
       streifen.appendChild(r);
@@ -29473,7 +29464,7 @@ function kbZeichnen(){
           return `<span class="g"><span class="bb"><img src="${r.bild}" alt="" title="Pick the group this diamond stands for">${
                    r.gruppe ? kbRaute(r.gruppe) : ""}</span>` +
                  `<b>${n ? n.n.toLocaleString("en") : "…"}</b>` +
-                 `<select data-r="${i}" title="What this diamond means - named once, it holds in every town. The list is cut to what can stand at this place: the row keeps the game's own order.">` +
+                 `<select data-r="${i}" title="Name this diamond">` +
                  `<option value="">name it …</option>` +
                  kbRauteKandidaten(i).map(g => `<option value="${kbEsc(g)}"${g === r.gruppe ? " selected" : ""}>${kbEsc(g)}</option>`).join("") +
                  `</select></span>`;
@@ -29518,7 +29509,7 @@ function kbZeichnen(){
   /* a type ordered afresh has arrived - the lock goes back as it was */
   for (const z of KB.zeilen) if (z.typNeu && z.typ) kbTypNeuErledigt(z);
   blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Town ?"}${KB.linie ? ` · attack line ${kbEsc(KB.linie)}` : ""} · ${new Date().toLocaleDateString()}</div>
-    <div class="kb-schreibrecht"><button class="kb-alle" title="${KB.zeilen.length && KB.zeilen.every(u => u.haken) ? "Untick every line" : "Tick every line on the sheet"}">${KB.zeilen.length && KB.zeilen.every(u => u.haken) ? "\u2610 none" : "\u2611 all"}</button><button class="kb-sichtbar" title="Tick every line that stands in the part of the bar you see right now — then one lock click locks them all">\u2610 visible part</button><button class="kb-typen-neu" title="Read the types of the visible lines afresh — all whose type is not locked">\u21bb types</button><button class="kb-zeile-plus" title="Add an empty line — for a unit the count missed. The count vote will not take it away again; × removes it.">+ line</button>${(() => {
+    <div class="kb-schreibrecht"><button class="kb-alle" title="${KB.zeilen.length && KB.zeilen.every(u => u.haken) ? "Untick every line" : "Tick every line on the sheet"}">${KB.zeilen.length && KB.zeilen.every(u => u.haken) ? "\u2610 none" : "\u2611 all"}</button><button class="kb-sichtbar" title="Tick the visible lines">\u2610 visible part</button><button class="kb-typen-neu" title="Read the visible types again">\u21bb types</button><button class="kb-zeile-plus" title="Add a line">+ line</button>${(() => {
       /* THE LOCKS FOR THE SELECTION. Without ticked lines the two buttons
          are grey and dead; with ticks a click locks the type, or name and
          owner, of every ticked line - or opens them, when all are shut. */
@@ -29533,11 +29524,11 @@ function kbZeichnen(){
       return `<span>Selection${n ? ` (${n})` : ""}:</span>${knopf("typ", "type")}${knopf("name", "name &amp; owner")}`;
     })()}</div>
     <div class="kb-z kopfz"><div></div><div>#</div><div>Type</div><div>Tag</div><div>Name</div><div>Owner</div><div>Strength</div><div>Script</div><div></div></div>
-    <div class="kb-zeilen">${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${kbFestHand(z) ? "fest" : ""} ${z.haken ? "haken" : ""} ${z.unsicher ? "unsicher" : ""} ${z.fort ? "fort" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}" ${z.fort ? `title="left the bar - this unit is no longer in the town. The line is kept so that what was read of it can still go into the book with &quot;Keep the sheet&quot;."` : ""}>
-      <div><button class="kb-haken ${z.haken ? "an" : ""}" data-i="${z.i}" title="Select this line — Shift+click a range, Ctrl+click adds or removes one">${z.haken ? "\u2611" : "\u2610"}</button></div>
-      <div class="kb-nr">${riegelListe.length > 1 && z.riegel !== null && z.riegel !== undefined ? (() => { const nr = riegelListe.indexOf(z.riegel); return `<span class="kb-riegel r${nr % 4}" data-r="${z.riegel}" title="Screen section ${nr + 1} (from card ${z.riegel + 1}) — click to tick all of it"></span>`; })() : ""}${z.i + 1}</div>
+    <div class="kb-zeilen">${KB.zeilen.map(z => `<div class="kb-z ${z.status} ${z.eigen ? "eigen" : ""} ${kbFestHand(z) ? "fest" : ""} ${z.haken ? "haken" : ""} ${z.unsicher ? "unsicher" : ""} ${z.fort ? "fort" : ""} ${KB.schreibt && KB.schreibt.i === z.i ? "schreibt" : ""} ${KB.auswahl === z.i ? (KB.wahlGeglaubt ? "wahl geglaubt" : "wahl") : ""}" data-i="${z.i}" ${z.fort ? `title="Left the bar - kept"` : ""}>
+      <div><button class="kb-haken ${z.haken ? "an" : ""}" data-i="${z.i}" title="Select - Shift range, Ctrl adds">${z.haken ? "\u2611" : "\u2610"}</button></div>
+      <div class="kb-nr">${riegelListe.length > 1 && z.riegel !== null && z.riegel !== undefined ? (() => { const nr = riegelListe.indexOf(z.riegel); return `<span class="kb-riegel r${nr % 4}" data-r="${z.riegel}" title="Section ${nr + 1} - tick all"></span>`; })() : ""}${z.i + 1}</div>
       <div><span class="sym ${z.eigen ? "eigen" : kbSeiteKlasse(z.seite)}" data-f="typ" title="${(z.eigen ? "own unit" : kbSeiteName(z.seite)) + " · " + (z.typ ? kbEsc(atName(z.typ)) : "type unknown - click to set")}">${z.typ && kbSymbolDa(z.typ) ? "" : "?"}</span></div>
-      <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling} - a second unit` : "click to correct"}">${
+      <div class="f" data-f="tag" title="${z.zwilling ? `same tag and name as line ${z.zwilling}` : "click to correct"}">${
         z.status === "erfasst" ? zeig(z, "tag", z.tag) + (z.zwilling ? " ²" : "") : "<i>?</i>"}</div>
       <div class="f nam ${(z.name || "").length > 16 ? "lang" : ""}" data-f="name" title="${
         z.unlesbar && !z.beschrieben ? "Unreadable - type what you see."
@@ -29561,11 +29552,11 @@ function kbZeichnen(){
         z.unsicher
           ? `<span class="kb-schwach" title="${kbEsc(z.unsicherGrund || "read too poorly to write down")}">\u25cf</span>` : ""}${
         kbUnvoll(z)
-          ? `<span class="kb-unvoll" title="Name cut off in the game. A later reading, the owner line or the hover window completes it.">\u2026</span>` : ""}${
+          ? `<span class="kb-unvoll" title="Name cut off in the game.">\u2026</span>` : ""}${
         z.unlesbar
           ? `<span class="kb-unles" title="${z.beschrieben
-              ? "Described by hand — recognised again by the picture of its name line, not by its letters"
-              : "Unreadable characters — this unit is recognised by the picture of its name line"}">\u270e</span>` : ""}${
+              ? "Described by hand"
+              : "Unreadable characters"}">\u270e</span>` : ""}${
         z.bekannt && z.bekannt.stand === "gleich"
           ? `<span class="kb-bek" title="Already in the clan's book — ${kbEsc(kbBekanntText(z.bekannt))}">\u25cf</span>` : ""}${
         z.bekannt && z.bekannt.stand === "aehnlich"
@@ -29575,10 +29566,10 @@ function kbZeichnen(){
           : `Read as &quot;${kbEsc(z.abweichung.tag)} ${kbEsc(z.abweichung.name)} — ${kbEsc(z.abweichung.besitzer)}&quot; — click to take that over, right-click to dismiss it as a misread`}">!</button>` : ""
       }<button class="kb-neu ${z.neuLesen ? "an" : ""}" data-i="${z.i}" title="${
         z.neuLesen ? "Waiting for a fresh picture."
-                   : "Read this line afresh: the next picture of its unit overwrites name and owner, whatever stands here"
+                   : "Read again"
       }">\u21bb<small>N</small></button><button class="kb-typ-neu ${z.typNeu ? "an" : ""}" data-i="${z.i}" title="${
         z.typNeu ? "Waiting for the next look."
-                 : "Read the type of this line afresh at the next look, whatever stands here"
+                 : "Read the type again"
       }">\u21bb<small>T</small></button><button class="kb-fest typ ${kbFestTyp(z) ? "zu" : ""} ${z.festTyp === null ? "vorgabe" : ""}" data-i="${z.i}" data-was="typ" title="${
         kbFestTyp(z) ? "Type locked." : "Type open — click to lock it against readings"
       }${z.festTyp === null ? " (follows the default above)" : ""}">${kbFestTyp(z) ? "🔒" : "🔓"}<small>T</small></button><button class="kb-fest name ${kbFestName(z) ? "zu" : ""} ${z.festName === null ? "vorgabe" : ""} ${z.abweichung ? "warnt" : ""}" data-i="${z.i}" data-was="name" title="${
@@ -29605,7 +29596,7 @@ function kbZeichnen(){
          itself would be no note at all. Nothing is written by place while
          it stands. */
       if (!KB.abreiseUnklar) return "";
-      return `<div class="kb-hinweis schwach">A unit left the bar - which one is unclear. Nothing is written by place until cleared.
+      return `<div class="kb-hinweis schwach">A unit left the bar - which one?
         <button class="kb-abreise-weg" type="button">understood</button></div>`;
     })()}`;
   blatt.querySelectorAll(".kb-z[data-i] .sym").forEach(el => {
@@ -29650,7 +29641,7 @@ function kbPult(){
     <div class="kb-abstand"></div>
     <button class="rd-schalter" id="kb-leer">New sheet</button>
     <div class="kb-abstand"></div>
-    <button class="rd-schalter ${kbSchwebe ? "an" : ""}" id="kb-schweben" ${pipDa ? "" : "disabled"} ${kbSchwebeGeste && !kbSchwebe ? "hidden" : ""} title="${pipDa ? "A small window that stays over the game: the strip at the card pitch of the game, the unit under the frame, and the confirm buttons" : "Needs Chrome or Edge 116 or newer"}">${kbSchwebe ? "Strip floating - close it" : "Float the strip"}</button>
+    <button class="rd-schalter ${kbSchwebe ? "an" : ""}" id="kb-schweben" ${pipDa ? "" : "disabled"} ${kbSchwebeGeste && !kbSchwebe ? "hidden" : ""} title="${pipDa ? "" : "Needs Chrome or Edge 116 or newer"}">${kbSchwebe ? "Strip floating - close it" : "Float the strip"}</button>
     <div class="kb-abstand"></div>
     <div style="color:#6d7680;font-size:11px;line-height:1.5;padding:0 2px">Borderless or windowed.</div>`;
   /* the user's own switch: off means off, sharing included */
@@ -29786,7 +29777,7 @@ async function kbSchwebeAuf(){
   doc.body.innerHTML = `<div class="kb-streifen" id="kb-schwebe-streifen"></div>
     <div class="kb-jetzt" id="kb-schwebe-jetzt"></div>
     <div class="kb-knoepfe">
-      <button class="rd-schalter" id="kb-schwebe-sichtbar" title="Tick every line that stands in the part of the bar you see right now">\u2610 visible part</button>
+      <button class="rd-schalter" id="kb-schwebe-sichtbar" title="Tick the visible lines">\u2610 visible part</button>
       <button class="rd-schalter" id="kb-schwebe-bestaetigen" title="Lock name, owner and type of the line under the frame">\u2713 confirm</button>
       <button class="rd-schalter" id="kb-schwebe-neu" title="Clear the line under the frame and read it afresh (Alt+Down)">\u21bb read again</button>
       <button class="rd-schalter" id="kb-schwebe-platz" title="Placeholders for the numbers below this unit">\u2026 placeholders</button>
@@ -32922,7 +32913,7 @@ async function pgBlick(f){
         PG.fehl.set(zk, n);
         if (n >= PG_VERSUCHE){
           PG.leer.add(zk);
-          PG.status = `Line ${ziel.i + 1} could not be read in ${PG_VERSUCHE} tries — skipped. Click it to type the name.`;
+          PG.status = `Line ${ziel.i + 1} could not be read in ${PG_VERSUCHE} tries — skipped.`;
         } else {
           PG.status = abgewiesen ? `Line ${ziel.i + 1} read as ${abgewiesen} again — rejected, try ${n} of ${PG_VERSUCHE}.`
                                  : `Line ${ziel.i + 1} could not be read — try ${n} of ${PG_VERSUCHE}.`;
@@ -32931,7 +32922,7 @@ async function pgBlick(f){
     } else {
       PG.status = PG.N && PG.namen.size >= PG.N
         ? "Every name on the sheet — keep it, or scroll for more."
-        : "Scroll the list in the game; the rest is picked up as it comes into view.";
+        : "Scroll the list in the game.";
     }
     /* the head strip and the table after the line (round 2): the row btl's
        first write then carries the first name - as it did while the town
@@ -41404,7 +41395,7 @@ function gefPult(){
     <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="gf-kraft">${ICO_CAPTURE}${
       live ? "Capture running" : "Capture the game"}</button>
     ${live ? `<button class="rd-schalter" id="gf-teilen" style="font-size:10.5px;padding:6px 0">Share again</button>` : ""}
-    <button class="rd-schalter ${gefSchwebe ? "an" : ""}" id="gf-schweben" ${pipDa ? "" : "disabled"} title="${pipDa ? "A small window that stays over the game: the score, and the confirmation once the end screen was read" : "Needs Chrome or Edge 116 or newer"}">${gefSchwebe ? "Floating - close it" : "Float over the game"}</button>
+    <button class="rd-schalter ${gefSchwebe ? "an" : ""}" id="gf-schweben" ${pipDa ? "" : "disabled"} title="${pipDa ? "" : "Needs Chrome or Edge 116 or newer"}">${gefSchwebe ? "Floating - close it" : "Float over the game"}</button>
     ${gefSchwebeLogZeile()}
     ${gefTeilenZeile()}
     ${(() => {
@@ -41428,10 +41419,7 @@ function gefPult(){
       if (live && !detailK) return `<div style="margin-top:8px;padding:7px 9px;border:1px solid #8a6820;border-radius:3px;background:rgba(226,172,72,.16);color:#e2ac48;font-size:12px;line-height:1.45">Waiting for the end screen.</div>`;
       return "";
     })()}
-    ${GEF.ende || detailK ? "" : `<div style="margin-top:8px;color:#cbb27a;font-size:11.5px;line-height:1.55;border-left:2px solid #8a6a2a;padding:0 2px 0 8px">Keep the
-      game window open and shared until the end screen has been read and sent here: the box in the head
-      strip, and a chime while Sound is on. Once the window is gone, the end of the battle cannot
-      be read at all.</div>`}
+    ${GEF.ende || detailK ? "" : `<div style="margin-top:8px;color:#cbb27a;font-size:11.5px;line-height:1.55;border-left:2px solid #8a6a2a;padding:0 2px 0 8px">Keep the game window shared until the end screen is read.</div>`}
     <div class="kb-abstand"></div>
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="gf-klang">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
@@ -41510,7 +41498,7 @@ function gefZeichnen(){
   const ortName = (GEF.ort !== null && GEF.ort !== undefined && MAP.n[GEF.ort]) ? MAP.n[GEF.ort][0] : null;
   kopf.innerHTML = `
     <div class="rd-kf weit ${ortName ? "ort" : ""}"><div class="t">Town</div>
-      <div class="v">${ortName ? `<b class="kb-ortname">${esc(ortName)}</b>` : "<small>none picked, choose one on the left</small>"}</div></div>
+      <div class="v">${ortName ? `<b class="kb-ortname">${esc(ortName)}</b>` : "<small>none picked</small>"}</div></div>
     <div class="rd-kf" data-kachel="battle"><div class="t">Score, left to right</div>
       <div class="v${gehalten ? " gf-halt" : ""}">${b ? `${b.li}<small> : </small>${b.re}` : "-"}</div>
       <div class="bar"><i style="width:${b ? b.li : 0}%"></i></div></div>
@@ -41608,7 +41596,7 @@ function gefZeichnen(){
     ${gefTafelBlatt()}
     ${pkBlatt()}
     ${!darf("aufklaerung") ? `<div class="note" style="margin-top:16px">${esc(rechtSatz("aufklaerung"))} Nothing is sent.</div>`
-      : GEF.ort === null || GEF.ort === undefined ? `<div class="note" style="margin-top:16px">Pick a town on the left, or nothing is sent to the clan.</div>`
+      : GEF.ort === null || GEF.ort === undefined ? `<div class="note" style="margin-top:16px">Pick a town.</div>`
       : GEF.gesendet ? (() => {
           /* "sent" means the clan has it (PUNKTE-D): pushErgebnis for this
              town's row, at or after the t of the last write (GEF.zeileT).
@@ -41648,14 +41636,13 @@ function gefZeichnen(){
       /* started by the reader itself (gefUhrStarten): said so, no button */
       const knopf = !V.gestartet && wo && passt && !zeitReise && !gefechtStand(i) && alt < OT_DAUER;
       return `<div class="ot-zeile" style="margin-top:16px">
-        <span style="color:${GEF_FARBE}">The countdown stood in the head strip, then a line with a highlighted word took its place, ${esc(otMmSs(alt))} ago.${
+        <span style="color:${GEF_FARBE}">Overtime started ${esc(otMmSs(alt))} ago.${
           V.gestartet ? " Clan's clock started." : ""}</span>
         ${knopf ? `<button class="mini" id="gf-ot">Start the clan's clock at that moment</button>` : ""}
         ${(() => { const st = V.gestartet ? "" :
           !wo ? "No town picked." :
           !passt ? "That reading belongs to another town." :
-          gefechtStand(i) ? "A clock already stands on this town." :
-          alt >= OT_DAUER ? "That is longer ago than the whole overtime, so it is not offered here." : "";
+          gefechtStand(i) ? "A clock already stands on this town." : "";
           return st ? `<div class="note">${st}</div>` : ""; })()}</div>`;
     })()}`;
   /* AUF pointerdown, NICHT AUF click. Das Blatt wird bei jedem Blick neu
@@ -48785,9 +48772,9 @@ function wacheTickIntern(){
     const sichtbar = wache.zoom != null
       || (wache.video && kriegsreiterDa(wache.video));
     wache.meldung = (!wache.jeGefixt && wache.laeufe > 25 && !sichtbar)
-      ? "No war map in this window — is the game window the one being shared?"
+      ? "No war map in the window."
       : (!wache.jeGefixt && wache.laeufe > 25)
-        ? "War map is there, but I cannot place it yet — try zooming out a little."
+        ? "War map found - zoom out."
         : res.fehler;
     wache.keinFix = true; radarSignal = 0;
     /* Dieser Ausgang liegt VOR der 0,85-Deckelung unten - wache.ruhe blieb
@@ -49834,7 +49821,7 @@ function areaDialog(id, e, neuGezogen){
   openDlg(`
     <div class="dlg-h"><h2>${a.aufkl ? "Reconnaissance \u00b7 " + esc(aufklZiele(a)) : (neuGezogen ? "What is in there?" : "Marked area")}</h2>
       ${fremd || a.aufkl ? "" : withholdAbsatz()}
-      ${neuGezogen && !a.aufkl ? "" : `<p>${zustandText(id, a, e.n || e.by) + " · " + alterText(e.t)}</p>`}${
+      ${neuGezogen && !a.aufkl ? "" : `<p>${zustandText(id, a, e.n || e.by).replace(/\.$/, "") + " · " + alterText(e.t)}</p>`}${
       fremd || neuGezogen ? "" : streckeAbsatz({art: "area", id, v: a})}${
       a.aufkl && !fremd ? aufklFensterZeilen(a, id) : ""}</div>
     <div class="dlg-b">
@@ -50603,7 +50590,7 @@ function intelDialog(tab, seite){
       <p>${liste.length ? `<b>${clans.length}</b> clan${clans.length===1?"":"s"} and
          <b>${liste.length}</b> player${liste.length===1?"":"s"} on record ·
          <b>${sicht.length}</b> town${sicht.length===1?"":"s"} with sightings.`
-         : "Nothing recorded yet. Report a sighting with an owner, or add names below, and this fills up."}</p></div>
+         : "Nothing recorded yet."}</p></div>
     <div class="tabs">
       <button data-tab="clans"   aria-pressed="true">Clans</button>
       <button data-tab="players" aria-pressed="false">Players</button>
@@ -50613,8 +50600,7 @@ function intelDialog(tab, seite){
     <div class="dlg-b">
       <div class="tabp schmal" data-tab="supply">
         <p style="font-size:12.5px;color:var(--dim);line-height:1.5;margin:0 0 12px">
-          A town can only be reinforced from a neighbour of the same side that is
-          <b>not fighting</b>. <b>${nsBesetzt}</b> of ${MAP.n.length} towns have a known owner.
+          <b>${nsBesetzt}</b> of ${MAP.n.length} towns have a known owner.
           ${nsBesetzt < MAP.n.length*0.5
             ? `<span style="color:var(--accent)">Read more of the map and these lists get
                sharper.</span>` : ""}</p>
@@ -50646,9 +50632,6 @@ function intelDialog(tab, seite){
 
         <h4 style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;
           color:var(--dim2);margin:22px 0 7px">Para-block leverage — one jump, several towns</h4>
-        <p style="font-size:12px;color:var(--dim2);line-height:1.5;margin:0 0 9px">
-          A para-block puts a town into a battle, so it stops being a supply source for
-          all of its neighbours. These are the towns where that costs the most.</p>
         ${nsHebel.length ? `<div class="tw"><table>
           <thead><tr><th>Block here</th><th>Side</th><th>Cuts off</th><th data-links>Which towns</th></tr></thead>
           <tbody>${nsHebel.slice(0, 40).map(z => `<tr data-go="${z.i}" style="cursor:pointer">
@@ -50706,8 +50689,7 @@ function intelDialog(tab, seite){
             <td>${cl.gesehen||"—"}</td>
             <td style="color:var(--dim2)">${cl.t?alterText(cl.t):"—"}</td>
           </tr>${CL_AUF.has(cl.id) ? clanUnterzeile(cl) : ""}`).join("")}</tbody></table></div>`
-          : `<div class="empty">No clans yet. Create one above, or tick players on a battle
-             screenshot and group them.</div>`}
+          : `<div class="empty">No clans yet.</div>`}
       </div>
 
       <div class="tabp" data-tab="players">
@@ -50795,8 +50777,7 @@ function intelDialog(tab, seite){
             <td style="color:${alter(d.t)<FRISCH?"var(--text)":"var(--dim2)"}">${alterText(d.t)}</td>
           </tr>`).join("")}</tbody></table></div>`
           : `<div class="empty">Nothing reported. Tool <b>8</b> puts a sighting on a town.</div>`}
-        <div class="note">Reports fade on the map after ${Math.round(FRISCH/3600e3)} hours and go pale
-          after a day. Click a row to fly there.</div>
+        <div class="note">Reports fade after ${Math.round(FRISCH/3600e3)} hours, pale after a day.</div>
       </div>
     </div>
     <div class="dlg-f"><button class="btn primary" id="d-close">Close</button></div>`, "xwide");
@@ -51049,11 +51030,7 @@ function intelDialog(tab, seite){
 function massenDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Add many players</h2>
-      <p>One per line, exactly as the game shows them. Anything in the name
-         stays part of the name — clans do not exist in-game, so a tag someone
-         carries around is their own habit, not a membership.</p>
-      <p>Use the clan field below to assign all of them at once, or leave it
-         empty and assign them later.</p></div>
+      <p>One name per line, as the game shows it.</p></div>
     <div class="dlg-b">
       <textarea id="bulk-txt" style="min-height:150px"
         placeholder="[ROS] Peter&#10;Peter123&#10;/!(§Peter"></textarea>
@@ -51109,7 +51086,7 @@ function depotLeserHtml(){
         ${bildAufnahmeMoeglich()
           ? `<button class="btn primary mit-ico" id="dl-start">${ICO_CAPTURE}Read from game</button>
              <button class="btn" id="dl-schweben"${pip ? "" : ' disabled title="Needs Chrome or Edge 116 or newer"'}>Float over the game</button>`
-          : `<div class="hint">Capturing a window needs the page to run over https; on a local file the browser does not allow it.</div>`}
+          : `<div class="hint">Capture needs https - not on a local file.</div>`}
         <span style="flex:1"></span>
         <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);cursor:pointer">
           <input type="checkbox" id="dl-stellen"> Publish depot for clan
@@ -53807,8 +53784,7 @@ let ocrLaeuft = null;
 function ocrDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Read a battle screenshot</h2>
-      <p>The battle detail screen works best: it carries the town, both sides' strength and the
-         full player list. A plain scoreboard works too.</p></div>
+      </div>
     <div class="dlg-b">
       ${bildQuelleHTML("ocr-file")}
       <div id="sb-box" style="display:none"></div>
@@ -53816,11 +53792,7 @@ function ocrDialog(){
       <div id="ocr-out" style="display:none;flex-direction:column;gap:6px">
         <div id="ocr-stadt-box"></div>
         <div style="font-size:11.5px;color:var(--dim);border-top:1px solid var(--line);padding-top:8px">
-          Tick what is a player name and fix typos, then pick a clan for the
-          ticked ones. Shift-click a box to tick a whole range. You can do this
-          several times — two to one clan, three to another. Reading decorated
-          names goes wrong more often than not — the name stays exactly as you
-          leave it here.</div>
+          Tick the names, then pick a clan.</div>
         <div id="ocr-list" style="max-height:34vh;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
         <div class="row" style="align-items:center">
           <span id="ocr-anzahl" style="font-size:11px;color:var(--dim2);
@@ -53969,8 +53941,7 @@ async function ocrLesen(datei, quelle){
       if (zaehlbar(ausRahmen) > zaehlbar(text)) text = ausRahmen;
     }
   } catch(e){
-    setz(`<b>Reading failed.</b> The recogniser needs internet access and does not work offline
-          or inside the preview. Use <b>Add many at once</b> and type the names instead.`);
+    setz(`<b>Reading failed.</b> The recogniser needs internet.`);
     return;
   }
 
@@ -55308,10 +55279,6 @@ function sbNamenHTML(r){
     </div>
     ${darf("aufklaerung") ? "" : `<div class="note" style="margin:5px 0 0;color:var(--warn,#d08b3a)">${
       esc(rechtSatz("aufklaerung"))} Nothing typed here would be kept.</div>`}
-    <div class="note" style="margin:5px 0 7px">Names cannot be read reliably, so they are cut
-      out and shown. Type each one <b>once</b> — from then on the strip is recognised and the
-      field fills itself. A suggestion is only a suggestion: the picture is right there, check
-      it. Nothing is written without a tick.</div>
     <div style="max-height:32vh;overflow-y:auto;display:flex;flex-direction:column">
       ${leute.map(zeile).join("")}</div>
   </div>`;
@@ -55389,9 +55356,7 @@ async function sbAnzeigen(datei, quelle){
         <div style="font-family:var(--schmal);font-size:10.5px;letter-spacing:.09em;
           color:var(--dim2);text-transform:uppercase">Nothing counted</div>
         <div style="font-size:12px;color:var(--dim);margin-top:5px">${formGefunden
-          ? `Something scoreboard-shaped was found, but not a single player row could be
-             read. Most likely this is <b>not the game window</b> — or the scoreboard was
-             only partly visible.`
+          ? `Scoreboard found, no player row read.`
           : (() => {
               /* Nicht mehr pauschal "das ist nicht der Endbildschirm" - das
                  stand frueher auch dann da, wenn genau er eingeworfen wurde,
@@ -55405,10 +55370,8 @@ async function sbAnzeigen(datei, quelle){
               if (art === "dialog") return `That looks like the <b>battle dialog from the
                 war map</b>. It has no scoreboard bars — the name columns are read
                 instead; check the list below.`;
-              if (art === "sonstiges") return `No player list found in this picture. If it
-                is a chat window, note that channel members are not battle participants.`;
-              return `This is not the end-of-battle screen. Share the <b>game window</b>
-                while the scoreboard is up, and let it fill the window.`;
+              if (art === "sonstiges") return `No player list in this picture.`;
+              return `Not the end screen.`;
             })()}</div>
         <div class="note" style="margin-top:6px;font-size:11px">Nothing was written. A wrong
           reading would be worse than none.</div>
@@ -55438,9 +55401,6 @@ async function sbAnzeigen(datei, quelle){
       <div style="font-family:var(--schmal);font-size:10.5px;letter-spacing:.09em;
         color:var(--dim2);text-transform:uppercase">Counted from the scoreboard</div>
       ${r.tabellen.map(zeile).join("")}
-      <div class="note" style="margin-top:2px">The badge says which <b>soldier</b> somebody is
-        playing, not which side they fight for in the war — in a staged battle anyone can play
-        anyone. Only a war battle says anything about the war.</div>
       <div class="row" style="margin-top:3px;align-items:center;gap:7px">
         <button class="btn" id="sb-zahlen" style="font-size:11.5px">Record as a war battle</button>
         <span style="font-size:11px;color:var(--dim2)">Staged? Then leave it — nothing is
@@ -56607,8 +56567,7 @@ function zwInhalt(k){
         sign in as <b style="color:var(--text)">${esc(anmeldenameZuletzt)}</b>.</div>` : ""}
       <label class="zr-schalt"><input type="checkbox" id="zr-auto" ${CFG.auto ? "checked" : ""}>
         Stay signed in on this computer</label>
-      <div class="note" style="margin-top:0">Your code then lies unlocked in this browser.
-        Not on a shared one.</div>
+      <div class="note" style="margin-top:0">Not on a shared computer.</div>
       <button class="btn" id="zr-aus">Log out</button>
       <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:9px">
         <h4 style="font-size:10.5px;letter-spacing:.09em;color:var(--dim2);
@@ -56657,7 +56616,7 @@ function zwVerdrahten(k){
     if (neu !== neu2){ sag("The two new ones do not match."); return; }
     if (neu === alt){ sag("That is the password you already have."); return; }
     if (!CFG || !CFG.schloss){
-      sag("This browser has no password on file — log out and sign in with it first.");
+      sag("No password on file here - sign in first.");
       return;
     }
     const knopf = document.getElementById("zr-pw-go");
@@ -56756,8 +56715,7 @@ function zwVerdrahten(k){
       document.getElementById("zr-pw-neu2").value = "";
       sag("Done." + (anmGeaendert
         ? " Your old backup file no longer works — a new one was saved. "
-          + "Other devices need to sign in again with your name and the new "
-          + "password." : ""));
+          + "Other devices: sign in again with the new password." : ""));
       toast("Password changed");
     } catch(e){
       knopf.disabled = false; knopf.textContent = "Change";
@@ -57492,13 +57450,13 @@ const PUNKTE_REGEL_FELDER = [
      defaults 1 are the OPUS/FABLE proposal of 05.09.2026 ("erst alles 1
      Punkt"), never his word; the defaults 0 are the room's own "Vorgabe 0". */
   {k:"battle_done",  n:"A battle whose end the Battlereader read and sent", std:1,
-   d:"To everyone whose Battlereader read the end screen and sent it, once per battle and town."},
+   d:"Per read end screen, once per battle and town."},
   {k:"aufkl_fight",  n:"A battle inside a recon request", std:0,
    d:"To whoever asked for the recon, once per town and day."},
   {k:"aufkl_fight_own", n:"... and our side fights there", std:0,
-   d:"On top of the line above, when the town is ours or one of our attacks aims at it."},
+   d:"Extra when the town is ours or under our attack."},
   {k:"soldier_kept", n:"A soldier changed in the arsenal", std:1,
-   d:"Per changed soldier and day; the clan only sees that the arsenal was updated."},
+   d:"Per changed soldier and day."},
   /* P1 (Blatt 16.09., 17.09.2026): paid by warmap_punkte_abschluss once
      2026-09-17_punkte_e.sql has been run. stift 1 / 2 are the FABLE proposal
      he took (ENNO 17.09.2026: "2a passt so erstmal ..."), the recon rates
@@ -57508,7 +57466,7 @@ const PUNKTE_REGEL_FELDER = [
      server reads it with warmap_punkte_satz_dez); the town's sum is rounded
      there, not the rate (a placeholder alone would be floor(0,5) = 0). */
   {k:"stift",        n:"Giving a team to somebody else's order", std:1,
-   d:"To the giver when that order gets done; once per order and player."},
+   d:"To the giver when the order is done."},
   {k:"stift_quote",  n:"... while that order still lacked units", std:2,
    d:"Instead of the line above when the order's quota was still open before the assignment."},
   {k:"kette_je_gefecht", n:"Chain link: multiplier per battle on it", std:1,
@@ -57565,11 +57523,11 @@ const PUNKTE_REGEL_FELDER = [
   {k:"exp_leader",   n:"EXP per leader point", std:1, dez:2,
    d:"Factor on every leader booking."},
   {k:"exp_radar",    n:"EXP per map point (ownership changes)", std:0.1, dez:2,
-   d:"On top of the recon factor, for recon / map only - the radar's and the hand's ownership changes."},
+   d:"Extra for radar recon."},
   {k:"elite",        n:"Outnumbered: extra on a battle read", std:0,
    d:"Added to the battle rate when the reader's scoreboard showed the enemy outnumbering us."},
   {k:"elite_ab",     n:"Outnumbered from", std:1.5, dez:2,
-   d:"Enemy head count per one of ours; at this ratio or more the extra is paid."},
+   d:"Enemies per own unit for the extra."},
 ];
 /* P2: the EXP of one player from the rows of warmap_punkte_stand (spieler,
    name, konto, aktion, punkte, letzte, n) - the same sum as the server's
@@ -57671,7 +57629,7 @@ function regelnDialog(tab){
   };
   openDlg(`
     <div class="dlg-h"><h2>Clan rules</h2>
-      <p>What you set here holds for everyone in the clan. Nobody else can change it.</p></div>
+      </div>
     <div class="tabs">
       <button data-tab="marken" aria-pressed="true">Marks</button>
       <button data-tab="punkte" aria-pressed="false">Points</button>
@@ -57702,15 +57660,14 @@ function regelnDialog(tab){
           </tr>`).join("")}</tbody>
         </table></div>
         <div class="row" style="align-items:center;gap:8px">
-          <span style="font-size:12px;color:var(--dim);flex:1">An attack or a defence only pays
-            out when a clan member's Battlereader read the end of a battle on one of its towns.
-            Recon requests are exempt; chains need one battle anywhere in the chain.</span>
+          <span style="font-size:12px;color:var(--dim);flex:1">Paid after a Battlereader read a battle
+            on its town. Recon exempt; a chain needs one battle.</span>
           <label class="toggle"><input type="checkbox" id="rg-p-gefecht"${
             gefechtPflichtAn(p) ? " checked" : ""}><span></span></label>
         </div>
         <div class="row" style="align-items:center;gap:8px">
-          <span style="font-size:12px;color:var(--dim);flex:1">A para-block pays only when the
-            para team was sighted there or a battle was read there.</span>
+          <span style="font-size:12px;color:var(--dim);flex:1">Para-block pays when a team was sighted
+            or a battle read there.</span>
           <label class="toggle"><input type="checkbox" id="rg-p-para"${
             schalterAn(p, "para_pflicht") ? " checked" : ""}><span></span></label>
         </div>
@@ -57888,9 +57845,7 @@ async function aufsichtFenster(tage){
            style="font-size:10.5px">Take back …</button></td>` : ""}
       </tr>`).join("")}</tbody></table>`
       : `<div class="empty">Nothing recorded in the last ${tage} days.</div>`}
-    ${istAdmin() ? `<div class="note">Taking back removes what that person wrote on the
-      map and about others. Their own depot, arsenal, soldiers and private notes stay —
-      those are theirs.</div>` : ""}`;
+    ${istAdmin() ? `<div class="note">Taking back removes their map entries; their own depot and notes stay.</div>` : ""}`;
   koerper.querySelectorAll("[data-zurueck]").forEach(b =>
     b.addEventListener("click", ()=>zurueckNehmen(b.dataset.zurueck)));
 }
@@ -57936,14 +57891,14 @@ function meldungStand(id, st){
 function meldeFenster(){
   openDlg(`
     <div class="dlg-h"><h2>Tell the admin</h2>
-      <p>Broken, in the way, or missing — it lands on his list with your name on it.</p></div>
+      </div>
     <div class="dlg-b">
       <div class="row" style="flex-wrap:wrap;gap:5px">
         ${TODO_ART.map(([k,n],i)=>`<button class="btn" data-art="${k}"
           aria-pressed="${i===0}" style="font-size:11px;padding:3px 9px">${esc(n)}</button>`).join("")}
       </div>
       <textarea id="md-text" style="min-height:96px" dir="auto"
-        placeholder="What did you expect, and what happened instead? One or two sentences are plenty."></textarea>
+        placeholder="What happened?"></textarea>
     </div>
     <div class="dlg-f">
       <button class="btn" id="d-close">Cancel</button>
@@ -57959,7 +57914,7 @@ function meldeFenster(){
   document.getElementById("d-close").addEventListener("click", closeDlg);
   document.getElementById("md-go").addEventListener("click", ()=>{
     const txt = document.getElementById("md-text").value.trim();
-    if (txt.length < 4){ toast("A sentence, please — otherwise nobody can act on it."); return; }
+    if (txt.length < 4){ toast("A sentence, please."); return; }
     meldungSenden(art, txt, "");
     closeDlg();
   });
@@ -58265,8 +58220,7 @@ async function notizFenster(){
   const nurLesen = !geholt;
   if (nurLesen && !privRec()){
     dialogFehler("Could not open your notebook",
-      "The server did not answer, and there is nothing of your notebook on this "
-      + "computer. Try again in a moment.");
+      "Server did not answer - no notebook here.");
     return;
   }
   const text = await notizLesen();
@@ -58279,17 +58233,13 @@ async function notizFenster(){
     <div class="dlg-b">
       ${verschlossen ? `
         <div class="note" style="border-left:3px solid var(--su);padding-left:9px">
-          <b>This notebook cannot be opened here.</b> It was written on another computer, or with
-          another password. Log out in the gear menu and sign in with the password it was written
-          under.</div>
+          <b>This notebook cannot be opened here.</b> Written under another password - sign in with it.</div>
         ${pwSession ? `<button class="btn danger" id="nz-neu" style="font-size:11.5px">Start a
           new notebook here</button>`
-        : `<div class="note">To start a new one here instead, log out in the gear menu and sign
-          back in by typing your password.</div>`}`
+        : ""}`
       : `
         ${nurLesen ? `<div class="note" style="border-left:3px solid var(--su);padding-left:9px">
-          <b>Read only — the server did not answer.</b> This is what is stored on this
-          computer.</div>` : ""}
+          <b>Read only — the server did not answer.</b> Stored on this computer.</div>` : ""}
         <textarea id="nz-text" ${nurLesen ? "readonly" : ""}
           style="min-height:320px;line-height:1.5${nurLesen ? ";opacity:.75" : ""}" dir="auto"
           spellcheck="false" placeholder="Whatever you want to keep to yourself.">${esc(text)}</textarea>
@@ -58322,8 +58272,7 @@ async function notizFenster(){
      staende ein neuer Schluessel neben altem Text, und das saehe fuer immer
      wie ein Passwortproblem aus. */
   document.getElementById("nz-neu")?.addEventListener("click", async ()=>{
-    if (!confirm("Start a new notebook here? The old text is written over on every computer "
-               + "and cannot be read again.")) return;
+    if (!confirm("Start a new notebook? The old text is overwritten everywhere.")) return;
     try {
       const k = await crypto.subtle.generateKey({name:"AES-GCM", length:256}, true,
                                                 ["encrypt","decrypt"]);
@@ -58355,9 +58304,7 @@ async function notizFenster(){
     if (p < 0.7){ voll.textContent = ""; return; }
     voll.textContent = `${Math.round(p*100)} % full`;
     voll.style.color = p >= 1 ? "var(--su)" : p >= 0.9 ? "#ffc9a0" : "var(--dim2)";
-    voll.title = p >= 1
-      ? "Past this it no longer travels: it stays on this computer and is gone if you clear the browser."
-      : "A notebook has room for about twelve thousand characters. Past that it stops travelling between your computers.";
+    voll.title = "Notebook limit: 12,000 characters - past that it stays on this computer.";
   };
   const sichern = async (wort) => {
     /* Doppelt gesichert: der Knopf fehlt im Nur-Lesen-Fall ohnehin, aber
@@ -58426,8 +58373,7 @@ function torZeigen(meldung){
         <input type="password" id="tor-code" placeholder="your invite code" autocomplete="off"
           spellcheck="false">
         <button class="btn primary" id="tor-go">Set up this device</button>
-        <p class="tor-klein">You pick a password next — that is what gets you back in, here and
-          on any other device.</p>
+        <p class="tor-klein">Next: pick a password.</p>
       </div>
 
       <!-- Vorgabe: "Ich will mich mit meinem Account namen und passwort am
@@ -58445,12 +58391,10 @@ function torZeigen(meldung){
 
         <details style="margin-top:11px">
           <summary class="tor-klein" style="cursor:pointer">Forgotten your password?</summary>
-          <p class="tor-klein" style="margin-top:7px">Nobody can look it up or reset it. What
-            brings the account back is the <b>backup file</b> from signup, or the code itself.</p>
+          <p class="tor-klein" style="margin-top:7px">Cannot be reset. The <b>backup file</b> brings the account back.</p>
           <input type="file" id="tor-datei" accept=".txt,text/plain"
             style="font-size:11px;width:100%;margin-top:6px">
-          <p class="tor-klein" style="margin-top:7px">Neither? Ask on Discord for a new code —
-            the old one stops working, and your private notebook stays locked.</p>
+          <p class="tor-klein" style="margin-top:7px">Neither? Ask on Discord for a new code.</p>
         </details>
       </div>
       <p class="tor-klein" style="margin-top:11px">Your password never leaves this browser.</p>
@@ -58468,7 +58412,7 @@ function torZeigen(meldung){
     try { text = await datei.text(); }
     catch(e){ torZeigen("Could not read that file."); return; }
     const code = codeAusText(text);
-    if (!code){ torZeigen("That file does not carry a code — look for the line starting with CODE:."); return; }
+    if (!code){ torZeigen("No code in that file (line CODE:)."); return; }
     const f = document.getElementById("tor-code");
     if (f) f.value = code;
     document.getElementById("tor-go")?.click();
@@ -58866,7 +58810,7 @@ function passwortAltFragen(ich, lage, meldung){
            mehr hinein.
            Lieber gar nicht entscheiden als falsch. */
         passwortAltFragen(ich, lage,
-          "Could not check that right now — the server did not answer. Try again.");
+          "Server did not answer - try again.");
         return;
       }
       if (!passt){
@@ -58941,8 +58885,7 @@ function passwortAnlegen(ich, meldung, lage){
       <div class="tor-marke">WAR MAP</div>
       <div class="tor-sub">${esc(ich.name || "welcome")}</div>
       ${meldung ? `<div class="tor-fehler">${esc(meldung)}</div>` : ""}
-      <p class="tor-text">Pick a password. From here on that is all you need on this
-        computer.</p>
+      <p class="tor-text">Pick a password.</p>
       <input type="password" id="pw-1" placeholder="your password" autocomplete="new-password">
       <input type="password" id="pw-2" placeholder="again" autocomplete="new-password">
       <label class="tor-schalt"><input type="checkbox" id="pw-auto"> Stay signed in on this
@@ -59075,8 +59018,7 @@ function passwortAnlegen(ich, meldung, lage){
       torFertig();
       setTimeout(() => toast(gespeichert
         ? (getauscht
-            ? "Your invite code is used up. A backup file with the new one was saved — move it "
-              + "somewhere safe."
+            ? "Invite code used up - backup file saved."
             : "A backup file with your code was saved — move it somewhere safe.")
         : "Could not save the backup file."), 700);
       /* Und die Einschraenkung dazu, falls es sie gibt. Zweite Meldung statt
@@ -59177,8 +59119,7 @@ function passwortAbfragen(meldung){
   document.getElementById("pw-1").addEventListener("keydown", ev => {
     if (ev.key === "Enter") los(); });
   document.getElementById("pw-neu")?.addEventListener("click", ()=>{
-    if (!confirm("Start over with a new code? What is stored here is thrown away — "
-               + "everything on the server comes back.")) return;
+    if (!confirm("Start over with a new code? Stored data here is thrown away.")) return;
     CFG = null; localStorage.removeItem(CFG_KEY); torZeigen();
   });
   /* Die Sicherungsdatei: der Code steht darin eingerueckt in einer eigenen
@@ -59242,8 +59183,7 @@ function beitrittDialog(){
           placeholder="the name you play under" dir="auto" spellcheck="false"
           ${CFG && CFG.name ? "readonly" : ""}>
       </div>
-      ${CFG && CFG.name ? `<div class="note" style="font-size:11px">This has to be your name in the
-        game. Wrong or misspelled? Ask on Discord.</div>` : ""}
+      ${CFG && CFG.name ? `<div class="note" style="font-size:11px">Your name in the game.</div>` : ""}
       <div class="row" style="align-items:center;gap:8px">
         <span style="font-size:12px;color:var(--dim);width:96px">Joining as</span>
         <div class="own4" style="flex:1">
@@ -59251,15 +59191,11 @@ function beitrittDialog(){
             aria-pressed="${f===q.id}">${q.tag}</button>`).join("")}
         </div>
       </div>
-      <div class="note" style="font-size:11px">Follows the clan by default — change it only if you
-        fight somewhere else this war.</div>
+      <div class="note" style="font-size:11px">Clan's side by default.</div>
       <div style="border-top:1px solid var(--line);margin-top:11px;padding-top:10px">
         <div style="border-left:3px solid var(--accent);padding:8px 12px;background:var(--panel2);
              border-radius:var(--r);font-size:13px;line-height:1.55">
-          What is in here stays in here. No screenshots, no pasting into other clans' chats, no
-          passing it on to the other side.<br><br>
-          <span style="color:var(--dim)">Please play fair — the USSR has it hard enough as it is.
-          Sharing this gets you removed, but honestly, we would rather just trust you.</span>
+          What is in here stays in here.
         </div>
       </div>
     </div>
@@ -60246,8 +60182,6 @@ function feindDialog(key, name){
           rollenVorrat().filter(r=>!rollen.includes(r)).map(r=>
             `<button class="btn" data-rset="${esc(r)}" style="font-size:10px;padding:1px 6px;opacity:.8"
               >+ ${esc(r)}</button>`).join("")}</div>
-        <div class="note">Free text — whatever the clan needs. Suggested are the ones already used
-          elsewhere, so a shared vocabulary forms instead of fifteen spellings for the same thing.</div>
       </div>
     </div>
     <div class="dlg-f"><button class="btn" id="fd-hebe" title="Lift every town this player was reported in">Lift on the map</button>
@@ -60867,9 +60801,7 @@ async function clansFuellen(){
               style="flex:1;font-size:11px">
             <button class="btn" id="vz-bildweg" style="padding:2px 8px;font-size:10.5px">Remove</button>
           </div>
-          <div class="hint" id="vz-bildhint">A JPG or PNG is shrunk to 128&thinsp;px here on your
-            computer before it is sent — a big photo costs nothing. It is cropped square from the
-            middle. Without a picture the clan shows its tag instead.</div>` : ""}
+          <div class="hint" id="vz-bildhint">JPG or PNG, cropped square, 128&thinsp;px.</div>` : ""}
         </div>
       </div>
       <div class="row">
@@ -60894,7 +60826,7 @@ async function clansFuellen(){
         <td style="text-align:left;color:var(--dim)">${esc(c.kontakt || "—")}</td>
       </tr>`).join("")}</tbody>
     </table></div>`
-    : `<div class="empty">Nobody else is fighting for this faction yet — at least not with this tool.</div>`}
+    : `<div class="empty">No other clan on this side yet.</div>`}
 
     <div class="note">Everyone here sees that your clan exists and how to reach you.
       <b>Nothing you have scouted is shared.</b></div>`;
@@ -61638,8 +61570,7 @@ function clanDialog(tab){
             ${leiter ? `<div class="row"><button class="btn" id="cl-withhold">${wh ? "Lift withhold" : "Withhold this war"}</button></div>` : ""}
           </div>`;
           })() : ""}
-          <div class="note">The side sets which depot is shown, what the <b>Arsenal</b> offers, and
-            the side of new teams.${leiter?"":" The leader sets it."}${
+          <div class="note">The side sets depot, arsenal and new teams.${leiter?"":" The leader sets it."}${
             verw?"":" The clan's name is changed by the admin — the leader asks on the board."}</div>`;
         })()}
         <!-- THE NEIGHBOURHOOD BELONGS ON THE CARD. Under its own heading it
@@ -61707,8 +61638,7 @@ function clanDialog(tab){
               </div>`).join("")}
             </div>`).join("")}</div>` : `<div class="empty">No groups yet.</div>`}`;
         })()}
-        ` : `<div class="note">Open the <b>Depot</b> on the right (key <kbd>D</kbd>) and enter what you own,
-          with the names the teams have in the game. From then on this window shows the whole clan.</div>`}
+        ` : `<div class="note"><b>Depot</b> (key <kbd>D</kbd>): enter what you own, named as in the game.</div>`}
       </div>
 
       <div class="tabp" data-tab="growth">
@@ -61738,7 +61668,7 @@ function clanDialog(tab){
             }).join("");
           })()}</tbody></table></div>` : ""}
         <div class="note">${reihen.length > 1 ? `A team appears on the line the day it was bought.`
-          : `The first snapshot is the state as it is now — come back in a few days.`}</div>
+          : `First snapshot — come back in a few days.`}</div>
       </div>
 
       <div class="tabp" data-tab="who"><div id="cl-who">
@@ -61927,8 +61857,7 @@ function poolPanel(){
       <input type="number" id="pool-n" min="1" max="99" value="1"
         style="width:62px;background:var(--panel2);border:1px solid var(--line);
           border-radius:2px;padding:4px 6px;outline:0;text-align:right">
-      <span style="font-size:12px;color:var(--dim)">of a type — the last column says when the
-        pool covers that many.</span>
+      <span style="font-size:12px;color:var(--dim)">of a type</span>
     </div>
     <div class="tw"><table>
       <thead><tr><th colspan="2">Assault team</th><th>Price out of the pool</th>
@@ -61942,9 +61871,7 @@ function poolPanel(){
         <td style="text-align:left;color:var(--dim)">${v.engpass ? esc(resName(v.engpass)) : "—"}</td>
         <td data-zeit="${esc(a.k)}">${v.stueck ? "covered" : esc(dauerText(v.wartenS))}</td>
       </tr>`).join("")}</tbody>
-    </table></div>
-    <div class="note">“Enough for n in” assumes nobody else spends a thing — the earliest possible moment,
-      not a forecast. Read it again before a big decision.</div>`;
+    </table></div>`;
 }
 function poolPanelWiring(){
   document.getElementById("pool-set")?.addEventListener("click", poolDialog);
@@ -62167,8 +62094,7 @@ function arsenalDialog(tab){
           const d = FAEHIG.find(x => x.k === k) || {name: k, warum: ""};
           return `<span class="kchip an" title="${esc(d.warum)}">${esc(d.name)}</span>`;
         }).join("")}</div></div>` : ""}
-      ${frak != null ? "" : `<div class="hint" style="font-size:10.5px">No side set for the clan —
-        everything is on offer. Set it under <b>Load / Merge</b>.</div>`}
+      ${frak != null ? "" : `<div class="hint" style="font-size:10.5px">No side set for the clan.</div>`}
     </div>`;
   };
 
@@ -62866,17 +62792,14 @@ document.getElementById("b-war").addEventListener("click", ()=>{
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;flex-direction:column;gap:8px">
         <span style="font-size:12px;color:var(--dim)">Start town</span>
         <div id="set-start"></div>
-        <div class="note" style="font-size:11px">The one town each side holds when a war begins —
-          everything else starts uncontrolled. The list offers the thirteen capitals; any other
-          town works too, just type its name.</div>
+        <div class="note" style="font-size:11px">Start town of each side; type any town.</div>
       </div>
       <div style="border-top:1px solid var(--line);padding-top:11px;display:flex;flex-direction:column;gap:8px">
         <span style="font-size:12px;color:var(--dim)">Capitals to win</span>
         <div class="row" style="align-items:center;gap:9px">
           <input type="number" id="set-sieg" min="1" max="13" step="1"
                  value="${siegZahl()}" style="width:72px" ${verw?"":"disabled"}>
-          <span class="note" style="font-size:11px;flex:1">Of the thirteen capitals. The top bar
-            counts down to this number for every side.</span>
+          <span class="note" style="font-size:11px;flex:1">Capitals needed to win.</span>
         </div>
       </div>
       ${/* ENNO 07.09.2026: "Moeglichkeit die Versorgungsmengen der Truppentypen
@@ -63179,7 +63102,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0e698ae7a1</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 8a132f42f7</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -63407,7 +63330,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0e698ae7a1";
+const BAU = "8a132f42f7";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
@@ -64012,14 +63935,12 @@ async function syncStart(){
        Auskunft - und die teuerste, denn er gibt sein Konto verloren. */
     if (hatBuiltin()){
       torZeigen(hatteSchloss || anmeldenameZuletzt
-        ? "This code no longer works — the password was probably changed "
-          + "on another device. Sign in below with your name and the new "
-          + "password."
+        ? "This code no longer works."
         : "That code was not accepted. Ask on Discord for a new one.");
       return;
     }
     dialogFehler("That code was not accepted",
-      "Either it is mistyped or it has not been approved. Ask on Discord.");
+      "Mistyped or not approved - ask on Discord.");
     return;
   }
   CFG.room = ich.room; CFG.admin = !!ich.is_admin; CFG.name = ich.name;
@@ -64504,7 +64425,7 @@ async function mitgliederDialog(meldung){
                 title="Copy the invite message for this person">Message</button>
               <button class="btn" data-ren="${esc(m.player)}" data-name="${esc(m.name || "")}"
                 style="padding:2px 7px;font-size:10.5px"
-                title="Their name in the game — this is what everybody sees on the map">Rename</button>
+                title="Name in the game">Rename</button>
               ${fuehrt ? "" : `
               <button class="btn" data-lock="${esc(m.player)}" data-to="${m.approved ? "0" : "1"}"
                 style="padding:2px 7px;font-size:10.5px">${m.approved ? "Lock" : "Unlock"}</button>`}
@@ -64513,18 +64434,16 @@ async function mitgliederDialog(meldung){
               ${(!hatLeiter && m.approved) ? `
               <button class="btn" data-ltr="${esc(m.player)}" data-nm="${esc(m.name || m.player)}"
                 style="padding:2px 7px;font-size:10.5px"
-                title="Hand this clan over to them. This is the one thing you can do to a clan from the outside — and only once.">Make leader</button>` : ""}
+                title="Hand the clan over - once.">Make leader</button>` : ""}
               ${fuehrt
                 ? `<span style="color:var(--dim2);font-size:10.5px;padding:0 4px"
-                     title="An admin cannot lock or remove a leader. The leader has to hand the clan over first.">leads this clan</span>`
+                     title="The leader cannot be locked or removed.">leads this clan</span>`
                 : `<button class="btn danger" data-del="${esc(m.player)}"
                 style="padding:2px 7px;font-size:10.5px">Remove</button>`}`}</td>
           </tr>`;
         }).join("")}</tbody>
       </table></div>
-      <div class="note">Send a code in a direct message, never in a public channel. Nobody here can
-        hand out a replacement: whoever forgets their password needs the <b>backup file</b> they
-        were given when they signed up.
+      <div class="note">Send the code by direct message only.
         <b>Lock</b> shuts somebody out but keeps what they wrote; <b>Remove</b> deletes
         their entry and the code stops working.</div>
     </div>
@@ -64713,8 +64632,7 @@ async function mitgliederDialog(meldung){
   d.style.cssText = "position:fixed;inset:0;z-index:99999;background:#1a1a1a;"
     + "color:#eee;font:15px/1.6 system-ui,sans-serif;padding:40px;overflow:auto";
   d.innerHTML = "<h2 style='margin:0 0 12px'>The map could not start</h2>"
-    + "<p>Something in the stored data broke the startup. Your data is still "
-    + "on the server; this browser just cannot read it.</p>"
+    + "<p>Stored data broke the startup - your data is on the server.</p>"
     + "<p><button id='e-neu' style='padding:8px 16px;font:inherit'>Reload</button> "
     + "<button id='e-leer' style='padding:8px 16px;font:inherit'>Clear this browser and reload</button></p>"
     + "<pre style='color:#e09;white-space:pre-wrap;font-size:12px'></pre>";
