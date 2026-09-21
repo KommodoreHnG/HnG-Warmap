@@ -15949,25 +15949,31 @@ function wegSuche(starts, ziel, passierbar, kosten){
   return {laenge: dist[ziel], hops: weg.length - 1, weg, von: weg[0]};
 }
 
-/* ---- DER KUERZESTE WEG AM ANGRIFFSPFEIL (08.09.2026) ------------------
+/* ---- DER WEG AM ANGRIFFSPFEIL (seit B2 21.09.2026 entlang der Kurve; bis dahin der kuerzeste) (08.09.2026) ------------------
    Der Auftrag: "Bei aktiven Angriffspfeilen den kuerzesten Weg zeigen."
    Und die Antwort auf die teure Frage, woertlich: "INAKTIVE BEFEHLE
    BRAEUCHTEN DIE HIGHLIGHTS AUSSERDEM NICHT." Also nur aktive.
 
-   WAS GEZAEHLT WIRD, sind Schlachten, nicht Karteneinheiten: jede Stadt
-   auf dem Weg, die diese Seite noch nicht haelt, kostet 1. Darunter liegt
-   ein Feinanteil aus dem Abstand zur gezeichneten Kurve (der Schwenk des
-   Pfeils - derselbe Steuerpunkt wie in drawArrow), aus der Kantenlaenge
-   und aus der Kampfmarke. Der Feinanteil je Kante ist durch 1/1438
-   gedeckelt und ein einfacher Weg hat hoechstens 1437 Kanten: die Summe
-   bleibt unter 0,70 Sehnen und kann einen Umweg nie erzwingen. Bei
-   annaehernd gleicher Laenge entscheidet damit der Schwenk - und nur dort.
-   BIS ZUM 08.09.2026 STAND HIER EINE ANDERE WERTUNG: eine Schlacht kostete
-   1, die Laenge lag im Feinanteil, und der Weg machte lieber dreissig
-   Etappen durch eigenes Land als eine Schlacht. Sie stammte aus dem
-   Uebergabeblatt. Der Kommodore dazu: "Gefechte sollen nicht vermieden
-   werden. Es geht immer um den direktesten Weg, egal was dazwischen
-   liegt." 
+   WHAT AN EDGE COSTS (B2, 21.09.2026): its length in map units PLUS
+   ANGRIFF_WEG_KURVE times the distance of the town it reaches to the
+   drawn curve (the bow of the arrow - the same control point as in
+   drawArrow, ANGRIFF_WEG_PROBEN support points). So the route follows the bow: pull the belly
+   north and the chain, the rings and the swords move north. ENNO
+   20.09.2026 (ToDo 20.09., Z3): "Der Pfad der Staedte bei Angriffsbefehlen,
+   also das Highlight welche eingenommen werden muessen, soll sich am
+   tatsaechlichen Verlauf des Pfeils orientieren. Wenn man den Bauch
+   verschiebt, soll sich auch das Highlighting der Staedte aendern".
+   HISTORY. Until 08.09.2026 a battle cost 1 and the length lay in a fine
+   share - the route made thirty legs through own land rather than one
+   battle (that weighting came from the hand-over sheet, not from him).
+   ENNO 08.09.2026: "Gefechte sollen nicht vermieden werden. Es geht immer
+   um den direktesten Weg, egal was dazwischen liegt." From 08.09. to
+   21.09. an edge cost its length plus a fine share capped at 0,70/1438 of
+   the chord per edge - which could never force a detour, so the belly
+   changed the route in 1 of 200 arrows (Messungen/messung_b2_bauch_1.js).
+   Z3 is the newer word: the first sentence of 08.09. still holds (an enemy
+   town costs nothing extra), the second ("der direkteste Weg") is
+   superseded by the bow.
 
    DER STEUERPUNKT WIRD IN KARTENEINHEITEN GEBILDET. toScr ist Streckung
    plus Verschiebung ohne Spiegelung, also ergibt dieselbe Formel dieselbe
@@ -16010,6 +16016,7 @@ function wegSuche(starts, ziel, passierbar, kosten){
 const ANGRIFF_WEG_MS       = 2000;   // Verfallszeit eines gespeicherten Weges
 const ANGRIFF_WEG_BILD     = 1;      // frische Wegsuchen je Bild, hoechstens
 const ANGRIFF_WEG_PROBEN   = 12;     // Stuetzstellen auf der Kurve, wie in drawArrow
+const ANGRIFF_WEG_KURVE    = 0.5;    // B2: W, weight of a town's distance to the drawn curve, per edge, on top of the length
 const ANGRIFF_WEG_KETTE_MS = 1500;   // so lange darf sich das Nachfassen selbst Bilder holen
 const ANGRIFF_WEG_MERK     = 200;    // so viele Pfeile behaelt der Speicher
 const angriffsWegSpeicher = new Map();
@@ -16066,20 +16073,23 @@ function angriffsWegNeu(a){
     d = Math.sqrt(q); nah[i] = d; return d;
   };
   const f = a.f;
-  const anteil = (v, m) => v/(v + m);          // 0 bis unter 1, ohne Ausreisser
-  /* DER DIREKTESTE WEG, EGAL WAS DAZWISCHEN LIEGT. Der Kommodore am
-     08.09.2026: "Gefechte sollen nicht vermieden werden." Hier stand vorher
-     eine Schlacht mit Kosten 1 und die Laenge nur im Feinanteil - der Weg
-     machte damit lieber dreissig Etappen durch eigenes Land als eine
-     Schlacht. Die Wertung kam aus dem Uebergabeblatt, nicht von ihm.
-     Jetzt kostet eine Kante ihre LAENGE, und ein feindlicher Ort kostet
-     nichts extra: er ist der Zweck, nicht das Hindernis.
-     Der Zusatz haelt den Weg an der gezeichneten Kurve und zieht ihn bei
-     gleicher Laenge dorthin, wo schon gekaempft wird. Er ist je Kante auf
-     0,70/1438 der Sehne gedeckelt und kann einen Umweg darum nie erzwingen -
-     bei hoechstens 1437 Kanten summiert er sich auf unter 0,70 Sehnen. */
-  const kosten = (u, v, l) => l
-    + (0.55*anteil(kurvNah(v), sehne) + 0.15*(fightAt(v) ? 1 : 0))*sehne/n;
+  /* THE ROUTE FOLLOWS THE BOW (B2, ENNO 20.09.2026, ToDo 20.09., Z3: "Wenn
+     man den Bauch verschiebt, soll sich auch das Highlighting der Staedte
+     aendern"). An edge costs its length PLUS ANGRIFF_WEG_KURVE times the
+     distance of the town it reaches to the drawn curve - map units, not
+     capped: a town off the bow is dearer than one on it, and the detour is
+     the price of the bow. Until 21.09.2026 that share was capped at
+     0,70/1438 of the chord per edge ("kann einen Umweg nie erzwingen"), and
+     the belly changed the route in 1 of 200 arrows
+     (Messungen/messung_b2_bauch_1.js). Measured on this form, W = 0,5, 196
+     arrows with chords of 120..600 map units: the belly (-0,5 / 0 / +0,5)
+     changes the route in 195 of 196, detour against the shortest
+     path median 6,7 %, p90 22,5 % (Messungen/ergebnis_b2.json).
+     A town with a fight costs nothing extra and nothing less - ENNO
+     08.09.2026: "Gefechte sollen nicht vermieden werden." The old
+     tie-break of 0,15/1438 of the chord AGAINST a fight town went with
+     the rebuild (FABLE 21.09.2026): unmeasurable, and the wrong way. */
+  const kosten = (u, v, l) => l + ANGRIFF_WEG_KURVE*kurvNah(v);
   const weg = wegSuche([a.from], a.to, () => true, kosten);
   if (!weg) return null;
   /* Der Startort zaehlt nicht mit: dort steht die Kolonne schon, sie nimmt
@@ -61833,7 +61843,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build c78d1b051b</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 5c7449717c</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -62061,7 +62071,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "c78d1b051b";
+const BAU = "5c7449717c";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
