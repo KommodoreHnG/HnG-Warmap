@@ -1031,15 +1031,12 @@ i.prio{margin-right:5px;vertical-align:-1px}
    and the surplus pushes the room past the screen: measured at 1280 points
    of window, content 1345, and the right-hand desk was cut off. The
    cabin next door has always used "auto" and comes out exactly even. */
-#spieler{position:fixed;inset:0;z-index:120;display:none;background:#0b0c10;
-  grid-template-columns:auto 1fr auto;grid-template-rows:auto 1fr;
-  grid-template-areas:"kopf kopf kopf" "links schirm pult";color:#cfd6dd}
-#spieler.an{display:grid}
-#spieler .rd-kopf{grid-area:kopf;background:#101216;border-bottom-color:#22252c}
-#spieler .rd-pult{grid-area:pult}
-#spieler .kb-links{grid-area:links}
-#spieler .kb-schirm{grid-area:schirm}
-#spieler .rd-pult .kb-abstand{height:14px}
+/* H2 (ToDo 20.09.2026): the player room is gone - its sheet (#sp-blatt) sits
+   under the battle sheet in the battle desk's screen column, shown once the
+   switch saw the war map or a battle window was read in this capture */
+#sp-blatt{display:none;margin-top:16px}
+#sp-blatt.an{display:block}
+#sp-blatt .sp-jetzt{font-family:var(--schmal);font-size:12px;letter-spacing:.04em;color:#7a6a48;line-height:1.4;margin:0 0 8px}
 /* the player sheet: two or three columns of names side by side */
 .sp-listen{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
 /* on a narrow screen the lists stack instead of squeezing to nothing */
@@ -1117,8 +1114,8 @@ i.prio{margin-right:5px;vertical-align:-1px}
 #gefstand.an{display:grid}
 #gefstand .rd-kopf{grid-area:kopf;background:#101216;border-bottom-color:#22252c}
 #gefstand .rd-pult{grid-area:pult}
-/* .kb-abstand carries no general rule, only one per desk (#kabine and
-   #spieler above) - without this line the spacer is 0 tall here and the
+/* .kb-abstand carries no general rule, only one per desk (#kabine
+   above) - without this line the spacer is 0 tall here and the
    switch sits against the note under it */
 #gefstand .rd-pult .kb-abstand{height:14px}
 /* DIE BESTAETIGUNG HAENGT AM RAUM, NICHT IM KOPF. gefZeichnen schreibt Kopf,
@@ -2248,9 +2245,9 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   #top-right .btn{padding:7px 8px;font-size:12px;letter-spacing:.04em}
 
   /* DIE RAUMLEISTE ROLLT, DIE DREI RECHTEN STEHEN FEST.
-     #top-capture (Radar, Units, Battle, Players, Board, Orders; gemessen
-     mit fuenf Knoepfen, Battle kam spaeter dazu; am Telefon ohne Units
-     und Players, MOB-4) ist 600 Punkte breit. b-radar liegt HIER, nicht
+     #top-capture (Radar, Units, Battle, Board, Orders - Players fiel mit
+     H2, ToDo 20.09.2026; gemessen mit fuenf Knoepfen, Battle kam spaeter
+     dazu; am Telefon ohne Units, MOB-4) ist 600 Punkte breit. b-radar liegt HIER, nicht
      in #top-right - die Radar-Haelfte der Regel "#top-right #b-radar .txt"
      weiter oben trifft nichts. Ohne min-width:0 schrumpft ein Flex-Kind nicht unter seine
      Inhaltsbreite - also schob es alles Weitere aus dem Schirm, und die
@@ -2269,7 +2266,8 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   /* Und die Raumknoepfe etwas enger, damit ohne Rollen schon drei statt
      zwei zu sehen sind. */
   #top-capture .btn{padding:7px 8px;font-size:12px;letter-spacing:.04em;gap:5px}
-  /* MOB-4: no Players and no Units button on a phone. ENNO 05.09.2026:
+  /* MOB-4: no Units button on a phone (the Players button fell with H2,
+     ToDo 20.09.2026). ENNO 05.09.2026:
      "Spielererfassung kann hier erstmal ausgeblendet werden." ENNO
      12.09.2026: "Nur Radar und Battlereader brauchen die Kopplung, da wir
      beim AT-Grabber ja das Overlay haben." Without screen sharing both
@@ -2280,7 +2278,7 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
      same way until a phone can see the battle board - it needs the
      shared game window as well (his 12.09.: the coupling). Room and
      wiring stay; the desk keeps all six. */
-  #top-capture #b-spieler,#top-capture #b-units,#top-capture #b-gefstand{display:none}
+  #top-capture #b-units,#top-capture #b-gefstand{display:none}
   /* Fuenf Titel passen nebeneinander nicht auf 375 Bildpunkte - sie wurden
      abgeschnitten. Auf dem Telefon also ein Griff, der alles auf einmal
      aufklappt, wie ueberall sonst auch. */
@@ -2546,16 +2544,12 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
           <path d="M8.4 17.2l-3.4 3.4M6.1 14.9l-3.4 3.4"/>
         </svg><span class="txt">Battlereader</span>
       </button>
-      <button class="btn" id="b-spieler" title="Read the players of a battle from the war map">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
-          <!-- a soldier in profile: helmet, tilted brim, face, shoulders -->
-          <path d="M5.2 11.6 C5.2 6.4 8.6 3.4 12.4 3.4 C16.2 3.4 19.0 6.2 19.2 10.4"/>
-          <path d="M3.6 12.6 C3.2 11.2 4.4 10.5 5.8 10.4 L19.2 9.4 C20.7 9.3 21.1 10.7 20.0 11.5 L6.4 13.5 C5.0 13.7 4.0 13.4 3.6 12.6 Z"/>
-          <path d="M18.8 11.6 C19.2 13.0 18.8 13.6 18.3 14.0 L19.6 15.2 L17.8 15.7 C18.0 17.2 16.8 18.4 14.8 18.6 L14.9 20.4"/>
-          <path d="M9.0 13.8 C8.8 16.6 10.4 18.2 12.4 18.6 L12.3 20.4"/>
-          <path d="M3.8 22.8 C5.4 21.0 8.4 20.4 12.3 20.4 M20.6 22.8 C19.4 21.2 17.2 20.6 14.9 20.4"/>
-        </svg><span class="txt">Players</span>
-      </button>
+      <!-- the Players button is gone (H1/H2, ToDo 20.09.2026 - ENNO
+           20.09.2026: "Insbesondere das Playerroom Symbol braucht
+           Überarbeitung." and Z22: "... sinnvoll, wenn wir diese Räume
+           fusionieren. Der Raum soll aber weiterhin Battlereader
+           bleiben."): the war map's battle window is read by the
+           Battlereader now, so its sign fell with the room -->
       <button class="btn" id="b-board" title="Clan board — notes, requests, sightings">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
           <!-- pin board with two notes -->
@@ -2843,18 +2837,11 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
 <div id="gefstand" data-fest>
   <div class="rd-kopf" id="gf-kopf"></div>
   <aside class="rd-links kb-links" id="gf-links"></aside>
-  <div class="kb-schirm" id="gf-schirm"><div class="kb-blatt" id="gf-blatt"></div></div>
+  <div class="kb-schirm" id="gf-schirm"><div class="kb-blatt" id="gf-blatt"></div>
+    <!-- H2 (ToDo 20.09.2026): the sheet of the war map's battle window - strength table and names (pg*) -->
+    <div class="kb-blatt" id="sp-blatt"></div></div>
   <aside class="rd-pult" id="gf-pult"></aside>
   <button class="rd-zu" id="gf-zu" title="Close">&times;</button>
-</div>
-<div id="spieler" data-fest>
-  <div class="rd-kopf" id="sp-kopf"></div>
-  <aside class="rd-links kb-links" id="sp-links"></aside>
-  <div class="kb-schirm" id="sp-schirm">
-    <div class="kb-blatt" id="sp-blatt"></div>
-  </div>
-  <aside class="rd-pult" id="sp-pult"></aside>
-  <button class="rd-zu" id="sp-zu" title="Close">&times;</button>
 </div>
 <div id="krieg-bar" data-fest><span class="st-gw">Game window · not shared</span>
   <button class="btn primary" id="krieg-teilen">Share</button>
@@ -12525,12 +12512,28 @@ function draw(){
       if (kampf){
         glutKampf(ctx, x, y, r, !light());
         scheibeKampf(ctx, x, y, r, f);
-        /* T9 (e): a side of the battle window not full - a small hollow dot
-           on top of the white ring, in the colour of the window's "marked
-           contested" line; full, or no reading: nothing */
-        if (r >= 3 && pgCheckAgain(i)){
-          ctx.beginPath(); ctx.arc(x, y - r*0.78, Math.max(1.6, r*0.22), 0, 6.284);
-          ctx.lineWidth = Math.max(1, 0.09*r); ctx.strokeStyle = pgCheckFarbe(); ctx.stroke();
+        /* Z23 (H2, ToDo 20.09.2026 - ENNO 20.09.2026: "Gefechte mit Spielern
+           sind auf der Kriegskarte hervorzuheben"): a small dot on top of
+           the white ring in the accent colour - hollow while the head's
+           counter says players are in and names are still missing (the
+           "check again" of T9 (e)), full once every name is read; nothing
+           while no counter above 0 was read (pgSpielerPunkt). Round 2
+           (Skeptiker Wort SOLL 2): 0,30 r instead of 0,22, and a dark edge
+           of one point around it - the map lettering's edge - because the
+           accent lies close to the glow; hollow is the dark edge on both
+           sides of the accent ring, nothing inside. */
+        const punkt = r >= 3 ? pgSpielerPunkt(i) : null;
+        if (punkt){
+          const rp = Math.max(3, r*0.30), py = y - r*0.78;    /* the floor of 3: room for the hole of the hollow dot inside its two edges */
+          ctx.beginPath(); ctx.arc(x, py, rp, 0, 6.284);
+          if (punkt === "voll"){
+            ctx.lineWidth = 2; ctx.strokeStyle = PG_PUNKT_KANTE; ctx.stroke();   /* one point of edge outside the fill */
+            ctx.fillStyle = pgPunktFarbe(); ctx.fill();
+          } else {
+            const w = Math.max(1.5, 0.09*r);
+            ctx.lineWidth = w + 2; ctx.strokeStyle = PG_PUNKT_KANTE; ctx.stroke();   /* one point of edge on either side of the ring */
+            ctx.lineWidth = w; ctx.strokeStyle = pgPunktFarbe(); ctx.stroke();
+          }
         }
       } else {
         ctx.beginPath(); ctx.arc(x, y, r, 0, 6.284);
@@ -21613,7 +21616,8 @@ function bildFreigabeBeenden(){
    and ask ONCE for a new one, without restarting the rooms.
    ENNO 02.09.2026: "Idealerweise wird man nur einmal gefragt."
    ENNO 12.09.2026 (SON-7): "Ja bau das erstmal so, wie genannt."
-   Units, Players and Battlereader need nothing: their next look goes
+   Units and Battlereader need nothing (the player room went into the
+   Battlereader, H2): their next look goes
    through bildVideoHolen, which sees a new stream and builds a fresh video
    element. The radar holds the stream itself (wacheStart), so it is handed
    the new one; the watch - counters, targets, memory - stays as it is.
@@ -21637,7 +21641,7 @@ async function bildFreigabeNeu(){
     return false;
   }
   const liest = !!wache || !!(typeof KB !== "undefined" && KB && KB.live)
-      || !!(typeof PG !== "undefined" && PG && PG.live) || !!(typeof GEF !== "undefined" && GEF && GEF.live)
+      || !!(typeof GEF !== "undefined" && GEF && GEF.live)   /* H2: the war map's window is read by the battle desk */
       || !!(typeof DL !== "undefined" && DL && DL.live);   /* Q12: the depot reader watches too */
   if (!liest){ bildFreigabeBeenden(); toast("Sharing stopped - no room was watching."); return false; }
   if (wache){
@@ -29684,7 +29688,8 @@ function kbPult(){
 /* ONE FLOATING WINDOW PER PAGE (H3, ToDo 20.09.2026 - Kopfblock 3, the rule
    of F1). Four rooms open a Document Picture-in-Picture window: the cabin's
    strip (kbSchwebeAuf), the depot list (dlSchwebeAuf), the battle desk
-   (gefSchwebeAuf) and the player room (pgSchwebeAuf). What Chrome does with
+   (gefSchwebeAuf - since H2 with the war map's rows, the player room's
+   opener went in there) and the radar (radarSchwebeAuf, F1). What Chrome does with
    the first window when a second requestWindow comes is not measured
    (FABLE 13.09.2026, BAT-12 Runde 2, not measured: closes it, or refuses the
    second) - so nothing is left to it:
@@ -30583,8 +30588,7 @@ function kbLiveStop(auchFreigabe){
   kbSchwebeGesteLoesen();
   kbOrtFlaeche.c = null; kbOrtFlaeche.g = null;
   /* the share is the page's: it ends only when no room is watching */
-  if (auchFreigabe && !(typeof PG !== "undefined" && PG && PG.live)
-      && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()
+  if (auchFreigabe && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()
       && !(typeof DL !== "undefined" && DL && DL.live)) bildFreigabeBeenden();   /* Q12: the depot reader watches too */
   kbZeichnen();
 }
@@ -32506,8 +32510,27 @@ function namenBekannt(name){
   return nah.length === 1 ? nah[0] : null;
 }
 
-/* ================= THE PLAYERS' ROOM ================================ */
-let PG = null, pgOffen = false;
+/* ================= THE DETAIL BRANCH OF THE BATTLEREADER (pg*) =========
+   H2 (ToDo 20.09.2026) - ENNO 20.09.2026 (Z22): "Hier überschneiden sich
+   die Zuständigkeitsbereich noch, daher ist es denke ich sinnvoll, wenn
+   wir diese Räume fusionieren. Der Raum soll aber weiterhin Battlereader
+   bleiben. Wenn wir auf die Detailansicht gehen und dort Spieler sind,
+   können wir diese ja erfassen." ENNO 17.09.2026 (Bitte 3): "Bzw. soll
+   die Spielererfassung in einem Gefecht auch über den Battlereader
+   funktionieren. Dann „leihen“ wir uns die OCR vom Playerroom".
+   NO ROOM OF ITS OWN ANY MORE. The functions below read the war map's
+   battle window - strength table (BAT-2), head strip (P8), names (T9,
+   H3) - for the battle desk: PG is GEF.detail, one state with the
+   battle's, read here under its old name so that every function stays as
+   it was; null without a desk. The desk's tick hands its picture in
+   (pgBlick) when the switch says war map (gefWeiche K) and "Read the
+   detail window too" is on; the sheet is #sp-blatt in the desk's screen
+   column, the head's tiles "War map" and "Names read" come from
+   pgKopfKacheln, the floating window is the desk's (gefSchwebeZeichnen
+   shows these rows while the switch says K). */
+Object.defineProperty(window, "PG", {configurable: true,
+  get(){ try { return GEF ? GEF.detail : null; } catch(e){ return null; } },
+  set(v){ try { if (GEF) GEF.detail = v; } catch(e){} }});
 function pgNeu(){
   return {live: null, laeuft: false, letzte: null, vorige: null,
           stadt: null, seiten: [], ende: {}, N: 0, erste: 0, anker: GF_FENSTER.y,
@@ -32779,17 +32802,17 @@ function pgVerarbeiten(R){
   PG.N = Math.max(PG.N, ...Object.values(PG.ende).map(v => v || 0));
 }
 const pgWacheStand = {alt: null}, pgFlaeche = {};
-/* One beat: look, and read at most one line - so the sheet fills up before
-   your eyes and the room stays answerable. */
-async function pgTick(){
-  if (!PG || !PG.live || PG.laeuft) return;
-  /* no new picture since the last beat - nothing to look at (see bildNeu) */
-  if (!bildNeu(PG)) return;
-  PG.laeuft = true;
-  let bild = null;
-  try {
-    const f = bild = await bildLive();
-    if (!PG || !PG.live) return;
+/* ONE BEAT OF THE DETAIL BRANCH (H2): the desk's tick hands its picture in
+   when the switch says war map. Look, and read at most one line - so the
+   sheet fills up before your eyes and the desk stays answerable. Returns
+   true when a line was read this beat - or a window was seen for the first
+   time, or a fresh sheet begun (round 2): the tick then looks again after
+   250 ms, the beat the player room had, instead of a full second. Errors
+   go to the tick's own catch (a share that ended stops the capture there). */
+async function pgBlick(f){
+  if (!PG || !GEF || !GEF.live) return false;
+  const D = PG;                                /* the sheet this beat reads for: "New sheet" meanwhile, and nothing of this beat lands */
+  {
     /* THE DOORMAN, HERE TOO. The room read the whole 3840 by 2160 picture
        four times a second - 65 thousandths and 33 megabytes each time -
        whether anything had changed or not. The cabin's doorman guards the
@@ -32804,25 +32827,52 @@ async function pgTick(){
     if (PG.R && geregt < 3 && PG.wacheZaehler % 20 !== 0) R = PG.R;
     else {
       R = await gfLesen(f, pgFlaeche);
-      if (!PG || !PG.live) return;
+      if (PG !== D || !GEF || !GEF.live) return false;
       PG.R = R;
     }
-    pgVerarbeiten(R);
-    if (!R.da){ pgZeichnen(); return; }
-    /* the town, once per battle */
-    if (R.kennung !== PG.letzte && R.kennung === PG.vorige){
+    if (!R.da){ pgVerarbeiten(R); pgZeichnen(); return false; }
+    /* THE TOWN, ONCE PER STANDING WINDOW (round 2, Skeptiker Handwerk SOLL
+       1): a window is read - head strip, table, names - only once it stood
+       for two looks and its town was read, at every new standing window,
+       not only the first. The town comes from the strip's words (P8,
+       gfKopfWorte - read at once here, without the two still readings:
+       the window stood; 3 of 3 on the sample pictures, 200 to 300 ms, and
+       nothing at all when the strip did not change - a scrolled list) and,
+       when they name no town, from the title reader (gfStadt: 0 of 3 on
+       the same pictures, so second). A window of ANOTHER town on the same
+       capture (he opened the next battle's window in the game) begins a
+       fresh sheet, as "New sheet" does: the first town's sheet and its row
+       btl stay as they were, nothing of the new window lands there. A
+       window seen once is looked at again after 250 ms (the tick's
+       follow-up); until then nothing of it goes into the sheet. Both
+       readers silent: the window is taken for the sheet's own, as before. */
+    if (R.kennung !== PG.letzte){
+      if (R.kennung !== PG.vorige){ PG.vorige = R.kennung; return true; }
       PG.letzte = R.kennung;
-      if (PG.stadt === null){
+      /* a new standing window: the sheet so far goes out once, without the beat, BEFORE the new
+         window's head is read into it - a change of town then leaves the old row complete and
+         with its own head count (FABLE 21.09.2026, 22:55) */
+      PG.staerkeT = 0; pgStaerkeTeilen();
+      await pgKopf(R, f, true);
+      if (PG !== D || !GEF || !GEF.live) return false;
+      const W = pgKopfWorteGueltig();
+      let stadt = W && W.ort !== null && W.ort !== undefined ? W.ort : null;
+      if (stadt === null){
         const st = await gfStadt(R.c);
-        if (!PG) return;
-        if (st) PG.stadt = st.i;
+        if (PG !== D || !GEF || !GEF.live) return false;
+        if (st) stadt = st.i;
       }
+      if (stadt !== null && PG.stadt !== null && PG.stadt !== undefined && stadt !== PG.stadt){
+        pgRuhen(); pgWacheStand.alt = null;
+        const N = pgNeu(); N.stadt = stadt; N.letzte = N.vorige = R.kennung;
+        N.kopfWorte = PG.kopfWorte; N.kopfVorige = PG.kopfVorige;   /* the strip's words are this window's - not read twice */
+        GEF.detail = N;
+        return true;
+      }
+      if (stadt !== null && (PG.stadt === null || PG.stadt === undefined)) PG.stadt = stadt;
     }
     PG.vorige = R.kennung;
-    await pgKopf(R, f);                        /* P8: the head strip first, so the first row carries it */
-    if (!PG || !PG.live) return;
-    await pgStaerke(R, f);
-    if (!PG || !PG.live) return;
+    pgVerarbeiten(R);
     /* one unread visible line that actually carries a name */
     let ziel = null;
     for (const s of R.seiten){
@@ -32839,8 +32889,8 @@ async function pgTick(){
       PG.liest = pgKey(ziel.s.platz, ziel.i);
       PG.status = `Reading line ${ziel.i + 1} …`;
       pgZeichnen();
-      let g = await gfName(R.c, ziel.s.spalte, ay, t => { if (PG) PG.status = t; });
-      if (!PG) return;
+      let g = await gfName(R.c, ziel.s.spalte, ay, t => { if (PG === D) PG.status = t; });
+      if (PG !== D) return false;
       PG.liest = null;
       const zk = pgKey(ziel.s.platz, ziel.i);
       /* T9 (d): a reading the arrow rejected is not taken again (pgNeuLesen) */
@@ -32883,37 +32933,25 @@ async function pgTick(){
         ? "Every name on the sheet — keep it, or scroll for more."
         : "Scroll the list in the game; the rest is picked up as it comes into view.";
     }
-  } catch(e){
-    if (!PG) return;
-    PG.status = /denied|Permission/i.test(String(e.message || e))
-      ? "Screen sharing was declined." : "Capture: " + (e.message || e);
-    pgLiveStop();
-  } finally {
-    if (bild && bild.close) bild.close();
-    if (PG) PG.laeuft = false;
+    /* the head strip and the table after the line (round 2): the row btl's
+       first write then carries the first name - as it did while the town
+       arrived a beat after the first line. P8 holds: the strip before the
+       table, so the row carries it. */
+    await pgKopf(R, f);
+    if (PG !== D || !GEF || !GEF.live) return false;
+    await pgStaerke(R, f);
+    if (PG !== D || !GEF || !GEF.live) return false;
+    pgZeichnen();
+    return !!ziel;
   }
-  pgZeichnen();
 }
-function pgLiveStart(){
-  if (!PG || PG.live) return;
-  PG.live = setInterval(pgTick, 250);
-  PG.status = "Live.";
-  kbRauschenAn(); pgZeichnen(); pgTick();
-  pgSchwebeSelbst();                          /* H3: the floating window with the first gesture once the share stands */
-}
-function pgLiveStop(auchFreigabe){
-  if (!PG || !PG.live) return;
-  clearInterval(PG.live); PG.live = null;
-  kbRauschenAus();
-  /* the last reading and the standing surface go with the room - 33
-     megabytes each, nothing to keep while nobody looks */
+/* the detail branch's surfaces go with the capture (gefLiveStop): the last
+   look and the standing surface - 33 megabytes each, nothing to keep while
+   nobody looks - and the table's and the strip's memo of the look */
+function pgRuhen(){
+  if (!PG) return;
   PG.R = null; pgFlaeche.c = null; pgFlaeche.g = null;
-  PG.staerkeR = null; PG.kopfR = null;
-  /* the share is the page's: it ends only when no room is watching */
-  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)
-      && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()
-      && !(typeof DL !== "undefined" && DL && DL.live)) bildFreigabeBeenden();   /* Q12: the depot reader watches too */
-  pgZeichnen();
+  PG.staerkeR = null; PG.kopfR = null; PG.liest = null;
 }
 async function pgBild(datei){
   if (!PG) return;
@@ -32958,7 +32996,7 @@ async function pgStaerke(R, quelle){
     if (!PG || PG.staerkeR !== R) return;
     PG.staerkeMs = T ? T.ms : null;
     if (!T){ PG.staerke = null; PG.staerkeZeile = "No strength table in the picture."; return; }
-    PG.staerke = {zeilen: T.zeilen, t: jetzt(), kennung: R.kennung, abstand: T.abstand, fern: T.fern, zeuge: T.zeuge, q: PG.live ? "live" : "file"};
+    PG.staerke = {zeilen: T.zeilen, t: jetzt(), kennung: R.kennung, abstand: T.abstand, fern: T.fern, zeuge: T.zeuge, q: (GEF && GEF.live) ? "live" : "file"};
     pgStaerkeHand();
   }
   if (PG.staerke) pgStaerkeTeilen();
@@ -32976,12 +33014,14 @@ async function pgStaerke(R, quelle){
    row goes without type / status until the new strip stood still and was
    read. A town the room has not read (gfStadt) is taken from the strip; a
    read town is never overwritten. */
-async function pgKopf(R, quelle){
+async function pgKopf(R, quelle, sofort){
   if (!PG || !R || !R.da || !quelle) return;
   if (PG.kopfR === R) return;
   PG.kopfR = R;
+  /* sofort (H2 round 2): the words at once, without the two still readings
+     - for a window that stood two looks (pgBlick reads its town from them) */
   const mit = K => {
-    const still = gfKopfKennungGleich(K.kennung, PG.kopfVorige) || !PG.live;
+    const still = gfKopfKennungGleich(K.kennung, PG.kopfVorige) || !(GEF && GEF.live) || !!sofort;
     PG.kopfVorige = K.kennung;
     return still && (!PG.kopfWorte || !gfKopfKennungGleich(PG.kopfWorte.kennung, K.kennung));
   };
@@ -33244,40 +33284,42 @@ function pgSollZahl(){
   return PG.seiten.length ? PG.seiten.reduce((a, s) => a + (pgKopfZahl(s.platz) !== null ? pgKopfZahl(s.platz) : (PG.ende[s.platz] || 0)), 0)
                           : Object.values(PG.ende).reduce((a, b) => a + (b || 0), 0);
 }
-function pgZeichnen(){
+/* the head's tiles of the detail branch (H2): "War map" - the strip's line
+   (P8) - and "Names read", once the switch saw the war map or a window was
+   read in this capture; drawn by gefZeichnen beside the battle's tiles.
+   With "Read the detail window too" off there is no detail branch to show
+   (round 2): no sheet, no tiles, no Keep / New sheet - the names read stay
+   in the state and come back with the switch. */
+const pgDetailDa = () => !!(PG && gefDetailAn() && (PG.seiten.length || (GEF && GEF.weiche === "K")));
+function pgKopfKacheln(){
+  if (!pgDetailDa()) return "";
+  const gelesen = PG.namen.size, soll = pgSollZahl();
+  return `<div class="rd-kf weit" data-kachel="war-map"${PG.kopf && PG.kopf.da ? ` title="war map line read in ${PG.kopf.ms} ms${PG.kopfWorte ? ", words in " + PG.kopfWorte.ms + " ms" : ""}"` : ""}><div class="t">War map</div>
+      <div class="v" style="white-space:normal;line-height:1.3"><small>${kbEsc(pgKopfZeile())}</small></div></div>
+    <div class="rd-kf ${soll && gelesen >= soll ? "gut" : ""}" data-kachel="names"${PG.staerkeMs !== null ? ` title="strength table read in ${PG.staerkeMs} ms"` : ""}><div class="t">Names read</div>
+      <div class="v">${gelesen}<small> of ${soll || "?"}</small></div>
+      <div class="bar"><i style="width:${soll ? Math.round(100*Math.min(1, gelesen/soll)) : 0}%"></i></div></div>`;
+}
+/* the sheet of the war map's battle window (H2: #sp-blatt in the battle
+   desk); vomTakt: called by gefZeichnen, which draws the desk itself */
+function pgZeichnen(vomTakt){
   if (!PG) return;
   /* while a name is being typed the sheet must not be rebuilt under the
      hand - the input would be thrown away on the next look */
   if (PG.tippt) return;
-  const kopfEl = document.getElementById("sp-kopf"), links = document.getElementById("sp-links"),
-        blatt = document.getElementById("sp-blatt");
+  const blatt = document.getElementById("sp-blatt");
   const ortName = PG.stadt !== null && PG.stadt !== undefined ? MAP.n[PG.stadt][0] : null;
   const gelesen = PG.namen.size;
   /* P8: the counter's figure is the side's count where it was read; the rows seen with ink otherwise */
   const soll = pgSollZahl();
-  kopfEl.innerHTML = `
-    <div class="rd-kf weit ${ortName ? "ort" : ""}"><div class="t">Battle at</div>
-      <div class="v">${ortName ? `<b class="kb-ortname">${kbEsc(ortName)}</b>`
-        : "<small>not read yet</small>"}</div></div>
-    ${PG.seiten.map(s => `<div class="rd-kf"><div class="t">${kbEsc(kbSeiteName(s.f))}</div>
-      <div class="v">${pgKopfZahl(s.platz) !== null ? pgKopfZahl(s.platz) : (PG.ende[s.platz] || "—")}<small> players</small></div></div>`).join("")}
-    <div class="rd-kf ${soll && gelesen >= soll ? "gut" : ""}"><div class="t">Names read</div>
-      <div class="v">${gelesen}<small> of ${soll || "?"}</small></div>
-      <div class="bar"><i style="width:${soll ? Math.round(100*Math.min(1, gelesen/soll)) : 0}%"></i></div></div>
-    <div class="rd-kf"${PG.staerkeMs !== null ? ` title="strength table read in ${PG.staerkeMs} ms"` : ""}><div class="t">Capture</div>
-      <div class="v"><small>${PG.frame ? `${PG.frame.w}×${PG.frame.h}, brightness ${PG.hell}${
-        PG.gain > 1 ? `, ×${PG.gain.toFixed(1)}` : ""}` : "—"}</small></div></div>
-    <div class="rd-kf weit"${PG.kopf && PG.kopf.da ? ` title="war map line read in ${PG.kopf.ms} ms${PG.kopfWorte ? ", words in " + PG.kopfWorte.ms + " ms" : ""}"` : ""}><div class="t">War map</div>
-      <div class="v" style="white-space:normal;line-height:1.3"><small>${kbEsc(pgKopfZeile())}</small></div></div>`;
-  links.innerHTML = `
-    <h3>Now</h3>
-    <div class="kb-jetzt">${kbEsc(PG.status)}</div>
-    <h3>Set</h3>
-    <div class="kb-geraet ${PG.liest ? "scannt" : ""}">${kbFunkgeraetSVG()}</div>`;
+  const da = pgDetailDa();
+  if (blatt) blatt.classList.toggle("an", da);
+  if (!blatt || !da || !gefOffen){ gefSchwebeZeichnen(); return; }
   /* ENNO 18.09.2026: "Ich brauche aber in der Oberfläche keine Kommentare." - the
      "How it works" text of this room is gone (P8, 19.09.2026) */
-  blatt.innerHTML = `<div class="kb-titel">${ortName ? kbEsc(ortName) : "Battle"} · ${
+  blatt.innerHTML = `<div class="kb-titel">War map · ${ortName ? kbEsc(ortName) : "Battle"} · ${gelesen} of ${soll || "?"} names · ${
     new Date().toLocaleDateString()}</div>
+    <div class="sp-jetzt">${kbEsc(PG.status)}</div>
     ${PG.seiten.length ? `${pgStaerkeHtml()}<div class="sp-listen">${PG.seiten.map(s => {
       /* P8: the counter's figure is the side's count where it was read (the rows drawn never
          fewer than the rows seen with ink); the roll's count otherwise */
@@ -33320,51 +33362,15 @@ function pgZeichnen(){
       const nW = pgWahlGueltig().length;        /* H3: the choice's buttons, once a box is set */
       return nW ? `<div class="sp-wahl"><button class="mini" id="sp-wahl-ok">Confirm ${nW}</button><button class="mini" id="sp-wahl-keep">Keep ${nW}</button></div>` : "";
     })()}` : `<div class="kb-hinweis">No battle window seen yet.</div>`}`;
-  pgPult();
-  pgSchwebeZeichnen();                         /* H3: the floating window follows the sheet */
+  gefSchwebeZeichnen();                        /* H3/H2: the floating window follows the sheet */
+  if (!vomTakt) gefPult();                     /* Keep the sheet follows the rows; the tick draws the desk itself */
 }
 /* ENNO 18.09.2026: "Ich brauche aber in der Oberfläche keine Kommentare." - the
    foot of this desk ("The game must run borderless or windowed. Names go into
    the register with their side; nothing else is kept.") is gone, and so is
    the foot of the battle reader's desk (gefPult, "Only the town picked on the
-   left is written to: ...") - P8, 19.09.2026 */
-function pgPult(){
-  const pult = document.getElementById("sp-pult");
-  const live = !!PG.live;
-  const pip = ("documentPictureInPicture" in window);
-  pult.innerHTML = `
-    <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="sp-kraft">${ICO_CAPTURE}${
-      live ? "Capture running" : "Capture the game"}</button>
-    ${live ? `<button class="rd-schalter" id="sp-teilen" style="font-size:10.5px;padding:6px 0">Share again</button>` : ""}
-    <div class="kb-abstand"></div>
-    <button class="rd-schalter ${kbTon ? "an" : ""}" id="sp-ton">${kbTon ? "Sound on" : "Sound off"}</button>
-    <div class="kb-abstand"></div>
-    <button class="rd-schalter" id="sp-keep" ${[...PG.namen.values()].some(v => !v.gespeichert) ? "" : "disabled"}>Keep the sheet</button>
-    <div class="kb-abstand"></div>
-    <button class="rd-schalter ${pgSchwebe ? "an" : ""}" id="sp-schweben" ${pip ? "" : 'disabled title="Needs Chrome or Edge 116 or newer"'}>${pgSchwebe ? "Floating - close it" : "Float over the game"}</button>
-    <div class="kb-abstand"></div>
-    <button class="rd-schalter" id="sp-leer">New sheet</button>`;
-  /* the desk's buttons on pointerdown, as the board's are (H3, round 4): the
-     desk is rewritten with the sheet, and a click that came after the blur
-     of a standing hand field landed on a button that was no longer there.
-     The press keeps the field's focus (preventDefault), the field closes as
-     the blur would (pgHandfeldZu, E8), then the button acts; the press is
-     the gesture the share and the floating window need. */
-  const knopf = (id, tu) => {
-    const b = document.getElementById(id);
-    if (!b || b.disabled) return;
-    b.addEventListener("pointerdown", ev => { if (ev.button !== 0) return; ev.preventDefault(); pgHandfeldZu(); if (PG) tu(); });
-  };
-  /* the user's own switch: off means off, sharing included */
-  knopf("sp-kraft", () => { PG.live ? pgLiveStop(true) : pgLiveStart(); });
-  /* share again: end the share and ask once; declined, the tick stops the room itself */
-  knopf("sp-teilen", async () => { await bildFreigabeNeu(); if (PG) pgPult(); });
-  knopf("sp-ton", () => { kbTon = !kbTon; if (kbTon) kbRauschenAn(); else kbRauschenAus(); pgPult(); });
-  knopf("sp-keep", () => pgBehalten());
-  /* H3: the floating window's switch */
-  knopf("sp-schweben", () => { if (pgSchwebe){ pgSchwebeZugemacht = true; pgSchwebeZu(); } else pgSchwebeAuf(); });
-  knopf("sp-leer", () => { const live = PG.live; pgLiveStop(); PG = pgNeu(); if (live) pgLiveStart(); pgZeichnen(); });
-}
+   left is written to: ...") - P8, 19.09.2026. The desk itself is the battle
+   desk's since H2 (gefPult: Keep the sheet, New sheet, the detail switch). */
 /* Correcting a name by hand - the reader is good, not infallible. The name
    cell itself is on pointerdown with the grips since H3 (round 3, the
    sheet's pointerdown listener): a click after a blur landed on a sheet
@@ -33399,7 +33405,8 @@ function pgHandName(k, neu){
    click into the game is the blur. */
 let pgHandfeldOffen = null;                    /* the open field: {k, doc, zu} */
 function pgHandfeldSuchen(k, doc){
-  return doc && pgSchwebe && pgSchwebe.document === doc ? doc.querySelector(`.gf-sz .n[data-k="${k}"]`)
+  let d = null; try { d = gefSchwebe && gefSchwebe.document; } catch(e){}
+  return doc && d && d === doc ? doc.querySelector(`.gf-sz .n[data-k="${k}"]`)
        : document.querySelector(`#sp-blatt .nm[data-k="${k}"]`);
 }
 function pgHandfeldIn(feld, k){
@@ -33425,7 +33432,7 @@ function pgHandfeldIn(feld, k){
     PG.tippt = false;
     const neu = el.value.trim();
     if (schreiben && neu !== alt) pgHandName(k, neu);
-    pgSchwebeSatz = null;                      /* the field must go from the window even when nothing changed */
+    gefSchwebeSatz = null;                     /* the field must go from the window even when nothing changed */
     pgZeichnen();
   };
   const blur = () => zu(true);
@@ -33454,9 +33461,9 @@ function pgHandfeld(k, doc){
 /* the state line alone, without a rebuild - while a hand field holds the sheet (round 3) */
 function pgStatusZeigen(){
   if (!PG) return;
-  const j = document.querySelector("#sp-links .kb-jetzt");
+  const j = document.querySelector("#sp-blatt .sp-jetzt");
   if (j) j.textContent = PG.status;
-  if (pgSchwebe){ try { const p = pgSchwebe.document.querySelector(".pg-jetzt"); if (p) p.textContent = PG.status; } catch(e){} }
+  if (gefSchwebe){ try { const p = gefSchwebe.document.querySelector(".pg-jetzt"); if (p) p.textContent = PG.status; } catch(e){} }
 }
 /* a grip pressed while a hand field stands: the field closes first, as the
    blur closes it (E7 - changed: the name is taken; unchanged: nothing), then
@@ -33465,29 +33472,9 @@ function pgStatusZeigen(){
 function pgHandfeldZu(){
   if (pgHandfeldOffen) pgHandfeldOffen.zu(true);
 }
-async function spielerraumAuf(){
-  if (pgOffen) return;
-  raeumeSchliessen("spieler");
-  pgOffen = true;
-  PG = pgNeu();
-  document.getElementById("spieler").classList.add("an");
-  pgZeichnen(); kbOszAn();
-  if (kannTeilen() && darf("aufklaerung")) pgLiveStart();
-  else if (!darf("aufklaerung")) PG.status = rechtSatz("aufklaerung");
-  else PG.status = "This browser cannot share a window here.";
-  pgZeichnen();
-}
-function spielerraumZu(){
-  if (!pgOffen) return;
-  pgOffen = false;
-  pgLiveStop(true); kbRauschenAus(); kbOszAus();
-  document.getElementById("spieler").classList.remove("an");
-  pgSchwebeGesteLoesen(); pgSchwebeZu();      /* H3: the floating window goes with the room */
-  PG = null;
-  unitsFremdSchliessen();
-}
-document.getElementById("b-spieler").addEventListener("click", spielerraumAuf);
-document.getElementById("sp-zu").addEventListener("click", spielerraumZu);
+/* the sheet's listeners (H2: #sp-blatt lives in the battle desk's screen
+   column; the desk opens and closes through gefstandAuf / gefstandZu - the
+   Players button and its room are gone, H1) */
 document.getElementById("sp-blatt").addEventListener("click", ev => { if (PG) pgBearbeiten(ev); });
 /* the grips on pointerdown (T9 (d)): the sheet is rewritten at every beat,
    and a click needs press and release on the same node */
@@ -33517,112 +33504,27 @@ document.getElementById("sp-blatt").addEventListener("pointerdown", ev => {
   else if (g.id === "sp-wahl-ok") pgWahlBestaetigen();
   else pgWahlBehalten();
 });
-/* Escape ends a standing choice first (H3), the room after */
-document.addEventListener("keydown", ev => { if (ev.key === "Escape" && pgOffen){ if (PG && PG.wahl.size) pgWahlEnde(); else spielerraumZu(); } });
-
-/* ---- the floating window of the player room (H3, ToDo 20.09.2026) ----------
+/* ---- the detail rows of the floating window (H3, ToDo 20.09.2026; in the
+   battle desk's window since H2) ---------------------------------------------
    ENNO 20.09.2026 (ToDo 20.09., Z25): "Bitte hier auch overlay, damit leute
    mit nur einem Bildschirm besser abgleichen können." ENNO 18.09.2026: "Wie
    beim AT Grabber auch ein Overlay Fenster, welches sich genau neben die
    Spielernamen im Spiel setzt, und wo man die Namen dann bestätigen kann
-   oder eine erneute Prüfung anstößt". The battle desk's window
-   (gefSchwebeAuf) is the pattern: the same Document Picture-in-Picture
-   window, 420 wide, 96 + 14 a row high, eighteen rows at most - the
-   sheet's rows with a reading that is not confirmed yet (the tick, Keep or
-   a typed name), in sheet order: box, name, tick, arrow, and "Confirm N"
-   under them while a box is set; the head carries the town, the count and
-   the room's state line ("read again: X (same)"). A click on the name opens
-   the hand field in the window (pgHandfeldIn). Opens with the first gesture
-   in the room once the share stands (the cabin's hook, kbSchwebeSelbst) and
-   by the button in the desk; closes with the room (spielerraumZu); closed
-   from its corner it is not handed to him again this session (the button
-   stays). One window per page: schwebeFremdesZu before requestWindow. H2
-   (ToDo 20.09.) takes this opener into the battle desk with the pg*
-   functions. The Alt keys stay with the cabin and the depot list. */
-let pgSchwebe = null, pgSchwebeSatz = null, pgSchwebeGeste = null, pgSchwebeZugemacht = false;
-function pgSchwebeGesteLoesen(){
-  const h = pgSchwebeGeste; pgSchwebeGeste = null;
-  const raum = document.getElementById("spieler");
-  if (h && raum){ raum.removeEventListener("pointerdown", h, true); raum.removeEventListener("keydown", h, true); }
-}
-function pgSchwebeSelbst(){
-  if (pgSchwebeGeste || pgSchwebe || pgSchwebeZugemacht || !("documentPictureInPicture" in window)) return;
-  const raum = document.getElementById("spieler");
-  if (!raum) return;
-  const h = ev => {
-    if (!PG || !PG.live || pgSchwebe || pgSchwebeZugemacht){ pgSchwebeGesteLoesen(); return; }
-    /* Escape closes the room, a bare modifier is no gesture the browser counts */
-    if (ev.type === "keydown" && (ev.key === "Escape" || /^(Alt|Shift|Control|Meta)$/.test(ev.key))) return;
-    if (ev.type === "keydown" && ev.target && /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName)) return;
-    if (ev.target && ev.target.closest && ev.target.closest("#sp-schweben,#sp-zu,#sp-kraft")) return;   /* the switch, the X and the capture button are no wish of this hook */
-    /* no share yet (the picker is open, or declined): the next gesture */
-    if (!(bildStrom && bildStrom.active)) return;
-    pgSchwebeGesteLoesen();
-    /* requestWindow is the first await inside - the gesture is still fresh;
-       refused for want of activation, the hook hangs once more */
-    pgSchwebeAuf().then(e => { if (e && e.name === "NotAllowedError"){ pgSchwebeSelbst(); if (PG) pgZeichnen(); } });
-  };
-  pgSchwebeGeste = h;
-  raum.addEventListener("pointerdown", h, true);
-  raum.addEventListener("keydown", h, true);
-}
-async function pgSchwebeAuf(){
-  if (pgSchwebe || !PG || !("documentPictureInPicture" in window)) return;
-  const hoch = 96 + 14*pgSchwebeZeilen().length;
-  schwebeFremdesZu("spieler");                       /* one floating window per page - the other room's goes first */
-  schwebeHalter = {raum: "spieler", zu: pgSchwebeZu};
-  let w;
-  try { w = await window.documentPictureInPicture.requestWindow({width: 420, height: hoch}); }   /* must be the first await after the gesture */
-  catch(e){ PG.status = "The floating window could not be opened - " + ((e && e.message) || e); pgZeichnen(); return e; }
-  /* the room may have closed while the window was being opened: no orphan window */
-  if (!PG || !pgOffen){ try { w.close(); } catch(e){} return null; }
-  pgSchwebe = w; pgSchwebeSatz = null;
-  const doc = w.document;
-  for (const sh of document.styleSheets){
-    try { const st = doc.createElement("style"); st.textContent = [...sh.cssRules].map(r => r.cssText).join("\n"); doc.head.appendChild(st); }
-    catch(e){ if (sh.href){ const l = doc.createElement("link"); l.rel = "stylesheet"; l.href = sh.href; doc.head.appendChild(l); } }
-  }
-  doc.body.className = "gf-schwebe pg-schwebe";
-  doc.body.innerHTML = "";
-  /* the grips on the window's own document by delegation, set once: the
-     body is rewritten at every change */
-  doc.body.addEventListener("pointerdown", ev => {
-    if (!PG || !ev.target || !ev.target.closest) return;
-    const g = ev.target.closest(".gf-sz .g[data-ok],.gf-sz .g[data-neu],.gf-sz .w[data-w],.gf-sz .g[data-confirm]");
-    if (!g){
-      /* the name opens its hand field on the press, as on the sheet (round 3) */
-      const n = ev.target.closest(".gf-sz .n[data-k]");
-      if (!n || n.querySelector("input")) return;
-      ev.preventDefault();
-      pgHandfeldIn(n, n.dataset.k);
-      return;
-    }
-    ev.preventDefault();
-    pgHandfeldZu();                            /* a standing hand field closes as the blur would, then the grip acts (round 3) */
-    if (!PG) return;
-    if (g.dataset.ok !== undefined) pgBestaetigen(g.dataset.ok);
-    else if (g.dataset.neu !== undefined) pgNeuLesen(g.dataset.neu, doc);
-    else if (g.dataset.w !== undefined) pgWahl(g.dataset.w, ev.shiftKey, pgSchwebeZeilen().filter(z => z.kaest).map(z => z.k));
-    else pgWahlBestaetigen();
-  });
-  /* closed from its own corner or by the browser: forget it (a hand field
-     in it goes unwritten), relabel the desk - and do not hand it to him
-     again this session (pgSchwebeSelbst) */
-  w.addEventListener("pagehide", () => { if (pgSchwebe === w){ pgSchwebe = null; pgSchwebeSatz = null; pgSchwebeZugemacht = true; pgHandfeldWeg(w); if (PG){ pgZeichnen(); pgPult(); } } });
-  pgSchwebeZeichnen();
-  pgPult();
-  return null;
-}
+   oder eine erneute Prüfung anstößt". ONE window per page (Kopfblock 3):
+   the battle desk's (gefSchwebeAuf, 420 wide, 96 + 14 a row) carries these
+   rows while the switch says war map (gefSchwebeZeichnen) - the sheet's rows
+   with a reading that is not confirmed yet (the tick, Keep or a typed name),
+   in sheet order: box, name, tick, arrow, and "Confirm N" under them while a
+   box is set; the head carries the town, the count and the state line
+   ("read again: X (same)"). A click on the name opens the hand field in the
+   window (pgHandfeldIn). The window opens with the first gesture in the desk
+   once the share stands (gefSchwebeSelbst, the player room's hook) and by
+   the button in the desk. The Alt keys stay with the cabin and the depot
+   list. */
 /* the hand field standing in window w is gone with it - unwritten, as the board's (gefSchwebeEdit) */
 function pgHandfeldWeg(w){
   let d = null; try { d = w && w.document; } catch(e){}
   if (pgHandfeldOffen && d && pgHandfeldOffen.doc === d) pgHandfeldOffen.zu(false);
-}
-function pgSchwebeZu(){
-  const w = pgSchwebe; pgSchwebe = null; pgSchwebeSatz = null;
-  if (!w) return;
-  pgHandfeldWeg(w); try { w.close(); } catch(e){}
-  if (PG && pgOffen) pgPult();                 /* the desk's button says so at once - another room may have taken the window (round 3) */
 }
 /* the sheet's rows for the window: a reading, not confirmed, in sheet order; eighteen at most; kaest = the row carries a box (pgKaest) */
 function pgSchwebeZeilen(){
@@ -33636,20 +33538,17 @@ function pgSchwebeZeilen(){
   }
   return aus;
 }
-function pgSchwebeZeichnen(){
-  if (!pgSchwebe || !PG) return;
+/* the head and the rows of the detail branch for the desk's window (H2):
+   {kopf, block, n} - n the rows drawn (the "Confirm N" row counted) */
+function pgSchwebeHtml(){
+  if (!PG) return {kopf: "", block: "", n: 0};
   const zeilen = pgSchwebeZeilen(), nW = pgWahlGueltig().length;
   const ortName = PG.stadt !== null && PG.stadt !== undefined ? MAP.n[PG.stadt][0] : null;
   const soll = pgSollZahl();
-  let html = `<div class="pg-kopf">${esc(ortName || "Battle")} \u00b7 ${PG.namen.size} of ${soll || "?"}</div><div class="pg-jetzt">${esc(PG.status || "")}</div>`;
-  if (zeilen.length) html += `<div class="gf-sz-block">${zeilen.map(z => `<div class="gf-sz${z.u ? " un" : ""}"><span class="w sp-kaest${z.kaest ? (PG.wahl.has(z.k) ? " an" : "") : " leer"}"${z.kaest ? ` data-w="${z.k}"` : ""}></span><span class="n" data-k="${z.k}">${esc(z.n)}${z.vor ? ` <small>known: ${esc(z.vor)}</small>` : ""}</span><span class="g" data-ok="${z.k}" title="Confirm">\u2713</span><span class="g" data-neu="${z.k}" title="Read again">\u21bb</span></div>`).join("")}${
-    nW ? `<div class="gf-sz knopf"><span class="g" data-confirm="1">Confirm ${nW}</span></div>` : ""}</div>`;
-  if (html === pgSchwebeSatz) return;
-  try {
-    pgSchwebe.document.body.innerHTML = html; pgSchwebeSatz = html;
-    const hoch = 96 + 14*(zeilen.length + (nW ? 1 : 0));
-    if (pgSchwebe.innerHeight && Math.abs(pgSchwebe.innerHeight - hoch) > 2){ try { pgSchwebe.resizeBy(0, hoch - pgSchwebe.innerHeight); } catch(e){} }
-  } catch(e){}
+  const kopf = `<div class="pg-kopf">${esc(ortName || "Battle")} \u00b7 ${PG.namen.size} of ${soll || "?"}</div><div class="pg-jetzt">${esc(PG.status || "")}</div>`;
+  const block = zeilen.length ? `<div class="gf-sz-block">${zeilen.map(z => `<div class="gf-sz${z.u ? " un" : ""}" data-q="d"><span class="w sp-kaest${z.kaest ? (PG.wahl.has(z.k) ? " an" : "") : " leer"}"${z.kaest ? ` data-w="${z.k}"` : ""}></span><span class="n" data-k="${z.k}">${esc(z.n)}${z.vor ? ` <small>known: ${esc(z.vor)}</small>` : ""}</span><span class="g" data-ok="${z.k}" title="Confirm">\u2713</span><span class="g" data-neu="${z.k}" title="Read again">\u21bb</span></div>`).join("")}${
+    nW ? `<div class="gf-sz knopf" data-q="d"><span class="g" data-confirm="1">Confirm ${nW}</span></div>` : ""}</div>` : "";
+  return {kopf, block, n: zeilen.length + (nW ? 1 : 0)};
 }
 
 async function kabineAuf(){
@@ -33777,6 +33676,95 @@ let gefOffen = false, GEF = null;
    and sickle and the right by its cross; it does not say what colour either
    of them is. So the reader keeps them as left and right and shows the colour
    it measured, and nobody is told a side he was not shown. */
+/* ==== THE SWITCH: WAR MAP OR BATTLE (BAT-14, H2 - ToDo 20.09.2026) =======
+   ENNO 20.09.2026 (Z22): "Wenn wir auf die Detailansicht gehen und dort
+   Spieler sind, können wir diese ja erfassen." ENNO 17.09.2026 (Nr. 5): "Der
+   Battlereader ist insofern speziell, da er gleichzeitig die Desktop
+   Anwendung, als auch das FPS-Spiel auslesen sollte." ENNO 12.09.2026: "Es
+   geht nur darum, dass die Zuordnung nicht aus Versehen vertauscht werden
+   kann, oder falsche Fenster eingestellt werden."
+   The recogniser of MESSUNG-BAT-14 (FABLE 13.09.2026), word for word from
+   the measured JS: on a 320 by 180 copy of the picture four rules in this
+   order - "?" when 95 % of the points are dark (loading screen, black),
+   "X" (another window) when the top three rows are flat or more than
+   17,5 % of the points are near white, "K" (the war map) when the head
+   band - top 10 rows, left 200 columns - carries a run of at least three
+   orange columns with five orange rows each on average (the active tab or
+   the orange logo of the desktop application), "F" (the battle) otherwise.
+   Measured: 0 of 1.780 battle pictures as K (the end screen with the map
+   of Europe included), 0 of 62 war map pictures with the tab bar as F,
+   0,2 to 0,6 ms a picture. Two desktop states without the tab bar (the
+   war's end screen, the faction resources) say F - the battle's gates read
+   nothing there (the probe of H2 proves it).
+   A SWITCH PER PICTURE, NOT A LOCK: K opens the detail window's gate
+   (gfLesen, GF_TABELLE - P8: 22 of 22, 0 of 131 false), everything else
+   goes to the battle's gates as before - bars, board (GEF_TAFEL), end
+   screen (BAT-4), card -, X and "?" included, so a window with a title bar
+   (unmeasured) reads as it did. One tick, one picture, one gate. */
+const GEF_WEICHE = {LEN: 3, MITTEL: 5.0, FLACH: 0.90, HELL: 0.175, SCHWARZ: 0.95};
+let gefWeicheFlaeche = null;
+function gefWeiche(bild){
+  if (!bild || !bild.width || !bild.height) return "?";
+  if (!gefWeicheFlaeche){
+    const c = document.createElement("canvas"); c.width = 320; c.height = 180;
+    gefWeicheFlaeche = c.getContext("2d", {willReadFrequently: true});
+  }
+  const ctx = gefWeicheFlaeche;
+  ctx.drawImage(bild, 0, 0, 320, 180);
+  const d = ctx.getImageData(0, 0, 320, 180).data;
+  const V = new Uint8Array(320*180), cnt = new Uint8Array(200);
+  let dunkel = 0, hell = 0;
+  for (let y = 0; y < 180; y++){
+    for (let x = 0; x < 320; x++){
+      const i = (y*320 + x)*4, r = d[i], g = d[i+1], b = d[i+2];
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      V[y*320 + x] = mx;
+      if (mx < 25) dunkel++; else if (mx > 230) hell++;
+      if (y < 10 && x < 200 && mx >= 120){
+        const sat = mx ? 255*(mx - mn)/mx : 0;
+        if (sat >= 110){
+          /* the hue as OpenCV counts it (0..180): orange 8..25 */
+          const df = mx - mn;
+          let h = mx === r ? 30*(g - b)/df : mx === g ? 60 + 30*(b - r)/df : 120 + 30*(r - g)/df;
+          if (h < 0) h += 180;
+          if (h >= 8 && h <= 25) cnt[x]++;
+        }
+      }
+    }
+  }
+  let lauf = 0, best = 0, summe = 0, bestsumme = 0;
+  for (let c = 0; c < 200; c++){
+    if (cnt[c] >= 4){ lauf++; summe += cnt[c]; if (lauf > best){ best = lauf; bestsumme = summe; } }
+    else { lauf = 0; summe = 0; }
+  }
+  let flach = 0;
+  for (let y = 0; y < 3; y++) for (let x = 1; x < 320; x++) if (Math.abs(V[y*320 + x] - V[y*320 + x - 1]) <= 1) flach++;
+  const n = 320*180, mittel = best ? bestsumme/best : 0;
+  if (dunkel/n >= GEF_WEICHE.SCHWARZ) return "?";
+  if (flach/(3*319) >= GEF_WEICHE.FLACH || hell/n > GEF_WEICHE.HELL) return "X";
+  if (best >= GEF_WEICHE.LEN && mittel >= GEF_WEICHE.MITTEL) return "K";
+  return "F";
+}
+/* THE SWITCH "Read the detail window too" (Z22, the broken-off sentence
+   read as this switch - Widerspruch 5 of the list, FABLE): on by default,
+   kept per device (localStorage). Off: the detail window's gate stays shut
+   and every picture goes to the battle's gates, as before H2. */
+const GEF_DETAIL_KEY = "hng-warmap-gef-detail";
+const gefDetailAn = () => lies(GEF_DETAIL_KEY, "1") !== "0";
+function gefDetailSetzen(an){ schreib(GEF_DETAIL_KEY, an ? "1" : "0"); }
+/* what the share shows, for the desk: "Sharing: war map" / "battle window"
+   / "other window" from the last decided verdict of the switch, "window"
+   before one; a whole screen (displaySurface monitor - the page refuses it
+   today, bildStromFragen) is named as such with what is seen on it */
+function gefTeilenZeile(){
+  if (!(bildStrom && bildStrom.active)) return "";
+  let art = "";
+  try { const sp = bildStrom.getVideoTracks()[0]; art = (sp && sp.getSettings && sp.getSettings().displaySurface) || ""; } catch(e){}
+  const w = GEF && GEF.weiche;
+  const was = w === "K" ? "war map" : w === "F" ? "battle window" : w === "X" ? "other window" : "";
+  const text = art === "monitor" ? "screen" + (was ? " \u00b7 " + was : "") : (was || "window");
+  return `<div class="note" id="gf-teilen-zeile" style="margin-top:6px">Sharing: ${esc(text)}</div>`;
+}
 const GEF_TAKT = (() => {
   /* ONE LOOK A SECOND. The bar moves about two and a half points in four
      seconds (23 to 98 percent over four minutes, 31 steps), so a look every
@@ -36305,7 +36293,7 @@ function kriegsendeGefechtHaken(ort){
    of room, and the start line */
 function kriegsendeRaum(){
   return [typeof radarOffen !== "undefined" && radarOffen, typeof kbOffen !== "undefined" && kbOffen,
-          typeof pgOffen !== "undefined" && pgOffen, typeof gefOffen !== "undefined" && gefOffen].map(x => x ? 1 : 0).join("");
+          typeof gefOffen !== "undefined" && gefOffen].map(x => x ? 1 : 0).join("");   /* H2: the player room is the battle desk's */
 }
 function kriegsendeWache(){
   const geteilt = !!(bildStrom && bildStrom.active), raum = kriegsendeRaum();
@@ -37854,7 +37842,7 @@ function chatStart(){
    degrees the circle lies under the badge and the star's tip, so 0,78 to
    1,0 cannot be read - "full" here is 0,78 or more or the badge changing.
    It blinks, so the reading is smoothed over three looks (the maximum).
-   THE GUARD, while BAT-14 is not built: the row is read only when the
+   THE GUARD (kept beside the switch of H2, gefWeiche): the row is read only when the
    picture carried the HUD in this look or within GEF_HUD_HALTEN - the
    digit box, the banner line, the score bars or their pair of boxes. The
    war map never shows any of those. The 15 s of holding are there because
@@ -40478,6 +40466,11 @@ function gefNeu(){
              overwrites (FABLE's rule 5.17; on Blatt 13.09. he left both
              unanswered) */
           staged: 0, ortLadebild: null,
+          /* H2 (ToDo 20.09.2026): the detail branch - the war map's battle
+             window (pg*: strength table, head strip, names) as one state
+             with the battle's; weiche the last decided verdict of gefWeiche
+             (K war map, F battle, X another window) */
+          detail: pgNeu(), weiche: null,
           status: "Waiting for the game window ..."};
 }
 function gefOrte(){
@@ -41019,6 +41012,7 @@ function gefLiveStart(){
   pkStart(GEF);                           // the player card's own look (Q7), a new state with the new capture
   GEF.status = "Live";
   gefZeichnen(); gefTick();
+  gefSchwebeSelbst();                     // H2: the floating window with the first gesture once the share stands (the player room's hook, H3)
 }
 /* Stopping the tick is not stopping the share, and the share is the page's:
    it ends only when no other room and no watch is on it. The rooms shut each
@@ -41028,8 +41022,8 @@ function gefLiveStart(){
    The last reading goes with the tick. A stopped capture that still shows the
    last score reads exactly like a running one, and that is a claim nobody
    made. The working surfaces go too - two of them now, the bar strip and the
-   head strip, together about two megabytes at 3840x2160 - as the player room
-   does it next door. */
+   head strip, together about two megabytes at 3840x2160 - and the detail
+   branch's with them (pgRuhen, H2). */
 function gefLiveStop(auchFreigabe){
   if (!GEF) return;
   if (GEF.live){ clearInterval(GEF.live); GEF.live = null; }
@@ -41049,9 +41043,10 @@ function gefLiveStop(auchFreigabe){
   GEF.endbild = null; GEF.endbildGemeldet = null;
   gefEndbildMaske = null;                 // the strip mask, 400 kB at 3840
   gefFlaechenWeg();
+  pgRuhen();                              // H2: the detail branch's surfaces go with the tick as well (the sheet stays)
+  gefSchwebeGesteLoesen();
   if (GEF.status === "Live") GEF.status = "Capture stopped.";
-  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)
-      && !(typeof PG !== "undefined" && PG && PG.live) && !wacheLaeuft()
+  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live) && !wacheLaeuft()
       && !(typeof DL !== "undefined" && DL && DL.live)) bildFreigabeBeenden();   /* Q12: the depot reader watches too */
   gefZeichnen();
 }
@@ -41061,7 +41056,7 @@ function gefLiveStop(auchFreigabe){
 function gefTotRaeumen(){
   if (!GEF || GEF.live || gefOffen) return false;
   if (typeof gefEndeFrisch === "function" && gefEndeFrisch()) return false;
-  gefSchwebeZu();
+  gefSchwebeZu(); gefSchwebeGesteLoesen();
   GEF = null;
   gefKopfKnopf();
   return true;
@@ -41070,7 +41065,7 @@ async function gefTick(){
   if (!GEF || !GEF.live || GEF.laeuft) return;
   /* PAUSED (Blatt 16.09., P3 (a)). ENNO 17.09.2026: "Solange ich aber einen
      anderen raum nutze, muss der Battlereader aber natuerlich schweigen."
-     Radar, cabin or player room took the one share (raeumeSchliessen sets
+     Radar or cabin took the one share (raeumeSchliessen sets
      the pause); the tick keeps its interval and reads nothing until the desk
      is opened again. A share that died meanwhile ends the capture as the
      catch below does - not while another room's new share (bildFreigabeNeu)
@@ -41085,19 +41080,34 @@ async function gefTick(){
   }
   if (!bildNeu(GEF)) return;
   GEF.laeuft = true;
-  let bild = null;
+  let bild = null, mehr = false;
   try {
     bild = await bildLive();
     if (!GEF || !GEF.live) return;
-    const R = gefLesen(bild, GEF);
-    if (!GEF || !GEF.live) return;
-    GEF.stand = R;
-    GEF.status = R ? "Live" : "The picture came back empty.";
-    gefMelden();
-    gefUhrStarten();
-    gefEndbildMelden();
-    if (GEF.ende && !GEF.ende.uebertragen && GEF.ende.schluessel) gefUebertragPruefen();   // asks again while the row is queued (PUNKTE-D)
-    gefZeichnen();
+    /* THE SWITCH (H2, BAT-14): the war map's battle window goes to the
+       detail branch, everything else to the battle's gates - one gate per
+       picture (gefWeiche). "?" (dark) leaves the last verdict standing. */
+    const art = gefWeiche(bild);
+    if (art !== "?") GEF.weiche = art;
+    if (art === "K" && gefDetailAn()){
+      /* no fresh battle reading from a war map picture: the held score
+         dims as after a lost HUD (gefLesungZeile, GEF_BALKEN_HALTEN) */
+      GEF.stand = null;
+      mehr = await pgBlick(bild);
+      if (!GEF || !GEF.live) return;
+      GEF.status = "Live";
+      gefZeichnen();
+    } else {
+      const R = gefLesen(bild, GEF);
+      if (!GEF || !GEF.live) return;
+      GEF.stand = R;
+      GEF.status = R ? "Live" : "The picture came back empty.";
+      gefMelden();
+      gefUhrStarten();
+      gefEndbildMelden();
+      if (GEF.ende && !GEF.ende.uebertragen && GEF.ende.schluessel) gefUebertragPruefen();   // asks again while the row is queued (PUNKTE-D)
+      gefZeichnen();
+    }
   } catch(e){
     if (GEF){
       GEF.status = String((e && e.message) || e);
@@ -41112,6 +41122,8 @@ async function gefTick(){
   } finally {
     if (bild && bild.close) bild.close();
     if (GEF) GEF.laeuft = false;
+    /* a line read off the war map: look again after 250 ms, the player room's beat, so the sheet fills up before his eyes */
+    if (mehr && GEF && GEF.live) setTimeout(gefTick, 250);
   }
 }
 /* THE ONE SENTENCE OF THE CONFIRMATION, chosen here for both places that
@@ -41170,6 +41182,40 @@ function gefEndeSatz(){
    the window over an exclusive full screen or keeps it up (SOLL-7: no advice
    about the window mode in here). */
 let gefSchwebe = null, gefSchwebeSatz = null, gefSchwebeEdit = null, gefSchwebeEditZu = null;   /* gefSchwebeEdit (H3): the entry whose hand field is open in the window; gefSchwebeEditZu closes it (round 3) */
+/* THE FIRST GESTURE OPENS IT (H2 - the player room's hook of H3, the
+   cabin's kbSchwebeSelbst): once the share stands, the first press or key
+   in the desk opens the window - FOR THE WAR MAP'S DETAIL ROWS ONLY
+   (round 2: the switch says K and "Read the detail window too" is on);
+   for the battle the button does it, as before (BAT-12), the hook hangs
+   on. Closed by hand (the button, its corner) it is not handed to him
+   again this session - the button stays. The capture button, the X, the
+   window's own switch and the detail switch are no wish of this hook; without a share yet
+   (the picker open, or declined) the next gesture; refused for want of
+   activation, the hook hangs once more. */
+let gefSchwebeGeste = null, gefSchwebeZugemacht = false;
+function gefSchwebeGesteLoesen(){
+  const h = gefSchwebeGeste; gefSchwebeGeste = null;
+  const raum = document.getElementById("gefstand");
+  if (h && raum){ raum.removeEventListener("pointerdown", h, true); raum.removeEventListener("keydown", h, true); }
+}
+function gefSchwebeSelbst(){
+  if (gefSchwebeGeste || gefSchwebe || gefSchwebeZugemacht || !("documentPictureInPicture" in window)) return;
+  const raum = document.getElementById("gefstand");
+  if (!raum) return;
+  const h = ev => {
+    if (!GEF || !GEF.live || gefSchwebe || gefSchwebeZugemacht){ gefSchwebeGesteLoesen(); return; }
+    if (ev.type === "keydown" && (ev.key === "Escape" || /^(Alt|Shift|Control|Meta)$/.test(ev.key))) return;
+    if (ev.type === "keydown" && ev.target && /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName)) return;
+    if (ev.target && ev.target.closest && ev.target.closest("#gf-schweben,#gf-zu,#gf-kraft,#gf-detail")) return;   /* nor the detail switch (round 2) */
+    if (!(bildStrom && bildStrom.active)) return;
+    if (!(GEF.weiche === "K" && gefDetailAn())) return;   /* the battle: the button only (BAT-12) - the hook hangs on */
+    gefSchwebeGesteLoesen();
+    gefSchwebeAuf().then(e => { if (e && e.name === "NotAllowedError") gefSchwebeSelbst(); });
+  };
+  gefSchwebeGeste = h;
+  raum.addEventListener("pointerdown", h, true);
+  raum.addEventListener("keydown", h, true);
+}
 async function gefSchwebeAuf(){
   if (gefSchwebe || !GEF || !("documentPictureInPicture" in window)) return false;
   let w;
@@ -41181,7 +41227,7 @@ async function gefSchwebeAuf(){
      player moves it - ENNO 12.09.2026 (BAT-12): "Den genauen Look und die
      Position koennen wir dann noch feinjustieren." */
   try { w = await window.documentPictureInPicture.requestWindow({width: 420, height: 96}); }   /* must be the first await after the gesture */
-  catch(e){ GEF.status = "The floating window could not be opened - " + ((e && e.message) || e); gefZeichnen(); return false; }
+  catch(e){ GEF.status = "The floating window could not be opened - " + ((e && e.message) || e); gefZeichnen(); return e; }   /* the error for the hook (gefSchwebeSelbst) */
   if (!GEF){ try { w.close(); } catch(e){} return false; }     // the desk closed while the browser was asked
   gefSchwebe = w; gefSchwebeSatz = null;
   const doc = w.document;
@@ -41202,8 +41248,10 @@ async function gefSchwebeAuf(){
   };
   log("opened");
   doc.addEventListener("visibilitychange", () => log(doc.visibilityState === "hidden" ? "hidden" : "visible"));
-  /* closed from its own corner or by the browser: forget it, relabel the desk */
-  w.addEventListener("pagehide", () => { if (gefSchwebe === w){ gefSchwebe = null; gefSchwebeSatz = null; gefSchwebeEdit = null; gefSchwebeEditZu = null; } log("closed"); gefPult(); });
+  /* closed from its own corner or by the browser: forget it (a detail hand
+     field in it goes unwritten, pgHandfeldWeg), relabel the desk - and do
+     not hand it to him again this session (gefSchwebeSelbst) */
+  w.addEventListener("pagehide", () => { if (gefSchwebe === w){ gefSchwebe = null; gefSchwebeSatz = null; gefSchwebeEdit = null; gefSchwebeEditZu = null; gefSchwebeZugemacht = true; pgHandfeldWeg(w); if (PG) pgZeichnen(); } log("closed"); gefPult(); });
   gefSchwebeZeichnen();
   gefPult();
   return true;
@@ -41227,7 +41275,8 @@ function gefSchwebeLogZeile(){
 }
 function gefSchwebeZu(){
   const w = gefSchwebe; gefSchwebe = null; gefSchwebeSatz = null; gefSchwebeEdit = null; gefSchwebeEditZu = null;
-  if (w){ try { w.close(); } catch(e){} }
+  if (w){ pgHandfeldWeg(w); try { w.close(); } catch(e){} }
+  if (GEF && gefOffen) gefPult();               /* the desk's button says so at once - another room may have taken the window (H3 round 3) */
 }
 /* the box while it stands, the reading line otherwise (P3 (e)); written
    anew only when it changed - this runs at every tick of the desk. The memo
@@ -41253,8 +41302,14 @@ function gefSchwebeZeilen(){
 function gefSchwebeZeichnen(){
   if (!gefSchwebe) return;
   const K = gefEndeSatz();
+  /* H2: the war map in the share - the detail branch's head and rows take
+     the window while the switch says K and the detail switch is on; the
+     confirmation box goes before both (BAT-12) */
+  const detail = !!(PG && GEF && GEF.weiche === "K" && gefDetailAn());
+  const D = detail ? pgSchwebeHtml() : null;
   let html;
   if (K) html = `<div class="gf-satz" style="border-color:${K.rand};background:${K.grund};color:${K.farbe}">${K.text}</div>`;
+  else if (detail) html = D.kopf;
   else { const L = gefLesungZeile(); html = `<div class="gf-lesung${L.gehalten ? " gf-halt" : ""}">${esc(L.text)}</div>`; }
   /* T9 (d), ToDo 16.9.2026 - ENNO 18.09.2026: "Wie beim AT Grabber auch ein
      Overlay Fenster, welches sich genau neben die Spielernamen im Spiel
@@ -41274,11 +41329,12 @@ function gefSchwebeZeichnen(){
      (gefTafelHandfeld) - 420 wide for the box; while a hand field stands the
      body is not rewritten (gefSchwebeEdit). */
   const W = GEF && GEF.tafel && GEF.tafel.wahl;
-  const nW = W ? [...W].filter(gefSchwebeKaest).length : 0;
-  if (zeilen.length) html += `<div class="gf-sz-block">${zeilen.map(z => { const kaest = gefSchwebeKaest(z.id);
+  let nW = W ? [...W].filter(gefSchwebeKaest).length : 0, nZeilen = zeilen.length;
+  if (detail){ html += D.block; nZeilen = D.n; nW = 0; }
+  else if (zeilen.length) html += `<div class="gf-sz-block">${zeilen.map(z => { const kaest = gefSchwebeKaest(z.id);
     return `<div class="gf-sz${z.u ? " un" : ""}"><span class="w sp-kaest${kaest ? (W && W.has(z.id) ? " an" : "") : " leer"}"${kaest ? ` data-w="${z.id}"` : ""}></span><span class="n" data-n="${z.id}">${esc(z.n)}</span><span class="g" data-ok="${z.id}" title="Confirm">✓</span><span class="g" data-neu="${z.id}" title="Read again">↻</span></div>`; }).join("")}${
     nW ? `<div class="gf-sz knopf"><span class="g" data-confirm="1">Confirm ${nW}</span></div>` : ""}</div>`;
-  if (gefSchwebeEdit) return;
+  if (gefSchwebeEdit || (PG && PG.tippt)) return;    /* a hand field of either sheet holds the window (H2) */
   if (html === gefSchwebeSatz) return;
   try {
     const doc = gefSchwebe.document;
@@ -41288,6 +41344,27 @@ function gefSchwebeZeichnen(){
       doc.body.addEventListener("pointerdown", ev => {
         if (!ev.target || !ev.target.closest) return;
         const g = ev.target.closest(".gf-sz .g[data-ok],.gf-sz .g[data-neu],.gf-sz .w[data-w],.gf-sz .g[data-confirm]");
+        /* H2: a row of the detail branch (data-q d) acts through pg*, a board's row through gefTafel* */
+        const zeile = ev.target.closest(".gf-sz"), detailZeile = !!(zeile && zeile.dataset.q === "d");
+        if (detailZeile){
+          if (!PG) return;
+          if (!g){
+            const n = ev.target.closest(".gf-sz .n[data-k]");
+            if (!n || n.querySelector("input")) return;
+            ev.preventDefault();
+            gefTafelFeldZu();
+            pgHandfeldIn(n, n.dataset.k);
+            return;
+          }
+          ev.preventDefault();
+          gefTafelFeldZu(); pgHandfeldZu();    /* a standing hand field closes as the blur would, then the grip acts (H3 round 3) */
+          if (!PG) return;
+          if (g.dataset.ok !== undefined) pgBestaetigen(g.dataset.ok);
+          else if (g.dataset.neu !== undefined) pgNeuLesen(g.dataset.neu, doc);
+          else if (g.dataset.w !== undefined) pgWahl(g.dataset.w, ev.shiftKey, pgSchwebeZeilen().filter(z => z.kaest).map(z => z.k));
+          else pgWahlBestaetigen();
+          return;
+        }
         if (!g){
           /* the name opens its hand field on the press (round 3): a desk
              field in focus closes first, and its focusout rewrites this
@@ -41302,14 +41379,14 @@ function gefSchwebeZeichnen(){
         }
         ev.preventDefault();
         const ok = g.dataset.ok, neu = g.dataset.neu, w = g.dataset.w;
-        gefTafelFeldZu();                      /* a field being typed in closes as the blur would, then the grip acts (round 3) */
+        gefTafelFeldZu(); pgHandfeldZu();      /* a field being typed in closes as the blur would, then the grip acts (round 3) */
         if (ok !== undefined) gefTafelBestaetigen(+ok);
         else if (neu !== undefined) gefTafelNeuLesen(+neu, doc);
         else if (w !== undefined) gefTafelWahl(+w, ev.shiftKey, gefSchwebeZeilen().map(z => z.id).filter(gefSchwebeKaest));
         else gefTafelWahlBestaetigen();
       });
     }
-    const hoch = 96 + 14*(zeilen.length + (nW ? 1 : 0));
+    const hoch = 96 + 14*(nZeilen + (nW ? 1 : 0));
     if (gefSchwebe.innerHeight && Math.abs(gefSchwebe.innerHeight - hoch) > 2){ try { gefSchwebe.resizeBy(0, hoch - gefSchwebe.innerHeight); } catch(e){} }
   } catch(e){}
 }
@@ -41317,6 +41394,11 @@ function gefPult(){
   const pult = document.getElementById("gf-pult");
   if (!pult || !GEF) return;
   const live = !!GEF.live;
+  /* H2 round 2: the war map in the share and the detail switch on - the
+     desk reads the battle window, so "Waiting for the end screen." and the
+     end-screen note say nothing here and go; back with the battle (F), with
+     another window (X) or before a verdict */
+  const detailK = !!(GEF.weiche === "K" && gefDetailAn());
   const pipDa = ("documentPictureInPicture" in window);
   pult.innerHTML = `
     <button class="rd-schalter mit-ico ${live ? "an" : ""}" id="gf-kraft">${ICO_CAPTURE}${
@@ -41324,6 +41406,7 @@ function gefPult(){
     ${live ? `<button class="rd-schalter" id="gf-teilen" style="font-size:10.5px;padding:6px 0">Share again</button>` : ""}
     <button class="rd-schalter ${gefSchwebe ? "an" : ""}" id="gf-schweben" ${pipDa ? "" : "disabled"} title="${pipDa ? "A small window that stays over the game: the score, and the confirmation once the end screen was read" : "Needs Chrome or Edge 116 or newer"}">${gefSchwebe ? "Floating - close it" : "Float over the game"}</button>
     ${gefSchwebeLogZeile()}
+    ${gefTeilenZeile()}
     ${(() => {
       /* WAS STEHT GERADE AN - und nichts Dazuerfundenes. Gefragt wird die
          gegebene Bestaetigung durch ihr Frischefenster, NICHT der Befund
@@ -41342,29 +41425,45 @@ function gefPult(){
       const K = gefEndeSatz();                  // one choice for desk and overlay (BAT-12)
       const kasten = (rand, grund, farbe, text) => `<div style="margin-top:8px;padding:7px 9px;border:1px solid ${rand};border-radius:3px;background:${grund};color:${farbe};font-size:12px;line-height:1.45">${text}</div>`;
       if (K) return kasten(K.rand, K.grund, K.farbe, K.text);
-      if (live) return `<div style="margin-top:8px;padding:7px 9px;border:1px solid #8a6820;border-radius:3px;background:rgba(226,172,72,.16);color:#e2ac48;font-size:12px;line-height:1.45">Waiting for the end screen.</div>`;
+      if (live && !detailK) return `<div style="margin-top:8px;padding:7px 9px;border:1px solid #8a6820;border-radius:3px;background:rgba(226,172,72,.16);color:#e2ac48;font-size:12px;line-height:1.45">Waiting for the end screen.</div>`;
       return "";
     })()}
-    ${GEF.ende ? "" : `<div style="margin-top:8px;color:#cbb27a;font-size:11.5px;line-height:1.55;border-left:2px solid #8a6a2a;padding:0 2px 0 8px">Keep the
+    ${GEF.ende || detailK ? "" : `<div style="margin-top:8px;color:#cbb27a;font-size:11.5px;line-height:1.55;border-left:2px solid #8a6a2a;padding:0 2px 0 8px">Keep the
       game window open and shared until the end screen has been read and sent here: the box in the head
       strip, and a chime while Sound is on. Once the window is gone, the end of the battle cannot
       be read at all.</div>`}
     <div class="kb-abstand"></div>
     <button class="rd-schalter ${kbTon ? "an" : ""}" id="gf-klang">${kbTon ? "Sound on" : "Sound off"}</button>
     <div class="kb-abstand"></div>
+    <button class="rd-schalter ${gefDetailAn() ? "an" : ""}" id="gf-detail">Read the detail window too</button>
+    ${PG && pgDetailDa() ? `<button class="rd-schalter" id="sp-keep" ${[...PG.namen.values()].some(v => !v.gespeichert) ? "" : "disabled"}>Keep the sheet</button>
+    <button class="rd-schalter" id="sp-leer">New sheet</button>` : ""}
+    <div class="kb-abstand"></div>
     ${gefSchreiberZeile()}
     ${ladebildPultZeile()}`;
   ladebildPultVerdrahten(pult);                  // P9: "Use Krajenka" / "Keep Gera", on pointerdown like the desk's buttons
+  /* H2: the detail switch (Z22 - its broken-off sentence, Widerspruch 5),
+     Keep the sheet and New sheet of the war map's battle window - on
+     pointerdown as the desk's other buttons, a standing hand field closes
+     first as the blur would (H3 round 4) */
+  const gfKnopf = (id, tu) => {
+    const b = document.getElementById(id);
+    if (!b || b.disabled) return;
+    b.addEventListener("pointerdown", ev => { if (ev.button !== 0) return; ev.preventDefault(); pgHandfeldZu(); if (GEF) tu(); });
+  };
+  gfKnopf("gf-detail", () => { gefDetailSetzen(!gefDetailAn()); gefPult(); });
+  gfKnopf("sp-keep", () => { if (PG) pgBehalten(); });
+  gfKnopf("sp-leer", () => { if (!PG) return; pgRuhen(); pgWacheStand.alt = null; GEF.detail = pgNeu(); gefZeichnen(); });
   document.getElementById("gf-kraft").addEventListener("click", () => {
     if (GEF && GEF.live) gefLiveStop(true); else gefLiveStart(); });
   /* share again: end the share and ask once; declined, the tick stops the desk itself */
   document.getElementById("gf-teilen")?.addEventListener("click", async () => { await bildFreigabeNeu(); gefPult(); });
-  /* THE SAME SWITCH THE CABIN AND THE PLAYER ROOM CARRY, on the same kbTon.
+  /* THE SAME SWITCH THE CABIN CARRIES (the player room carried it too, until H2), on the same kbTon.
      Without it the confirmation would be the only sound in the tool that
      cannot be turned off - this desk was the one of the three that had no
      switch. ONE DIFFERENCE, and it is deliberate: over there switching the
      sound back ON also brings the room hiss back (kbRauschenAn), because
-     kbLiveStart and pgLiveStart start it. The battle desk has no hiss and
+     kbLiveStart starts it (the player room's start did too, until H2). The battle desk has no hiss and
      never had one, so the switch here must not start a noise this room does
      not own. Switching OFF still stops it: off means off.
      AUF pointerdown, NICHT AUF click - aus demselben Grund, der neunzig
@@ -41382,7 +41481,8 @@ function gefPult(){
   const schw = document.getElementById("gf-schweben");
   if (schw && !schw.disabled) schw.addEventListener("pointerdown", ev => {
     ev.preventDefault();
-    if (gefSchwebe){ gefSchwebeZu(); gefPult(); } else gefSchwebeAuf();
+    pgHandfeldZu();                              /* H2: a standing detail hand field closes as the blur would (H3 round 4) */
+    if (gefSchwebe){ gefSchwebeZugemacht = true; gefSchwebeZu(); gefPult(); } else gefSchwebeAuf();
   });
 }
 /* the score line the head strip and the floating window show: this look's
@@ -41411,7 +41511,7 @@ function gefZeichnen(){
   kopf.innerHTML = `
     <div class="rd-kf weit ${ortName ? "ort" : ""}"><div class="t">Town</div>
       <div class="v">${ortName ? `<b class="kb-ortname">${esc(ortName)}</b>` : "<small>none picked, choose one on the left</small>"}</div></div>
-    <div class="rd-kf"><div class="t">Score, left to right</div>
+    <div class="rd-kf" data-kachel="battle"><div class="t">Score, left to right</div>
       <div class="v${gehalten ? " gf-halt" : ""}">${b ? `${b.li}<small> : </small>${b.re}` : "-"}</div>
       <div class="bar"><i style="width:${b ? b.li : 0}%"></i></div></div>
     <div class="rd-kf"><div class="t">Time left</div>
@@ -41420,6 +41520,7 @@ function gefZeichnen(){
     <div class="rd-kf"><div class="t">Capture</div>
       <div class="v"><small>${GEF.live && R ? `${R.w}x${R.h}, every ${GEF_TAKT} ms` : esc(GEF.status)}</small></div>
       <div class="bar"></div></div>
+    ${pgKopfKacheln()}
     ${gefEndeKasten()}`;
   gefEndeRahmen();
   gefSchwebeZeichnen();                       // the overlay follows the same gate (BAT-12)
@@ -41449,7 +41550,7 @@ function gefZeichnen(){
   /* while a name on the scoreboard block is being typed the sheet is not
      rebuilt under the hand (BAT-1, the rule of pgZeichnen): nothing below
      this line runs, the clock button's listener included */
-  if (GEF.tafel && GEF.tafel.tippt){ gefPult(); return; }
+  if (GEF.tafel && GEF.tafel.tippt){ pgZeichnen(true); gefPult(); return; }
   blatt.innerHTML = `
     <div class="kb-titel">Battle state</div>
     ${b ? `
@@ -41573,6 +41674,7 @@ function gefZeichnen(){
   });
   gefTafelVerdrahten(blatt);
   pkVerdrahten(blatt);
+  pgZeichnen(true);                           /* H2: the war map's sheet under the battle's */
   gefPult();
 }
 /* THE HEAD BUTTON CARRIES THE CAPTURE (Blatt 16.09., P3 (a)): "an" while
@@ -41630,18 +41732,20 @@ async function gefstandAuf(){
 function gefstandZu(){
   if (!gefOffen) return;
   gefOffen = false;
+  pgHandfeldZu();                             // H2: a detail hand field closes as the blur would
   document.getElementById("gefstand").classList.remove("an");
   if (GEF && GEF.live){ gefKopfKnopf(); return; }
   gefLiveStop(true);
   document.getElementById("gefstand").classList.remove("gf-ende", "gf-puls");
-  gefSchwebeZu();                             // the overlay goes with the desk (BAT-12), as the strip with the cabin
+  gefSchwebeZu(); gefSchwebeGesteLoesen();    // the overlay goes with the desk (BAT-12), as the strip with the cabin
   GEF = null;
+  unitsFremdSchliessen();                     // H2: the other scripts' readers of the detail branch (as the player room did)
   gefKopfKnopf();
 }
 document.getElementById("b-gefstand").addEventListener("click", gefstandAuf);
 document.getElementById("gf-zu").addEventListener("click", gefstandZu);
-/* Escape ends a standing choice on the board first (H3), the desk after */
-document.addEventListener("keydown", ev => { if (ev.key === "Escape" && gefOffen){ const T = GEF && GEF.tafel; if (T && T.wahl && T.wahl.size) gefTafelWahlEnde(); else gefstandZu(); } });
+/* Escape ends a standing choice on the board or the war map's sheet first (H3, H2), the desk after */
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && gefOffen){ const T = GEF && GEF.tafel; if (T && T.wahl && T.wahl.size) gefTafelWahlEnde(); else if (PG && PG.wahl.size) pgWahlEnde(); else gefstandZu(); } });
 
 /* ONE ROOM AT A TIME. All four full-screen rooms sit on the same
    position:fixed inset:0 z-index:120, and none of them asked after the
@@ -41653,7 +41757,6 @@ document.addEventListener("keydown", ev => { if (ev.key === "Escape" && gefOffen
 function raeumeSchliessen(ausser){
   if (ausser !== "radar"    && typeof radarOffen !== "undefined" && radarOffen) radarZu();
   if (ausser !== "kabine"   && typeof kbOffen    !== "undefined" && kbOffen)    kabineZu();
-  if (ausser !== "spieler"  && typeof pgOffen    !== "undefined" && pgOffen)    spielerraumZu();
   if (ausser !== "gefstand"){
     if (typeof gefOffen !== "undefined" && gefOffen) gefstandZu();
     /* THE BATTLEREADER PAUSES while another capture room is open (Blatt
@@ -51136,7 +51239,7 @@ function dlLiveStop(auchFreigabe){
   clearInterval(DL.live); DL.live = null;
   dlSchwebeGesteLoesen();
   /* the share is the page's: it ends only when no room is watching */
-  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live) && !(typeof PG !== "undefined" && PG && PG.live)
+  if (auchFreigabe && !(typeof KB !== "undefined" && KB && KB.live)
       && !(typeof GEF !== "undefined" && GEF && GEF.live) && !wacheLaeuft()) bildFreigabeBeenden();
   DL.status = `Stopped \u00b7 ${DL.zeilen.length} on the sheet`;
   dlZeichnen();
@@ -51639,8 +51742,9 @@ function dlSchwebeZeichnen(){
 /* The old battle calculator is gone - it was a stock ledger kept by hand.
    The battle analysis takes its place as a room of its own, reading the
    strengths and the players straight off the war map's battle view. The
-   pot btl and its two accessors stay: the players' room fills them since
-   13.09.2026 (BAT-2) with the strength table of the battle window - one
+   pot btl and its two accessors stay: the players' room filled them since
+   13.09.2026 (BAT-2), the battle desk's detail branch (pg*) does since H2
+   (ToDo 20.09.2026), with the strength table of the battle window - one
    row per side, eighteen groups, see setBattle - and the town column
    shows it (schlachtFenster). */
 
@@ -54510,7 +54614,8 @@ const statusVon = who => {
   return e.v;
 };
 /* a recording running against the game counts as use of the page: whoever
-   has the radar, the units cabin, the players room or the battlereader on
+   has the radar, the units cabin or the battlereader (the war map's
+   battle window included, H2) on
    the game is doing something with the tool, even without a click for 40
    minutes (FABLE 15.09.2026, F2). Read only, nothing is set.
    AND THE SHARED WINDOW ITSELF (Blatt 16.09., P4, SOLL-6). ENNO 17.09.2026:
@@ -54521,7 +54626,7 @@ const statusVon = who => {
    closed radar with the share still standing included. Without a share the
    clock runs as before; an Inactive set by hand stays (statusRuhePruefen
    sets, it never lifts). */
-const aufnahmeLaeuft = () => wacheLaeuft() || !!(KB && KB.live) || !!(PG && PG.live) || !!(GEF && GEF.live)
+const aufnahmeLaeuft = () => wacheLaeuft() || !!(KB && KB.live) || !!(GEF && GEF.live)
   || !!(bildStrom && bildStrom.active);
 /* WER NACH SEINEM STATUS EINEN BEFEHL ERFUELLEN KANN. AT-Befehle (Pfeil,
    Parablock, Flaeche): Active und RTS only - der schiebt seine Einheiten.
@@ -59185,7 +59290,8 @@ function beitrittDialog(){
    Infantryman, Recon 20 Recon. Das Minimum ueber alle benoetigten Ressourcen
    ist die Zahl - mehr geht nicht, auch wenn von einer anderen Ressource noch
    reichlich da ist. */
-/* THE POT btl IS WRITTEN SINCE 13.09.2026 by the players' room (BAT-2).
+/* THE POT btl IS WRITTEN SINCE 13.09.2026 by the players' room (BAT-2) -
+   since H2 (ToDo 20.09.2026) by the battle desk's detail branch (pg*).
    THE CONTRACT WITH THE BATTLE WINDOW (BAT-11, FABLE 13.09.2026):
      v = {seiten: [{f, n, ca, text, spieler, liste, namen, kopf?, hand?}],
           typ?, rolle?, status?, aufkl?, seit?, seitT?, stern?, tag?, licht?, wetter?, q, src}
@@ -59251,16 +59357,34 @@ function pgCheckAgain(i){
   }
   return offen.length ? offen : null;
 }
-/* the colour of the window's "marked contested" line (--dim), once per theme */
-let pgCheckFarbeMerk = null;
-function pgCheckFarbe(){
+/* Z23 (H2): the dot on a contested town - null while btl:<town> carries no
+   head counter above 0 (no players read there), "hohl" while pgCheckAgain
+   reports a side with names missing, "voll" when every name is read.
+   FABLE's reading of "Gefechte mit Spielern" (Kopfblock 2 of the list):
+   battles in which people stand - the counter beside the emblem (P8) -,
+   not every battle. Read only. */
+function pgSpielerPunkt(i){
+  const e = battleStand(i), v = e && e.v;
+  if (!v || !Array.isArray(v.seiten)) return null;
+  let kopf = 0;
+  for (const sd of v.seiten) if (sd.kopf !== undefined && sd.kopf !== null && !isNaN(+sd.kopf)) kopf += +sd.kopf;
+  if (kopf <= 0) return null;
+  return pgCheckAgain(i) ? "hohl" : "voll";
+}
+/* the dot's dark edge (round 2): the map lettering's edge in the dark
+   theme (draw: strokeText), taken for both themes - the glow under the
+   dot is the same warm orange in both, and the accent lies close to it */
+const PG_PUNKT_KANTE = "rgba(5,8,12,.92)";
+/* the accent colour for the dot (--accent), once per theme */
+let pgPunktFarbeMerk = null;
+function pgPunktFarbe(){
   const th = light() ? "l" : "d";
-  if (!pgCheckFarbeMerk || pgCheckFarbeMerk.th !== th){
+  if (!pgPunktFarbeMerk || pgPunktFarbeMerk.th !== th){
     let f = "";
-    try { f = getComputedStyle(document.documentElement).getPropertyValue("--dim").trim(); } catch(e){}
-    pgCheckFarbeMerk = {th, f: f || (th === "l" ? "#554d3f" : "#a89c88")};
+    try { f = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(); } catch(e){}
+    pgPunktFarbeMerk = {th, f: f || "#e2ac48"};
   }
-  return pgCheckFarbeMerk.f;
+  return pgPunktFarbeMerk.f;
 }
 function ausRessourcen(vorrat){
   const raus = [];
@@ -59381,12 +59505,13 @@ function schlachtFenster(i){
    with the town, its type and what the tool knows of the time - the
    countdown of the battle reader, else the clan's overtime clock, always the
    age of the battle mark and who set it (the mark's time, not the battle's);
-   the tables and the names out of the pot btl, which the players' room
-   writes (BAT-2), in exactly the form setBattle describes; behind every name
+   the tables and the names out of the pot btl, which the battle desk's
+   detail branch writes (BAT-2; the players' room until H2), in exactly the
+   form setBattle describes; behind every name
    what the register knows (pgEtikett, read only). Kind of battle, role,
    light and weather stand in the situation row and the war map's running
    time under the countdown since P8 (19.09.2026) - out of the row btl, the
-   players' room reads the head strip (gfKopf); what was not read is not
+   detail branch reads the head strip (gfKopf); what was not read is not
    shown, nothing is guessed. No layout card of the FPS map
    (its holder colours are BAT-17).
    Opened by a click on a contested town (the disc, or the stack of KAR-6);
@@ -59406,7 +59531,7 @@ let schlachtOrt = null, schlachtUhr = null, schlachtMerk = "";
 const SCHLACHT_SPALTE = 13;                    /* names per column before a second one opens */
 const schlachtRaumOffen = () =>
   (typeof radarOffen !== "undefined" && radarOffen) || (typeof kbOffen !== "undefined" && kbOffen) ||
-  (typeof pgOffen !== "undefined" && pgOffen) || (typeof gefOffen !== "undefined" && gefOffen);
+  (typeof gefOffen !== "undefined" && gefOffen);   /* H2: the player room is the battle desk's */
 /* ENNO 07.09.2026: "Bei allen laufenden Gefechten von Staedten oder Orten
    innerhalb der Befehle muss, falls bekannt, die Zeit und eine
    Detailansicht des Gefechts. ... Dieses 'Schlachtfenster' soll sich AUCH
@@ -59467,7 +59592,7 @@ function schlachtKopfText(v){
   return {art: teile.join(" \u00b7 "), zeit};
 }
 /* what the window was drawn from: the row times of the pot and of the
-   reading. The players' room (setBattle) and the battle reader (gefSchreiben
+   reading. The detail branch (setBattle) and the battle reader (gefSchreiben
    with another town selected) write without a side() for this town - the
    tick compares and redraws when one of them changed (round 2) */
 const schlachtStandKey = i => { const e = battleStand(i), b = gefStand(i); return (e ? e.t : "") + "|" + (b ? b.t : ""); };
@@ -63054,7 +63179,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 0c535352d4</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0e698ae7a1</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -63282,7 +63407,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "0c535352d4";
+const BAU = "0e698ae7a1";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
