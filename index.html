@@ -49989,6 +49989,25 @@ const dlOffen = z => z.status === "gelesen" && !dlImDepot(z);
 async function dlLiveStart(){
   dlNeu();
   if (DL.live) return;
+  /* E1 (B) - THE FLOATING LIST OPENS WITH THIS CLICK WHEN THE SHARE ALREADY
+     STANDS. ENNO 20.09.2026 (ToDo 20.09., Z12, Depot Grabber): "Außerdem
+     gerne den Floating Teil direkt". One click carries one user activation,
+     and requestWindow and getDisplayMedia both consume it (FABLE 13.09.2026,
+     BAT-12) - so where the picker is still needed the window keeps coming
+     with the next gesture (dlSchwebeSelbst at the end). Where the share
+     stands already (the head strip's Share, the cabin, the radar or an
+     earlier run: bildStrom.active) nothing needs the activation but the
+     window: requestWindow is the first await after the click, the run
+     follows. Refused (no activation, another window), the run starts as
+     before and the window comes with the next gesture. A window he closed
+     from its corner this session stays closed (the Q12 rule above
+     dlSchwebeSelbst; the button "Float over the game" opens it again). No
+     register of floating windows here: H3 (ToDo 20.09.) builds
+     schwebeHalter and hangs this opener on it. */
+  if (bildStrom && bildStrom.active && !dlSchwebe && !dlSchwebeZugemacht && ("documentPictureInPicture" in window)){
+    await dlSchwebeAuf();                              /* requestWindow is the first await inside */
+    if (!DL || DL.live) return;
+  }
   DL.status = "Asking for the game window \u2026"; dlZeichnen();
   try { await bildStromHolen(); }                      /* the browser's picker - the first await after the click */
   catch(e){
@@ -50924,7 +50943,7 @@ function kartenRaster(quelle){
   const ctx = quelle.getContext("2d", {willReadFrequently:true});
   const d = ctx.getImageData(0, 0, W, H).data;
   const N = W*H;
-  const L = new Uint8Array(N), SAT = new Uint8Array(N), gold = new Uint8Array(N);
+  const L = new Uint8Array(N), SAT = new Uint8Array(N), gold = new Uint8Array(N), beige = new Uint8Array(N);
   for (let i = 0, j = 0; j < N; i += 4, j++){
     const R = d[i], G = d[i+1], B = d[i+2];
     const mx = R > G ? (R > B ? R : B) : (G > B ? G : B);
@@ -50941,10 +50960,37 @@ function kartenRaster(quelle){
       const gn = (G-B)/Math.max(1, R-B);
       if (gn > 0.42 && gn < 0.86) gold[j] = 1;
     }
+    /* E1 (ToDo 20.09., 21.09.2026) - THE SECOND SIEVE: the sign box of a
+       locked or weakened unit is not gold but beige-grey (measured on the
+       4K stills, Listen/MESSUNG-R3.md 2b: RGB 227/212/186, saturation 0,16,
+       L 214; under the mouse 252/230/192), and the gold window above
+       (saturation > 0,30) never sees it - "Map with details" kept 2 of 7
+       cards, "Pfadfinder" 4 of 7, the stack broke and the short way took
+       over. Lowering the gold threshold does not do: 0,15 instead of 0,30
+       multiplied the gold mask fivefold on the Full HD picture (brown
+       ground). So a window of its own, the measurer's: L > 190, saturation
+       0,10..0,28, R >= G >= B - 0,4..0,6 % of the strip on those two
+       pictures, at most 0,14 % on the other 96 (counter material 0,00..
+       0,14 %). The grey areas are gathered apart from the gold ones
+       (flaechenAus below) and join the candidates; the gold mask and its
+       use in the bar row stay as they were. ENNO 20.09.2026 (Z12): "Funktioniert
+       noch nicht." - read as the order for what R3 left open (FABLE). */
+    else if (L[j] > 190 && R >= G && G >= B){
+      const sat = (mx-mn)/Math.max(mx,1);
+      if (sat >= 0.10 && sat <= 0.28) beige[j] = 1;
+    }
   }
   const nein = grund => ({ok:false, grund});
 
   /* ---- Goldflaechen ueber Laeufe und Union-Find --------------------- */
+  /* E1: the same steps for each mask on its own - runs, union-find, the
+     minimum size, the pieces the dark sign cut apart put back together.
+     Apart, not merged: a pale rim around a gold box (gold blended with a
+     light ground: saturation 0,2, L above 190) would otherwise widen the
+     gold box by a point and shift the short way's card height (box width /
+     0,456) by a few percent; gathered on its own such a rim is a ring, and
+     a ring fails the fill test of the candidates (>= 0,45). */
+  const flaechenAus = maske => {
   const eltern = [], kasten = [];
   const finde = a => { while (eltern[a] !== a) a = eltern[a] = eltern[eltern[a]]; return a; };
   const eine = (a,b) => { a = finde(a); b = finde(b); if (a !== b) eltern[b] = a; };
@@ -50953,9 +50999,9 @@ function kartenRaster(quelle){
     const jetzt = [];
     let x = 0;
     while (x < W){
-      if (!gold[y*W+x]){ x++; continue; }
+      if (!maske[y*W+x]){ x++; continue; }
       const a = x;
-      while (x < W && gold[y*W+x]) x++;
+      while (x < W && maske[y*W+x]) x++;
       const id = kasten.length;
       eltern.push(id);
       kasten.push({x0:a, x1:x-1, y0:y, y1:y, n:x-a});
@@ -50996,6 +51042,9 @@ function kartenRaster(quelle){
     }
     if (fertig) break;
   }
+  return stuecke;
+  };
+  const stuecke = flaechenAus(gold).concat(flaechenAus(beige));
   const kandidaten = stuecke.filter(f => {
     const b = f.x1-f.x0+1, h = f.y1-f.y0+1;
     return b >= 6 && h >= 6 && b/h >= 0.70 && b/h <= 2.60 && f.n/(b*h) >= 0.45;
@@ -51226,9 +51275,27 @@ function kartenRaster(quelle){
   while (pl > 0 && evg[pl-1] > 0.50) pl--;
   while (pr < W-1 && evg[pr+1] > 0.50) pr++;
   { let luecke = 0;
+    /* E1 (ToDo 20.09., 21.09.2026), measured on his 1440p recording and the
+       4K still (scratchpad/todo16/e1/meld_pb.json): the name column - its
+       letters differ from card to card - repeats only weakly with the
+       pitch, evg 0,40..0,65 on every picture, right at the threshold. On
+       most pictures the dips below 0,50 last at most 14 points; on r3_003
+       40 points (limit 0,25 P0 = 35,5), on r3_010 69, on the 4K
+       "Kampfbeginn" 133 (limit 53) - the search gave up in the name column,
+       PB 126/96/187 instead of 468/468/701, and the short way read 2/8/2
+       cards. The figure columns further right repeat strongly (evg 0,76..
+       0,82) and begin at 2,0..2,3 P from the panel's left edge (1440p: pl
+       + 2,29 P; 4K: the last gap ends at pl + 2,0 P), the war map's panel is
+       3,30 P wide at every size (468/142, 701/213, 352/106,5), the soldier
+       window's 2,62 P (377/144) with a periodic column 120 points right of
+       it. So the search to the right does not give up before pl + 2,4 P0 -
+       past the name column, short of the soldier window's edge - and from
+       there the old rule holds. The threshold and the 1,6 P0 test below are
+       unchanged. */
+    const panelBis = pl + 2.4*P0;
     for (let x = pr+1; x < W; x++){
       if (evg[x] > 0.50){ pr = x; luecke = 0; }
-      else if (++luecke > 0.25*P0) break;
+      else if (++luecke > 0.25*P0 && x > panelBis) break;
     }
     luecke = 0;
     for (let x = pl-1; x >= 0; x--){
@@ -61876,7 +61943,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build a67ce4c5e3</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 8c7046c8a4</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -62104,7 +62171,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "a67ce4c5e3";
+const BAU = "8c7046c8a4";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
