@@ -7622,12 +7622,12 @@ function zuordNachruecken(){
       const zusammen = (da ? da.ats : []).filter(id => depot.has(id));
       const neuDazu = ats.some(id => !zusammen.includes(id));
       for (const id of ats) if (!zusammen.includes(id)) zusammen.push(id);
-      /* a recon request takes scouts within reach only, a gather without
-         an airfield no air team (T15); the rest stay off it */
+      /* a recon request takes scouts only, a gather without an airfield no
+         air team (T15); the rest stay off it */
       if ((weiter.art === "area" && weiter.v && weiter.v.aufkl) || (weiter.art === "arrow" && weiter.v && weiter.v.gather)){
-        const meine = myDepotAlle(), lage = weiter.v.aufkl ? aufklLage(aufklPunkte(weiter.v)) : null;
-        const ok = zusammen.filter(id => { const d = meine.find(x => x.id === id); return !d || !aufklSperre(weiter, d, lage); });
-        if (ok.length !== zusammen.length){ zusammen.length = 0; zusammen.push(...ok); toast(weiter.v.aufkl ? "Only scouts within reach move on to the recon request." : "Air teams stay off a gather without an airfield."); }
+        const meine = myDepotAlle();
+        const ok = zusammen.filter(id => { const d = meine.find(x => x.id === id); return !d || !aufklSperre(weiter, d); });
+        if (ok.length !== zusammen.length){ zusammen.length = 0; zusammen.push(...ok); toast(weiter.v.aufkl ? "Only scouts move on to the recon request." : "Air teams stay off a gather without an airfield."); }
       }
       /* teams that arrive by the chain wait for the owner's word; a row
          that already held them all keeps what it had */
@@ -7670,7 +7670,6 @@ function zuordWahl(b, zurueck){
   const c = light() ? "#1a2029" : "#e9e2d5";
   const frei = zuordFreieTeams();
   const ort = befehlOrtName(b);
-  const lage = b.art === "area" && b.v && b.v.aufkl ? aufklLage(aufklPunkte(b.v)) : null;   // a recon request: scouts that reach it only
   /* Die Gruppen als Sammelgriff - aber nur mit den Teams, die hier auch
      wirklich zur Wahl stehen. Ein Griff, der ein gebundenes Team mitnaehme,
      waere gelogen. */
@@ -7680,7 +7679,7 @@ function zuordWahl(b, zurueck){
      eine Zahl, die er nicht haelt - ein Gegenleser hat es vorgefuehrt:
      Knopf "3", angehakt eins. Die Antwort danach war ehrlich, kam aber zu
      spaet. */
-  const nehmbar = new Set(frei.filter(d => !aufklSperre(b, d, lage)).map(d => d.id));
+  const nehmbar = new Set(frei.filter(d => !aufklSperre(b, d)).map(d => d.id));
   const zuGrp = gruppenListe()
     .map(g => ({id: g.id, name: gruppeName(g), ats: g.ats.filter(id => nehmbar.has(id))}))
     .filter(g => g.ats.length);
@@ -7689,7 +7688,7 @@ function zuordWahl(b, zurueck){
       <p>${esc(befehlArtName(b))}${ort ? ` \u00b7 ${esc(ort)}` : ""} \u00b7 ${ZUSTAND_NAME[b.zs] || b.zs || "planned"}${
         b.art !== "arrow" && b.v && +b.v.soll ? ` \u00b7 target ${+b.v.soll}` : ""}</p></div>
     <div class="dlg-b">
-      ${frei.length ? `<div class="zuord-liste">${frei.map(d => { const grund = aufklSperre(b, d, lage); return `<label${
+      ${frei.length ? `<div class="zuord-liste">${frei.map(d => { const grund = aufklSperre(b, d); return `<label${
           grund ? ` title="${esc(grund)}" style="opacity:.45;cursor:default"` : ""}><input type="checkbox" data-zteam="${esc(d.id)}"${grund ? " disabled" : ""}>
           <span>${symbolSVG(d.k, c, 22, 15)}</span><span class="n"><span>${esc(d.name || atName(d.k))}${
           d.tag ? ` <small>${esc(d.tag)}</small>` : ""}</span><em>${esc(atName(d.k))}</em></span></label>`; }).join("")}</div>
@@ -9204,8 +9203,8 @@ function ordersDialog(tab){
   }));
   /* the branch at a fork: the teams of the row go onto the chosen order,
      accepted (picking is confirming, as in zuordZuweisen); only teams still
-     in the depot, on a recon request only scouts within reach - the same
-     two filters zuordNachruecken applies */
+     in the depot, on a recon request only scouts - the same two filters
+     zuordNachruecken applies */
   document.querySelectorAll("#dlg [data-zweig]").forEach(k => k.addEventListener("click", ev => {
     ev.stopPropagation();
     const [zk, xk] = k.dataset.zweig.split("|");
@@ -9215,8 +9214,8 @@ function ordersDialog(tab){
     const depot = new Set(aufSeite(myDepotAlle(), clanFaktion()).map(d => d.id));
     let ids = z.ats.filter(id => depot.has(id));
     if ((ziel.art === "area" && ziel.v && ziel.v.aufkl) || (ziel.art === "arrow" && ziel.v && ziel.v.gather)){   // T15: a gather without an airfield takes no air team
-      const meineT = myDepotAlle(), lage = ziel.v.aufkl ? aufklLage(aufklPunkte(ziel.v)) : null;
-      ids = ids.filter(id => { const d = meineT.find(x => x.id === id); return !d || !aufklSperre(ziel, d, lage); });
+      const meineT = myDepotAlle();
+      ids = ids.filter(id => { const d = meineT.find(x => x.id === id); return !d || !aufklSperre(ziel, d); });
     }
     if (!ids.length){ zuordLoeschen({art: z.art, id: z.id}); toast("No team of that row can move on."); wieder(); return; }
     if (zuordZuweisen(ziel, ids)){ zuordLoeschen({art: z.art, id: z.id}); toast(`Moved on to ${ziel.name}`); }
@@ -9613,38 +9612,51 @@ function paraBedrohungEtikett(x, y, n){
    A recon request is an area with aufkl:1. Set on towns it also carries
    orte:[town indices], and its polygon is a hull around them, so drawing,
    hit test, shield, chain, state, assignment and the inbox run unchanged.
-   Asked only within sight: every target must lie within the widest scout's
-   vision of one of our towns. Nothing new goes to the server. */
-function aufklTypen(){ return MAP.at.filter(t => kannAufklaeren(t.k)).map(t => t.k); }
-/* a scout's vision in map units, as siehtStaedte reads it */
-function aufklWeite(k){ return atVision(k)/SICHT_TEILER; }
-/* the scouts sitting in any clan depot on the war side */
-function aufklImDepot(){
-  const drin = new Set();
-  for (const who of paraMitglieder()){
-    const liste = paraDepotVon(who);
-    if (!liste) continue;
-    for (const t of liste) if (t && kannAufklaeren(t.k)) drin.add(t.k);
+   Asked from anywhere: no range check and no distance in the window since
+   ToDo 20.09. (ENNO 20.09.2026, Z7: "Nimm mal den Kram mit der
+   Entfernungsmessung raus. Das ist zu kompliziert. Es reicht mir, wenn
+   insgesamt klar ist, wer ATs fuer Aufklaerung hat."). Nothing new goes to
+   the server. */
+/* who has scouts, for the request window: per member the scout teams in
+   the depot on the war side, neither deployed nor bound to a live
+   assignment on another order (this very order excepted, as paraErfuellbar
+   counts); a depot never read is "unknown"; Mobile, Inactive and Offline
+   members are out (statusKannAT). Eight names at most, then "+N"; nobody
+   = "none" (FABLE 21.09.2026). Bound teams are asked PER OWNER: a team id
+   is unique inside one depot only (see paraVorrat). */
+function aufklScoutsText(ausser){
+  const alle = alleBefehle(true), belegt = new Map();
+  for (const z of zuordAlle()){
+    if (ausser && z.art === ausser.art && String(z.id) === String(ausser.id)) continue;   // this very order
+    const b = zuordBefehl(z, alle);
+    if (!b || b.zs === "fertig") continue;
+    let m = belegt.get(z.who);
+    if (!m){ m = new Set(); belegt.set(z.who, m); }
+    for (const id of z.ats) m.add(id);
   }
-  return [...drin];
-}
-/* the widest scout to ask with: from the depots, else any of the four */
-function aufklWeitester(){
-  const depot = aufklImDepot(), typen = depot.length ? depot : aufklTypen();
-  let best = null;
-  for (const k of typen) if (best === null || aufklWeite(k) > aufklWeite(best)) best = k;
-  return {k: best, r: best === null ? 0 : aufklWeite(best), ausDepot: depot.length > 0};
+  const zeilen = [];
+  let unbekannt = 0;
+  for (const who of paraMitglieder()){
+    if (!statusKannAT(who)) continue;
+    const liste = paraDepotVon(who);
+    if (!liste){ unbekannt++; continue; }
+    const weg = deployedIds(who), mein = belegt.get(who);
+    let n = 0;
+    for (const t of liste) if (t && kannAufklaeren(t.k) && !weg.has(t.id) && !(mein && mein.has(t.id))) n++;
+    if (n) zeilen.push([(depotIdx.get(who) || {}).name || who, n]);
+  }
+  zeilen.sort((p, q) => q[1] - p[1] || String(p[0]).localeCompare(String(q[0])));
+  const teile = zeilen.slice(0, 8).map(([name, n]) => `${name} ${n}`);
+  if (zeilen.length > 8) teile.push(`+${zeilen.length - 8}`);
+  let text = "Scouts: " + (teile.length ? teile.join(" \u00b7 ") : "none");
+  if (unbekannt) text += ` \u00b7 ${unbekannt} member${unbekannt === 1 ? "" : "s"} unknown`;
+  return text;
 }
 /* our towns: held by the clan's side */
 function aufklEigene(){
   const f = clanFaktion(), raus = [];
   for (let i = 0; i < MAP.n.length; i++) if (MAP.n[i] && ownerOf(i) === f) raus.push(i);
   return raus;
-}
-/* the target points of a request: its towns, else the polygon's corners */
-function aufklPunkte(a){
-  if (a && a.orte && a.orte.length) return a.orte.filter(i => MAP.n[i]).map(i => [MAP.n[i][1], MAP.n[i][2]]);
-  return (a && a.pts) || [];
 }
 /* DIE ZIELSTAEDTE EINER ANFRAGE, als Ortsindizes. Benannt (aufklKlick):
    a.orte. Gezeichnet (Recon-Werkzeug auf freiem Boden): alle Staedte,
@@ -9655,8 +9667,8 @@ function aufklPunkte(a){
    AT-Grabber dann ist der Befehl abgeschlossen."
    ZUR LAUFZEIT GERECHNET, NICHT IN a.orte GESCHRIEBEN: sobald a.orte
    steht, behandeln aufklKlick (Ctrl-Klick ersetzt pts durch
-   aufklHuelle), aufklPunkte, aufklZiele und aufklRingeZeichnen die
-   Flaeche als Stadt-Anfrage. Kosten: Staedte mal Ecken je Aufruf; gerufen
+   aufklHuelle), aufklZiele und aufklRingeZeichnen die Flaeche als
+   Stadt-Anfrage. Kosten: Staedte mal Ecken je Aufruf; gerufen
    aus aufklStand, aufklStandZeile und streckeStand, nie aus draw().
    Eine Stadt ohne Kampfeinheiten schreibt keine edep-Zeile und wird hier
    darum nie fertig - ob "leer gesehen" zaehlt, ist offen (ENNO
@@ -9674,29 +9686,11 @@ function aufklZielliste(a){
     if (MAP.n[i] && punktInFlaeche(MAP.n[i][1], MAP.n[i][2], a.pts)) raus.push(i);
   return raus;
 }
-/* the worst target: the own town nearest to it, and that distance */
-function aufklLage(punkte){
-  const eigene = aufklEigene();
-  let worst = null;
-  for (const p of punkte){
-    let ort = -1, d = Infinity;
-    for (const i of eigene){
-      const w = Math.hypot(MAP.n[i][1] - p[0], MAP.n[i][2] - p[1]);
-      if (w < d){ d = w; ort = i; }
-    }
-    if (!worst || d > worst.d) worst = {ort, d};
-  }
-  return worst || {ort: -1, d: Infinity};
-}
-/* true when every point lies within the widest scout's sight of one of our
-   towns; else a toast says why, and no request is made */
-function aufklInSicht(punkte){
-  if (!aufklEigene().length){ toast("No town of ours to scout from."); return false; }
-  const w = aufklWeitester(), lage = aufklLage(punkte);
-  if (lage.ort < 0){ toast("No town of ours to scout from."); return false; }
-  if (lage.d <= w.r) return true;
-  toast(`Out of reach: ${atName(w.k)} sees ${Math.round(w.r)} map units from ${MAP.n[lage.ort][0]}, the target is ${Math.round(lage.d)} away.`);
-  return false;
+/* a request needs a town of ours to scout from - that is the one gate
+   left; else a toast, and no request is made */
+function aufklVonUns(){
+  if (aufklEigene().length) return true;
+  toast("No town of ours to scout from."); return false;
 }
 /* the hull of a request on towns: an octagon of AUFKL_RAND around one town
    (wider around a capital, whose star reaches further), the convex hull of
@@ -9752,12 +9746,11 @@ function aufklFlussAbbruch(){
 }
 function aufklKlick(i, mehr){
   if (!MAP.n[i]) return;
-  const punkt = [[MAP.n[i][1], MAP.n[i][2]]];
   const F = aufklFluss, e = F && S.area[F.id];
   if (mehr && e && e.v && e.v.aufkl && lebt(F.id, e)){
     const orte = (e.v.orte || []).slice();
     if (orte.includes(i)){ toast(`${MAP.n[i][0]} is already in this request.`); return; }
-    if (!aufklInSicht(punkt)) return;
+    if (!aufklVonUns()) return;
     orte.push(i);
     befehlSchreiben({art: "area", id: F.id, v: e.v}, {orte, pts: aufklHuelle(orte)});
     tips();
@@ -9771,7 +9764,7 @@ function aufklKlick(i, mehr){
     toast(`${MAP.n[i][0]} is asked for already. Ctrl-click adds towns, Escape ends.`);
     return;
   }
-  if (!aufklInSicht(punkt)) return;
+  if (!aufklVonUns()) return;
   const k = areaSpeichern(aufklHuelle([i]), {aufkl: 1, orte: [i]});
   if (!k) return;
   aufklFluss = {id: k}; tips();
@@ -9890,29 +9883,23 @@ function aufklStandZeile(a, id){
     if (!aufklZielliste(a).length) return `<p>No town inside.</p>`;
   }
   const zs = befehlZustand(id, a);
-  if (zs === "plan") return `<p>Nothing counts before it is active.</p>`;
+  if (zs === "plan") return "";
   const st = aufklStand(id, a);
-  const zahl = `<b>${st.einheiten}</b> unit${st.einheiten === 1 ? "" : "s"} recorded since it went active`;
+  const zahl = `<b>${st.einheiten}</b> unit${st.einheiten === 1 ? "" : "s"} recorded`;
   if (zs === "fertig") return `<p>${zahl}.</p>`;
   if (st.offen.length)
-    return `<p>${zahl}; nothing yet from <b>${esc(st.offen.map(i => MAP.n[i][0]).join(", "))}</b></p>`;
-  return `<p>${zahl}. Every asked town is in.</p>`;
+    return `<p>${zahl} \u00b7 nothing yet from <b>${esc(st.offen.map(i => MAP.n[i][0]).join(", "))}</b></p>`;
+  return `<p>${zahl} \u00b7 every town in.</p>`;
 }
-/* the request window's lines under the state line */
+/* the request window's lines under the state line: who has scouts, and
+   the standing - no distance, no range (ENNO 20.09.2026, Z7) */
 function aufklFensterZeilen(a, id){
-  const lage = aufklLage(aufklPunkte(a)), w = aufklWeitester();
-  if (lage.ort < 0) return `<p>No town of ours to scout from.</p>${aufklStandZeile(a, id)}`;
-  const typen = aufklTypen();
-  const kann = typen.filter(k => aufklWeite(k) >= lage.d), fehlt = typen.filter(k => aufklWeite(k) < lage.d);
-  return `<p>Nearest own town: <b>${esc(MAP.n[lage.ort][0])}</b> (${Math.round(lage.d)} map units)</p>
-      <p>Scouts that reach it: ${kann.length ? esc(kann.map(atName).join(", ")) : "none"}</p>${
-      w.ausDepot ? "" : `<p>No scout in any depot yet.</p>`}${
-      fehlt.length ? `<p>out of reach: ${esc(fehlt.map(atName).join(", "))}</p>` : ""}
-      <p>${paraTextSicher(() => paraErfuellbarText(kann, {art: "area", id}))}</p>
+  if (!aufklEigene().length) return `<p>No town of ours to scout from.</p>${aufklStandZeile(a, id)}`;
+  return `<p>${paraTextSicher(() => aufklScoutsText({art: "area", id}))}</p>
       ${aufklStandZeile(a, id)}`;
 }
 /* why a team may not take a recon request; "" when it may */
-function aufklSperre(b, d, lage){
+function aufklSperre(b, d){
   /* T15 (ENNO 18.09.2026: "Fuer luftgebundene Truppen muesste dies ein
      Flugplatz sein, sonst muessen diese ATs ausgegraut sein"): a gather on
      a town without an airfield takes no air team. The pick window asks
@@ -9920,9 +9907,7 @@ function aufklSperre(b, d, lage){
      the gather); zuordZuweisen filters once more, so no road slips past */
   if (b && b.art === "arrow" && b.v && b.v.gather && !istFlugplatz(b.v.to) && fliegt(d.k)) return "no airfield";
   if (!(b && b.art === "area" && b.v && b.v.aufkl)) return "";
-  if (!kannAufklaeren(d.k)) return "not a scout";
-  const L = lage || aufklLage(aufklPunkte(b.v));
-  return aufklWeite(d.k) < L.d ? "out of reach" : "";
+  return kannAufklaeren(d.k) ? "" : "not a scout";
 }
 /* the placeholder mark: a ring with a cross, in the request's colour */
 function aufklZeichen(x, y, r, farbe){
@@ -18845,12 +18830,12 @@ window.addEventListener("mouseup", e => {
        with it. */
     if (zieh.pts.length >= 2){ lineFrischZeigen(lineSpeichern(zieh.pts)); dragged = true; }
   } else if (zieh.art === "area"){
-    /* a drawn recon request: every corner must be within sight, else no
+    /* a drawn recon request needs a town of ours to scout from, else no
        entry and the tool stays for another try; a bare click with the
        recon tool keeps the tool and its flow too */
     let fertig = true;
     if (zieh.pts.length >= 6){
-      if (!zieh.aufkl || aufklInSicht(zieh.pts)) areaSpeichern(zieh.pts, zieh.aufkl ? {aufkl: 1} : null);
+      if (!zieh.aufkl || aufklVonUns()) areaSpeichern(zieh.pts, zieh.aufkl ? {aufkl: 1} : null);
       else fertig = false;
     } else if (zieh.aufkl) fertig = false;
     if (fertig) setTool("inspect");          // one report, then back to the normal pointer
@@ -20723,7 +20708,7 @@ function side(){
     ${(() => { const anf = aufklAnfragenAn(i); return anf.length ? `<div class="sec">
       <h3>Reconnaissance</h3>
       ${anf.map(([id, e]) => `<div style="font-size:11.5px;color:var(--dim);margin-top:4px">${e.v.label ? esc(e.v.label) + " \u00b7 " : ""}${zustandText(id, e.v, e.n || e.by)}</div>
-      <button class="btn" data-aufkl-fenster="${esc(id)}" style="margin-top:4px;font-size:11px" title="Scouts that reach it, name, chain and state of this request">Request window \u2026</button>`).join("")}
+      <button class="btn" data-aufkl-fenster="${esc(id)}" style="margin-top:4px;font-size:11px" title="Name, chain and state of this request">Request window \u2026</button>`).join("")}
     </div>` : ""; })()}
     ${rolleAbschnitt(i)}
     <div class="sec">
@@ -48606,7 +48591,7 @@ function areaDialog(id, e, neuGezogen){
                    : ["recon wanted","many planes","armour massing","infantry heavy","AA cover","weak spot","avoid"])
           .map(v=>`<button class="btn" data-vor="${esc(v)}" style="font-size:11px;padding:3px 8px">${esc(v)}</button>`).join("")}
       </div>
-      ${fremd ? "" : `<div class="row" style="align-items:center">
+      ${fremd || a.aufkl ? "" : `<div class="row" style="align-items:center">
         <span style="font-size:12px;color:var(--dim);flex:1">Planned strength <small>(teams)</small></span>
         <input type="number" id="ar-soll" min="0" max="999" value="${+a.soll || ""}" placeholder="\u2014" style="width:70px" ${meins?"":"disabled"}>
       </div>`}
@@ -48626,7 +48611,6 @@ function areaDialog(id, e, neuGezogen){
         <label class="toggle"><input type="checkbox" id="ar-entwurf" ${a.entwurf ? "checked" : ""}><span></span></label>
       </div>` : ""}
       ${a.entwurf ? ENTWURF_WARNUNG : ""}
-      ${a.aufkl ? `<div class="note">Closes itself once every town is read. A town found empty: mark it done by hand.</div>` : ""}
     </div>
     <div class="dlg-f">
       ${darfWeg(e) ? `<button class="btn danger" id="ar-del">Delete</button>` : ""}
@@ -61849,7 +61833,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build cba301413a</span></p></div>
+         installation. <span style="color:var(--dim2)">· build c78d1b051b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -62077,7 +62061,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "cba301413a";
+const BAU = "c78d1b051b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
