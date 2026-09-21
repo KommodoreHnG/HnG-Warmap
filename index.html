@@ -6806,11 +6806,12 @@ function darfZustand(key, v, e){
    findet sie zwei Ebenen tief. a.soll hat er nicht mehr - "'Planned
    strength' ist am 08.09.2026 aus diesem Fenster gefallen" -, ein Pfeil
    ohne a.req ist also ohne Anforderung.
-   DIE SPERRE DARUNTER GILT FEST (12.09.2026, vorher am Schalter
-   regeln.leer): kein Pfeil, keine Linie, keine Flaeche ohne Anforderung
-   geht auf aktiv. Frei bleiben die Aufklaerungsanfrage und der Active
-   Parablock - anforderungNoetig sagt, wen sie trifft. Der Regel-Raum zeigt
-   dem Leiter nur noch, wie viele Befehle das gerade sind. */
+   DIE SPERRE DARUNTER FIEL AM 20.09.2026 (ToDo 20.09., B1 - ENNO: "Sollen
+   auch ohne Vergabe von Truppen aktivierbar sein."; seit dem 12.09. galt
+   sie fest, vorher am Schalter regeln.leer). Seither geht jeder Befehl
+   ohne Anforderung auf aktiv; der Regel-Reiter "Orders" ist mit ihr
+   gefallen. Die Funktion bleibt und sagt nur noch, ob eine Anforderung
+   steht. */
 function anforderungGestellt(v){
   if (!v || typeof v !== "object") return false;
   if (+v.soll > 0) return true;
@@ -6835,7 +6836,8 @@ function anforderungGestellt(v){
   }
   return false;
 }
-/* WEN DIE SPERRE TRIFFT: Pfeil, Linie und Flaeche fordern Einheiten und
+/* WEN DIE SPERRE TRAF (sie fiel am 20.09.2026, B1 - siehe oben; die
+   Funktion bleibt als Leser): Pfeil, Linie und Flaeche fordern Einheiten und
    brauchen darum eine Anforderung. Frei: die Aufklaerungsanfrage (area mit
    aufkl) fordert keine; der Active Parablock (para) meldet ein Gefecht,
    das schon steht - ob er eine Staerke braucht, ist ihm vorgelegt
@@ -6863,23 +6865,14 @@ function zustandSetzen(key, v, st, leise){
     toast(`${MAP.n[w.from][0]} is not ours yet. Take the airfield first.`);
     return false;
   }
-  /* KEIN LEERER BEFEHL AUF AKTIV. Fest seit dem 12.09.2026 - bis dahin
-     hing es am Schalter regeln.leer aus dem Regel-Raum, und ohne Schalter
-     ging jeder leere Befehl auf aktiv. Sein Wort vom 08.09.2026 steht ueber
-     anforderungGestellt, wen es trifft steht an anforderungNoetig. Wie die
-     Bedingung darueber ist das keine Rechtefrage, sondern eine Bedingung am
-     Befehl selbst: die Meldung nennt darum, was fehlt, nicht wer duerfte. */
-  /* NICHT BEI DEN SELBSTTAETIGEN WEGEN. zustandSetzen ruft sich beim
-     Abschluss eines Luftpfeils selbst mit st=1 fuer den Parablock am Ziel -
-     und ein frischer Parablock hat naturgemaess keine Anforderung. Ein
-     Gegenleser hat vorgefuehrt, was dabei herauskam: der Parablock blieb auf
-     "plan" stehen, waehrend der Mensch "Marked done" las, und die Absage der
-     Sperre wurde vom spaeteren Toast ueberschrieben. leise steht genau fuer
-     diese Aufrufe. */
-  if (st === 1 && !leise && anforderungNoetig(b.art, w) && !anforderungGestellt(w)){
-    toast("It does not say how many units it needs. Fill that in first.");
-    return false;
-  }
+  /* NO REQUIREMENT LOCK (ToDo 20.09., B1 - ENNO 20.09.2026, Z2: "Sollen
+     auch ohne Vergabe von Truppen aktivierbar sein."). From 12.09. to
+     21.09.2026 an arrow, line or area without a requirement was refused
+     here ("It does not say how many units it needs.") on his word of
+     08.09.2026 - "sollte ergo auch garnicht auf aktiv gestellt werden
+     koennen"; the newer word wins. Draft, other side, airfield and the
+     rights above and below stay. leise still covers the self-acting
+     calls (the para block after a finished drop). */
   const chef = darf("bestaetigen"), autor = b.by === S.me && darf("befehl");
   if (!chef && !autor) return darfNicht(b.by === S.me ? "befehl" : "bestaetigen");
   /* an arrow going active remembers who held its target (zb), so that a
@@ -15186,8 +15179,16 @@ function anfClanVorrat(){
    rollte die Tafel sonst seitwaerts - gemessen 561 px in 560 (Skeptiker
    FABLE 11.09.2026). */
 const anfKlammer = v => `(${v.hat} in clan, ${v.frei} free)`;
-const anfZuordSatz = (fest, offen) => `Assigned: <b>${fest}</b> team${fest === 1 ? "" : "s"}${
-  offen ? ` (${offen} pending)` : ""}`;
+/* ONE LINE OF STATE (ToDo 20.09., B1 - Q4-Nachzug, FABLE 21.09.2026):
+   the assignment (zuord, accepted teams and the pending ones) and the
+   commitment (S.join, teams promised through the Bring fields) side by
+   side - "Assigned: 2 teams · 0 committed". Both are teams. Until then the
+   window head said "Nobody has committed ..." next to "Assigned: 2 teams"
+   (Blatt 18.09., Q4). The commitment stays a living road: the Bring
+   fields, the Player/Teams table, the arrow's width, the shield. */
+const zusageTeams = id => joinOf(id).reduce((s, j) => s + j.n, 0);
+const anfZuordSatz = (fest, offen, zusage) => `Assigned: <b>${fest}</b> team${fest === 1 ? "" : "s"}${
+  offen ? ` (${offen} pending)` : ""} \u00b7 <b>${zusage}</b> committed`;
 /* MEINE TEAMS AN DIESEM PFEIL, NACH TYP - und welche eigenen Teams je Typ
    noch zu haben sind. zu: je Typ die Zahl meiner Teams in meiner Zeile an
    b. frei: je Typ die Kennungen meiner Teams der Kriegsseite, die weder in
@@ -15226,7 +15227,7 @@ function anfZuordAuffrischen(a){
   document.querySelectorAll("#dlg td[data-anfzukl]").forEach(z => { z.textContent = String(zuKl.get(z.dataset.anfzukl) || 0); });
   document.querySelectorAll("#dlg td[data-anfhab]").forEach(z => { const v = hab[z.dataset.anfhab]; if (v) z.textContent = anfKlammer(v); });
   const n = document.getElementById("a-zuord-zahl");
-  if (n){ const {fest, offen} = zuordZahlen(st.b); n.innerHTML = anfZuordSatz(fest, offen); }
+  if (n){ const {fest, offen} = zuordZahlen(st.b); n.innerHTML = anfZuordSatz(fest, offen, zusageTeams(a.id)); }
 }
 /* DIE GRIFFE DER TAFEL. Die Zuhoerer haengen an der Tabelle selbst, nicht an
    #dlg: das Fenster wird je Oeffnen neu gebaut, die Tabelle mit ihm - so
@@ -21032,8 +21033,7 @@ function arrowDialog(a, frisch){
       ${fremd || frisch ? "" : streckeAbsatz({art: "arrow", id: a.id, v: a})}
       ${!fremd && a.luft ? `<p>${paraTextSicher(paraVorratText)}</p>` : ""}
       ${!fremd && (a.sym || a.luft) ? `<p>${paraTextSicher(() => paraErfuellbarText(paraBefehlTypen(a), {art: "arrow", id: a.id}))}</p>` : ""}
-      ${fremd ? "" : `${anfW ? `<p>${anfW}</p>` : ""}<p>${gesamt ? `<b>${mit.length}</b> player${mit.length===1?"":"s"} committed,
-          <b>${gesamt}</b> assault teams.` : "Nobody has committed to this arrow yet."}</p>
+      ${fremd ? "" : `${anfW ? `<p>${anfW}</p>` : ""}
       ${a.gather && gatherStandText(a) ? `<p id="a-gather-stand">${gatherStandText(a)}</p>` : ""}
       ${a.gather ? "" : `<p>${sammelText(a)}</p>`}`}</div>
     <div class="dlg-b">
@@ -21046,7 +21046,7 @@ function arrowDialog(a, frisch){
            every player, the pending ones in brackets */
         const {fest, offen} = zuordZahlen({art: "arrow", id: a.id});
         return `<div class="row" style="align-items:center">
-        <span id="a-zuord-zahl" style="font-size:12px;color:var(--dim);flex:1">${anfZuordSatz(fest, offen)}</span>
+        <span id="a-zuord-zahl" style="font-size:12px;color:var(--dim);flex:1">${anfZuordSatz(fest, offen, gesamt)}</span>
         <button class="btn" id="a-zuord" style="font-size:11px"${befehlZustand(a.id, a) === "fertig" ? ' disabled title="Done"' : ""}>Assign my team \u2026</button>
       </div>`;
       })()}
@@ -56338,14 +56338,8 @@ const schalterAn = (p, k) => !(p && p[k] !== undefined && p[k] !== null && +p[k]
 function regelnDialog(tab){
   if (!istLeader()){ toast("Only the clan leader sets these."); return; }
   const r = clanRegeln(), p = punkteRegeln();
-  /* Was die Sperre GERADE JETZT trifft. Diese Zahl wird gezaehlt und nicht
-     behauptet - sie bleibt richtig, auch wenn die Anforderung je Typ in
-     einer Form kommt, die hier niemand kennt. alleBefehle() laesst fremde
-     Seiten und Fertiges schon weg; Aufklaerungsanfragen und Parablocks
-     fallen hier heraus, weil die Sperre sie nicht trifft (anforderungNoetig,
-     12.09.2026). */
-  const bef = alleBefehle().filter(b => !b.entwurf && anforderungNoetig(b.art, b.v));
-  const ohne = bef.filter(b => !anforderungGestellt(b.v));
+  /* The Orders tab (the requirement rule and its count "N of M orders ...")
+     fell with the lock on 20.09.2026 (B1, ENNO Z2) - two tabs remain. */
   /* hoch ist der Deckel des Feldes. 999 bei den Marken wie bei l-soll und
      ar-soll, 99 bei den Punkten - dieselbe Grenze, die warmap_punkte_satz am
      Server zieht. Zwei verschiedene Deckel waeren zwei verschiedene
@@ -56370,7 +56364,6 @@ function regelnDialog(tab){
       <p>What you set here holds for everyone in the clan. Nobody else can change it.</p></div>
     <div class="tabs">
       <button data-tab="marken" aria-pressed="true">Marks</button>
-      <button data-tab="befehl" aria-pressed="false">Orders</button>
       <button data-tab="punkte" aria-pressed="false">Points</button>
     </div>
     <div class="dlg-b">
@@ -56387,15 +56380,6 @@ function regelnDialog(tab){
         </table></div>
         <div class="note">Empty box = grey default. <b>0</b> = no limit.</div>
         <div class="note">Per player, live orders only.</div>
-      </div>
-
-      <div class="tabp" data-tab="befehl">
-        <div class="note">An order must say how many units it needs before it can go
-          active. Recon requests and para-blocks are exempt.</div>
-        <div class="note">${bef.length
-          ? `<b>${ohne.length}</b> of <b>${bef.length}</b> orders on the map say nothing about
-             strength right now. None of them goes active until it does.`
-          : `Nothing on the map to measure this against right now.`}</div>
       </div>
 
       <div class="tabp" data-tab="punkte">
@@ -61865,7 +61849,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build a35dcd7f99</span></p></div>
+         installation. <span style="color:var(--dim2)">· build cba301413a</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -62093,7 +62077,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "a35dcd7f99";
+const BAU = "cba301413a";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
