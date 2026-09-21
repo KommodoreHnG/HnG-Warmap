@@ -35314,7 +35314,7 @@ function kriegsendeKachel(){
   const f = FACTIONS[z.v.sieger];
   return `<div class="tile" style="--f:${col(f)}">
       <span class="k">deploy cost</span><span class="v">+${z.v.kosten} %</span>
-      <span class="u">${f.tag} won${z.v.tage ? ` \u00b7 ${esc(z.v.tage)} days` : ""}</span></div>`;
+      <span class="u">${f.tag} won${z.v.tage ? ` \u00b7 ${esc(z.v.tage)} game day${+z.v.tage === 1 ? "" : "s"}` : ""}${z.v.tage && echtZeitText(z.v.tage) ? ` \u00b7 ${echtZeitText(z.v.tage)}` : ""}</span></div>`;
 }
 /* the yellow surcharge behind a warfunds figure - only when the clan's own
    side won the last war: floor(wf x kosten / 100). The percentage is the
@@ -35386,7 +35386,7 @@ function kriegsendeSchreiben(B){
              tafel: tafel, bilder: 2, nr: nr, breite: B.breite || null, gelesen: jetzt()};
   if (!stamp("kriegsende", key, v)){ KRIEG.gemeldet.fest = true; return; }   // no right: stamp said so, and it will not change on its own
   save(); tally(); kraftLeiste();
-  toast(`War end read \u2014 ${FACTIONS[v.sieger].tag} won after ${v.tage} days.`);
+  toast(`War end read \u2014 ${FACTIONS[v.sieger].tag} won after ${v.tage} game day${+v.tage === 1 ? "" : "s"}${echtZeitText(v.tage) ? ` (${echtZeitText(v.tage)})` : ""}.`);
   if (!CFG) return;                                  // no clan connection: the admin cuts by hand
   kriegsendeSchnitt(nr);
 }
@@ -35732,6 +35732,15 @@ const LAGE_SCHREIB_ABSTAND = 15000;                   // the row grows at most e
 const LAGE_SAMMEL_VERFALL = 120000;                   // a collection starts over after two minutes without the gate
 const LAGE_GESAGT_ABSTAND = 600000;                   // "too small" once per ten minutes
 const LAGE_SPIELTAG_MIN = 306.4;                     // real minutes in one game day (Q9: 4,70 game minutes per real minute, MESSUNG-KRIEGSTAGE.md)
+/* the real time behind N game days, shown beside them wherever war days are
+   named (R1, ENNO 21.09.2026: "Gerne unterscheidung zwischen ingame und real
+   days hinschreiben mit beiden angaben"): "5.5 real days", under a real day
+   "15 real h"; nothing for 0 or no value */
+function echtZeitText(tage){
+  const min = +tage * LAGE_SPIELTAG_MIN;
+  if (!(min > 0)) return "";
+  return min < 1440 ? `${Math.round(min / 60)} real h` : `${(min / 1440).toFixed(1)} real days`;
+}
 const LAGE_STERNE_N = 13;                             // the map's capitals ("9 der 13"): a star row votes only when all of them are seen (round 3)
 /* the places as parts of width and height (MESSUNG-T10.md, 1, 4 and 5) */
 const LAGE_FELD = {
@@ -36575,10 +36584,10 @@ function lageTafelHtml(){
     </tr>`;
   };
   const rest = (typeof v.naechsteT === "number" ? v.naechsteT : z.t + (v.naechste || 60)*60000) - jetzt();
-  /* "day N" of the start page is whole game days (Q9): the head gives the real span too, "game day 2 · 10–15 h" */
+  /* "day N" of the start page is whole game days (Q9): the head gives the real span too, "game day 2 · 10–15 h real" (R1: the word "real" behind it) */
   const tagH = n => Math.round(n * LAGE_SPIELTAG_MIN / 60);
   const tage = typeof v.tage === "number" || (typeof v.tage === "string" && /^[0-9]+$/.test(v.tage)) ? +v.tage : NaN;
-  const kopf = [v.nr ? `War ${v.nr}` : "", Number.isInteger(tage) && tage >= 0 ? `game day ${tage} \u00b7 ${tagH(tage)}–${tagH(tage + 1)} h` : "", v.fuehrt !== null && v.fuehrt !== undefined && FACTIONS[v.fuehrt] ? `${FACTIONS[v.fuehrt].tag} leads${v.fehlt ? ` \u00b7 ${v.fehlt} to win` : ""}` : ""].filter(Boolean).join(" \u00b7 ");
+  const kopf = [v.nr ? `War ${v.nr}` : "", Number.isInteger(tage) && tage >= 0 ? `game day ${tage} \u00b7 ${tagH(tage)}–${tagH(tage + 1)} h real` : "", v.fuehrt !== null && v.fuehrt !== undefined && FACTIONS[v.fuehrt] ? `${FACTIONS[v.fuehrt].tag} leads${v.fehlt ? ` \u00b7 ${v.fehlt} to win` : ""}` : ""].filter(Boolean).join(" \u00b7 ");
   return `<div id="lage-tafel">
     <p style="margin:0 0 8px;font-size:12px;color:var(--dim)">${esc(kopf)}${kopf ? " \u00b7 " : ""}read ${esc(v.stand)} by ${esc(werWar(z))} \u00b7 ${rest > 0 ? `next in ${Math.ceil(rest/60000)} min` : "update due"} \u00b7 map: ${umkaempft} contested</p>
     <div class="tw"><table>
@@ -61715,7 +61724,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build 34d87c2e76</span></p></div>
+         installation. <span style="color:var(--dim2)">· build f0580a5d17</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -61943,7 +61952,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "34d87c2e76";
+const BAU = "f0580a5d17";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
