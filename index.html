@@ -3833,13 +3833,53 @@ function soldatNorm(s){
      have no field at all and come back as 0, which is right - nobody is
      credited with a ribbon they never entered. */
   const badge = Math.max(0, Math.min(3, Math.round(+s.kb || 0)));
-  return {id: text(s.id) || Math.random().toString(36).slice(2,9),
+  const raus = {id: text(s.id) || Math.random().toString(36).slice(2,9),
           cls: text(s.cls), name: text(s.name).slice(0, SOLDAT_NAME_MAX), rank: rang, kb: badge,
           w: nurText(s.w).slice(0, WAFFEN_MAX),
           v: (Array.isArray(s.v) ? s.v : []).map(fzNorm).filter(Boolean)
                                             .slice(0, FAHRZEUG_MAX)};
+  /* the side he was made on (R2, 21.09.2026): 0 US, 1 GE, 2 SU, written by
+     "Add a soldier"; anything else is no field, so an older row stays as it
+     was and is read off its kit (soldatSeiten) */
+  if (s.f === 0 || s.f === 1 || s.f === 2) raus.f = s.f;
+  return raus;
 }
 const soldatenListe = a => (Array.isArray(a) ? a : []).map(soldatNorm).filter(Boolean);
+/* THE SIDE OF A SOLDIER (R2, 21.09.2026). ENNO 21.09.2026: "Das schreiben
+   von Waffen macht immer nur Sinn für die jeweilige Fraktion, die gerade
+   aktiv gespielt wird. Für den Krieg bedeutet dies zusätzlich, dass
+   natürlich nur die Rollen und Ausrüstung angezeigt wird für die aktuell
+   gewählte Fraktion." The game binds every soldier to one faction ("All
+   your soldiers ... are faction-specific", HnG_Strategy_en.xml), so a
+   soldier made here carries it as f (0 US, 1 GE, 2 SU - the clan's side at
+   "Add a soldier"). One without f is read off his kit, by the rule the pick
+   itself follows (verfuegbar, the game's purchase rows): the sides that may
+   buy EVERY piece he carries. A Panzerschreck on a US rifleman keeps him on
+   US (sold there, home GE); a PTRD alone leaves US and SU. No piece, only
+   pieces sold everywhere, or a kit no side can buy as a whole: every side -
+   unknown is not another side, and a man we know nothing about stays in
+   view, as rolleKannIch never puts a cross against him. The arsenal, the
+   role windows, the inbox, the badge and the acceptance all ask this one
+   rule. Always a fresh array, never the constant itself. Measured on the
+   build (21.09.2026, HEAD 136e50e): about 0.002 ms for 15 soldiers. */
+const SEITEN_ALLE = [0, 1, 2];
+function soldatSeiten(s){
+  if (!s || typeof s !== "object") return SEITEN_ALLE.slice();
+  if (s.f === 0 || s.f === 1 || s.f === 2) return [s.f];
+  let m = null;
+  const schnitt = d => {
+    const q = SEITEN_ALLE.filter(f => verfuegbar(d, f, null));
+    m = m === null ? q : m.filter(f => q.includes(f));
+  };
+  for (const k of (Array.isArray(s.w) ? s.w : [])) if (ARM[k]) schnitt(ARM[k]);
+  for (const x of (Array.isArray(s.v) ? s.v : [])){
+    const k = typeof x === "string" ? x : x && x.k;
+    if (VEH[k]) schnitt(VEH[k]);
+  }
+  return m && m.length ? m : SEITEN_ALLE.slice();
+}
+const soldatPasst = (s, f) => soldatSeiten(s).includes(f);
+const soldatenDerSeite = (liste, f) => (Array.isArray(liste) ? liste : []).filter(s => soldatPasst(s, f));
 const UPG = {};
 for (const u of MAP.upg) UPG[u.k] = u;
 /* Die Spieldateien zaehlen die Fraktionen ab 1, diese Karte ab 0. */
@@ -10910,7 +10950,10 @@ function rolleKannIch(k, men, wunsch){
   if (!r) return true;
   const w = rolleWunsch(wunsch);
   if (r.immer && !w) return true;
-  const liste = men || meineSoldaten();
+  /* R2 (ENNO 21.09.2026): only the men on the clan's side answer - a GE
+     Panzerfaust does not hunt for a US clan. None on this side is unknown,
+     not unable, like no arsenal at all. */
+  const liste = soldatenDerSeite(men || meineSoldaten(), clanFaktion());
   if (!liste.length) return true;
   /* Ein eingetragener Mann ohne eine einzige Waffe und ohne Fahrzeug ist
      genauso unbekannt wie ein fehlender. Traegt KEINER von ihnen etwas, gilt
@@ -10953,7 +10996,7 @@ function rolleErfuellbar(k, wunsch){
   for (const who of paraMitglieder()){
     if (!statusKannFPS(who)) continue;                         // no status set counts like Offline - out, not unknown (Nachzuegler-1, round 1)
     if (r && r.immer && !w){ n++; continue; }
-    const men = soldatenVon(who);
+    const men = soldatenDerSeite(soldatenVon(who), clanFaktion());   // R2: his men on the clan's side
     if (!men.some(s => (s.w && s.w.length) || (s.v && s.v.length))){ unbekannt++; continue; }
     if (rolleKannIch(k, men, w)) n++;
   }
@@ -60445,6 +60488,7 @@ The depot of that side becomes the active one.`)) return;
       werkzeugeAuffrischen();   // T11: withhold dims the tools on the clan's side
     }
     rebuildUnits(); kopfzeile(); side(); draw(); tally(); depotZeichnen(); kraftLeiste();
+    ordersZahl();   // R2: the badge counts the roles my men on THIS side can fill
     clanDialog("clan"); toast(`Now fighting as ${FACTIONS[f].tag}`);
   }));
   document.getElementById("cl-bf-save")?.addEventListener("click", ()=>{
@@ -60615,20 +60659,33 @@ function poolDialog(){
 document.getElementById("b-arms").addEventListener("click", () => arsenalDialog());
 function arsenalDialog(tab){
   const nz = n => n.toLocaleString("en");
+  /* THE CLAN'S SIDE ONLY (R2, ENNO 21.09.2026: "... nur die Rollen und
+     Ausrüstung angezeigt wird für die aktuell gewählte Fraktion."): every
+     card, count, capability and row here is of soldiers on clanFaktion()
+     (soldatPasst); the others are counted once, in the head and under the
+     own list, where my own men of other sides stay in reach (dimmed, with
+     their side, removable). Built afresh on every opening, so a switch of
+     the side shows at the next click. */
+  const seite = clanFaktion(), tag = FACTIONS[seite].tag;
   const meine = meineSoldaten();
+  const meineHier = meine.filter(s => soldatPasst(s, seite));
+  const andereMeine = meine.length - meineHier.length;
   /* Everybody's soldiers, so the clan view works even for members who never
      open this window themselves. */
   const alle = [];
+  let andere = 0;
   for (const [who, d] of depotIdx)
-    for (const s of (d.arms || []))
+    for (const s of (d.arms || [])){
+      if (!soldatPasst(s, seite)){ andere++; continue; }
       alle.push({...s, who, wer: d.name || who, mine: who === S.me});
+    }
   /* Anonym veroeffentlichte Soldaten zaehlen voll mit, aber alle unter einem
      einzigen Eintrag. Getrennte Zeilen waeren in einem kleinen Clan durch
      Abzaehlen aufzuloesen - und auch die eigenen bleiben unmarkiert, sonst
      verriete sie das erste Bildschirmfoto. */
   let anonLeute = 0;
   for (const k of Object.keys(S.anon || {})){
-    const l = anonSoldaten(k);
+    const l = anonSoldaten(k).filter(s => { if (soldatPasst(s, seite)) return true; andere++; return false; });
     if (!l.length) continue;
     anonLeute++;
     for (const s of l)
@@ -60651,6 +60708,21 @@ function arsenalDialog(tab){
     weg ? `<button data-weg="${esc(weg)}" title="Remove">×</button>`
         : attr ? `<button ${attr} title="Remove">×</button>` : ""}</span>`;
 
+  /* A soldier of another side, under the own list: his side, class, rank,
+     name, the kit as text and Remove - no editing of the pieces. */
+  const seitenWort = s => soldatSeiten(s).map(f => FACTIONS[f].tag).join(" / ");
+  const kitText = s => [...(s.w || []).map(k => ARM[k] ? ARM[k].name : k),
+                        ...(s.v || []).map(x => VEH[x.k] ? VEH[x.k].name : x.k)].join(", ");
+  const andereKarte = (s, i) => `<div class="sold-andere" data-i="${i}" style="display:flex;gap:9px;align-items:center;
+      flex-wrap:wrap;background:var(--panel2);border-radius:var(--r);border-left:3px solid var(--line);
+      padding:5px 9px;opacity:.6;font-size:11.5px">
+      <b style="min-width:34px">${esc(seitenWort(s))}</b>
+      <span>${esc((CLS[s.cls] || {name: s.cls || "—"}).name)}</span>
+      <span>${s.cls === "general" ? "general" : "rank"} ${s.rank || 0}</span>
+      ${s.name ? `<span>${esc(s.name)}</span>` : ""}
+      <span style="color:var(--dim2);flex:1;min-width:120px">${esc(kitText(s))}</span>
+      <button class="btn danger" data-loesch-andere="${i}" style="padding:3px 8px">Remove</button>
+    </div>`;
   /* Eine Soldatenkarte. Klasse und Stufe entscheiden, was ueberhaupt zur
      Auswahl steht - ein Panzerfahrer bekommt gar keine Autos angeboten, weil
      das Spiel ihm keine verkauft. */
@@ -60734,15 +60806,17 @@ function arsenalDialog(tab){
 
   openDlg(`
     <div class="dlg-h"><h2>Arsenal</h2>
-      <p>${alle.length ? `<b>${alle.length}</b> soldier${alle.length === 1 ? "" : "s"} on record
+      <p>${alle.length ? `<b>${esc(tag)}</b> \u00b7 <b>${alle.length}</b> soldier${alle.length === 1 ? "" : "s"}${
+         andere ? ` (${andere} other${andere === 1 ? "" : "s"})` : ""} on record
          across ${mitglieder()} member${mitglieder() === 1 ? "" : "s"}${
          anonLeute ? `, ${anonLeute} of them anonymous` : ""}.`
-         : "Nothing recorded yet. Enter your own soldiers and what they carry — as much or as little as you want to show."}</p></div>
+         : andere ? `<b>${esc(tag)}</b> \u00b7 no soldiers yet (${andere} other${andere === 1 ? "" : "s"} on record).`
+         : "Nothing recorded yet."}</p></div>
     <div class="dlg-b">
       <div class="tabp ${tab === "clan" ? "" : "on"}" data-tab="mine">
         <div id="sold-liste" style="display:flex;flex-direction:column;gap:7px">
-          ${meine.length ? meine.map(soldatKarte).join("")
-            : `<div class="empty">No soldiers yet.</div>`}
+          ${meineHier.length ? meine.map((s, i) => soldatPasst(s, seite) ? soldatKarte(s, i) : "").join("")
+            : `<div class="empty">No ${meine.length ? esc(tag) + " " : ""}soldiers yet.</div>`}
         </div>
         <div class="row" style="align-items:center;gap:11px">
           ${/* Am Anschlag abgeblendet, mit dem Grund und dem Stand daneben -
@@ -60752,10 +60826,18 @@ function arsenalDialog(tab){
                    title="A player can have ${SOLDATEN_MAX} soldiers at most.">
                    Add a soldier</button>`
               : `<button class="btn primary" id="sold-neu">Add a soldier</button>`}
-          <span class="note" style="margin:0">${meine.length} of ${SOLDATEN_MAX}</span>
+          <span class="note" style="margin:0">${meine.length} of ${SOLDATEN_MAX}${
+            andereMeine ? ` (${andereMeine} other${andereMeine === 1 ? "" : "s"})` : ""}</span>
         </div>
-        <div class="note">Your soldiers go in <b>without your name</b>. The clan sees the totals,
-          not who has what.</div>
+        ${/* My own men of the other sides (R2, round 2): dimmed, with their
+             side, removable - nothing of mine is ever out of sight or out of
+             reach. Their kit is not edited here, the pick follows the clan's
+             side; the index is the index in meineSoldaten(). */
+          andereMeine ? `<div id="sold-andere" style="margin-top:4px">
+          <div class="sold-l" style="width:auto;padding:0 0 5px">Other sides \u00b7 ${andereMeine}</div>
+          <div style="display:flex;flex-direction:column;gap:5px">${
+            meine.map((s, i) => soldatPasst(s, seite) ? "" : andereKarte(s, i)).join("")}</div>
+        </div>` : ""}
       </div>
 
       <div class="tabp ${tab === "clan" ? "on" : ""}" data-tab="clan">
@@ -60826,11 +60908,9 @@ function arsenalDialog(tab){
               p.koennen.get(f.k) || "—"}</td>`).join("")}
           </tr>`).join("")}</tbody>
         </table></div>
-        <div class="note">Capabilities are read off the kit, never typed in — enter what a soldier carries and
-          the labels follow.</div>
         ` : `<div class="${alle.length ? "note" : "empty"}">${alle.length
-          ? "Nobody has entered a weapon or a vehicle yet — the capability overview fills up as soon as somebody does."
-          : "Nobody has recorded a soldier yet."}</div>`}
+          ? "No weapons or vehicles entered yet."
+          : andere ? `No ${esc(tag)} soldiers on record yet.` : "Nobody has recorded a soldier yet."}</div>`}
         ${alle.length ? `<details style="margin-top:4px">
           <summary style="cursor:pointer;font-size:12px;color:var(--dim)">Every soldier on record (${alle.length})</summary>
           <div style="margin-top:8px"><div class="tw"><table>
@@ -60864,9 +60944,16 @@ function arsenalDialog(tab){
   const neuZeichnen = () => arsenalDialog(document.querySelector("#dlg .tabs button[aria-pressed=true]")?.dataset.tab);
   document.getElementById("sold-neu")?.addEventListener("click", () => {
     setMyArms(meineSoldaten().concat([{id: Math.random().toString(36).slice(2, 9),
-      cls: MAP.cls[0] ? MAP.cls[0].k : "rifleman", name: "", rank: "", w: [], v: []}]));
+      cls: MAP.cls[0] ? MAP.cls[0].k : "rifleman", name: "", rank: "", w: [], v: [],
+      f: clanFaktion()}]));   // R2: a soldier belongs to the side he is made on
     arsenalDialog("mine");
   });
+  document.querySelectorAll("#dlg [data-loesch-andere]").forEach(b => b.addEventListener("click", () => {
+    const l = meineSoldaten().slice();   // R2: a man of another side leaves the way every card does
+    const i = +b.dataset.loeschAndere;
+    if (!l[i]) return;
+    l.splice(i, 1); setMyArms(l); arsenalDialog("mine");
+  }));
   document.querySelectorAll("#dlg .sold").forEach(karte => {
     const i = +karte.dataset.i;
     const aendere = (feld, wert) => {
@@ -61724,7 +61811,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build f0580a5d17</span></p></div>
+         installation. <span style="color:var(--dim2)">· build e278b0ecce</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -61952,7 +62039,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "f0580a5d17";
+const BAU = "e278b0ecce";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
