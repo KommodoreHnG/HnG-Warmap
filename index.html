@@ -1447,6 +1447,11 @@ body.kb-zieht{user-select:none}
 .gf-schwebe .gf-sz .n input{width:100%;font:inherit;font-size:12px;height:13px;line-height:13px;background:#fff8e6;color:#2b2416;border:1px solid #b9ab8a;border-radius:2px;padding:0 3px;box-sizing:border-box}
 .gf-schwebe .pg-kopf{font-size:18px;font-weight:700;letter-spacing:.04em;color:#e8d9a8;line-height:1.2;padding:8px 0 0;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gf-schwebe .pg-jetzt{font-size:11px;color:#a9b0b8;height:16px;line-height:16px;margin:2px 0 6px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* F1 (ToDo 20.09.2026): the radar's floating window - the screen copied
+   small, one line "scan · sig · side line" under it, nothing to press */
+.rd-schwebe{margin:0;padding:0;background:#0b0c10;color:#e8d9a8;font-family:var(--schmal);font-size:13px;overflow:hidden;user-select:none;display:flex;flex-direction:column;height:100vh;box-sizing:border-box}
+.rd-schwebe canvas{display:block;flex:none}
+.rd-schwebe .rd-schwebe-zeile{flex:none;height:22px;line-height:22px;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em}
 /* the sheet */
 .kb-blatt{background:#e9dfc6;color:#2b2416;border-radius:2px;padding:14px 18px 18px;
   box-shadow:0 8px 30px rgba(0,0,0,.5), inset 0 0 0 1px #d7ccb0;
@@ -46428,6 +46433,7 @@ async function radarAuf(){
   if (radarZiel === null) zielZiehen();
   radarPult(); radarMassHalten(); radarSchleife();
   radarTonAn();                       // der Suchton laeuft, solange das Pult offen ist
+  radarSchwebeSelbst();               /* F1: the floating window with the first gesture once the share stands */
   /* Meldet gerade ein anderes Geraet? Dann ist das hier ein Zweitmonitor -
      und der soll NICHT nach der Bildschirmfreigabe fragen. Genau das ist
      Der gemeldete Fall: das Handy zeigt, wo der PC steht. */
@@ -46476,7 +46482,128 @@ function radarZu(){
   if (kopf) kopf.dataset.fertig = "";
   document.getElementById("radar").classList.remove("an");
   if (radarBild){ cancelAnimationFrame(radarBild); radarBild = null; }
+  radarSchwebeGesteLoesen(); radarSchwebeZu();   /* F1: the floating window goes with the room */
   radarTonAus();
+}
+
+/* ---- F1 (ToDo 20.09.2026): THE RADAR'S FLOATING WINDOW -----------------
+   ENNO 20.09.2026 (ToDo 20.09., Z14, Radar): "Hier bitte auch ein Floating
+   Fenster, was nur die Scan Anzeige und die Positionierungsanzeige enthält.
+   Und vllt die Karte in klein. Das ist einfach als das Spiegeln aufs Handy"
+   The same Document Picture-in-Picture window as the cabin's strip
+   (kbSchwebeAuf), 400 x 320 (FABLE): a canvas that carries a copy of the
+   radar screen (rd-cv - the map small, the dashed frame with the cross =
+   where the game's view stands, the target, the beam) and ONE line under it
+   "scan 37 % · sig 82 % · holding: …" from radarScan, schirmSignal and the
+   desk's side line ([data-neben], written by radarFrisch). No second
+   painter: after every radarMalen the screen is copied over with drawImage
+   (radarSchwebeZeichnen, hung in radarZeichnen), at most ten pictures a
+   second (RADAR_SCHWEBE_TAKT) and only while the window stands; the copy is
+   fitted, not stretched. Nothing to press but the window's own X.
+   Opens with the first gesture in the room once the own watch runs and the
+   share stands (radarSchwebeSelbst, the cabin's hook - the power switch,
+   share again, the button and the X are no wish of it) and by the button in
+   the desk; closes with the room (radarZu). Closed from its corner or by the
+   button it is not handed to him again this session (radarSchwebeZugemacht,
+   as the depot list, Q12) - the button stays. One window per page: the two
+   register lines (schwebeFremdesZu, schwebeHalter - H3) before
+   requestWindow; another room's opener closes this one through
+   radarSchwebeZu, the radar does not take it back by itself (that bit is the
+   battle desk's). The phone as second screen (radarFern, S.pos) is untouched
+   (beside it, not instead of it - FABLE 21.09.2026). radarSchwebeLast counts the copies and their time
+   for the load probe. */
+const RADAR_SCHWEBE_TAKT = 100;      /* ms between two copies: ten pictures a second at most */
+const RADAR_SCHWEBE_ZEILE = 22;      /* the line under the screen, CSS points */
+let radarSchwebe = null, radarSchwebeGeste = null, radarSchwebeZugemacht = false, radarSchwebeZeit = 0, radarSchwebeZeile = "";
+let radarSchwebeLast = {n: 0, ms: 0, max: 0};
+function radarSchwebeGesteLoesen(){
+  const h = radarSchwebeGeste; radarSchwebeGeste = null;
+  const raum = document.getElementById("radar");
+  if (h && raum){ raum.removeEventListener("pointerdown", h, true); raum.removeEventListener("keydown", h, true); }
+}
+function radarSchwebeSelbst(){
+  if (radarSchwebeGeste || radarSchwebe || radarSchwebeZugemacht || !("documentPictureInPicture" in window)) return;
+  const raum = document.getElementById("radar");
+  if (!raum) return;
+  const h = ev => {
+    if (!radarOffen || radarSchwebe || radarSchwebeZugemacht){ radarSchwebeGesteLoesen(); return; }
+    /* Escape closes the room, a bare modifier is no gesture the browser counts */
+    if (ev.type === "keydown" && (ev.key === "Escape" || /^(Alt|Shift|Control|Meta)$/.test(ev.key))) return;
+    if (ev.type === "keydown" && ev.target && /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName)) return;
+    /* the power switch, share again, the window's own button and the X are no wish of this hook */
+    if (ev.target && ev.target.closest && ev.target.closest("#rd-kraft,#rd-teilen,#rd-schweben,#rd-zu")) return;
+    /* no own watch yet (the picker is open, declined, or only following another device): the next gesture */
+    if (!wacheLaeuft() || !(bildStrom && bildStrom.active)) return;
+    radarSchwebeGesteLoesen();
+    /* requestWindow is the first await inside - the gesture is still fresh;
+       refused for want of activation, the hook hangs once more */
+    radarSchwebeAuf().then(e => { if (e && e.name === "NotAllowedError") radarSchwebeSelbst(); });
+  };
+  radarSchwebeGeste = h;
+  raum.addEventListener("pointerdown", h, true);
+  raum.addEventListener("keydown", h, true);
+}
+async function radarSchwebeAuf(){
+  if (radarSchwebe || !radarOffen || !("documentPictureInPicture" in window)) return;
+  schwebeFremdesZu("radar");                         /* one floating window per page - the other room's goes first */
+  schwebeHalter = {raum: "radar", zu: radarSchwebeZu};
+  let w;
+  try { w = await window.documentPictureInPicture.requestWindow({width: 400, height: 320}); }   /* must be the first await after the gesture */
+  catch(e){ toast("The floating window could not be opened - " + ((e && e.message) || e)); if (radarOffen) radarPult(); return e; }
+  /* the room may have closed while the window was being opened: no orphan window */
+  if (!radarOffen){ try { w.close(); } catch(e){} return null; }
+  radarSchwebe = w; radarSchwebeZeile = ""; radarSchwebeZeit = 0;
+  const doc = w.document;
+  for (const sh of document.styleSheets){
+    try { const st = doc.createElement("style"); st.textContent = [...sh.cssRules].map(r => r.cssText).join("\n"); doc.head.appendChild(st); }
+    catch(e){ if (sh.href){ const l = doc.createElement("link"); l.rel = "stylesheet"; l.href = sh.href; doc.head.appendChild(l); } }
+  }
+  doc.body.className = "rd-schwebe";
+  doc.body.innerHTML = `<canvas id="rd-schwebe-cv"></canvas><div class="rd-schwebe-zeile" id="rd-schwebe-zeile"></div>`;
+  w.addEventListener("resize", () => { radarSchwebeZeichnen(true); });
+  /* closed from its own corner or by the browser: forget it, relabel the
+     desk - and do not hand it to him again this session (radarSchwebeSelbst) */
+  w.addEventListener("pagehide", () => { if (radarSchwebe === w){ radarSchwebe = null; radarSchwebeZeile = ""; radarSchwebeZugemacht = true; if (radarOffen) radarPult(); } });
+  radarSchwebeZeichnen(true);
+  radarPult();
+  return null;
+}
+function radarSchwebeZu(){
+  const w = radarSchwebe; radarSchwebe = null; radarSchwebeZeile = "";
+  if (!w) return;
+  try { w.close(); } catch(e){}
+  if (radarOffen) radarPult();                 /* the desk's button says so at once - another room may have taken the window */
+}
+/* the copy: the screen as radarMalen left it, fitted into the window over
+   the line; the line only when its text changed. sofort skips the
+   ten-a-second gate (first picture, resize). */
+function radarSchwebeZeichnen(sofort){
+  const w = radarSchwebe;
+  if (!w) return;
+  const nun = performance.now();
+  if (!sofort && nun - radarSchwebeZeit < RADAR_SCHWEBE_TAKT) return;
+  const cv = document.getElementById("rd-cv");
+  let doc, ziel, zeileEl;
+  try { doc = w.document; ziel = doc.getElementById("rd-schwebe-cv"); zeileEl = doc.getElementById("rd-schwebe-zeile"); } catch(e){ return; }
+  if (!cv || !ziel || !cv.width || !cv.height) return;
+  radarSchwebeZeit = nun;
+  const dpr = w.devicePixelRatio || 1;
+  const W = Math.max(40, w.innerWidth || 400), H = Math.max(40, (w.innerHeight || 320) - RADAR_SCHWEBE_ZEILE);
+  const bw = Math.round(W*dpr), bh = Math.round(H*dpr);
+  if (ziel.width !== bw || ziel.height !== bh){ ziel.width = bw; ziel.height = bh; ziel.style.width = W + "px"; ziel.style.height = H + "px"; }
+  const g = ziel.getContext("2d");
+  if (!g) return;
+  const f = Math.min(bw/cv.width, bh/cv.height);
+  const dw = Math.max(1, Math.round(cv.width*f)), dh = Math.max(1, Math.round(cv.height*f));
+  const t0 = performance.now();
+  g.fillStyle = "#0b0c10"; g.fillRect(0, 0, bw, bh);
+  g.drawImage(cv, 0, 0, cv.width, cv.height, (bw - dw) >> 1, (bh - dh) >> 1, dw, dh);
+  const ms = performance.now() - t0;
+  const L = radarSchwebeLast; L.n++; L.ms += ms; if (ms > L.max) L.max = ms;
+  const neben = document.querySelector("#rd-pult [data-neben]");
+  const nebenText = neben && !neben.hidden ? neben.textContent.trim() : "";
+  const zeile = `scan ${Math.round(radarScan*100)} % \u00b7 sig ${Math.round(schirmSignal()*100)} %` + (nebenText ? " \u00b7 " + nebenText : "");
+  if (zeile !== radarSchwebeZeile && zeileEl){ zeileEl.textContent = zeile; radarSchwebeZeile = zeile; }
 }
 /* Ist der Scan voll, wird der Sektor und sein Umland gutgeschrieben. */
 /* Ist ein Scan durch, gelten die Staedte im Bild als frisch gesehen. Vorher
@@ -47220,6 +47347,10 @@ function radarPult(){
          (bildFreigabeNeu). Nur bei eigener laufender Wache. FABLE 12.09.2026 */
       laeuft ? `<button class="rd-schalter" id="rd-teilen"
       style="font-size:10.5px;padding:6px 0">${esc(rdS("SHARE AGAIN"))}</button>` : ""}
+    ${/* F1 (ToDo 20.09.2026): the floating window over the game - the screen
+         copied small and the scan/signal line (radarSchwebeAuf) */ ""}
+    ${fern || !kannTeilen() ? "" : /* no button on the phone as second screen (FABLE 21.09.2026) */ `<button class="rd-schalter ${radarSchwebe ? "an" : ""}" id="rd-schweben"
+      style="font-size:10.5px;padding:6px 0"${("documentPictureInPicture" in window) ? "" : ' disabled title="Needs Chrome or Edge 116 or newer"'}>${esc(rdS(radarSchwebe ? "FLOATING \u00b7 CLOSE IT" : "FLOAT OVER THE GAME"))}</button>`}
     ${/* HIER STAND der TAKE-OVER-Knopf des wartet-Zustands - der
          Zwischenschritt ist abgeschafft (Die Direktive 30.08.),
          uebernommen wird direkt, UNDO LAST READING bleibt das
@@ -47287,6 +47418,8 @@ function radarPult(){
     await wacheStart(2); radarPult();
   });
   el.querySelector("#rd-teilen")?.addEventListener("click", async ()=>{ await bildFreigabeNeu(); radarPult(); });
+  /* F1: the floating window's switch - closed by hand it is not handed to him again this session */
+  el.querySelector("#rd-schweben")?.addEventListener("click", ()=>{ if (radarSchwebe){ radarSchwebeZugemacht = true; radarSchwebeZu(); } else radarSchwebeAuf(); });
   el.querySelector("#rd-neu")?.addEventListener("click", ()=>{
     /* ein Widerspruchsziel kaeme sonst sofort wieder (FABLE 12.09.2026) */
     widerspruchUeberspringen();
@@ -47678,7 +47811,7 @@ function schirmSignal(){
 function radarZeichnen(){
   if (!radarOffen || malAngemeldet) return;
   malAngemeldet = true;
-  requestAnimationFrame(() => { malAngemeldet = false; radarMalen(); });
+  requestAnimationFrame(() => { malAngemeldet = false; radarMalen(); radarSchwebeZeichnen(); });   /* F1: the floating window's copy right after the screen */
 }
 function radarMalen(){
   if (!radarOffen) return;
@@ -62921,7 +63054,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build d70196ff72</span></p></div>
+         installation. <span style="color:var(--dim2)">· build 0c535352d4</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -63149,7 +63282,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "d70196ff72";
+const BAU = "0c535352d4";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
