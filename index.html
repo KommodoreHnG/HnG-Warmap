@@ -22921,11 +22921,22 @@ function findeTransform(mk, punkte, melde, sHint){
   });
   return best ? {guete:best[0], s:best[1], ox:best[2], oy:best[3]} : null;
 }
-function farbenLesen(mk, punkte, tr, sperren){
+function farbenLesen(mk, punkte, tr, sperren, px){
   const {m, W, H} = mk;
   const R = Math.max(2, Math.round(2.2*tr.s));
-  const besitz = {}; let unklar = 0, aussen = 0, verdeckt = 0;
+  const besitz = {}; let unklar = 0, aussen = 0, verdeckt = 0, feuer = 0;
   const zaehl = [0,0,0];
+  /* F3 (ToDo 20.09., Z16): with the picture's points (px = the ImageData
+     of this working picture, same W and H as the mask) the reader also
+     returns, per town it looked at, the mean of g-b over the box and the
+     number of fire points in it - the watch keeps the first as a time
+     series (wache.puls) and reads the pulse of a fire from it, and takes
+     the second as the condition for a fire find. One more read per point
+     in the loop that runs anyway; without px nothing is read and gbMittel
+     and feuerPkt stay empty. */
+  const d = px && px.data && px.width === W && px.height === H ? px.data : null;
+  const gbMittel = {}, feuerPkt = {};
+  const kasten = (2*R + 1)*(2*R + 1);
   punkte.forEach((p, idx) => {
     const cx = Math.round(p[0]*tr.s + tr.ox), cy = Math.round(p[1]*tr.s + tr.oy);
     if (cx < R || cy < R || cx >= W-R || cy >= H-R){ aussen++; return; }
@@ -22943,17 +22954,44 @@ function farbenLesen(mk, punkte, tr, sperren){
              && cy + R >= sp.y0 && cy - R <= sp.y1){ gesperrt = true; break; }
     }
     if (gesperrt){ verdeckt++; unklar++; return; }
-    const st = [0,0,0];
-    for (let y=cy-R; y<=cy+R; y++) for (let x=cx-R; x<=cx+R; x++){
-      const v = m[y*W + x];
-      if (v >= 1 && v <= 3) st[v-1]++;      /* 4 ist Feuer und stimmt nicht mit */
+    const st = [0,0,0]; let fe = 0, sgb = 0;
+    for (let y=cy-R; y<=cy+R; y++){
+      const z = y*W;
+      for (let x=cx-R; x<=cx+R; x++){
+        const q = z + x, v = m[q];
+        if (v >= 1 && v <= 3) st[v-1]++;      /* 4 ist Feuer und stimmt nicht mit */
+        else if (v >= 4) fe++;
+        if (d) sgb += d[q*4 + 1] - d[q*4 + 2];
+      }
     }
+    if (d){ gbMittel[idx] = sgb/kasten; if (fe) feuerPkt[idx] = fe; }
+    /* FIRE OVER THE DISC MEANS NO OWNER FROM THIS PICTURE (ToDo 20.09. F3
+       - ENNO 20.09.2026: "Gefechte werden teils noch als sowjet Städte
+       erkannt."). Measured (Listen/MESSUNG-F3.md, Abschnitt 5): on the
+       middle zoom (Kriegskarte Kampfbeginn.png) the fire covers the whole
+       disc, and seven covered towns got an owner out of 4 to 39 points of
+       the dark red halo (four of them Soviet) next to 506 to 931 fire
+       points - the halo passes the Soviet colour test and fails the fire
+       test (g-b 10, threshold 25), and the rule st[beste] >= 3 below is
+       content with four points. This bar: more fire points (classes 4 and
+       5) than faction points in the box -> unclear, like a covered town.
+       Still picture: 7 of 7 halo readings dropped, 0 of 50 quiet towns;
+       four videos: 376 of 389 readings at burning towns dropped (the rest
+       show the true colour in the trough), 0 of 708 at quiet towns; three
+       neighbours of a fire stay readable (closest 931 against 911).
+       Far out (span above 1000, boxes of 25 to 49 points) the bar trips
+       on the rust-brown ground as well (class 4 without glow, measured
+       at 155 still pictures: up to 453 boxes in one picture) and costs
+       quiet towns - 8 in 5 pictures, 0.4 to 0.7 % of the towns read,
+       never a wrong owner, none up to span 480. A floor of fire points
+       for the far zooms is not measured and not built. */
+    if (fe > st[0] + st[1] + st[2]){ feuer++; unklar++; return; }
     const beste = st.indexOf(Math.max(...st));
     const rest = st.reduce((a,b)=>a+b,0) - st[beste];
     if (st[beste] < 3 || st[beste] < 2*rest){ unklar++; return; }
     besitz[idx] = beste; zaehl[beste]++;
   });
-  return {besitz, unklar, aussen, zaehl, verdeckt};
+  return {besitz, unklar, aussen, zaehl, verdeckt, feuer, gbMittel, feuerPkt};
 }
 
 /* Welche Staedte brennen? Gezaehlt wird nur, was bei einer STADT liegt -
@@ -41760,7 +41798,15 @@ function kartenAusBild(quelle, melde, opt){
      pruefen, dann sperren. Der Detektor liefert die Sperre gleich
      mit, samt gemessener Unterkante. */
   const ispr = suchIndexOffen(a);
-  return {erg: farbenLesen(a.mk, punkte, tr, [lspr, dspr, ispr, espr]),
+  /* F3: the points go along only where the pulse was measured - discs of
+     PULS_SCHEIBE_PX and more in the working picture (UNITS zoom) and no
+     dark capture corrected by a gain (there the mask comes from the
+     brightened curve and g-b from the raw points; the threshold is not
+     calibrated for that). Farther out, or boosted, farbenLesen reads the
+     mask alone, as before. */
+  const pulsPx = SCHEIBE_EINH*tr.s >= PULS_SCHEIBE_PX
+    && !(a.mk.bildwerte && a.mk.bildwerte.gain) ? a.px : null;
+  return {erg: farbenLesen(a.mk, punkte, tr, [lspr, dspr, ispr, espr], pulsPx),
           indexOffen: !!ispr,
           brennt: feuerLesen(a.mk, punkte, tr, feuerKlemm),
           adern: linienLesen(a.mk, punkte, tr),
@@ -47245,6 +47291,39 @@ const ERNTE_KURZ = 4, ERNTE_GLEICH = 3;
    echten Leseblock: Uebereinstimmung 95 bis 100 Prozent bei 21 bis 142
    gemeinsam gelesenen Staedten. Die Schwelle liegt mit Abstand darunter. */
 const ERNTE_EINIG = 0.92, ERNTE_GEMEINSAM = 8;
+/* THE PULSE OF A FIRE AS A MARK (ToDo 20.09. F3 - ENNO 20.09.2026: "Hier
+   bitte auf die Fluktuation der Bildwerte bei Gefechten vs. Der Konstanz
+   bei echten roten Städten achten"). Measured on four videos at 6 pictures
+   a second (Listen/MESSUNG-F3.md; 9 burning towns / 389 readings, 18 quiet
+   / 708): the halo pulses with a period of 4.0 s and a plateau of up to
+   2.33 s at the crest - a 2-s window sees nothing inside the plateau
+   (span 0.69 / 1.68, below a quiet town with a neighbour's fire at the
+   edge of its box, 3.0), and a 3-s window sees as little as 10.9. Over
+   any window of a full period (4 s) the mean of g-b in the reading box of
+   farbenLesen swings by >= 20.8 at every burning town and by <= 1.1 at
+   every quiet one (a unit card passing through the box: 3.0); 5 s: 20.9
+   against 1.1. Threshold 10: 9 of 9 caught, 0 of 18 false; re-run at the
+   watch's own rate (200 to 400 ms a reading) with this window and cover:
+   20.7 against 1.1. Brightness would separate as well (18.8 against 3.0),
+   but the passing card makes 12.4 there - the card is white, the fire
+   orange, so g-b it is.
+   A window is judged once its oldest reading is PULS_DECK_MS old - a full
+   period, so that the FIRST judgement of a series already covers one
+   crest and one trough whatever the phase - and it holds PULS_MIN
+   readings; PULS_FENSTER_MS keeps a beat that stalls from holding the
+   window open for ever. Measured at discs of 34 and 47 px in the working
+   picture (1440p videos at 800 wide; UNITS zoom gives 45 with the map
+   field and 31.7 with the full-screen stand-in, so the floor sits 12 %
+   under the measured 34, box side -10 %, area -20 % - the spans there
+   were 28.7 (disc 34.8) and 79.4 (disc 48.1) against 10) - below
+   PULS_SCHEIBE_PX nothing was measured, there the single-picture bar in
+   farbenLesen carries alone. The vote's comment says the fire pulses at
+   1.6 s: that was 14 captures at 0.4 s; this is 6 per second over 10.8 s.
+   PULS_FEUER_MIN: fire points in the reading box before an unsteady town
+   counts as a fire find - a fire has >= 292 even in the trough, a quiet
+   neighbour of a fire up to 106 (FABLE 21.09.2026). */
+const PULS_FENSTER_MS = 5000, PULS_DECK_MS = 4000, PULS_MIN = 6;
+const PULS_SCHWELLE = 10, PULS_SCHEIBE_PX = 30, PULS_FEUER_MIN = 150;
 let wache = null;
 /* Was die Einpassung ueber die Lage der Karte im Spiel verraet: Massstab und
    Bildmitte. Beides faellt beim Rechnen ohnehin an - es muss keine Anzeige
@@ -47948,6 +48027,57 @@ function wacheTickIntern(){
      Hinweis genau einmal je Sitzung, und ein zweiter, spaeterer Ausfall
      bleibt stumm. wache.hellGesagt wurde in der ganzen Datei nie
      zurueckgesetzt. */
+  /* UNSTEADY TOWNS ARE NOT TAKEN OVER (ToDo 20.09. F3 - ENNO 20.09.2026:
+     "Gefechte werden teils noch als sowjet Städte erkannt. Hier bitte auf
+     die Fluktuation der Bildwerte bei Gefechten vs. Der Konstanz bei
+     echten roten Städten achten"). Per town a series of the mean g-b in
+     its reading box (erg.gbMittel, only with discs >= PULS_SCHEIBE_PX -
+     see the constants), fed by the SURE readings only (res.sicher, the
+     step the first take-over writes on; a mislocated fit is not sure).
+     Readings older than PULS_FENSTER_MS fall out; a change of zoom (span
+     of the picture by more than 5 %) empties the series, the box then
+     holds other content. Once the window is full, a span above
+     PULS_SCHWELLE says: this town is unsteady - it leaves this reading's
+     besitz (no owner from it, whatever fightAt, the full map or the front
+     say). With fire points in its box in THIS picture (erg.feuerPkt - a
+     fire has >= 292 of them in the reading box even in the trough, own
+     run, 506-931 on the middle zoom (MESSUNG-F3 §5); a quiet neighbour of
+     a fire up to 106, a dialog or a tooltip over the town none - hence
+     the floor PULS_FEUER_MIN) it counts as a fire find as well, so that the
+     fight mark, the 20-s memory and the first take-over's distance follow
+     the rule below exactly as for a find of feuerLesen. Constant red
+     stays Soviet as today; the vote at fought-over towns further down
+     stays as the second bar. Not sure: nothing here - the series keeps
+     its readings, and this reading's besitz is not written anywhere. */
+  if (wache.puls){
+    const nunP = jetzt();
+    for (const [i, e] of wache.puls)
+      if (nunP - e.r[e.r.length - 1].t > PULS_FENSTER_MS) wache.puls.delete(i);
+  }
+  if (res.sicher && res.erg && res.erg.gbMittel && res.tr && res.tr.s > 0 && res.W){
+    wache.puls ||= new Map();
+    const nunP = jetzt(), spP = res.W/res.tr.s;
+    const feuerOffen = res.brennt && !res.brennt.zuHell && !res.brennt.zuFern;
+    const fePkt = res.erg.feuerPkt || {};
+    let unruhig = 0;
+    for (const idx in res.erg.gbMittel){
+      const i = +idx;
+      let e = wache.puls.get(i);
+      if (!e || Math.abs(e.sp - spP) > 0.05*e.sp) e = {sp: spP, r: []};
+      e.r.push({t: nunP, v: res.erg.gbMittel[idx]});
+      while (e.r.length && nunP - e.r[0].t > PULS_FENSTER_MS) e.r.shift();
+      wache.puls.set(i, e);
+      if (e.r.length < PULS_MIN || nunP - e.r[0].t < PULS_DECK_MS) continue;
+      let lo = Infinity, hi = -Infinity;
+      for (const q of e.r){ if (q.v < lo) lo = q.v; if (q.v > hi) hi = q.v; }
+      e.spanne = hi - lo;
+      if (e.spanne <= PULS_SCHWELLE) continue;
+      unruhig++;
+      delete res.erg.besitz[idx];
+      if (feuerOffen && !res.brennt[idx] && fePkt[idx] >= PULS_FEUER_MIN) res.brennt[idx] = 1;   /* 1: found by the pulse, not a point count */
+    }
+    res.erg.unruhig = unruhig;
+  }
   if (res.brennt && !res.brennt.zuHell) wache.hellGesagt = false;
   if (res.brennt && res.brennt.zuHell && !wache.hellGesagt){
     wache.hellGesagt = true;
@@ -48151,12 +48281,24 @@ function wacheTickIntern(){
          verschiedenen Seiten gehoeren und genau eine brennt - die Regel,
          an 1155 Faellen ohne Ausnahme bestaetigt. Sonst bleibt das Feld leer;
          eine Farbe allein ist noch keine Richtung. */
-      if (f !== 3 && bes[a] != null && bes[b] != null && bes[a] !== bes[b]){
-        const ba = !!br[a], bb = !!br[b];
-        if (ba !== bb){
-          const angreifer = ba ? bes[b] : bes[a];
-          if (f === angreifer) neu.a = angreifer;
-        }
+      /* F3 (ToDo 20.09.): the burning end has no reading of its own any
+         more - farbenLesen drops a disc under fire (more fire than faction
+         points in its box), the pulse drops an unsteady town - and with
+         two readings required the rule fell silent (Zeitskalierung
+         Krieg.mkv, one run of the round-1 sceptic: 18 and 283 attacker
+         entries before the bar, 0 after;
+         Kampfbeginn 377 -> 75). So the burning end takes its side from
+         the map (ownerOf: this war, in time, not "open") when this
+         picture has none; the quiet end is still read in THIS picture,
+         as before. The halo's own reading would not do: at seven covered
+         towns it said 4x Soviet, 2x German, 1x US (MESSUNG-F3.md,
+         Abschnitt 5). */
+      const ba = !!br[a], bb = !!br[b];
+      const seiteDes = (i, brennt) => bes[i] != null ? bes[i] : (brennt ? ownerOf(i) : -1);
+      const sa = seiteDes(a, ba), sb = seiteDes(b, bb);
+      if (f !== 3 && sa >= 0 && sb >= 0 && sa !== sb && ba !== bb){
+        const angreifer = ba ? sb : sa;
+        if (f === angreifer) neu.a = angreifer;
       }
       const alt = S.vers[versSchl(a, b)];
       const av = imKrieg(alt) ? alt.v : null;
@@ -62020,7 +62162,7 @@ function hilfeDialog(){
   openDlg(`
     <div class="dlg-h"><h2>Info</h2>
       <p>${MAP.n.length} towns and ${MAP.e.length} supply lines, read straight out of the game
-         installation. <span style="color:var(--dim2)">· build bdc5cc4c9a</span></p></div>
+         installation. <span style="color:var(--dim2)">· build f11532345b</span></p></div>
     <div class="tabs">
       <button data-tab="keys"   aria-pressed="true">Keys</button>
       <button data-tab="draw"   aria-pressed="false">Drawing</button>
@@ -62248,7 +62390,7 @@ const BUILTIN = {url: "https://fomxhfmsocfzpojbxjbe.supabase.co", key: "sb_publi
 /* Die Kennung dieses Baus. Sie stand bisher nur im Hilfetext; als Wert
    laesst sich damit zeigen, WELCHE Fassung gerade laeuft - und ob ein
    Neuladen ueberhaupt etwas gebracht hat. */
-const BAU = "bdc5cc4c9a";
+const BAU = "f11532345b";
 let CFG = null, syncTimer = null, lastSeen = "1970-01-01T00:00:00Z", pulling = false;
 /* Die gerade laufende Abgleichsrunde, damit das Zurueckkehren zum Fenster
    sie sofort ausloesen kann. Sie entsteht in syncStart und wird dort
